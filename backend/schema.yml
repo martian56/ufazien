@@ -1,0 +1,2035 @@
+openapi: 3.0.3
+info:
+  title: Ufazien API
+  version: 1.0.0
+  description: API documentation for Ufazien project
+paths:
+  /api/:
+    get:
+      operationId: api_retrieve
+      description: API status view that returns a simple JSON response with API documentation
+        links.
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/auth/google/login/:
+    post:
+      operationId: api_auth_google_login_create
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/auth/login/:
+    post:
+      operationId: api_auth_login_create
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/auth/signup/:
+    post:
+      operationId: api_auth_signup_create
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/auth/token/refresh/:
+    post:
+      operationId: api_auth_token_refresh_create
+      description: |-
+        Takes a refresh type JSON web token and returns an access type JSON web
+        token if the refresh token is valid.
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRefresh'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenRefresh'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenRefresh'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenRefresh'
+          description: ''
+  /api/auth/user/:
+    get:
+      operationId: api_auth_user_retrieve
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+    patch:
+      operationId: api_auth_user_partial_update
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/auth/user/{user_id}/:
+    get:
+      operationId: api_auth_user_retrieve_2
+      parameters:
+      - in: path
+        name: user_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+    patch:
+      operationId: api_auth_user_partial_update_2
+      parameters:
+      - in: path
+        name: user_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/auth/user/{user_id}/follow/:
+    post:
+      operationId: api_auth_user_follow_create
+      parameters:
+      - in: path
+        name: user_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/average/create-schema/:
+    post:
+      operationId: api_average_create_schema_create
+      description: Create a new average schema
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/average/current-schema/:
+    get:
+      operationId: api_average_current_schema_retrieve
+      description: Get user's current schema with grades
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/average/delete-schema/{schema_id}/:
+    delete:
+      operationId: api_average_delete_schema_destroy
+      description: Delete a schema (only by creator)
+      parameters:
+      - in: path
+        name: schema_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/average/my-schemas/:
+    get:
+      operationId: api_average_my_schemas_list
+      description: List user's own schemas and saved schemas
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAverageSchemaList'
+          description: ''
+  /api/average/public-schemas/:
+    get:
+      operationId: api_average_public_schemas_list
+      description: List all public schemas
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAverageSchemaList'
+          description: ''
+  /api/average/publish-schema/{schema_id}/:
+    post:
+      operationId: api_average_publish_schema_create
+      description: Publish a schema to make it public
+      parameters:
+      - in: path
+        name: schema_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/average/save-schema/{schema_id}/:
+    post:
+      operationId: api_average_save_schema_create
+      description: Save a public schema to user's saved schemas
+      parameters:
+      - in: path
+        name: schema_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/average/unsave-schema/{schema_id}/:
+    delete:
+      operationId: api_average_unsave_schema_destroy
+      description: Remove a schema from user's saved schemas
+      parameters:
+      - in: path
+        name: schema_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/average/update-grade/{field_grade_id}/:
+    put:
+      operationId: api_average_update_grade_update
+      description: Update a grade for a specific field
+      parameters:
+      - in: path
+        name: field_grade_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/average/use-schema/{schema_id}/:
+    post:
+      operationId: api_average_use_schema_create
+      description: Start using a schema (make it current)
+      parameters:
+      - in: path
+        name: schema_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/blog/bookmarks/{user_id}/:
+    get:
+      operationId: api_blog_bookmarks_retrieve
+      parameters:
+      - in: path
+        name: user_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: api_blog_bookmarks_create
+      parameters:
+      - in: path
+        name: user_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/blog/categories/:
+    get:
+      operationId: api_blog_categories_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedCategoryList'
+          description: ''
+    post:
+      operationId: api_blog_categories_create
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Category'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Category'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Category'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+          description: ''
+  /api/blog/categories/with-counts/:
+    get:
+      operationId: api_blog_categories_with_counts_retrieve
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/blog/comments/{comment_id}/like/:
+    post:
+      operationId: api_blog_comments_like_create
+      parameters:
+      - in: path
+        name: comment_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/blog/posts/:
+    get:
+      operationId: api_blog_posts_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBlogPostList'
+          description: ''
+    post:
+      operationId: api_blog_posts_create
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BlogPost'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BlogPost'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BlogPost'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlogPost'
+          description: ''
+  /api/blog/posts/{id}/:
+    get:
+      operationId: api_blog_posts_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlogPost'
+          description: ''
+    put:
+      operationId: api_blog_posts_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BlogPost'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BlogPost'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BlogPost'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlogPost'
+          description: ''
+    patch:
+      operationId: api_blog_posts_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedBlogPost'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedBlogPost'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedBlogPost'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlogPost'
+          description: ''
+    delete:
+      operationId: api_blog_posts_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/blog/posts/{post_id}/bookmark/:
+    get:
+      operationId: api_blog_posts_bookmark_retrieve
+      parameters:
+      - in: path
+        name: post_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: api_blog_posts_bookmark_create
+      parameters:
+      - in: path
+        name: post_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/blog/posts/{post_id}/comments/:
+    get:
+      operationId: api_blog_posts_comments_retrieve
+      parameters:
+      - in: path
+        name: post_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: api_blog_posts_comments_create
+      parameters:
+      - in: path
+        name: post_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/blog/posts/{post_id}/like/:
+    post:
+      operationId: api_blog_posts_like_create
+      parameters:
+      - in: path
+        name: post_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/blog/posts/{post_id}/view/:
+    post:
+      operationId: api_blog_posts_view_create
+      parameters:
+      - in: path
+        name: post_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/blog/posts/popular/:
+    get:
+      operationId: api_blog_posts_popular_retrieve
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/blog/tags/:
+    get:
+      operationId: api_blog_tags_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedTagList'
+          description: ''
+    post:
+      operationId: api_blog_tags_create
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Tag'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Tag'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Tag'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tag'
+          description: ''
+  /api/blog/tags/trending/:
+    get:
+      operationId: api_blog_tags_trending_retrieve
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/blog/upload/image/:
+    post:
+      operationId: api_blog_upload_image_create
+      description: Upload and optimize images for blog posts with security checks
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/gpa/academic-years/:
+    get:
+      operationId: api_gpa_academic_years_list
+      description: List all academic years (L1, L2, L3)
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AcademicYear'
+          description: ''
+  /api/gpa/calculations/:
+    get:
+      operationId: api_gpa_calculations_list
+      description: List and create user's GPA calculations
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedUserGPAList'
+          description: ''
+    post:
+      operationId: api_gpa_calculations_create
+      description: List and create user's GPA calculations
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserGPA'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CreateUserGPA'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CreateUserGPA'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateUserGPA'
+          description: ''
+  /api/gpa/calculations/{id}/:
+    get:
+      operationId: api_gpa_calculations_retrieve
+      description: Retrieve, update or delete a specific GPA calculation
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserGPA'
+          description: ''
+    put:
+      operationId: api_gpa_calculations_update
+      description: Retrieve, update or delete a specific GPA calculation
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserGPA'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/UserGPA'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/UserGPA'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserGPA'
+          description: ''
+    patch:
+      operationId: api_gpa_calculations_partial_update
+      description: Retrieve, update or delete a specific GPA calculation
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedUserGPA'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedUserGPA'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedUserGPA'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserGPA'
+          description: ''
+    delete:
+      operationId: api_gpa_calculations_destroy
+      description: Retrieve, update or delete a specific GPA calculation
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/gpa/calculations/{user_gpa_id}/grades/:
+    get:
+      operationId: api_gpa_calculations_grades_list
+      description: List and create course grades for a specific GPA calculation
+      parameters:
+      - in: path
+        name: user_gpa_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CourseGrade'
+          description: ''
+    post:
+      operationId: api_gpa_calculations_grades_create
+      description: List and create course grades for a specific GPA calculation
+      parameters:
+      - in: path
+        name: user_gpa_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CourseGrade'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CourseGrade'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CourseGrade'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CourseGrade'
+          description: ''
+  /api/gpa/convert-grade/:
+    post:
+      operationId: api_gpa_convert_grade_create
+      description: Convert between different grading systems
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/gpa/grade-distribution/:
+    get:
+      operationId: api_gpa_grade_distribution_retrieve
+      description: Get grade distribution for user's courses
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/gpa/grades/{id}/:
+    get:
+      operationId: api_gpa_grades_retrieve
+      description: Retrieve, update or delete a specific course grade
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CourseGrade'
+          description: ''
+    put:
+      operationId: api_gpa_grades_update
+      description: Retrieve, update or delete a specific course grade
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CourseGrade'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CourseGrade'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CourseGrade'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CourseGrade'
+          description: ''
+    patch:
+      operationId: api_gpa_grades_partial_update
+      description: Retrieve, update or delete a specific course grade
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedCourseGrade'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedCourseGrade'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedCourseGrade'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CourseGrade'
+          description: ''
+    delete:
+      operationId: api_gpa_grades_destroy
+      description: Retrieve, update or delete a specific course grade
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/gpa/input-state/:
+    get:
+      operationId: api_gpa_input_state_retrieve
+      description: Get or save user's input state for GPA calculator
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: api_gpa_input_state_create
+      description: Get or save user's input state for GPA calculator
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/gpa/semesters/:
+    get:
+      operationId: api_gpa_semesters_list
+      description: List semesters, optionally filtered by academic year
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Semester'
+          description: ''
+  /api/gpa/statistics/:
+    get:
+      operationId: api_gpa_statistics_retrieve
+      description: Get user's GPA statistics
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/gpa/targets/:
+    get:
+      operationId: api_gpa_targets_list
+      description: List and create GPA targets
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GPATarget'
+          description: ''
+    post:
+      operationId: api_gpa_targets_create
+      description: List and create GPA targets
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GPATarget'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/GPATarget'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/GPATarget'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GPATarget'
+          description: ''
+  /api/gpa/update-user-gpa/:
+    post:
+      operationId: api_gpa_update_user_gpa_create
+      description: Update user's GPA with simplified period-based averages
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+components:
+  schemas:
+    AcademicYear:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 10
+        description:
+          type: string
+          maxLength: 100
+        order:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+      required:
+      - id
+      - name
+      - order
+    AverageSchema:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        description:
+          type: string
+          nullable: true
+        creator:
+          type: integer
+          readOnly: true
+        creator_full_name:
+          type: string
+          readOnly: true
+        creator_username:
+          type: string
+          readOnly: true
+        is_public:
+          type: boolean
+        is_saved_by_user:
+          type: string
+          readOnly: true
+        usage_count:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/SchemaField'
+          readOnly: true
+      required:
+      - created_at
+      - creator
+      - creator_full_name
+      - creator_username
+      - fields
+      - id
+      - is_saved_by_user
+      - name
+      - updated_at
+      - usage_count
+    BlogPost:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        title:
+          type: string
+          maxLength: 255
+        content:
+          type: string
+        excerpt:
+          type: string
+          maxLength: 300
+        featured_image:
+          type: string
+          format: uri
+          nullable: true
+        featured_image_url:
+          type: string
+          readOnly: true
+        author:
+          allOf:
+          - $ref: '#/components/schemas/User'
+          readOnly: true
+        category:
+          type: integer
+        category_name:
+          type: string
+          readOnly: true
+        tag_names:
+          type: array
+          items:
+            type: string
+          writeOnly: true
+        tags:
+          type: string
+          readOnly: true
+        published_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        read_time:
+          type: string
+          maxLength: 20
+        likes_count:
+          type: string
+          readOnly: true
+        comments:
+          type: string
+          readOnly: true
+        views:
+          type: integer
+          readOnly: true
+        is_liked:
+          type: string
+          readOnly: true
+        is_bookmarked:
+          type: string
+          readOnly: true
+        is_published:
+          type: boolean
+        is_featured:
+          type: boolean
+      required:
+      - author
+      - category
+      - category_name
+      - comments
+      - content
+      - featured_image_url
+      - id
+      - is_bookmarked
+      - is_liked
+      - likes_count
+      - published_at
+      - read_time
+      - tags
+      - title
+      - updated_at
+      - views
+    CalculationTypeEnum:
+      enum:
+      - semester
+      - yearly
+      type: string
+      description: |-
+        * `semester` - Semester-based
+        * `yearly` - Yearly Average
+    Category:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+      required:
+      - id
+      - name
+    CourseGrade:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        display_grade:
+          type: string
+          readOnly: true
+        semester_name:
+          type: string
+          readOnly: true
+        course_name:
+          type: string
+          maxLength: 100
+        credits:
+          type: number
+          format: double
+          maximum: 10
+          minimum: 0.5
+        grade_type:
+          $ref: '#/components/schemas/GradeTypeEnum'
+        ufaz_grade:
+          type: number
+          format: double
+          maximum: 20
+          minimum: 0
+          nullable: true
+        azerbaijan_grade:
+          type: number
+          format: double
+          maximum: 100
+          minimum: 0
+          nullable: true
+        gpa_grade:
+          type: number
+          format: double
+          maximum: 4.0
+          minimum: 0
+          nullable: true
+        gpa_points:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        letter_grade:
+          type: string
+          readOnly: true
+        user_gpa:
+          type: integer
+        semester:
+          type: integer
+          nullable: true
+      required:
+      - course_name
+      - credits
+      - display_grade
+      - gpa_points
+      - id
+      - letter_grade
+      - semester_name
+      - user_gpa
+    CreateUserGPA:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 100
+        calculation_type:
+          $ref: '#/components/schemas/CalculationTypeEnum'
+        course_grades:
+          type: array
+          items:
+            $ref: '#/components/schemas/CourseGrade'
+          writeOnly: true
+      required:
+      - course_grades
+      - name
+    GPATarget:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        target_semester_name:
+          type: string
+          readOnly: true
+        target_year_name:
+          type: string
+          readOnly: true
+        target_gpa:
+          type: number
+          format: double
+          maximum: 4.0
+          minimum: 0
+        description:
+          type: string
+          maxLength: 200
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        user:
+          type: integer
+          readOnly: true
+        target_semester:
+          type: integer
+          nullable: true
+        target_year:
+          type: integer
+          nullable: true
+      required:
+      - created_at
+      - id
+      - target_gpa
+      - target_semester_name
+      - target_year_name
+      - user
+    GradeTypeEnum:
+      enum:
+      - ufaz
+      - azerbaijan
+      - gpa
+      type: string
+      description: |-
+        * `ufaz` - UFAZ (20-point)
+        * `azerbaijan` - Azerbaijan (100-point)
+        * `gpa` - Direct GPA (4.0 scale)
+    MajorEnum:
+      enum:
+      - CS
+      - CH
+      - CE
+      - OGE
+      - GE
+      - UD
+      type: string
+      description: |-
+        * `CS` - Computer Science
+        * `CH` - Chemistry
+        * `CE` - Chemical Engineering
+        * `OGE` - Oil and Gas Engineering
+        * `GE` - Geophysical Engineering
+        * `UD` - Undeclared
+    PaginatedAverageSchemaList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AverageSchema'
+    PaginatedBlogPostList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/BlogPost'
+    PaginatedCategoryList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Category'
+    PaginatedTagList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tag'
+    PaginatedUserGPAList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserGPA'
+    PatchedBlogPost:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        title:
+          type: string
+          maxLength: 255
+        content:
+          type: string
+        excerpt:
+          type: string
+          maxLength: 300
+        featured_image:
+          type: string
+          format: uri
+          nullable: true
+        featured_image_url:
+          type: string
+          readOnly: true
+        author:
+          allOf:
+          - $ref: '#/components/schemas/User'
+          readOnly: true
+        category:
+          type: integer
+        category_name:
+          type: string
+          readOnly: true
+        tag_names:
+          type: array
+          items:
+            type: string
+          writeOnly: true
+        tags:
+          type: string
+          readOnly: true
+        published_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        read_time:
+          type: string
+          maxLength: 20
+        likes_count:
+          type: string
+          readOnly: true
+        comments:
+          type: string
+          readOnly: true
+        views:
+          type: integer
+          readOnly: true
+        is_liked:
+          type: string
+          readOnly: true
+        is_bookmarked:
+          type: string
+          readOnly: true
+        is_published:
+          type: boolean
+        is_featured:
+          type: boolean
+    PatchedCourseGrade:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        display_grade:
+          type: string
+          readOnly: true
+        semester_name:
+          type: string
+          readOnly: true
+        course_name:
+          type: string
+          maxLength: 100
+        credits:
+          type: number
+          format: double
+          maximum: 10
+          minimum: 0.5
+        grade_type:
+          $ref: '#/components/schemas/GradeTypeEnum'
+        ufaz_grade:
+          type: number
+          format: double
+          maximum: 20
+          minimum: 0
+          nullable: true
+        azerbaijan_grade:
+          type: number
+          format: double
+          maximum: 100
+          minimum: 0
+          nullable: true
+        gpa_grade:
+          type: number
+          format: double
+          maximum: 4.0
+          minimum: 0
+          nullable: true
+        gpa_points:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        letter_grade:
+          type: string
+          readOnly: true
+        user_gpa:
+          type: integer
+        semester:
+          type: integer
+          nullable: true
+    PatchedUserGPA:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        course_grades:
+          type: array
+          items:
+            $ref: '#/components/schemas/CourseGrade'
+          readOnly: true
+        course_count:
+          type: string
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        calculation_type:
+          $ref: '#/components/schemas/CalculationTypeEnum'
+        overall_gpa:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        total_credits:
+          type: number
+          format: double
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        user:
+          type: integer
+          readOnly: true
+    SchemaField:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        weight:
+          type: number
+          format: double
+          minimum: 0.0
+        order:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+      required:
+      - id
+      - name
+      - weight
+    Semester:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        academic_year_name:
+          type: string
+          readOnly: true
+        name:
+          type: string
+          maxLength: 20
+        number:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        academic_year:
+          type: integer
+      required:
+      - academic_year
+      - academic_year_name
+      - id
+      - name
+      - number
+    Tag:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 50
+        post_count:
+          type: integer
+          readOnly: true
+      required:
+      - id
+      - name
+      - post_count
+    TokenRefresh:
+      type: object
+      properties:
+        access:
+          type: string
+          readOnly: true
+        refresh:
+          type: string
+      required:
+      - access
+      - refresh
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        username:
+          type: string
+          description: Required. 150 characters or fewer. Letters, digits and @/./+/-/_
+            only.
+          pattern: ^[\w.@+-]+$
+          maxLength: 150
+        email:
+          type: string
+          format: email
+          title: Email address
+          maxLength: 254
+        first_name:
+          type: string
+          maxLength: 150
+        last_name:
+          type: string
+          maxLength: 150
+        followers_count:
+          type: integer
+          readOnly: true
+        is_following:
+          type: string
+          readOnly: true
+        year:
+          type: string
+          maxLength: 2
+        bio:
+          type: string
+          nullable: true
+          maxLength: 500
+        avatar:
+          type: string
+          format: uri
+          nullable: true
+        avatar_url:
+          type: string
+          readOnly: true
+        major:
+          $ref: '#/components/schemas/MajorEnum'
+        gpa:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,1}(?:\.\d{0,2})?$
+        completed_credits:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        phone:
+          type: string
+          nullable: true
+          maxLength: 20
+      required:
+      - avatar_url
+      - followers_count
+      - id
+      - is_following
+      - username
+    UserGPA:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        course_grades:
+          type: array
+          items:
+            $ref: '#/components/schemas/CourseGrade'
+          readOnly: true
+        course_count:
+          type: string
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        calculation_type:
+          $ref: '#/components/schemas/CalculationTypeEnum'
+        overall_gpa:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        total_credits:
+          type: number
+          format: double
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        user:
+          type: integer
+          readOnly: true
+      required:
+      - course_count
+      - course_grades
+      - created_at
+      - id
+      - name
+      - overall_gpa
+      - total_credits
+      - updated_at
+      - user
+  securitySchemes:
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

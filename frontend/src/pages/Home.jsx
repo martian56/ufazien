@@ -1,0 +1,988 @@
+"use client"
+
+import { useEffect, useState, useRef } from "react"
+import { useNavigate } from "react-router-dom"
+import { gsap } from "gsap"
+import { ScrollTrigger } from "gsap/ScrollTrigger"
+import { TextPlugin } from "gsap/TextPlugin"
+import {
+  Calculator,
+  TrendingUp,
+  PenTool,
+  MessageCircle,
+  Users,
+  Sparkles,
+  ChevronRight,
+  BookOpen,
+  ArrowRight,
+  CheckCircle,
+  BarChart3,
+  Calendar,
+  Award,
+  Target,
+  Zap,
+  Globe,
+  Shield,
+  Rocket,
+  Brain,
+  Heart,
+  Play,
+  Menu,
+  X,
+  Star,
+  Activity,
+  Github,
+  Twitter,
+  Linkedin,
+  Instagram,
+  Code,
+  Database,
+  Smartphone,
+  Cloud,
+  Layers,
+} from "lucide-react"
+
+// Register GSAP plugins
+gsap.registerPlugin(ScrollTrigger, TextPlugin)
+
+export default function Home() {
+  const navigate = useNavigate()
+  const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [isScrolled, setIsScrolled] = useState(false)
+  const [currentFeature, setCurrentFeature] = useState(0)
+  const [currentTestimonial, setCurrentTestimonial] = useState(0)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+
+  // Refs for GSAP animations
+  const heroRef = useRef(null)
+  const heroTitleRef = useRef(null)
+  const heroSubtitleRef = useRef(null)
+  const heroButtonsRef = useRef(null)
+  const statsRef = useRef(null)
+  const featuresRef = useRef(null)
+  const testimonialsRef = useRef(null)
+  const ctaRef = useRef(null)
+  const floatingElementsRef = useRef([])
+  const cursorRef = useRef(null)
+  const progressBarRef = useRef(null)
+
+  // Check authentication status
+  useEffect(() => {
+    const accessToken = localStorage.getItem("access")
+    setIsAuthenticated(!!accessToken)
+  }, [])
+
+  // GSAP Animations Setup
+  useEffect(() => {
+    const ctx = gsap.context(() => {
+      // Hero animations
+      const tl = gsap.timeline()
+
+      tl.from(heroTitleRef.current, {
+        y: 100,
+        opacity: 0,
+        duration: 1.2,
+        ease: "power3.out",
+      })
+        .from(
+          heroSubtitleRef.current,
+          {
+            y: 50,
+            opacity: 0,
+            duration: 1,
+            ease: "power3.out",
+          },
+          "-=0.8",
+        )
+        .from(
+          heroButtonsRef.current.children,
+          {
+            y: 30,
+            opacity: 0,
+            duration: 0.8,
+            stagger: 0.2,
+            ease: "power3.out",
+          },
+          "-=0.6",
+        )
+
+      // Floating elements animation
+      floatingElementsRef.current.forEach((el, index) => {
+        if (el) {
+          gsap.to(el, {
+            y: -20,
+            rotation: 5,
+            duration: 3 + index * 0.5,
+            repeat: -1,
+            yoyo: true,
+            ease: "power2.inOut",
+          })
+        }
+      })
+
+      // Stats animation
+      ScrollTrigger.create({
+        trigger: statsRef.current,
+        start: "top 80%",
+        onEnter: () => {
+          gsap.fromTo(statsRef.current.children, 
+            {
+              y: 50,
+              opacity: 0,
+            },
+            {
+              y: 0,
+              opacity: 1,
+              duration: 0.8,
+              stagger: 0.1,
+              ease: "power3.out",
+            }
+          )
+        },
+      })
+
+      // Features animation
+      ScrollTrigger.create({
+        trigger: featuresRef.current,
+        start: "top 80%",
+        onEnter: () => {
+          gsap.fromTo(featuresRef.current.querySelectorAll(".feature-card"),
+            {
+              y: 60,
+              opacity: 0,
+            },
+            {
+              y: 0,
+              opacity: 1,
+              duration: 1,
+              stagger: 0.2,
+              ease: "power3.out",
+            }
+          )
+        },
+      })
+
+      // Testimonials animation
+      ScrollTrigger.create({
+        trigger: testimonialsRef.current,
+        start: "top 80%",
+        onEnter: () => {
+          gsap.fromTo(testimonialsRef.current.querySelector(".testimonial-card"),
+            {
+              scale: 0.8,
+              opacity: 0,
+            },
+            {
+              scale: 1,
+              opacity: 1,
+              duration: 1,
+              ease: "power3.out",
+            }
+          )
+        },
+      })
+
+      // CTA animation
+      ScrollTrigger.create({
+        trigger: ctaRef.current,
+        start: "top 80%",
+        onEnter: () => {
+          gsap.fromTo(ctaRef.current.children,
+            {
+              y: 40,
+              opacity: 0,
+            },
+            {
+              y: 0,
+              opacity: 1,
+              duration: 0.8,
+              stagger: 0.2,
+              ease: "power3.out",
+            }
+          )
+        },
+      })
+    }, heroRef.current)
+
+    return () => ctx.revert()
+  }, [])
+
+  // Scroll progress and header effects
+  useEffect(() => {
+    const handleScroll = () => {
+      const scrollY = window.scrollY
+      const windowHeight = window.innerHeight
+      const documentHeight = document.documentElement.scrollHeight
+      const progress = (scrollY / (documentHeight - windowHeight)) * 100
+
+      setIsScrolled(scrollY > 50)
+
+      if (progressBarRef.current) {
+        gsap.to(progressBarRef.current, {
+          width: `${progress}%`,
+          duration: 0.1,
+          ease: "none",
+        })
+      }
+    }
+
+    window.addEventListener("scroll", handleScroll)
+    return () => window.removeEventListener("scroll", handleScroll)
+  }, [])
+
+  // Custom cursor effect
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      if (cursorRef.current) {
+        gsap.to(cursorRef.current, {
+          x: e.clientX - 16,
+          y: e.clientY - 16,
+          duration: 0.2,
+          ease: "power2.out",
+        })
+      }
+    }
+
+    window.addEventListener("mousemove", handleMouseMove)
+    return () => window.removeEventListener("mousemove", handleMouseMove)
+  }, [])
+
+  // Auto-rotate features and testimonials
+  useEffect(() => {
+    const featureInterval = setInterval(() => {
+      setCurrentFeature((prev) => (prev + 1) % features.length)
+    }, 5000)
+
+    const testimonialInterval = setInterval(() => {
+      setCurrentTestimonial((prev) => (prev + 1) % testimonials.length)
+    }, 4000)
+
+    return () => {
+      clearInterval(featureInterval)
+      clearInterval(testimonialInterval)
+    }
+  }, [])
+
+  const features = [
+    {
+      icon: Calculator,
+      title: "AI-Powered GPA Calculator",
+      description: "Advanced GPA tracking with UFAZ's 20-point system, predictive analytics, and semester planning.",
+      link: "/gpa-calculator",
+      color: "from-blue-500 to-cyan-500",
+      stats: "25,000+ calculations",
+      badge: "Most Popular",
+    },
+    {
+      icon: TrendingUp,
+      title: "Smart Average Calculator",
+      description: "Comprehensive grade analysis with weighted averages, trend tracking, and performance insights.",
+      link: "/average-calculator",
+      color: "from-green-500 to-emerald-500",
+      stats: "12,500+ users",
+      badge: "Trending",
+    },
+    {
+      icon: PenTool,
+      title: "Advanced Blog Platform",
+      description: "AI-powered writing tools, rich editor, collaborative features, and community engagement.",
+      link: "/blog",
+      color: "from-purple-500 to-pink-500",
+      stats: "5,300+ posts",
+      badge: "New Features",
+    },
+    {
+      icon: MessageCircle,
+      title: "Study Groups & Chat",
+      description: "Real-time collaboration, course-specific groups, video calls, and peer-to-peer learning.",
+      link: "/community",
+      color: "from-orange-500 to-red-500",
+      stats: "280+ active groups",
+      badge: "Community",
+    },
+    {
+      icon: Calendar,
+      title: "Smart Academic Calendar",
+      description: "AI-powered scheduling, deadline tracking, and integration with UFAZ academic calendar.",
+      link: "/calendar",
+      color: "from-indigo-500 to-purple-500",
+      stats: "15,000+ events",
+      badge: "Essential",
+    },
+    {
+      icon: BarChart3,
+      title: "Analytics Dashboard",
+      description: "Comprehensive academic analytics, progress tracking, and performance visualization.",
+      link: "/dashboard",
+      color: "from-teal-500 to-blue-500",
+      stats: "Real-time insights",
+      badge: "Pro Feature",
+    },
+  ]
+
+  const stats = [
+    { number: "5,500+", label: "Active Students", icon: Users, color: "text-blue-600", growth: "+23%" },
+    { number: "45,000+", label: "GPA Calculations", icon: Calculator, color: "text-green-600", growth: "+156%" },
+    { number: "8,300+", label: "Blog Posts", icon: PenTool, color: "text-purple-600", growth: "+89%" },
+    { number: "280+", label: "Study Groups", icon: MessageCircle, color: "text-orange-600", growth: "+67%" },
+  ]
+
+  const testimonials = [
+    {
+      name: "Sarah Johnson",
+      role: "Computer Science, 3rd Year",
+      avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?fm=jpg&q=60&w=3000&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Mnx8dXNlciUyMHByb2ZpbGV8ZW58MHx8MHx8fDA%3D",
+      content:
+        "Ufazien completely transformed how I manage my academics. The GPA calculator with AI predictions helped me plan my semester perfectly!",
+      rating: 5,
+      verified: true,
+    },
+    {
+      name: "Ahmed Hassan",
+      role: "Geo Physics, 2nd Year",
+      avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?fm=jpg&q=60&w=3000&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8M3x8dXNlciUyMHByb2ZpbGV8ZW58MHx8MHx8fDA%3D",
+      content:
+        "The study groups feature is incredible. I found amazing study partners and our group chat keeps us all motivated and on track.",
+      rating: 5,
+      verified: true,
+    },
+    {
+      name: "Maria Rodriguez",
+      role: "Chemistry, 4th Year",
+      avatar: "https://img.freepik.com/free-photo/horizontal-portrait-smiling-happy-young-pleasant-looking-female-wears-denim-shirt-stylish-glasses-with-straight-blonde-hair-expresses-positiveness-poses_176420-13176.jpg?semt=ais_hybrid&w=740",
+      content:
+        "The blog platform helped me share my research and connect with professors. It's like having a professional portfolio built-in!",
+      rating: 5,
+      verified: true,
+    },
+  ]
+
+  const technologies = [
+    { name: "React 18", icon: Code, color: "text-blue-500", description: "Modern UI framework" },
+    { name: "Django", icon: Database, color: "text-green-500", description: "Scalable backend" },
+    { name: "AI/ML", icon: Brain, color: "text-purple-500", description: "Intelligent features" },
+    { name: "Cloud", icon: Cloud, color: "text-cyan-500", description: "Global infrastructure" },
+    { name: "Mobile", icon: Smartphone, color: "text-pink-500", description: "Cross-platform" },
+    { name: "Analytics", icon: BarChart3, color: "text-indigo-500", description: "Data insights" },
+  ]
+
+  const achievements = [
+    { icon: Award, title: "Best Student Platform 2024", org: "UFAZ Innovation Awards" },
+    { icon: Star, title: "4.9/5 Student Rating", org: "Based on 2,500+ reviews" },
+    { icon: Shield, title: "ISO 27001 Certified", org: "Enterprise Security Standard" },
+    { icon: Rocket, title: "99.9% Uptime", org: "Reliable & Always Available" },
+  ]
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 overflow-x-hidden relative">
+      {/* Custom Cursor */}
+      <div
+        ref={cursorRef}
+        className="fixed w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full pointer-events-none z-50 opacity-50 hidden lg:block"
+      />
+
+      {/* Scroll Progress Bar */}
+      <div className="fixed top-0 left-0 w-full h-1 bg-gray-200/50 z-50">
+        <div ref={progressBarRef} className="h-full bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600" />
+      </div>
+
+      {/* Floating Background Elements */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
+        <div
+          ref={(el) => (floatingElementsRef.current[0] = el)}
+          className="absolute -top-40 -right-40 w-96 h-96 bg-gradient-to-r from-blue-400/10 to-purple-400/10 rounded-full blur-3xl"
+        />
+        <div
+          ref={(el) => (floatingElementsRef.current[1] = el)}
+          className="absolute -bottom-40 -left-40 w-96 h-96 bg-gradient-to-r from-green-400/10 to-blue-400/10 rounded-full blur-3xl"
+        />
+        <div
+          ref={(el) => (floatingElementsRef.current[2] = el)}
+          className="absolute top-1/3 right-1/4 w-64 h-64 bg-gradient-to-r from-purple-400/8 to-pink-400/8 rounded-full blur-2xl"
+        />
+        <div
+          ref={(el) => (floatingElementsRef.current[3] = el)}
+          className="absolute bottom-1/3 left-1/4 w-80 h-80 bg-gradient-to-r from-cyan-400/8 to-blue-400/8 rounded-full blur-2xl"
+        />
+      </div>
+
+      {/* Header */}
+      <header
+        className={`fixed top-0 left-0 right-0 z-40 transition-all duration-500 ${
+          isScrolled ? "bg-white/90 backdrop-blur-xl shadow-xl border-b border-white/20 py-3" : "bg-transparent py-4"
+        }`}
+      >
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between">
+            {/* Logo */}
+            <div className="flex items-center gap-3 group cursor-pointer" onClick={() => navigate("/")}>
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg group-hover:shadow-xl group-hover:scale-105 transition-all duration-300">
+                <BookOpen className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+              </div>
+              <div className="hidden sm:block">
+                <span className="text-xl sm:text-2xl font-black bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                  Ufazien
+                </span>
+                <div className="text-xs text-gray-500 font-medium">Student Success Platform</div>
+              </div>
+            </div>
+
+            {/* Desktop Navigation */}
+            <nav className="hidden lg:flex items-center space-x-8">
+              {[
+                { name: "Features", href: "#features" },
+                { name: "Analytics", href: "#stats" },
+                { name: "Community", href: "#community" },
+                { name: "About", href: "#about" },
+              ].map((item) => (
+                <a
+                  key={item.name}
+                  href={item.href}
+                  className="text-gray-700 hover:text-blue-600 font-medium transition-all duration-300 hover:scale-105 relative group"
+                >
+                  {item.name}
+                  <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-blue-600 to-purple-600 group-hover:w-full transition-all duration-300" />
+                </a>
+              ))}
+            </nav>
+
+            {/* Action Buttons */}
+            <div className="flex items-center space-x-2 sm:space-x-4">
+              {!isAuthenticated && (
+                <button
+                  onClick={() => navigate("/auth")}
+                  className="hidden sm:block px-4 py-2 text-gray-700 hover:text-blue-600 font-medium transition-all duration-300"
+                >
+                  Sign In
+                </button>
+              )}
+
+              <button
+                onClick={() => navigate(isAuthenticated ? "/dashboard" : "/auth")}
+                className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-4 sm:px-6 py-2 sm:py-3 rounded-xl font-bold hover:shadow-xl transition-all duration-300 flex items-center gap-2 text-sm sm:text-base"
+              >
+                <Rocket className="w-4 h-4 sm:w-5 sm:h-5" />
+                {isAuthenticated ? "Dashboard" : "Get Started"}
+              </button>
+
+              {/* Mobile Menu Button */}
+              <button
+                onClick={() => setIsMenuOpen(!isMenuOpen)}
+                className="lg:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors duration-300"
+              >
+                {isMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              </button>
+            </div>
+          </div>
+
+          {/* Mobile Navigation */}
+          {isMenuOpen && (
+            <div className="lg:hidden mt-4 py-4 border-t border-gray-200/50 backdrop-blur-xl">
+              <div className="flex flex-col space-y-3">
+                {[
+                  { name: "Features", href: "#features" },
+                  { name: "Analytics", href: "#stats" },
+                  { name: "Community", href: "#community" },
+                  { name: "About", href: "#about" },
+                ].map((item) => (
+                  <a
+                    key={item.name}
+                    href={item.href}
+                    className="text-gray-700 hover:text-blue-600 font-medium py-2 transition-colors duration-300"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    {item.name}
+                  </a>
+                ))}
+                {!isAuthenticated && (
+                  <div className="pt-3 border-t border-gray-200/50">
+                    <button
+                      onClick={() => {
+                        navigate("/auth")
+                        setIsMenuOpen(false)
+                      }}
+                      className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-4 py-3 rounded-xl font-bold"
+                    >
+                      Get Started
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </header>
+
+      {/* Hero Section */}
+      <section ref={heroRef} className="relative min-h-screen flex items-center justify-center pt-20 pb-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
+          {/* Hero Badge */}
+          <div className="inline-flex items-center gap-2 sm:gap-3 bg-gradient-to-r from-blue-500/10 to-purple-500/10 backdrop-blur-sm border border-white/30 text-blue-700 px-4 sm:px-6 py-2 sm:py-3 rounded-full text-xs sm:text-sm font-bold mb-6 sm:mb-8 hover:scale-105 transition-all duration-300 cursor-pointer group">
+            <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 animate-spin group-hover:animate-pulse" />🎉 Welcome to the
+            Future of UFAZ Education
+            <ChevronRight className="w-3 h-3 sm:w-4 sm:h-4 group-hover:translate-x-1 transition-transform duration-300" />
+          </div>
+
+          {/* Main Heading */}
+          <h1
+            ref={heroTitleRef}
+            className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl xl:text-8xl font-black text-gray-900 mb-6 sm:mb-8 leading-tight"
+          >
+            Your Academic
+            <span className="block bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 bg-clip-text text-transparent">
+              Success Revolution
+            </span>
+          </h1>
+
+          {/* Subtitle */}
+          <p
+            ref={heroSubtitleRef}
+            className="text-lg sm:text-xl md:text-2xl text-gray-600 mb-8 sm:mb-12 max-w-4xl mx-auto leading-relaxed px-4"
+          >
+            Transform your UFAZ journey with AI-powered tools, real-time collaboration, and comprehensive academic
+            management designed for the next generation of students.
+          </p>
+
+          {/* CTA Buttons */}
+          <div
+            ref={heroButtonsRef}
+            className="flex flex-col sm:flex-row gap-4 sm:gap-6 justify-center mb-12 sm:mb-16 px-4"
+          >
+            <button
+              onClick={() => navigate(isAuthenticated ? "/gpa-calculator" : "/auth")}
+              className="group bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-8 sm:px-12 py-4 sm:py-6 rounded-xl sm:rounded-2xl font-black text-lg sm:text-xl hover:shadow-2xl transition-all duration-300 flex items-center justify-center gap-3 sm:gap-4"
+            >
+              <Calculator className="w-6 h-6 sm:w-7 sm:h-7 group-hover:rotate-12 transition-transform duration-300" />
+              Start Calculating
+              <ArrowRight className="w-5 h-5 sm:w-6 sm:h-6 group-hover:translate-x-2 transition-transform duration-300" />
+            </button>
+            <button className="group bg-white/80 backdrop-blur-sm border-2 border-gray-200 text-gray-700 px-8 sm:px-12 py-4 sm:py-6 rounded-xl sm:rounded-2xl font-black text-lg sm:text-xl hover:border-blue-300 hover:shadow-xl hover:bg-white transition-all duration-300 flex items-center justify-center gap-3 sm:gap-4">
+              <Play className="w-5 h-5 sm:w-6 sm:h-6 group-hover:scale-125 transition-transform duration-300" />
+              Watch Demo
+            </button>
+          </div>
+
+          {/* Hero Stats */}
+          <div ref={statsRef} className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 max-w-6xl mx-auto px-4">
+            {stats.map((stat, index) => (
+              <div
+                key={index}
+                className="group bg-white/60 backdrop-blur-sm rounded-2xl sm:rounded-3xl p-4 sm:p-6 lg:p-8 border border-white/30 hover:bg-white/80 hover:shadow-2xl hover:scale-105 transition-all duration-500 cursor-pointer"
+              >
+                <div className="flex items-center justify-center mb-3 sm:mb-4">
+                  <div
+                    className={`p-2 sm:p-3 rounded-xl sm:rounded-2xl bg-gradient-to-r ${
+                      stat.color === "text-blue-600"
+                        ? "from-blue-500 to-cyan-500"
+                        : stat.color === "text-green-600"
+                          ? "from-green-500 to-emerald-500"
+                          : stat.color === "text-purple-600"
+                            ? "from-purple-500 to-pink-500"
+                            : "from-orange-500 to-red-500"
+                    }`}
+                  >
+                    <stat.icon className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+                  </div>
+                </div>
+                <div className="text-2xl sm:text-3xl lg:text-4xl font-black text-gray-900 mb-1 sm:mb-2">
+                  {stat.number}
+                </div>
+                <div className="text-gray-600 font-bold mb-1 sm:mb-2 text-sm sm:text-base">{stat.label}</div>
+                <div className="text-xs sm:text-sm text-green-600 font-bold flex items-center justify-center gap-1">
+                  <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4" />
+                  {stat.growth}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Features Section */}
+      <section id="features" className="py-16 sm:py-24 lg:py-32 relative">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          {/* Section Header */}
+          <div className="text-center mb-12 sm:mb-16 lg:mb-20">
+            <div className="inline-flex items-center gap-3 bg-gradient-to-r from-purple-500/10 to-pink-500/10 text-purple-700 px-4 sm:px-6 py-2 sm:py-3 rounded-full text-sm font-bold mb-6 sm:mb-8">
+              <Zap className="w-4 h-4 sm:w-5 sm:h-5" />
+              Powerful Features
+            </div>
+            <h2 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black text-gray-900 mb-6 sm:mb-8">
+              Everything You Need to
+              <span className="block bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+                Excel at UFAZ
+              </span>
+            </h2>
+            <p className="text-lg sm:text-xl text-gray-600 max-w-4xl mx-auto leading-relaxed">
+              Cutting-edge tools and features designed to transform your academic journey with AI-powered insights,
+              seamless collaboration, and intelligent automation.
+            </p>
+          </div>
+
+          {/* Features Grid */}
+          <div ref={featuresRef} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
+            {features.map((feature, index) => (
+              <div
+                key={index}
+                className="feature-card group cursor-pointer bg-white/60 backdrop-blur-sm rounded-2xl sm:rounded-3xl p-6 sm:p-8 border border-white/30 hover:bg-white hover:shadow-2xl hover:scale-105 transition-all duration-500"
+                onClick={() => navigate(feature.link)}
+              >
+                <div className="flex items-start gap-4 sm:gap-6">
+                  <div
+                    className={`w-12 h-12 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl flex items-center justify-center bg-gradient-to-r ${feature.color} shadow-xl group-hover:scale-110 transition-transform duration-300`}
+                  >
+                    <feature.icon className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-2 sm:mb-3">
+                      <h3 className="text-lg sm:text-xl lg:text-2xl font-black text-gray-900">{feature.title}</h3>
+                      {feature.badge && (
+                        <span className="px-2 py-1 bg-gradient-to-r from-blue-500 to-purple-500 text-white text-xs font-bold rounded-full">
+                          {feature.badge}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-gray-600 mb-3 sm:mb-4 text-sm sm:text-base leading-relaxed">
+                      {feature.description}
+                    </p>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs sm:text-sm font-bold text-gray-500">{feature.stats}</span>
+                      <div className="flex items-center gap-2 text-blue-600 font-bold group-hover:gap-3 transition-all duration-300">
+                        <span className="text-sm">Explore</span>
+                        <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform duration-300" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Technology Stack */}
+          <div className="text-center mt-16 sm:mt-20 lg:mt-24">
+            <h3 className="text-2xl sm:text-3xl font-black text-gray-900 mb-8 sm:mb-12">
+              Built with Cutting-Edge Technology
+            </h3>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 sm:gap-6">
+              {technologies.map((tech, index) => (
+                <div
+                  key={index}
+                  className="group bg-white/60 backdrop-blur-sm p-4 sm:p-6 rounded-xl sm:rounded-2xl border border-white/30 hover:bg-white hover:shadow-xl hover:scale-105 transition-all duration-300 cursor-pointer"
+                >
+                  <div className="flex flex-col items-center gap-2 sm:gap-3">
+                    <div
+                      className={`p-2 sm:p-3 rounded-lg sm:rounded-xl bg-gradient-to-r ${
+                        tech.color === "text-blue-500"
+                          ? "from-blue-500 to-cyan-500"
+                          : tech.color === "text-green-500"
+                            ? "from-green-500 to-emerald-500"
+                            : tech.color === "text-purple-500"
+                              ? "from-purple-500 to-pink-500"
+                              : tech.color === "text-cyan-500"
+                                ? "from-cyan-500 to-blue-500"
+                                : tech.color === "text-pink-500"
+                                  ? "from-pink-500 to-red-500"
+                                  : "from-indigo-500 to-purple-500"
+                      }`}
+                    >
+                      <tech.icon className="w-4 h-4 sm:w-6 sm:h-6 text-white" />
+                    </div>
+                    <div className="text-center">
+                      <div className="font-bold text-gray-900 text-sm sm:text-base">{tech.name}</div>
+                      <div className="text-xs text-gray-500">{tech.description}</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Testimonials Section */}
+      <section
+        ref={testimonialsRef}
+        className="py-16 sm:py-24 lg:py-32 bg-gradient-to-r from-blue-50 to-purple-50 relative overflow-hidden"
+      >
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-12 sm:mb-16 lg:mb-20">
+            <div className="inline-flex items-center gap-3 bg-gradient-to-r from-green-500/10 to-blue-500/10 text-green-700 px-4 sm:px-6 py-2 sm:py-3 rounded-full text-sm font-bold mb-6 sm:mb-8">
+              <Heart className="w-4 h-4 sm:w-5 sm:h-5" />
+              Student Success Stories
+            </div>
+            <h2 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black text-gray-900 mb-6 sm:mb-8">
+              What UFAZ Students
+              <span className="block bg-gradient-to-r from-green-600 to-blue-600 bg-clip-text text-transparent">
+                Are Saying
+              </span>
+            </h2>
+            <p className="text-lg sm:text-xl text-gray-600 max-w-3xl mx-auto">
+              Join hundreds of UFAZ students who have transformed their academic journey with Ufazien
+            </p>
+          </div>
+
+          {/* Testimonial Carousel */}
+          <div className="relative max-w-4xl mx-auto">
+            <div className="testimonial-card bg-white/80 backdrop-blur-sm rounded-2xl sm:rounded-3xl p-8 sm:p-12 shadow-2xl border border-white/30">
+              <div className="text-center">
+                {/* Stars */}
+                <div className="flex justify-center gap-1 mb-6 sm:mb-8">
+                  {[...Array(testimonials[currentTestimonial].rating)].map((_, i) => (
+                    <Star key={i} className="w-6 h-6 sm:w-8 sm:h-8 text-yellow-400 fill-current" />
+                  ))}
+                </div>
+
+                {/* Quote */}
+                <blockquote className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 mb-6 sm:mb-8 leading-relaxed">
+                  "{testimonials[currentTestimonial].content}"
+                </blockquote>
+
+                {/* Author */}
+                <div className="flex items-center justify-center gap-4">
+                  <img
+                    src={testimonials[currentTestimonial].avatar || "/placeholder.svg"}
+                    alt={testimonials[currentTestimonial].name}
+                    className="w-12 h-12 sm:w-16 sm:h-16 rounded-full border-4 border-white shadow-lg"
+                  />
+                  <div className="text-left">
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-black text-gray-900 text-sm sm:text-base">
+                        {testimonials[currentTestimonial].name}
+                      </h4>
+                      {testimonials[currentTestimonial].verified && (
+                        <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500" />
+                      )}
+                    </div>
+                    <p className="text-gray-600 text-sm sm:text-base">{testimonials[currentTestimonial].role}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Navigation Dots */}
+            <div className="flex justify-center gap-3 mt-6 sm:mt-8">
+              {testimonials.map((_, index) => (
+                <button
+                  key={index}
+                  onClick={() => setCurrentTestimonial(index)}
+                  className={`w-2 h-2 sm:w-3 sm:h-3 rounded-full transition-all duration-300 ${
+                    currentTestimonial === index ? "bg-blue-600 scale-125" : "bg-gray-300 hover:bg-gray-400"
+                  }`}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Achievements Section */}
+      <section className="py-16 sm:py-24 lg:py-32 relative">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-12 sm:mb-16 lg:mb-20">
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-black text-gray-900 mb-6 sm:mb-8">
+              Recognized Excellence
+            </h2>
+            <p className="text-lg sm:text-xl text-gray-600 max-w-3xl mx-auto">
+              Our commitment to student success has been recognized by leading educational institutions and technology
+              organizations
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8">
+            {achievements.map((achievement, index) => (
+              <div
+                key={index}
+                className="group bg-white/60 backdrop-blur-sm rounded-xl sm:rounded-2xl p-6 sm:p-8 border border-white/30 hover:bg-white hover:shadow-xl hover:scale-105 transition-all duration-300 text-center"
+              >
+                <div className="w-12 h-12 sm:w-16 sm:h-16 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-xl sm:rounded-2xl flex items-center justify-center mx-auto mb-4 sm:mb-6 group-hover:scale-110 transition-transform duration-300">
+                  <achievement.icon className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
+                </div>
+                <h3 className="font-black text-gray-900 mb-2 text-sm sm:text-base">{achievement.title}</h3>
+                <p className="text-gray-600 text-xs sm:text-sm">{achievement.org}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Community CTA Section */}
+      <section ref={ctaRef} id="community" className="py-16 sm:py-24 lg:py-32 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600" />
+        <div className="absolute inset-0 bg-black/20" />
+        <div className="absolute inset-0 overflow-hidden">
+          <div className="absolute -top-40 -right-40 w-96 h-96 bg-white/10 rounded-full blur-3xl" />
+          <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-white/10 rounded-full blur-3xl" />
+        </div>
+
+        <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <div className="bg-white/10 backdrop-blur-2xl rounded-2xl sm:rounded-3xl p-8 sm:p-12 lg:p-16 border border-white/20">
+            <div className="flex items-center justify-center gap-4 mb-6 sm:mb-8">
+              <Users className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
+              <Heart className="w-6 h-6 sm:w-8 sm:h-8 text-red-400 animate-pulse" />
+              <Globe className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
+            </div>
+
+            <h2 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black text-white mb-6 sm:mb-8">
+              Join the UFAZIEN Revolution
+            </h2>
+            <p className="text-lg sm:text-xl lg:text-2xl text-blue-100 mb-8 sm:mb-12 max-w-4xl mx-auto leading-relaxed">
+              Connect with hundreds of UFAZ students, share knowledge, collaborate on projects, and build the future of
+              education together in our thriving community.
+            </p>
+
+            <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 lg:gap-8 justify-center mb-8 sm:mb-12 lg:mb-16">
+              <button
+                onClick={() => navigate("/community")}
+                className="group bg-white text-blue-600 px-8 sm:px-10 lg:px-12 py-4 sm:py-5 lg:py-6 rounded-xl sm:rounded-2xl font-black text-lg sm:text-xl hover:shadow-2xl transition-all duration-300 flex items-center justify-center gap-3 sm:gap-4"
+              >
+                <MessageCircle className="w-6 h-6 sm:w-7 sm:h-7 group-hover:rotate-12 transition-transform duration-300" />
+                Join Study Groups
+                <ArrowRight className="w-5 h-5 sm:w-6 sm:h-6 group-hover:translate-x-2 transition-transform duration-300" />
+              </button>
+              <button
+                onClick={() => navigate("/blog")}
+                className="group border-2 border-white text-white px-8 sm:px-10 lg:px-12 py-4 sm:py-5 lg:py-6 rounded-xl sm:rounded-2xl font-black text-lg sm:text-xl hover:bg-white hover:text-blue-600 transition-all duration-300 flex items-center justify-center gap-3 sm:gap-4"
+              >
+                <PenTool className="w-6 h-6 sm:w-7 sm:h-7 group-hover:rotate-12 transition-transform duration-300" />
+                Start Writing
+                <Sparkles className="w-5 h-5 sm:w-6 sm:h-6 group-hover:rotate-180 transition-transform duration-300" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 lg:gap-8 text-blue-100">
+              <div className="flex items-center justify-center gap-3">
+                <CheckCircle className="w-6 h-6 sm:w-8 sm:h-8 text-green-400" />
+                <span className="font-bold text-sm sm:text-base lg:text-lg">Free Forever</span>
+              </div>
+              <div className="flex items-center justify-center gap-3">
+                <Shield className="w-6 h-6 sm:w-8 sm:h-8 text-blue-400" />
+                <span className="font-bold text-sm sm:text-base lg:text-lg">Secure & Private</span>
+              </div>
+              <div className="flex items-center justify-center gap-3">
+                <Target className="w-6 h-6 sm:w-8 sm:h-8 text-purple-400" />
+                <span className="font-bold text-sm sm:text-base lg:text-lg">UFAZ Students Only</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="bg-gray-900 text-white py-12 sm:py-16 lg:py-20 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-r from-gray-900 via-blue-900/30 to-purple-900/30" />
+
+        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 sm:gap-12 mb-12 sm:mb-16">
+            {/* Brand */}
+            <div className="lg:col-span-2">
+              <div className="flex items-center gap-4 mb-6 sm:mb-8">
+                <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl sm:rounded-2xl flex items-center justify-center shadow-xl">
+                  <BookOpen className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
+                </div>
+                <div>
+                  <span className="text-2xl sm:text-3xl font-black">Ufazien</span>
+                  <div className="text-sm text-gray-400">Student Success Platform</div>
+                </div>
+              </div>
+              <p className="text-gray-400 mb-6 sm:mb-8 max-w-md leading-relaxed text-sm sm:text-base lg:text-lg">
+                Empowering UFAZ students with cutting-edge tools, AI-powered insights, and collaborative features to
+                excel in their academic journey and beyond.
+              </p>
+              <div className="flex items-center gap-4 sm:gap-6">
+                <div className="w-2 h-2 sm:w-3 sm:h-3 bg-green-500 rounded-full animate-pulse" />
+                <span className="text-gray-400 text-sm sm:text-base">All systems operational • 99.9% uptime</span>
+              </div>
+            </div>
+
+            {/* Quick Links */}
+            <div>
+              <h3 className="font-black mb-6 sm:mb-8 text-lg sm:text-xl">Quick Access</h3>
+              <div className="space-y-3 sm:space-y-4">
+                {[
+                  { name: "GPA Calculator", link: "/gpa-calculator" },
+                  { name: "Average Calculator", link: "/average-calculator" },
+                  { name: "Blog Platform", link: "/blog" },
+                  { name: "Study Groups", link: "/community" },
+                  { name: "Academic Calendar", link: "/calendar" },
+                  { name: "Analytics Dashboard", link: "/dashboard" },
+                ].map((item) => (
+                  <a
+                    key={item.name}
+                    href={item.link}
+                    className="block text-gray-400 hover:text-white transition-all duration-300 hover:translate-x-2 transform font-medium text-sm sm:text-base"
+                  >
+                    {item.name}
+                  </a>
+                ))}
+              </div>
+            </div>
+
+            {/* Support */}
+            <div>
+              <h3 className="font-black mb-6 sm:mb-8 text-lg sm:text-xl">Support</h3>
+              <div className="space-y-3 sm:space-y-4">
+                {[
+                  "Help Center",
+                  "Contact Us",
+                  "Privacy Policy",
+                  "Terms of Service",
+                  "API Documentation",
+                  "System Status",
+                ].map((item) => (
+                  <a
+                    key={item}
+                    href="#"
+                    className="block text-gray-400 hover:text-white transition-all duration-300 hover:translate-x-2 transform font-medium text-sm sm:text-base"
+                  >
+                    {item}
+                  </a>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Footer Bottom */}
+          <div className="border-t border-gray-800 pt-8 sm:pt-12 flex flex-col lg:flex-row items-center justify-between gap-6 sm:gap-8">
+            <div className="text-gray-500 text-center lg:text-left text-sm sm:text-base">
+              &copy; {new Date().getFullYear()} Ufazien.com - Crafted with ❤️ for UFAZ students
+            </div>
+
+            <div className="flex items-center gap-6 sm:gap-8">
+              {/* Social Links */}
+              <div className="flex items-center gap-3 sm:gap-4">
+                {[
+                  { icon: Github, href: "https://github.com/martian58" },
+                  { icon: Twitter, href: "https://twitter.com/martian588" },
+                  { icon: Linkedin, href: "https://www.linkedin.com/in/martian58" },
+                  { icon: Instagram, href: "https://instagram.com/ufaz" },
+                ].map((social, index) => (
+                  <a
+                    key={index}
+                    href={social.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-8 h-8 sm:w-10 sm:h-10 bg-gray-800 hover:bg-gradient-to-r hover:from-blue-600 hover:to-purple-600 rounded-lg sm:rounded-xl flex items-center justify-center transition-all duration-300 hover:scale-110"
+                  >
+                    <social.icon className="w-4 h-4 sm:w-5 sm:h-5" />
+                  </a>
+                ))}
+              </div>
+
+              {/* Version & Stats */}
+              <div className="flex items-center gap-4 sm:gap-6 text-xs sm:text-sm text-gray-400">
+                <div className="flex items-center gap-2">
+                  <Layers className="w-3 h-3 sm:w-4 sm:h-4" />
+                  <span>v3.0.0</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Activity className="w-3 h-3 sm:w-4 sm:h-4" />
+                  <span>99.9% Uptime</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </footer>
+    </div>
+  )
+}
