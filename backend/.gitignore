@@ -1,0 +1,60 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# Virtual environment
+env/
+venv/
+ENV/
+.venv/
+
+# Django specific
+*.log
+*.pot
+*.pyc
+*.sqlite3
+db.sqlite3
+
+# Media and static files
+/media/
+/staticfiles/
+/static/
+
+# VSCode and other IDEs
+.vscode/
+.idea/
+*.swp
+
+# Mac OS
+.DS_Store
+
+# System files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Migrations (optional — only ignore if you regenerate them often)
+# **Caution:** Only ignore if you intentionally don’t want to track migration files
+# */migrations/
+# !*/migrations/__init__.py
+
+# Environment variables / secrets
+.env
+.env
+
+# Coverage and testing
+htmlcov/
+.coverage
+coverage.xml
+*.cover
+*.py,cover
+.cache
+
+# MyPy and Pytest
+.mypy_cache/
+.pytest_cache/
+
+req.http

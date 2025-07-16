@@ -1,0 +1,401 @@
+/* TipTap Editor Styles */
+.ProseMirror {
+  outline: none;
+}
+
+.ProseMirror h1,
+.ProseMirror h2,
+.ProseMirror h3,
+.ProseMirror h4,
+.ProseMirror h5,
+.ProseMirror h6 {
+  line-height: 1.1;
+  margin-top: 2.5rem;
+  margin-bottom: 1rem;
+  text-wrap: pretty;
+}
+
+.ProseMirror h1,
+.ProseMirror h2 {
+  margin-top: 3.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.ProseMirror h1 {
+  font-size: 1.8rem;
+  font-weight: bold;
+}
+
+.ProseMirror h2 {
+  font-size: 1.5rem;
+  font-weight: bold;
+}
+
+.ProseMirror h3 {
+  font-size: 1.3rem;
+  font-weight: bold;
+}
+
+.ProseMirror h4,
+.ProseMirror h5,
+.ProseMirror h6 {
+  font-size: 1.1rem;
+  font-weight: bold;
+}
+
+.ProseMirror p {
+  margin: 1rem 0;
+  line-height: 1.7;
+}
+
+.ProseMirror ul,
+.ProseMirror ol {
+  padding: 0 1rem;
+  margin: 1rem 0;
+}
+
+.ProseMirror li {
+  margin: 0.5rem 0;
+}
+
+.ProseMirror li > p {
+  margin: 0;
+}
+
+.ProseMirror blockquote {
+  padding-left: 1rem;
+  border-left: 4px solid #e5e7eb;
+  margin: 1.5rem 0;
+  font-style: italic;
+  color: #6b7280;
+}
+
+.ProseMirror blockquote p {
+  margin: 0.5rem 0;
+}
+
+.ProseMirror code {
+  background-color: #f3f4f6;
+  border-radius: 0.25rem;
+  color: #374151;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+  font-size: 0.875rem;
+  padding: 0.125rem 0.25rem;
+}
+
+.ProseMirror pre {
+  background-color: #1f2937;
+  border-radius: 0.5rem;
+  color: #f9fafb;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+  margin: 1.5rem 0;
+  padding: 1rem;
+  overflow-x: auto;
+}
+
+.ProseMirror pre code {
+  background-color: transparent;
+  color: inherit;
+  font-size: 0.875rem;
+  padding: 0;
+}
+
+.ProseMirror img {
+  height: auto;
+  max-width: 100%;
+  border-radius: 0.5rem;
+  margin: 1.5rem 0;
+}
+
+.ProseMirror a {
+  color: #2563eb;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.ProseMirror a:hover {
+  color: #1d4ed8;
+}
+
+.ProseMirror hr {
+  border: none;
+  border-top: 2px solid #e5e7eb;
+  margin: 2rem 0;
+}
+
+.ProseMirror mark {
+  background-color: #fef08a;
+  padding: 0.125rem 0.25rem;
+  border-radius: 0.25rem;
+}
+
+/* Dark mode styles */
+.dark .ProseMirror {
+  color: #f9fafb;
+}
+
+.dark .ProseMirror blockquote {
+  border-left-color: #4b5563;
+  color: #9ca3af;
+}
+
+.dark .ProseMirror code {
+  background-color: #374151;
+  color: #f3f4f6;
+}
+
+.dark .ProseMirror pre {
+  background-color: #111827;
+  color: #f9fafb;
+}
+
+.dark .ProseMirror hr {
+  border-top-color: #4b5563;
+}
+
+.dark .ProseMirror mark {
+  background-color: #fbbf24;
+  color: #111827;
+}
+
+/* Focus styles */
+.ProseMirror:focus {
+  outline: none;
+}
+
+/* Placeholder styles */
+.ProseMirror p.is-editor-empty:first-child::before {
+  color: #9ca3af;
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+/* Code block language selection */
+.ProseMirror .hljs {
+  color: #f8f8f2;
+  background: #1f2937;
+}
+
+.ProseMirror .hljs-comment,
+.ProseMirror .hljs-quote {
+  color: #75715e;
+}
+
+.ProseMirror .hljs-keyword,
+.ProseMirror .hljs-selector-tag,
+.ProseMirror .hljs-literal {
+  color: #f92672;
+}
+
+.ProseMirror .hljs-number {
+  color: #ae81ff;
+}
+
+.ProseMirror .hljs-string {
+  color: #e6db74;
+}
+
+.ProseMirror .hljs-title,
+.ProseMirror .hljs-section {
+  color: #a6e22e;
+}
+
+.ProseMirror .hljs-variable {
+  color: #f8f8f2;
+}
+
+.ProseMirror .hljs-template-variable {
+  color: #f8f8f2;
+}
+
+.ProseMirror .hljs-attr {
+  color: #a6e22e;
+}
+
+.ProseMirror .hljs-function {
+  color: #a6e22e;
+}
+
+.ProseMirror .hljs-built_in {
+  color: #66d9ef;
+}
+
+.ProseMirror .hljs-addition {
+  color: #a6e22e;
+  background-color: #272822;
+}
+
+.ProseMirror .hljs-deletion {
+  color: #f92672;
+  background-color: #272822;
+}
+
+/* Custom selection styles */
+.ProseMirror-selectednode {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+/* Table styles (if using table extension later) */
+.ProseMirror table {
+  border-collapse: collapse;
+  margin: 1.5rem 0;
+  overflow: hidden;
+  table-layout: fixed;
+  width: 100%;
+}
+
+.ProseMirror table td,
+.ProseMirror table th {
+  border: 1px solid #e5e7eb;
+  box-sizing: border-box;
+  min-width: 1rem;
+  padding: 0.5rem;
+  position: relative;
+  vertical-align: top;
+}
+
+.ProseMirror table th {
+  background-color: #f9fafb;
+  font-weight: bold;
+  text-align: left;
+}
+
+.dark .ProseMirror table td,
+.dark .ProseMirror table th {
+  border-color: #4b5563;
+}
+
+.dark .ProseMirror table th {
+  background-color: #374151;
+}
+
+/* Image resize styles */
+.ProseMirror .image-resizer {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+}
+
+.ProseMirror .image-resizer img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.5rem;
+  margin: 0;
+  display: block;
+}
+
+.ProseMirror .image-resizer .resize-handle {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background-color: #3b82f6;
+  border: 1px solid #ffffff;
+  border-radius: 50%;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  cursor: nw-resize;
+}
+
+.ProseMirror .image-resizer:hover .resize-handle,
+.ProseMirror .image-resizer.selected .resize-handle {
+  opacity: 1;
+}
+
+.ProseMirror .image-resizer .resize-handle.nw {
+  top: -4px;
+  left: -4px;
+  cursor: nw-resize;
+}
+
+.ProseMirror .image-resizer .resize-handle.ne {
+  top: -4px;
+  right: -4px;
+  cursor: ne-resize;
+}
+
+.ProseMirror .image-resizer .resize-handle.sw {
+  bottom: -4px;
+  left: -4px;
+  cursor: sw-resize;
+}
+
+.ProseMirror .image-resizer .resize-handle.se {
+  bottom: -4px;
+  right: -4px;
+  cursor: se-resize;
+}
+
+/* Image selection styles */
+.ProseMirror .image-resizer.selected img {
+  box-shadow: 0 0 0 2px #3b82f6;
+}
+
+/* Dark mode resize handles */
+.dark .ProseMirror .image-resizer .resize-handle {
+  background-color: #60a5fa;
+  border-color: #1f2937;
+}
+
+.dark .ProseMirror .image-resizer.selected img {
+  box-shadow: 0 0 0 2px #60a5fa;
+}
+
+/* Image resize cursor states */
+.ProseMirror .image-resizer.resizing {
+  user-select: none;
+}
+
+.ProseMirror .image-resizer.resizing img {
+  pointer-events: none;
+}
+
+/* Image alignment styles */
+.ProseMirror .image-resizer.align-left {
+  float: left;
+  margin-right: 1rem;
+  margin-bottom: 1rem;
+}
+
+.ProseMirror .image-resizer.align-right {
+  float: right;
+  margin-left: 1rem;
+  margin-bottom: 1rem;
+}
+
+.ProseMirror .image-resizer.align-center {
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+  margin-bottom: 1rem;
+}
+
+/* Tooltip for image resize instructions */
+.ProseMirror .image-resizer::before {
+  content: "Click to select • Drag corners to resize • Hold Shift to maintain aspect ratio";
+  position: absolute;
+  top: -30px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  z-index: 1000;
+}
+
+.ProseMirror .image-resizer:hover::before {
+  opacity: 1;
+}
+
+.dark .ProseMirror .image-resizer::before {
+  background-color: rgba(255, 255, 255, 0.9);
+  color: #1f2937;
+}
