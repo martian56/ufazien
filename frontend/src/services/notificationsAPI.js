@@ -159,7 +159,7 @@ class NotificationsAPI {
    */
   async subscribePush(subscription) {
     try {
-      const response = await fetch(`${this.baseUrl}/subscribe-push/`, {
+      const response = await fetch(`${this.baseUrl}/push/subscribe/`, {
         method: 'POST',
         headers: this.getAuthHeaders(),
         body: JSON.stringify(subscription)
@@ -181,7 +181,7 @@ class NotificationsAPI {
    */
   async unsubscribePush(endpoint) {
     try {
-      const response = await fetch(`${this.baseUrl}/unsubscribe-push/`, {
+      const response = await fetch(`${this.baseUrl}/push/unsubscribe/`, {
         method: 'POST',
         headers: this.getAuthHeaders(),
         body: JSON.stringify({ endpoint })

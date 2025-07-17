@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react';
 import { Bell, X, Check, Settings, Trash2, ExternalLink } from 'lucide-react';
 import notificationsAPI from '../services/notificationsAPI';
 import pushNotificationService from '../services/pushNotificationService';
+import { useToast, ToastContainer } from '../hooks/useToast';
 
 export default function NotificationDropdown({ unreadCount, onCountUpdate }) {
+  const { notifications: toastNotifications, toast, removeNotification } = useToast();
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -71,18 +73,20 @@ export default function NotificationDropdown({ unreadCount, onCountUpdate }) {
       if (pushEnabled) {
         await pushNotificationService.unsubscribe();
         setPushEnabled(false);
+        toast.success('Push notifications disabled');
       } else {
         const hasPermission = await pushNotificationService.requestPermission();
         if (hasPermission) {
           await pushNotificationService.subscribe();
           setPushEnabled(true);
+          toast.success('Push notifications enabled');
         } else {
-          alert('Push notification permission denied. Please enable in browser settings.');
+          toast.error('Push notification permission denied. Please enable in browser settings.');
         }
       }
     } catch (error) {
       console.error('Failed to toggle push notifications:', error);
-      alert('Failed to update push notification settings');
+      toast.error('Failed to update push notification settings');
     }
   };
 
@@ -270,6 +274,12 @@ export default function NotificationDropdown({ unreadCount, onCountUpdate }) {
           </div>
         </>
       )}
+      
+      {/* Toast Notifications */}
+      <ToastContainer 
+        notifications={toastNotifications} 
+        removeNotification={removeNotification} 
+      />
     </div>
   );
 }
