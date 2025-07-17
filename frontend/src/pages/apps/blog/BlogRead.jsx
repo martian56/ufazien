@@ -16,11 +16,13 @@ import "../../../components/RichTextEditor.css"
 import "../../../components/BlogContent.css"
 import { sanitizeHtml } from "../../../utils/security"
 import { processblogContent, extractPlainText, calculateReadTime } from "../../../utils/contentProcessor"
+import { useToast, ToastContainer } from "../../../hooks/useToast"
 
 const API_URL = import.meta.env.VITE_API_URL
 
 // Helper function to strip HTML tags for text processing
 export default function BlogRead() {
+  const { notifications: toastNotifications, toast, removeNotification } = useToast();
   const { id } = useParams()
   const navigate = useNavigate()
 
@@ -477,7 +479,7 @@ export default function BlogRead() {
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(window.location.href)
-    alert("Link copied to clipboard!")
+    toast.success("Link copied to clipboard!")
   }
 
   const handleComment = async () => {
@@ -960,7 +962,7 @@ export default function BlogRead() {
                 </button>
 
                 <button
-                  onClick={() => setIsBookmarked(!isBookmarked)}
+                  onClick={handleBookmark}
                   className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all ${
                     isBookmarked
                       ? "bg-blue-50 text-blue-600 hover:bg-blue-100"
@@ -1451,7 +1453,7 @@ export default function BlogRead() {
                 <button
                   onClick={() => {
                     setShowReportModal(false)
-                    alert("Report submitted. Thank you for helping keep our community safe.")
+                    toast.success("Report submitted. Thank you for helping keep our community safe.")
                   }}
                   className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
                 >
@@ -1462,6 +1464,12 @@ export default function BlogRead() {
           </div>
         </div>
       )}
+      
+      {/* Toast Notifications */}
+      <ToastContainer 
+        notifications={toastNotifications} 
+        removeNotification={removeNotification} 
+      />
     </div>
   )
 }

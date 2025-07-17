@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome to UFAZIEN - {{ user.first_name|default:user.username }}</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        .header {
+            text-align: center;
+            border-bottom: 2px solid #3B82F6;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+        .logo {
+            font-size: 28px;
+            font-weight: bold;
+            color: #3B82F6;
+            margin-bottom: 10px;
+        }
+        .welcome-title {
+            color: #1F2937;
+            font-size: 24px;
+            margin-bottom: 15px;
+        }
+        .welcome-message {
+            color: #4B5563;
+            font-size: 16px;
+            margin-bottom: 25px;
+            line-height: 1.6;
+        }
+        .account-details {
+            background-color: #F3F4F6;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+        }
+        .detail-item {
+            margin-bottom: 8px;
+            color: #374151;
+        }
+        .detail-label {
+            font-weight: bold;
+            color: #1F2937;
+        }
+        .quick-links {
+            background-color: #EFF6FF;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+        }
+        .link-item {
+            margin-bottom: 10px;
+        }
+        .cta-button {
+            display: inline-block;
+            background-color: #3B82F6;
+            color: white;
+            text-decoration: none;
+            padding: 12px 25px;
+            border-radius: 6px;
+            font-weight: bold;
+            margin: 5px;
+        }
+        .cta-button:hover {
+            background-color: #2563EB;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #E5E7EB;
+            color: #6B7280;
+            font-size: 14px;
+        }
+        .social-links {
+            margin: 20px 0;
+        }
+        .social-links a {
+            color: #3B82F6;
+            text-decoration: none;
+            margin: 0 10px;
+        }
+        .unsubscribe {
+            font-size: 12px;
+            color: #9CA3AF;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">UFAZIEN</div>
+            <p>Your University Platform</p>
+        </div>
+        
+        <h1 class="welcome-title">Welcome to UFAZIEN, {{ user.first_name|default:user.username }}! 🎉</h1>
+        
+        <div class="welcome-message">
+            Thank you for joining UFAZIEN! Your account has been successfully created and you're now part of our community.
+        </div>
+        
+        <div class="account-details">
+            <h3 style="margin-top: 0; color: #1F2937;">Your Account Details</h3>
+            <div class="detail-item">
+                <span class="detail-label">Username:</span> {{ user.username }}
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Email:</span> {{ user.email }}
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Registration Date:</span> {{ user.date_joined|date:"F d, Y H:i" }}
+            </div>
+        </div>
+        
+        <div class="quick-links">
+            <h3 style="margin-top: 0; color: #1F2937;">Get Started</h3>
+            <div class="link-item">
+                <a href="https://ufazien.com/settings" class="cta-button">Complete Your Profile</a>
+            </div>
+            <div class="link-item">
+                <a href="https://ufazien.com/community" class="cta-button">Explore Community</a>
+            </div>
+            <div class="link-item">
+                <a href="https://ufazien.com/blog" class="cta-button">Read Blog Posts</a>
+            </div>
+            <div class="link-item">
+                <a href="https://ufazien.com/average-calculator" class="cta-button">Calculate Your Average</a>
+            </div>
+            <div class="link-item">
+                <a href="https://ufazien.com/gpa-calculator" class="cta-button">Calculate Your GPA</a>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <div class="social-links">
+                <a href="https://ufazien.com">Visit UFAZIEN</a> |
+                <a href="https://ufazien.com/blog">Blog</a> |
+                <a href="https://ufazien.com/community">Community</a> |
+                <a href="https://ufazien.com/help">Help Center</a>
+            </div>
+            <p>
+                Welcome to the UFAZIEN community! We're excited to have you on board.<br>
+                Need help getting started? Check out our help center or contact support.
+            </p>
+            <div class="unsubscribe">
+                <a href="https://ufazien.com/settings">Manage Email Preferences</a> |
+                <a href="https://ufazien.com/unsubscribe">Unsubscribe</a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

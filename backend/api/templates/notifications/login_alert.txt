@@ -1,0 +1,29 @@
+Login Alert - UFAZIEN
+
+Dear {{ user.first_name|default:user.username }},
+
+We detected a new login to your UFAZIEN account.
+
+Login Details:
+- Time: {{ login_time|date:"F d, Y H:i T" }}
+- IP Address: {{ ip_address|default:"Unknown" }}
+- Device: {{ user_agent|default:"Unknown device" }}
+
+If this was you, no action is needed. If you didn't log in, please:
+1. Change your password immediately: https://ufazien.com/change-password
+2. Contact our support team: support@ufazien.com
+
+Account Security Tips:
+- Use a strong, unique password
+- Enable two-factor authentication
+- Log out from public devices
+- Keep your account information up to date
+
+---
+UFAZIEN - Your University Platform
+Visit us: https://ufazien.com
+
+This is an automated security notification. You can manage your notification preferences:
+https://ufazien.com/settings
+
+To unsubscribe from security alerts: https://ufazien.com/unsubscribe
