@@ -73,6 +73,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5174", 
     "http://ufazien.com",  
     "https://ufazien.com", 
+    "http://13.42.171.119"
 ]
 
 CORS_ALLOW_CREDENTIALS = True
