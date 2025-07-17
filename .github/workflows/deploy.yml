@@ -282,7 +282,7 @@ jobs:
           
           # Install/update dependencies
           log "📦 Installing Node.js dependencies..."
-          npm install
+          npm i
           
           # Build application
           log "🏗️ Building React application..."
