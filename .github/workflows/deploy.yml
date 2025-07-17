@@ -51,6 +51,7 @@ jobs:
       run: |
         cd backend
         echo "
+        import os
         from .settings import *
         
         # Use SQLite in-memory for testing (completely isolated)
@@ -64,7 +65,7 @@ jobs:
         # Test-specific settings
         SECRET_KEY = 'test-secret-key-for-ci-cd-pipeline-only'
         DEBUG = True
-        ALLOWED_HOSTS = ['*']
+        ALLOWED_HOSTS = ['*']  # Allow all hosts for testing
         
         # Disable migrations for faster tests
         class DisableMigrations:
@@ -85,11 +86,19 @@ jobs:
         " > ufazien/test_settings.py
 
     - name: 🗄️ Run Django Migrations
+      env:
+        SECRET_KEY: 'test-secret-key-for-ci-cd-pipeline-only'
+        DEBUG: 'True'
+        ALLOWED_HOSTS: 'localhost,127.0.0.1'
       run: |
         cd backend
         python manage.py migrate --settings=ufazien.test_settings --run-syncdb
 
     - name: 🧪 Run Django Tests
+      env:
+        SECRET_KEY: 'test-secret-key-for-ci-cd-pipeline-only'
+        DEBUG: 'True'
+        ALLOWED_HOSTS: 'localhost,127.0.0.1'
       run: |
         cd backend
         # Ensure we're using test settings and in-memory database
@@ -105,7 +114,7 @@ jobs:
     - name: 📦 Install Frontend Dependencies
       run: |
         cd frontend
-        npm ci
+        npm install
 
     - name: 🔍 Run Frontend Linting
       run: |
