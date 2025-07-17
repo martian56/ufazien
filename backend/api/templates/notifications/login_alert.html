@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login Alert - UFAZIEN</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        .header {
+            text-align: center;
+            border-bottom: 2px solid #F59E0B;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+        .logo {
+            font-size: 28px;
+            font-weight: bold;
+            color: #3B82F6;
+            margin-bottom: 10px;
+        }
+        .alert-title {
+            color: #F59E0B;
+            font-size: 24px;
+            margin-bottom: 15px;
+        }
+        .alert-message {
+            color: #4B5563;
+            font-size: 16px;
+            margin-bottom: 25px;
+            line-height: 1.6;
+        }
+        .login-details {
+            background-color: #FEF3C7;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            border-left: 4px solid #F59E0B;
+        }
+        .detail-item {
+            margin-bottom: 8px;
+            color: #92400E;
+        }
+        .detail-label {
+            font-weight: bold;
+            color: #78350F;
+        }
+        .security-tips {
+            background-color: #F0F9FF;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            border-left: 4px solid #3B82F6;
+        }
+        .tip-item {
+            margin-bottom: 8px;
+            color: #1E40AF;
+        }
+        .warning-section {
+            background-color: #FEF2F2;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            border-left: 4px solid #EF4444;
+        }
+        .cta-button {
+            display: inline-block;
+            background-color: #EF4444;
+            color: white;
+            text-decoration: none;
+            padding: 12px 25px;
+            border-radius: 6px;
+            font-weight: bold;
+            margin: 10px 5px;
+        }
+        .cta-button.primary {
+            background-color: #3B82F6;
+        }
+        .cta-button:hover {
+            opacity: 0.9;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #E5E7EB;
+            color: #6B7280;
+            font-size: 14px;
+        }
+        .social-links {
+            margin: 20px 0;
+        }
+        .social-links a {
+            color: #3B82F6;
+            text-decoration: none;
+            margin: 0 10px;
+        }
+        .unsubscribe {
+            font-size: 12px;
+            color: #9CA3AF;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">UFAZIEN</div>
+            <p>Security Alert</p>
+        </div>
+        
+        <h1 class="alert-title">🔐 Login Alert</h1>
+        
+        <div class="alert-message">
+            Hello {{ user.first_name|default:user.username }},<br><br>
+            We detected a new login to your UFAZIEN account. Here are the details:
+        </div>
+        
+        <div class="login-details">
+            <h3 style="margin-top: 0; color: #78350F;">Login Details</h3>
+            <div class="detail-item">
+                <span class="detail-label">Time:</span> {{ login_time|date:"F d, Y H:i T" }}
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">IP Address:</span> {{ ip_address|default:"Unknown" }}
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Device:</span> {{ user_agent|default:"Unknown device" }}
+            </div>
+        </div>
+        
+        <div class="warning-section">
+            <h3 style="margin-top: 0; color: #DC2626;">If this wasn't you:</h3>
+            <p style="color: #DC2626; margin-bottom: 15px;">
+                If you didn't log in, your account may be compromised. Take action immediately:
+            </p>
+            <a href="https://ufazien.com/change-password" class="cta-button">Change Password Now</a>
+            <a href="mailto:support@ufazien.com" class="cta-button">Contact Support</a>
+        </div>
+        
+        <div class="security-tips">
+            <h3 style="margin-top: 0; color: #1E40AF;">Account Security Tips</h3>
+            <div class="tip-item">• Use a strong, unique password</div>
+            <div class="tip-item">• Always log out from public devices</div>
+            <div class="tip-item">• Keep your account information up to date</div>
+            <div class="tip-item">• Never share your login credentials</div>
+        </div>
+        
+        <div style="text-align: center; margin: 20px 0;">
+            <a href="https://ufazien.com/settings" class="cta-button primary">Review Security Settings</a>
+        </div>
+        
+        <div class="footer">
+            <div class="social-links">
+                <a href="https://ufazien.com">Visit UFAZIEN</a> |
+                <a href="https://ufazien.com/help">Help Center</a> |
+                <a href="mailto:support@ufazien.com">Contact Support</a>
+            </div>
+            <p>
+                This is an automated security notification to help protect your account.<br>
+                We take your security seriously at UFAZIEN.
+            </p>
+            <div class="unsubscribe">
+                <a href="https://ufazien.com/settings">Manage Email Preferences</a> |
+                <a href="https://ufazien.com/unsubscribe">Unsubscribe</a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

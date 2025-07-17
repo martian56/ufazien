@@ -1,13 +1,17 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, Link } from "react-router-dom"
 import {Calculator, TrendingUp,MessageCircle,
   PenTool,Users,Bell,Search, LogOut, Calendar,
   Award,Target,Activity,BookMarked,GraduationCap,
   Menu,X } from "lucide-react"
 import SideBar from "../components/ui/SideBar"
+import NotificationDropdown from "../components/NotificationDropdown"
+import notificationsAPI from "../services/notificationsAPI"
+import pushNotificationService from "../services/pushNotificationService"
 import { getMajorDisplayName } from "../utils/majorUtils"
+
 
 const API_URL = import.meta.env.VITE_API_URL
 
@@ -18,6 +22,7 @@ export default function Dashboard() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [currentTime, setCurrentTime] = useState(new Date())
   const [loading, setLoading] = useState(true)
+  const [unreadCount, setUnreadCount] = useState(0)
   const [user, setUser] = useState({
     name: "Loading...",
     email: "loading@ufaz.edu.az",
@@ -35,6 +40,38 @@ export default function Dashboard() {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000)
     return () => clearInterval(timer)
   }, [])
+
+  // Initialize push notifications
+  useEffect(() => {
+    const initializePushNotifications = async () => {
+      try {
+        await pushNotificationService.initialize();
+        
+        // Check if user is logged in before fetching notifications
+        const access = localStorage.getItem("access");
+        if (access) {
+          fetchUnreadCount();
+        }
+      } catch (error) {
+        console.error('Failed to initialize push notifications:', error);
+      }
+    };
+
+    initializePushNotifications();
+  }, []);
+
+  const fetchUnreadCount = async () => {
+    try {
+      const count = await notificationsAPI.getUnreadCount();
+      setUnreadCount(count);
+    } catch (error) {
+      console.error('Failed to fetch unread count:', error);
+    }
+  };
+
+  const handleCountUpdate = (newCount) => {
+    setUnreadCount(newCount);
+  };
 
 useEffect(() => {
   const access = localStorage.getItem("access");
@@ -227,10 +264,18 @@ useEffect(() => {
               </div>
 
               {/* Notifications */}
-              <button className="relative p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
-                <Bell className="w-5 h-5" />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-              </button>
+              <div className="flex items-center gap-2">
+                <NotificationDropdown 
+                  unreadCount={unreadCount} 
+                  onCountUpdate={handleCountUpdate}
+                />
+                {/* <Link 
+                  to="/notifications"
+                  className="hidden sm:block text-xs text-gray-500 hover:text-blue-600 transition-colors"
+                >
+                  View All
+                </Link> */}
+              </div>
 
               {/* User Profile */}
               <div className="flex items-center gap-3">

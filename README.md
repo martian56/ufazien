@@ -1,6 +1,6 @@
 # UFAZIEN
 
-A modern full-stack web application built with Django REST Framework and React, featuring a comprehensive blog system, dashboard, and various productivity applications.
+A modern full-stack web application built with Django REST Framework and React, featuring a comprehensive blog system, dashboard, average calculator, GPA calculator, and various productivity applications for Ufaz students.
 
 ## 🚀 Project Overview
 
@@ -13,13 +13,13 @@ UFAZIEN is a multi-purpose platform that combines:
 ## 🛠️ Tech Stack
 
 ### Backend
-- **Django 4.x**: Python web framework
+- **Django 5.x**: Python web framework
 - **Django REST Framework**: API development
 - **SQLite**: Database (development)
 - **Python 3.12**: Programming language
 
 ### Frontend
-- **React 18**: JavaScript library for UI
+- **React 19**: JavaScript library for UI
 - **Vite**: Build tool and development server
 - **TailwindCSS**: Utility-first CSS framework
 - **Lucide React**: Icon library
@@ -62,7 +62,6 @@ ufazien/
 │   ├── package.json       # Node.js dependencies
 │   ├── vite.config.js     # Vite configuration
 │   └── eslint.config.js   # ESLint configuration
-├── api_design.md          # API design documentation
 └── README.md              # This file
 ```
 
@@ -70,8 +69,8 @@ ufazien/
 
 ### Prerequisites
 
-- **Python 3.8+**
-- **Node.js 16+**
+- **Python 3.12+**
+- **Node.js 24.3+**
 - **npm or yarn**
 
 ### Backend Setup
@@ -245,7 +244,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 If you have any questions or need help, please:
 
-1. Check the [Issues](https://github.com/yourusername/ufazien/issues) page
+1. Check the [Issues](https://github.com/martian58/ufazien/issues) page
 2. Create a new issue if your problem isn't already listed
 3. Contact the maintainers
 

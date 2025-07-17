@@ -960,7 +960,7 @@ export default function BlogRead() {
                 </button>
 
                 <button
-                  onClick={() => setIsBookmarked(!isBookmarked)}
+                  onClick={handleBookmark}
                   className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all ${
                     isBookmarked
                       ? "bg-blue-50 text-blue-600 hover:bg-blue-100"
