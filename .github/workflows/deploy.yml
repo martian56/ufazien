@@ -275,6 +275,10 @@ jobs:
           # Frontend Deployment
           log "⚛️ Starting frontend deployment..."
           cd /home/ubuntu/ufazien/frontend
+
+          export NVM_DIR="$HOME/.nvm"
+          [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+          nvm use 24.3.0
           
           # Verify Node.js version
           NODE_VERSION=$(node --version)
