@@ -247,20 +247,20 @@ const MenuBar = ({ editor, darkMode }) => {
         // Validate file before upload
         const validation = validateImageFile(file)
         if (!validation.valid) {
-          alert(`Upload failed: ${validation.error}`)
+          toast?.error(`Upload failed: ${validation.error}`) || alert(`Upload failed: ${validation.error}`)
           return
         }
 
         // Check rate limiting
         const userIdentifier = localStorage.getItem('user_id') || 'anonymous'
         if (!uploadRateLimiter.isAllowed(userIdentifier)) {
-          alert('Upload rate limit exceeded. Please wait before uploading again.')
+          toast?.error('Upload rate limit exceeded. Please wait before uploading again.') || alert('Upload rate limit exceeded. Please wait before uploading again.')
           return
         }
 
         const access = localStorage.getItem('access')
         if (!access) {
-          alert('Authentication required for image upload.')
+          toast?.error('Authentication required for image upload.') || alert('Authentication required for image upload.')
           return
         }
 
@@ -282,15 +282,15 @@ const MenuBar = ({ editor, darkMode }) => {
           if (data.url && isValidImageUrl(data.url)) {
             editor.chain().focus().setImage({ src: data.url }).run()
           } else {
-            alert('Invalid image URL returned from server.')
+            toast?.error('Invalid image URL returned from server.') || alert('Invalid image URL returned from server.')
           }
         } else {
           const errorData = await response.json()
-          alert(`Failed to upload image: ${errorData.error || 'Unknown error'}`)
+          toast?.error(`Failed to upload image: ${errorData.error || 'Unknown error'}`) || alert(`Failed to upload image: ${errorData.error || 'Unknown error'}`)
         }
       } catch (error) {
         console.error('Image upload error:', error)
-        alert('Failed to upload image. Please try again.')
+        toast?.error('Failed to upload image. Please try again.') || alert('Failed to upload image. Please try again.')
       }
     }
     
@@ -323,7 +323,7 @@ const MenuBar = ({ editor, darkMode }) => {
       // Only allow safe protocols
       const allowedProtocols = ['http:', 'https:', 'mailto:', 'tel:']
       if (!allowedProtocols.includes(urlObj.protocol)) {
-        alert('Invalid URL protocol. Only HTTP, HTTPS, mailto, and tel are allowed.')
+        toast?.error('Invalid URL protocol. Only HTTP, HTTPS, mailto, and tel are allowed.') || alert('Invalid URL protocol. Only HTTP, HTTPS, mailto, and tel are allowed.')
         return
       }
 
@@ -334,7 +334,7 @@ const MenuBar = ({ editor, darkMode }) => {
         target: '_blank'
       }).run()
     } catch (error) {
-      alert('Invalid URL format. Please enter a valid URL.')
+      toast?.error('Invalid URL format. Please enter a valid URL.') || alert('Invalid URL format. Please enter a valid URL.')
     }
   }, [editor])
 
@@ -653,7 +653,7 @@ const MenuBar = ({ editor, darkMode }) => {
   )
 }
 
-const RichTextEditor = ({ content, onChange, darkMode = false, placeholder = "Start writing..." }) => {
+const RichTextEditor = ({ content, onChange, darkMode = false, placeholder = "Start writing...", toast }) => {
   const editor = useEditor({
     extensions: [
       StarterKit.configure({

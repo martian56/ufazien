@@ -5,7 +5,7 @@ import {
   Check, 
   CheckCheck, 
   Settings, 
-    Menu,
+  Menu,
   ArrowLeft,
   Filter,
   Trash2,
@@ -14,8 +14,10 @@ import {
 import SideBar from '../components/ui/SideBar';
 import notificationsAPI from '../services/notificationsAPI';
 import pushNotificationService from '../services/pushNotificationService';
+import { useToast, ToastContainer } from '../hooks/useToast';
 
 export default function NotificationsPage() {
+  const { notifications: toastNotifications, toast, removeNotification } = useToast();
   const navigate = useNavigate();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
@@ -111,18 +113,20 @@ export default function NotificationsPage() {
       if (pushEnabled) {
         await pushNotificationService.unsubscribe();
         setPushEnabled(false);
+        toast.success('Push notifications disabled');
       } else {
         const hasPermission = await pushNotificationService.requestPermission();
         if (hasPermission) {
           await pushNotificationService.subscribe();
           setPushEnabled(true);
+          toast.success('Push notifications enabled');
         } else {
-          alert('Push notification permission denied. Please enable in browser settings.');
+          toast.error('Push notification permission denied. Please enable in browser settings.');
         }
       }
     } catch (error) {
       console.error('Failed to toggle push notifications:', error);
-      alert('Failed to update push notification settings');
+      toast.error('Failed to update push notification settings');
     }
   };
 
@@ -430,6 +434,12 @@ export default function NotificationsPage() {
           onClick={() => setIsSidebarOpen(false)} 
         />
       )}
+      
+      {/* Toast Notifications */}
+      <ToastContainer 
+        notifications={toastNotifications} 
+        removeNotification={removeNotification} 
+      />
     </div>
   );
 }
