@@ -8,6 +8,7 @@ import "../../../components/RichTextEditor.css"
 import "../../../components/BlogContent.css"
 import { sanitizeText, sanitizeHtml, apiRateLimiter } from "../../../utils/security"
 import { enhanceBlogContent } from "../../../utils/blogContentEnhancer"
+import { useToast, ToastContainer } from "../../../hooks/useToast"
 import {
   Save,
   Eye,
@@ -55,6 +56,7 @@ import {
 const API_URL = import.meta.env.VITE_API_URL
 
 const BlogCreate = () => {
+  const { notifications: toastNotifications, toast, removeNotification } = useToast();
   const navigate = useNavigate()
   // Core state
   const [title, setTitle] = useState('');
@@ -428,19 +430,19 @@ const BlogCreate = () => {
     const sanitizedExcerpt = sanitizeText(excerpt, 300)
 
     if (!sanitizedTitle.trim() || !sanitizedContent.trim()) {
-      alert('Please add a title and content before publishing.');
+      toast.error('Please add a title and content before publishing.');
       return;
     }
 
     if (!category) {
-      alert('Please select a category.');
+      toast.error('Please select a category.');
       return;
     }
 
     // Check rate limiting
     const userIdentifier = localStorage.getItem('user_id') || 'anonymous'
     if (!apiRateLimiter.isAllowed(userIdentifier)) {
-      alert('Publishing rate limit exceeded. Please wait before publishing again.')
+      toast.error('Publishing rate limit exceeded. Please wait before publishing again.')
       return
     }
 
@@ -450,7 +452,7 @@ const BlogCreate = () => {
       const access = localStorage.getItem('access');
       
       if (!access) {
-        alert('Authentication required for publishing.');
+        toast.error('Authentication required for publishing.');
         return;
       }
       
@@ -496,11 +498,11 @@ const BlogCreate = () => {
 
       console.log('Post created successfully:', response.data);
       setIsDraft(false);
-      alert('Blog post published successfully!');
+      toast.success('Blog post published successfully!');
       navigate('/blog');
     } catch (error) {
       console.error('Error publishing post:', error);
-      alert('Error publishing post. Please try again.');
+      toast.error('Error publishing post. Please try again.');
     } finally {
       setIsPublishing(false);
     }
@@ -722,6 +724,7 @@ const BlogCreate = () => {
                     onChange={setContent}
                     darkMode={darkMode}
                     placeholder="Start writing your amazing blog post..."
+                    toast={toast}
                   />
                 )}
               </div>
@@ -1087,6 +1090,12 @@ const BlogCreate = () => {
           )}
         </div>
       </div>
+      
+      {/* Toast Notifications */}
+      <ToastContainer 
+        notifications={toastNotifications} 
+        removeNotification={removeNotification} 
+      />
     </div>
   );
 };

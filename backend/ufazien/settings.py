@@ -187,8 +187,20 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = 5242880  # 5MB
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend")
 AUTH_USER_MODEL = 'users.User'
+
+# Email settings for production (update these for production use)
+DEFAULT_FROM_EMAIL = 'ufazien@ufazien.com'
+EMAIL_HOST = os.getenv('EMAIL_HOST', '')
+EMAIL_PORT = os.getenv('EMAIL_PORT', 587)
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
+
+# Push notification settings (VAPID keys for web push)
+VAPID_PUBLIC_KEY = os.getenv('VAPID_PUBLIC_KEY_PEM', '')
+VAPID_PUBLIC_KEY_B64 = os.getenv('VAPID_PUBLIC_KEY_B64', '')
 
 from datetime import timedelta
 

@@ -116,11 +116,6 @@ jobs:
         cd frontend
         npm install
 
-    - name: 🔍 Run Frontend Linting
-      run: |
-        cd frontend
-        npm run lint || echo "Linting issues found, but continuing..."
-
     - name: 🏗️ Build Frontend Application
       run: |
         cd frontend

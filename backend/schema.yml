@@ -1241,6 +1241,154 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/notifications/:
+    get:
+      operationId: api_notifications_list
+      description: List user's notifications
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedNotificationList'
+          description: ''
+  /api/notifications/count/:
+    get:
+      operationId: api_notifications_count_retrieve
+      description: Get unread notification count
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/notifications/mark-read/:
+    post:
+      operationId: api_notifications_mark_read_create
+      description: Mark notifications as read
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/notifications/preferences/:
+    get:
+      operationId: api_notifications_preferences_retrieve
+      description: Get and update notification preferences
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationPreference'
+          description: ''
+    put:
+      operationId: api_notifications_preferences_update
+      description: Get and update notification preferences
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationPreference'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/NotificationPreference'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/NotificationPreference'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationPreference'
+          description: ''
+    patch:
+      operationId: api_notifications_preferences_partial_update
+      description: Get and update notification preferences
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedNotificationPreference'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedNotificationPreference'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedNotificationPreference'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationPreference'
+          description: ''
+  /api/notifications/push/subscribe/:
+    post:
+      operationId: api_notifications_push_subscribe_create
+      description: Subscribe to push notifications
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/notifications/push/unsubscribe/:
+    post:
+      operationId: api_notifications_push_unsubscribe_create
+      description: Unsubscribe from push notifications
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/notifications/vapid-key/:
+    get:
+      operationId: api_notifications_vapid_key_retrieve
+      description: Get VAPID public key for push notification subscription
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
 components:
   schemas:
     AcademicYear:
@@ -1566,6 +1714,91 @@ components:
         * `OGE` - Oil and Gas Engineering
         * `GE` - Geophysical Engineering
         * `UD` - Undeclared
+    Notification:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        notification_type:
+          $ref: '#/components/schemas/NotificationTypeEnum'
+        title:
+          type: string
+          maxLength: 255
+        message:
+          type: string
+        sender_username:
+          type: string
+          readOnly: true
+        sender_name:
+          type: string
+          readOnly: true
+        is_read:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        time_since:
+          type: string
+          readOnly: true
+        object_id:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          nullable: true
+      required:
+      - created_at
+      - id
+      - message
+      - notification_type
+      - sender_name
+      - sender_username
+      - time_since
+      - title
+    NotificationPreference:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        email_on_follow:
+          type: boolean
+        email_on_like:
+          type: boolean
+        email_on_comment:
+          type: boolean
+        email_on_new_post:
+          type: boolean
+        email_on_login:
+          type: boolean
+        email_on_registration:
+          type: boolean
+        push_on_follow:
+          type: boolean
+        push_on_like:
+          type: boolean
+        push_on_comment:
+          type: boolean
+        push_on_new_post:
+          type: boolean
+      required:
+      - id
+    NotificationTypeEnum:
+      enum:
+      - follow
+      - like_post
+      - like_comment
+      - comment
+      - new_post
+      type: string
+      description: |-
+        * `follow` - New Follower
+        * `like_post` - Post Liked
+        * `like_comment` - Comment Liked
+        * `comment` - New Comment
+        * `new_post` - New Post Published
     PaginatedAverageSchemaList:
       type: object
       required:
@@ -1635,6 +1868,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Category'
+    PaginatedNotificationList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Notification'
     PaginatedTagList:
       type: object
       required:
@@ -1802,6 +2058,32 @@ components:
         semester:
           type: integer
           nullable: true
+    PatchedNotificationPreference:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        email_on_follow:
+          type: boolean
+        email_on_like:
+          type: boolean
+        email_on_comment:
+          type: boolean
+        email_on_new_post:
+          type: boolean
+        email_on_login:
+          type: boolean
+        email_on_registration:
+          type: boolean
+        push_on_follow:
+          type: boolean
+        push_on_like:
+          type: boolean
+        push_on_comment:
+          type: boolean
+        push_on_new_post:
+          type: boolean
     PatchedUserGPA:
       type: object
       properties:
