@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ notification.title }} - UFAZIEN</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        .header {
+            text-align: center;
+            border-bottom: 2px solid #3B82F6;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+        .logo {
+            font-size: 28px;
+            font-weight: bold;
+            color: #3B82F6;
+            margin-bottom: 10px;
+        }
+        .notification-title {
+            color: #1F2937;
+            font-size: 24px;
+            margin-bottom: 15px;
+        }
+        .notification-message {
+            color: #4B5563;
+            font-size: 16px;
+            margin-bottom: 25px;
+            line-height: 1.6;
+        }
+        .sender-info {
+            background-color: #F3F4F6;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+        }
+        .sender-name {
+            font-weight: bold;
+            color: #374151;
+        }
+        .cta-button {
+            display: inline-block;
+            background-color: #3B82F6;
+            color: white;
+            text-decoration: none;
+            padding: 12px 25px;
+            border-radius: 6px;
+            font-weight: bold;
+            margin: 20px 0;
+        }
+        .cta-button:hover {
+            background-color: #2563EB;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #E5E7EB;
+            color: #6B7280;
+            font-size: 14px;
+        }
+        .social-links {
+            margin: 20px 0;
+        }
+        .social-links a {
+            color: #3B82F6;
+            text-decoration: none;
+            margin: 0 10px;
+        }
+        .unsubscribe {
+            font-size: 12px;
+            color: #9CA3AF;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">UFAZIEN</div>
+            <p>Your University Platform</p>
+        </div>
+        
+        <h1 class="notification-title">{{ notification.title }}</h1>
+    
+        <div class="notification-message">
+            {{ notification.message }}
+
+        {% if notification.notification_type == 'comment' %}
+           <p>Comment: {{ notification.content_object.content }}</p>
+        {% endif %}
+        </div>
+        
+        {% if notification.notification_type == 'like_post' or notification.notification_type == 'comment' %}
+            <a href="{{ site_url }}/blog/{{ notification.content_object.id }}" class="cta-button">
+                View Post
+            </a>
+        {% elif notification.notification_type == 'follow' %}
+            <a href="{{ site_url }}/profile/{{ notification.sender.id }}" class="cta-button">
+                View Profile
+            </a>
+        {% elif notification.notification_type == 'new_post' %}
+            <a href="{{ site_url }}/blog/{{ notification.content_object.id }}" class="cta-button">
+                Read Post
+            </a>
+        {% elif notification.notification_type == 'comment' %}
+            <a href="{{ site_url }}/blog/{{ notification.content_object.post.id }}" class="cta-button">
+                View Comment
+            </a>
+        {% elif notification.notification_type == 'like_comment' %}
+            <a href="{{ site_url }}/blog/{{ notification.content_object.post.id }}" class="cta-button">
+                View Comment
+            </a>
+        {% else %}
+            <a href="{{ site_url }}/notifications" class="cta-button">
+                View All Notifications
+            </a>
+        {% endif %}
+        
+        <div class="footer">
+            <div class="social-links">
+                <a href="{{ site_url }}">Visit UFAZIEN</a> |
+                <a href="{{ site_url }}/blog">Blog</a> |
+                <a href="{{ site_url }}/community">Community</a>
+            </div>
+            
+            <p>
+                You're receiving this email because you're a member of UFAZIEN.<br>
+                You can manage your notification preferences in your account settings.
+            </p>
+            
+            <div class="unsubscribe">
+                <a href="{{ site_url }}/settings">Manage Email Preferences</a> |
+                <a href="{{ site_url }}/unsubscribe">Unsubscribe</a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

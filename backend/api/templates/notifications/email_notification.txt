@@ -1,0 +1,23 @@
+{{ notification.title }} - UFAZIEN
+
+
+{{ notification.message }}
+
+{% if notification.notification_type == 'like_post' or notification.notification_type == 'comment' %}
+View Post: {{ site_url }}/blog/{{ notification.content_object.id }}
+{% elif notification.notification_type == 'follow' %}
+View Profile: {{ site_url }}/profile/{{ notification.sender.id }}
+{% elif notification.notification_type == 'new_post' %}
+Read Post: {{ site_url }}/blog/{{ notification.content_object.id }}
+{% else %}
+View All Notifications: {{ site_url }}/notifications
+{% endif %}
+
+---
+UFAZIEN - Your University Platform
+Visit us: {{ site_url }}
+
+You can manage your notification preferences in your account settings:
+{{ site_url }}/settings
+
+To unsubscribe from all emails: {{ site_url }}/unsubscribe

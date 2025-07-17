@@ -9,6 +9,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from dotenv import load_dotenv
 from .serializers import SignupSerializer, LoginSerializer, UserSerializer
+from api.services.notification_service import NotificationService
 import os
 
 
@@ -25,6 +26,10 @@ class SignupView(APIView):
         serializer = SignupSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.save()
+            
+            # Send welcome email
+            NotificationService.send_welcome_email(user)
+            
             refresh = RefreshToken.for_user(user)
             return Response({
                 "access": str(refresh.access_token),
@@ -43,6 +48,9 @@ class LoginView(APIView):
         password = serializer.validated_data["password"]
         user = authenticate(request, username=email, password=password)
         if user is not None:
+            # Send login alert email
+            NotificationService.send_login_alert_email(user, request)
+            
             refresh = RefreshToken.for_user(user)
             return Response({
                 "access": str(refresh.access_token),
@@ -103,6 +111,13 @@ class GoogleAuthCodeExchangeView(APIView):
                     "last_name": last_name,
                 }
             )
+
+            # Send welcome email for new Google OAuth users
+            if created:
+                NotificationService.send_welcome_email(user)
+            else:
+                # Send login alert for existing users
+                NotificationService.send_login_alert_email(user, request)
 
             # Optionally update names if user exists and info has changed
             updated = False

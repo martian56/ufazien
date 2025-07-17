@@ -1,0 +1,28 @@
+Welcome to UFAZIEN - {{ user.first_name }}!
+
+Dear {{ user.first_name|default:user.username }},
+
+Welcome to UFAZIEN! Your account has been successfully created.
+
+Account Details:
+- Username: {{ user.username }}
+- Email: {{ user.email }}
+- Registration Date: {{ user.date_joined|date:"F d, Y H:i" }}
+
+Get Started:
+- Complete your profile: https://ufazien.com/settings
+- Explore our community: https://ufazien.com/community
+- Read our latest blog posts: https://ufazien.com/blog
+- Calculate Your Average: https://ufazien.com/average-calculator
+- Calculate your GPA: https://ufazien.com/gpa-calculator
+
+Need help? Visit our help center or contact support.
+
+---
+UFAZIEN - Your University Platform
+Visit us: https://ufazien.com
+
+You can manage your notification preferences in your account settings:
+https://ufazien.com/settings
+
+To unsubscribe from all emails: https://ufazien.com/unsubscribe
