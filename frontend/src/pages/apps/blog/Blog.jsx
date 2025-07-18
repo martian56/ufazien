@@ -935,7 +935,7 @@ function BlogPostCard({ post, onLike, onBookmark, onPostClick, onSelect, current
         >
           {post.title}
         </h2>
-        <p className="text-gray-600 line-clamp-3">{createExcerpt(post.content, 200)}</p>
+        <p className="text-gray-600 line-clamp-3">{post.excerpt || createExcerpt(post.content, 200)}</p>
       </div>
 
       {/* Tags */}

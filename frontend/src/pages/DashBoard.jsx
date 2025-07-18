@@ -25,7 +25,7 @@ export default function Dashboard() {
   const [unreadCount, setUnreadCount] = useState(0)
   const [user, setUser] = useState({
     name: "Loading...",
-    email: "loading@ufaz.edu.az",
+    email: "loading@ufaz.az",
     year: "Loading...",
     major: "Loading...",
     avatar: "/placeholder.svg?height=40&width=40",
