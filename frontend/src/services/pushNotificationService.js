@@ -24,9 +24,18 @@ class PushNotificationService {
     }
 
     try {
-      // Register service worker
-      this.registration = await navigator.serviceWorker.register('/sw.js');
-      console.log('Service Worker registered successfully');
+      // Register service worker with better error handling
+      this.registration = await navigator.serviceWorker.register('/sw.js', {
+        scope: '/'
+      });
+      
+      console.log('Service Worker registered successfully:', this.registration.scope);
+
+      // Wait for service worker to be ready
+      await navigator.serviceWorker.ready;
+
+      // Listen for service worker messages
+      navigator.serviceWorker.addEventListener('message', this.handleServiceWorkerMessage.bind(this));
 
       // Check if already subscribed
       this.subscription = await this.registration.pushManager.getSubscription();
@@ -35,6 +44,19 @@ class PushNotificationService {
     } catch (error) {
       console.error('Service Worker registration failed:', error);
       return false;
+    }
+  }
+
+  /**
+   * Handle messages from service worker
+   */
+  handleServiceWorkerMessage(event) {
+    const { data } = event;
+    
+    if (data.type === 'SYNC_NOTIFICATIONS') {
+      console.log('Service worker requested notification sync');
+      // Trigger notification sync in main app
+      window.dispatchEvent(new CustomEvent('sync-notifications'));
     }
   }
 
