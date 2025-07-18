@@ -63,37 +63,23 @@ class SecurityUtils:
         # Note: In production, use a proper HTML sanitizer like bleach
         content = html.escape(content, quote=False)
         
-        # Allow specific safe HTML tags back
-        safe_replacements = {
-            '&lt;p&gt;': '<p>',
-            '&lt;/p&gt;': '</p>',
-            '&lt;br&gt;': '<br>',
-            '&lt;strong&gt;': '<strong>',
-            '&lt;/strong&gt;': '</strong>',
-            '&lt;em&gt;': '<em>',
-            '&lt;/em&gt;': '</em>',
-            '&lt;h1&gt;': '<h1>',
-            '&lt;/h1&gt;': '</h1>',
-            '&lt;h2&gt;': '<h2>',
-            '&lt;/h2&gt;': '</h2>',
-            '&lt;h3&gt;': '<h3>',
-            '&lt;/h3&gt;': '</h3>',
-            '&lt;ul&gt;': '<ul>',
-            '&lt;/ul&gt;': '</ul>',
-            '&lt;ol&gt;': '<ol>',
-            '&lt;/ol&gt;': '</ol>',
-            '&lt;li&gt;': '<li>',
-            '&lt;/li&gt;': '</li>',
-            '&lt;code&gt;': '<code>',
-            '&lt;/code&gt;': '</code>',
-            '&lt;pre&gt;': '<pre>',
-            '&lt;/pre&gt;': '</pre>',
-            '&lt;blockquote&gt;': '<blockquote>',
-            '&lt;/blockquote&gt;': '</blockquote>',
-        }
-        
-        for escaped, safe in safe_replacements.items():
-            content = content.replace(escaped, safe)
+        # Allow specific safe HTML tags back using regex to handle attributes
+        for tag in cls.ALLOWED_TAGS:
+            # Handle opening tags with attributes (e.g., <img src="...">)
+            pattern = rf'&lt;{tag}(\s[^&]*?)?&gt;'
+            replacement = rf'<{tag}\1>'
+            content = re.sub(pattern, replacement, content)
+            
+            # Handle self-closing tags with attributes (e.g., <img src="..." />)
+            pattern = rf'&lt;{tag}(\s[^&]*?)?/&gt;'
+            replacement = rf'<{tag}\1/>'
+            content = re.sub(pattern, replacement, content)
+            
+            # Handle closing tags (e.g., </p>)
+            if tag not in ['br', 'hr', 'img']:  # Skip self-closing tags
+                pattern = rf'&lt;/{tag}&gt;'
+                replacement = rf'</{tag}>'
+                content = re.sub(pattern, replacement, content)
         
         return content
     

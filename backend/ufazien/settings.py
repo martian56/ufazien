@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
+from urllib.parse import urlparse, parse_qsl
 from dotenv import load_dotenv
 import os
 
@@ -138,12 +139,43 @@ WSGI_APPLICATION = 'ufazien.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+
+if os.getenv("ENVIRONMENT") == "production":
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': os.getenv('DB_NAME', 'ufazien_test'),
+            'USER': os.getenv('DB_USER', 'ufazien_test_user'),
+            'PASSWORD': os.getenv('DB_PASSWORD', 'test_password'),
+            'HOST': 'localhost', 
+            'PORT': '',
+        }
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
+
+
+# NEON SERVERLESS DATABASE CONFIGURATION
+
+# Replace the DATABASES section of your settings.py with this
+# tmpPostgres = urlparse(os.getenv("DATABASE_URL"))
+
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.postgresql',
+#         'NAME': tmpPostgres.path.replace('/', ''),
+#         'USER': tmpPostgres.username,
+#         'PASSWORD': tmpPostgres.password,
+#         'HOST': tmpPostgres.hostname,
+#         'PORT': 5432,
+#         'OPTIONS': dict(parse_qsl(tmpPostgres.query)),
+#     }
+# }
 
 
 # Password validation

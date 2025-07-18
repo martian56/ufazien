@@ -5,14 +5,15 @@ import Dashboard from "./pages/DashBoard"
 import AverageCalculator from "./pages/apps/average/AverageCalculator"
 import Blog from "./pages/apps/blog/Blog"
 import GpaCalculator from "./pages/apps/gpa/GpaCalculator"
-import Calendar from "./pages/apps/Calendar"
-import Community from "./pages/apps/Community"
+import Calendar from "./pages/apps/calendar/Calendar"
+import Community from "./pages/apps/community/Community"
 import Settings from "./pages/Settings"
 import Notifications from "./pages/Notifications"
 import BlogCreate from "./pages/apps/blog/BlogCreate"
 import BlogRead from "./pages/apps/blog/BlogRead"
 import ProtectedRoute from "./pages/auth/ProtectedRoute"
 import UfazSimulation from "./pages/game/UfazSimulation"
+import Sim2 from "./pages/game/Sim2"
 
 function App() {
   return (
@@ -31,7 +32,8 @@ function App() {
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
         <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-        <Route path="/simulation" element={<ProtectedRoute><UfazSimulation /></ProtectedRoute>} />
+        <Route path="/simulation-old" element={<ProtectedRoute><UfazSimulation /></ProtectedRoute>} />
+        <Route path="/simulation" element={<ProtectedRoute><Sim2 /></ProtectedRoute>} />
         {/* Add more routes as needed */}
       </Routes>
     </Router>
