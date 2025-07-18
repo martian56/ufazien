@@ -426,7 +426,12 @@ const BlogCreate = () => {
   const handlePublish = async () => {
     // Sanitize and validate inputs
     const sanitizedTitle = sanitizeText(title, 200)
+    
+    // Debug: Log the content before and after sanitization
+    console.log('🔍 Original content:', content)
     const sanitizedContent = sanitizeHtml(content)
+    console.log('🔍 Sanitized content:', sanitizedContent)
+    
     const sanitizedExcerpt = sanitizeText(excerpt, 300)
 
     if (!sanitizedTitle.trim() || !sanitizedContent.trim()) {
@@ -487,6 +492,9 @@ const BlogCreate = () => {
         is_published: !isDraft,
         is_featured: false, // Can be set later through admin or separate feature
       };
+
+      console.log('🔍 Complete blog data to send:', blogData);
+      console.log('🔍 Content in blogData:', blogData.content);
 
       const response = await axios.post(`${API_URL}/api/blog/posts/`, blogData, {
         headers: {

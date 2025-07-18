@@ -12,8 +12,8 @@ import { ArrowLeft, Heart, MessageCircle, Share2, Bookmark, Eye, Clock,
 
 import { getMajorDisplayName } from "../../../utils/majorUtils"
 import SideBar from "../../../components/ui/SideBar"
-import "../../../components/RichTextEditor.css"
-import "../../../components/BlogContent.css"
+// import "../../../components/RichTextEditor.css"
+// import "../../../components/BlogContent.css"
 import { sanitizeHtml } from "../../../utils/security"
 import { processblogContent, extractPlainText, calculateReadTime } from "../../../utils/contentProcessor"
 import { useToast, ToastContainer } from "../../../hooks/useToast"
