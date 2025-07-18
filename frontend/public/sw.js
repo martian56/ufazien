@@ -1,31 +1,70 @@
 // Service Worker for handling push notifications
 const CACHE_NAME = 'ufazien-v1';
-const urlsToCache = [
+
+// Minimal caching - only cache the service worker itself and critical assets
+const criticalAssets = [
   '/',
-  '/static/js/bundle.js',
-  '/static/css/main.css',
-  '/icon-192x192.png',
-  '/icon-512x512.png'
+  '/favicon.ico'
 ];
 
-// Install event - cache resources
+// Install event - minimal caching to avoid deployment issues
 self.addEventListener('install', (event) => {
+  console.log('Service Worker installing...');
+  
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => {
-        return cache.addAll(urlsToCache);
+        console.log('Caching critical assets...');
+        // Try to cache critical assets, but don't fail if they don't exist
+        return Promise.allSettled(
+          criticalAssets.map(url => 
+            fetch(url).then(response => {
+              if (response.ok) {
+                return cache.put(url, response);
+              }
+            }).catch(error => {
+              console.warn(`Skipping cache for ${url}:`, error.message);
+            })
+          )
+        );
+      })
+      .then(() => {
+        console.log('Service Worker installed successfully');
+        return self.skipWaiting(); // Activate immediately
+      })
+      .catch(error => {
+        console.error('Service Worker installation failed:', error);
       })
   );
 });
 
-// Fetch event - serve from cache when offline
+// Fetch event - simplified for production deployment
 self.addEventListener('fetch', (event) => {
+  // Only handle same-origin GET requests
+  if (!event.request.url.startsWith(self.location.origin) || event.request.method !== 'GET') {
+    return;
+  }
+
+  // For navigation requests, try network first, fallback to cache
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request)
+        .catch(() => caches.match('/') || new Response('App is offline', { 
+          status: 503, 
+          statusText: 'Service Unavailable' 
+        }))
+    );
+    return;
+  }
+
+  // For other requests, try cache first, then network
   event.respondWith(
     caches.match(event.request)
-      .then((response) => {
-        // Return cached version or fetch from network
-        return response || fetch(event.request);
-      })
+      .then(response => response || fetch(event.request))
+      .catch(() => new Response('Resource unavailable', { 
+        status: 503, 
+        statusText: 'Service Unavailable' 
+      }))
   );
 });
 
@@ -36,8 +75,8 @@ self.addEventListener('push', (event) => {
   let notificationData = {
     title: 'UFAZIEN Notification',
     body: 'You have a new notification',
-    icon: '/icon-192x192.png',
-    badge: '/badge-72x72.png',
+    icon: '/favicon.ico',
+    badge: '/favicon.ico',
     tag: 'default',
     data: {
       url: '/notifications'
@@ -46,12 +85,12 @@ self.addEventListener('push', (event) => {
       {
         action: 'view',
         title: 'View',
-        icon: '/icon-view.png'
+        icon: '/favicon.ico'
       },
       {
         action: 'close',
         title: 'Close',
-        icon: '/icon-close.png'
+        icon: '/favicon.ico'
       }
     ],
     requireInteraction: false,
@@ -153,17 +192,18 @@ self.addEventListener('sync', (event) => {
 // Sync notifications when back online
 async function syncNotifications() {
   try {
-    // Fetch missed notifications
-    const response = await fetch('/api/notifications/', {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('access')}`
-      }
-    });
+    // We can't access localStorage from service worker
+    // Instead, we'll rely on the main app to handle notification syncing
+    console.log('Background sync triggered - notification sync requested');
     
-    if (response.ok) {
-      const data = await response.json();
-      console.log('Synced notifications:', data);
-    }
+    // Send a message to all clients to sync notifications
+    const clients = await self.clients.matchAll();
+    clients.forEach(client => {
+      client.postMessage({
+        type: 'SYNC_NOTIFICATIONS',
+        timestamp: Date.now()
+      });
+    });
   } catch (error) {
     console.error('Failed to sync notifications:', error);
   }
@@ -171,15 +211,25 @@ async function syncNotifications() {
 
 // Handle service worker updates
 self.addEventListener('activate', (event) => {
+  console.log('Service Worker activating...');
+  
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME) {
-            return caches.delete(cacheName);
-          }
-        })
-      );
+    Promise.all([
+      // Clean up old caches
+      caches.keys().then((cacheNames) => {
+        return Promise.all(
+          cacheNames.map((cacheName) => {
+            if (cacheName !== CACHE_NAME) {
+              console.log('Deleting old cache:', cacheName);
+              return caches.delete(cacheName);
+            }
+          })
+        );
+      }),
+      // Take control of all clients immediately
+      self.clients.claim()
+    ]).then(() => {
+      console.log('Service Worker activated successfully');
     })
   );
 });
