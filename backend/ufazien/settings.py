@@ -83,6 +83,14 @@ CORS_ALLOW_CREDENTIALS = True
 # Allow all headers for multipart/form-data uploads
 CORS_ALLOW_ALL_HEADERS = True
 
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:5173",
+    "http://localhost:5174", 
+    "http://ufazien.com",
+    "https://ufazien.com",
+    "http://13.42.171.119"
+]
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework_simplejwt.authentication.JWTAuthentication",
