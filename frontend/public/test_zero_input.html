@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Zero Input Fix</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        .old-behavior {
+            background-color: #ffe6e6;
+        }
+        .new-behavior {
+            background-color: #e6ffe6;
+        }
+        input {
+            padding: 8px;
+            margin: 5px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .result {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #f0f0f0;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Average Calculator Zero Input Fix Test</h1>
+    
+    <div class="test-section old-behavior">
+        <h2>🔴 Old Behavior (Before Fix)</h2>
+        <p>With <code>parseFloat(e.target.value) || null</code>:</p>
+        <label>
+            Grade Input: 
+            <input type="number" id="old-grade" placeholder="Try entering 0" min="0" max="20" step="0.1">
+        </label>
+        <label>
+            Weight Input: 
+            <input type="number" id="old-weight" placeholder="Try entering 0" min="0" step="0.1">
+        </label>
+        <div class="result" id="old-result">
+            Grade: <span id="old-grade-value">null</span> | Weight: <span id="old-weight-value">1</span>
+        </div>
+    </div>
+
+    <div class="test-section new-behavior">
+        <h2>✅ New Behavior (After Fix)</h2>
+        <p>With proper zero handling:</p>
+        <label>
+            Grade Input: 
+            <input type="number" id="new-grade" placeholder="Try entering 0" min="0" max="20" step="0.1">
+        </label>
+        <label>
+            Weight Input: 
+            <input type="number" id="new-weight" placeholder="Try entering 0" min="0" step="0.1">
+        </label>
+        <div class="result" id="new-result">
+            Grade: <span id="new-grade-value">null</span> | Weight: <span id="new-weight-value">0</span>
+        </div>
+    </div>
+
+    <script>
+        // Old behavior simulation
+        document.getElementById('old-grade').addEventListener('input', function(e) {
+            const value = parseFloat(e.target.value) || null;
+            document.getElementById('old-grade-value').textContent = value;
+        });
+
+        document.getElementById('old-weight').addEventListener('input', function(e) {
+            const value = parseFloat(e.target.value) || 1;
+            document.getElementById('old-weight-value').textContent = value;
+        });
+
+        // New behavior (fixed)
+        document.getElementById('new-grade').addEventListener('input', function(e) {
+            const value = e.target.value;
+            let result;
+            if (value === "") {
+                result = null;
+            } else {
+                const numValue = parseFloat(value);
+                result = isNaN(numValue) ? null : numValue;
+            }
+            document.getElementById('new-grade-value').textContent = result;
+        });
+
+        document.getElementById('new-weight').addEventListener('input', function(e) {
+            const value = e.target.value;
+            let result;
+            if (value === "") {
+                result = 0;
+            } else {
+                const numValue = parseFloat(value);
+                result = isNaN(numValue) ? 0 : numValue;
+            }
+            document.getElementById('new-weight-value').textContent = result;
+        });
+    </script>
+</body>
+</html>

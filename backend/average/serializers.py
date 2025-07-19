@@ -65,8 +65,8 @@ class CreateSchemaSerializer(serializers.Serializer):
             
             try:
                 weight = float(field['weight'])
-                if weight <= 0:
-                    raise serializers.ValidationError("Weight must be positive")
+                if weight < 0:
+                    raise serializers.ValidationError("Weight must be non-negative")
             except (ValueError, TypeError):
                 raise serializers.ValidationError("Weight must be a valid number")
         

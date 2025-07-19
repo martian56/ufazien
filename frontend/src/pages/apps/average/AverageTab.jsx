@@ -1,4 +1,3 @@
-import { useState } from "react"
 import { Plus, Trash2, Save, RotateCcw, Info } from "lucide-react"
 
 export default function AverageTab({
@@ -107,9 +106,17 @@ export default function AverageTab({
                       <input
                         type="number"
                         value={field.weight}
-                        onChange={(e) => updateNewField(index, "weight", parseFloat(e.target.value) || 1)}
+                        onChange={(e) => {
+                          const value = e.target.value
+                          if (value === "") {
+                            updateNewField(index, "weight", 0)
+                          } else {
+                            const numValue = parseFloat(value)
+                            updateNewField(index, "weight", isNaN(numValue) ? 0 : numValue)
+                          }
+                        }}
                         placeholder="Weight"
-                        min="0.1"
+                        min="0"
                         step="0.1"
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       />
@@ -188,8 +195,16 @@ export default function AverageTab({
                     <div className="w-32">
                       <input
                         type="number"
-                        value={fieldGrade.grade || ""}
-                        onChange={(e) => updateGrade(fieldGrade.id, parseFloat(e.target.value) || null)}
+                        value={fieldGrade.grade !== null && fieldGrade.grade !== undefined ? fieldGrade.grade : ""}
+                        onChange={(e) => {
+                          const value = e.target.value
+                          if (value === "") {
+                            updateGrade(fieldGrade.id, null)
+                          } else {
+                            const numValue = parseFloat(value)
+                            updateGrade(fieldGrade.id, isNaN(numValue) ? null : numValue)
+                          }
+                        }}
                         placeholder="0-20"
                         min="0"
                         max="20"

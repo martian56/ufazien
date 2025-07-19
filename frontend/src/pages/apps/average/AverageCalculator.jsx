@@ -191,7 +191,7 @@ export default function AverageCalculator() {
       return
     }
 
-    const validFields = newSchemaFields.filter(f => f.name.trim() && f.weight > 0)
+    const validFields = newSchemaFields.filter(f => f.name.trim() && f.weight >= 0)
     if (validFields.length === 0) {
       addNotification("At least one valid field is required", "error")
       return
