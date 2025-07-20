@@ -13,7 +13,10 @@ import BlogCreate from "./pages/apps/blog/BlogCreate"
 import BlogRead from "./pages/apps/blog/BlogRead"
 import ProtectedRoute from "./pages/auth/ProtectedRoute"
 import UfazSimulation from "./pages/game/UfazSimulation"
-import Sim2 from "./pages/game/Sim2"
+import CampusSimulatorMenuV2 from "./pages/game/CampusSimulatorMenuV2"
+import CampusWithBackend from "./pages/game/CampusWithBackend"
+import AiToolsMenu from "./pages/ai-tools/AiToolsMenu"
+import Humanizer from "./pages/ai-tools/humanizer/Humanizer"
 
 function App() {
   return (
@@ -33,7 +36,10 @@ function App() {
         <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
         <Route path="/simulation-old" element={<ProtectedRoute><UfazSimulation /></ProtectedRoute>} />
-        <Route path="/simulation" element={<ProtectedRoute><Sim2 /></ProtectedRoute>} />
+        <Route path="/campus-simulator/:lobbyId" element={<ProtectedRoute><CampusWithBackend /></ProtectedRoute>} />
+        <Route path="/campus-simulator" element={<ProtectedRoute><CampusSimulatorMenuV2 /></ProtectedRoute>} />
+        <Route path="/ai-tools" element={<ProtectedRoute><AiToolsMenu /></ProtectedRoute>} />
+        <Route path="/ai-tools/humanizer" element={<ProtectedRoute><Humanizer /></ProtectedRoute>} />
         {/* Add more routes as needed */}
       </Routes>
     </Router>

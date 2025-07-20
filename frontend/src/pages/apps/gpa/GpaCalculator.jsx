@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
+import { Helmet } from "react-helmet"
 import {
   Calculator,
   Plus,
@@ -442,11 +443,16 @@ export default function GpaCalculator() {
   const gpaStatus = getGpaStatus(gpaData.gpa)
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
-      {/* Sidebar */}
-      <SideBar  
-        isSidebarOpen={isSidebarOpen}
-        setIsSidebarOpen={setIsSidebarOpen}
+    <>
+      <Helmet>
+        <title>Ufazien | GPA Calculator</title>
+        <meta name="description" content="Calculate and track your GPA with Ufazien's GPA Calculator." />
+      </Helmet>
+      <div className="min-h-screen bg-gray-50 flex">
+        {/* Sidebar */}
+        <SideBar
+          isSidebarOpen={isSidebarOpen}
+          setIsSidebarOpen={setIsSidebarOpen}
         pageTitle="GPA Calculator"
       />
 
@@ -832,6 +838,7 @@ export default function GpaCalculator() {
         />
       )}
     </div>
+  </>
   )
 }
 
