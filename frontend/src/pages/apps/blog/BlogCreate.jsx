@@ -594,11 +594,16 @@ const BlogCreate = () => {
   };
 
   return (
-    <div className={`min-h-screen transition-colors duration-300 ${darkMode ? 'bg-gray-900 text-white' : 'bg-gray-50 text-gray-900'}`}>
-      {/* Header */}
-      <div className={`sticky top-0 z-50 border-b backdrop-blur-sm ${darkMode ? 'bg-gray-900/90 border-gray-700' : 'bg-white/90 border-gray-200'}`}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
+    <>
+      <Helmet>
+        <title>Ufazien | Blog Create</title>
+        <meta name="description" content="Create and publish your articles on Ufazien's blog." />
+      </Helmet>
+      <div className={`min-h-screen transition-colors duration-300 ${darkMode ? 'bg-gray-900 text-white' : 'bg-gray-50 text-gray-900'}`}>
+        {/* Header */}
+        <div className={`sticky top-0 z-50 border-b backdrop-blur-sm ${darkMode ? 'bg-gray-900/90 border-gray-700' : 'bg-white/90 border-gray-200'}`}>
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between h-16">
             <div className="flex items-center space-x-4">
               <button
                 onClick={() => navigate("/dashboard")}
@@ -608,7 +613,7 @@ const BlogCreate = () => {
                 <span className="hidden sm:inline">Back</span>
               </button>
               <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                UFAZ Blog Studio
+                Ufazien Blog Studio
               </h1>
               {isTyping && (
                 <div className="flex items-center space-x-2 text-sm text-gray-500">
@@ -1105,6 +1110,7 @@ const BlogCreate = () => {
         removeNotification={removeNotification} 
       />
     </div>
+  </>
   );
 };
 

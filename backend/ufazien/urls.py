@@ -11,6 +11,8 @@ urlpatterns = [
     path('api/auth/', include('users.urls')),
     path('api/average/', include('average.urls')),
     path('api/gpa/', include('gpa.urls')),
+    path('api/game/', include('game.urls')),
+    path('api/ai-tools/', include('ai_tools.urls')),
 ]
 
 

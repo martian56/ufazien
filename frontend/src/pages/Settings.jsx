@@ -9,6 +9,7 @@ import { Checkbox } from "../components/ui/checkbox"
 import SideBar from "../components/ui/SideBar"
 import { majorOptions, getMajorDisplayName } from "../utils/majorUtils"
 import axios from "axios"
+import { Helmet } from "react-helmet"
 
 const API_URL = import.meta.env.VITE_API_URL
 
@@ -344,6 +345,11 @@ const Settings = () => {
   }
 
   return (
+    <>
+    <Helmet>
+      <title>Ufazien | Settings</title>
+      <meta name="description" content="User settings for managing account preferences." />
+    </Helmet>
     <div className="min-h-screen bg-gray-50 flex">
       {/* Sidebar */}
       <SideBar
@@ -867,6 +873,7 @@ const Settings = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden" onClick={() => setIsSidebarOpen(false)} />
       )}
     </div>
+  </>
   )
 }
 

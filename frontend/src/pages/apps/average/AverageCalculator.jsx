@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { Helmet } from "react-helmet"
 import { useNavigate } from "react-router-dom"
 import {
   Calculator,
@@ -310,11 +311,16 @@ export default function AverageCalculator() {
   }, [searchTerm, activeTab])
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
-      {/* Sidebar */}
-      <SideBar
-        isSidebarOpen={isSidebarOpen}
-        setIsSidebarOpen={setIsSidebarOpen}
+    <>
+      <Helmet>
+        <title>Ufazien | Average Calculator</title>
+        <meta name="description" content="Calculate your average grades with Ufazien's Average Calculator." />
+      </Helmet>
+      <div className="min-h-screen bg-gray-50 flex">
+        {/* Sidebar */}
+        <SideBar
+          isSidebarOpen={isSidebarOpen}
+          setIsSidebarOpen={setIsSidebarOpen}
         pageTitle="Average Calculator"
       />
 
@@ -465,5 +471,6 @@ export default function AverageCalculator() {
         <div className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden" onClick={() => setIsSidebarOpen(false)} />
       )}
     </div>
+  </>
   )
 }

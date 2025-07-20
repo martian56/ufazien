@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useNavigate, Link } from "react-router-dom"
+import { Helmet } from 'react-helmet';
 import {Calculator, TrendingUp,MessageCircle,
   PenTool,Users,Bell,Search, LogOut, Calendar,
   Award,Target,Activity,BookMarked,GraduationCap,
@@ -222,7 +223,12 @@ useEffect(() => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
+    <>
+      <Helmet>
+        <title>Ufazien | Dashboard</title>
+        <meta name="description" content="User dashboard for managing academic tasks and activities." />
+      </Helmet>
+      <div className="min-h-screen bg-gray-50 flex">
       {/* Sidebar */}
       <SideBar
         isSidebarOpen={isSidebarOpen}
@@ -397,6 +403,7 @@ useEffect(() => {
         <div className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden" onClick={() => setIsSidebarOpen(false)} />
       )}
     </div>
+  </>
   )
 }
 

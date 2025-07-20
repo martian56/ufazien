@@ -186,11 +186,16 @@ export default function NotificationsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
-      {/* Sidebar */}
-      <SideBar
-        isSidebarOpen={isSidebarOpen}
-        setIsSidebarOpen={setIsSidebarOpen}
+    <>
+      <Helmet>
+        <title>Ufazien | Notifications</title>
+        <meta name="description" content="User notifications for managing alerts and updates." />
+      </Helmet>
+      <div className="min-h-screen bg-gray-50 flex">
+        {/* Sidebar */}
+        <SideBar
+          isSidebarOpen={isSidebarOpen}
+          setIsSidebarOpen={setIsSidebarOpen}
         pageTitle="Notifications"
       />
 
@@ -441,5 +446,6 @@ export default function NotificationsPage() {
         removeNotification={removeNotification} 
       />
     </div>
+  </>
   );
 }
