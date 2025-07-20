@@ -1,5 +1,6 @@
 import { BookOpen,Calculator,TrendingUp,PenTool,
-  Users,Settings,LogOut,Calendar,Activity,X, Gamepad
+  Users,Settings,LogOut,Calendar,Activity,X, Gamepad,
+  Brain
 } from "lucide-react"
 
 import { useNavigate } from "react-router-dom"
@@ -19,11 +20,12 @@ export default function SideBar({ isSidebarOpen, setIsSidebarOpen, pageTitle }) 
     { name: "Dashboard", icon: Activity, url: "/dashboard" },
     { name: "GPA Calculator", icon: Calculator, url: "/gpa-calculator" },
     { name: "Average Calculator", icon: TrendingUp, url: "/average-calculator" },
+    { name: "Campus Simulator", icon: Gamepad, url: "/campus-simulator" },
+    { name: "AI Tools", icon: Brain, url: "/ai-tools" },
     { name: "Blog", icon: PenTool, url: "/blog" },
     { name: "Community", icon: Users, url: "/community" },
     { name: "Calendar", icon: Calendar, url: "/calendar" },
     { name: "Settings", icon: Settings, url: "/settings" },
-    { name: "Simulation", icon: Gamepad, url: "/simulation" },
   ]
   for (let i = 0; i < sidebarItems.length; i++) {
     if (sidebarItems[i].name === pageTitle) {
