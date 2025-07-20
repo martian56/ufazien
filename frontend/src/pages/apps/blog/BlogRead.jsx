@@ -582,11 +582,16 @@ export default function BlogRead() {
   }
 
   return (
-    <div
-      className={`min-h-screen flex transition-colors duration-300 ${darkMode ? "bg-gray-900 text-white" : "bg-gray-50 text-gray-900"}`}
-    >
-      {/* Reading Progress Bar */}
-      <div className="fixed top-0 left-0 w-full h-1 bg-gray-200 z-50">
+    <>
+      <Helmet>
+        <title>Ufazien | Blog Read</title>
+        <meta name="description" content="Read the full articles on Ufazien's blog." />
+      </Helmet>
+      <div
+        className={`min-h-screen flex transition-colors duration-300 ${darkMode ? "bg-gray-900 text-white" : "bg-gray-50 text-gray-900"}`}
+      >
+        {/* Reading Progress Bar */}
+        <div className="fixed top-0 left-0 w-full h-1 bg-gray-200 z-50">
         <div
           className="h-full bg-gradient-to-r from-blue-600 to-purple-600 transition-all duration-300"
           style={{ width: `${readingProgress}%` }}
@@ -1471,5 +1476,6 @@ export default function BlogRead() {
         removeNotification={removeNotification} 
       />
     </div>
+  </>
   )
 }

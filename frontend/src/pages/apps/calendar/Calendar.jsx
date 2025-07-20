@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { Helmet } from "react-helmet"
 import { useNavigate } from "react-router-dom"
 import {
   CalendarIcon,
@@ -360,11 +361,16 @@ export default function Calendar() {
   const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
-      {/* Sidebar */}
-      <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0 ${
-          isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+    <>
+      <Helmet>
+        <title>Ufazien | Calendar</title>
+        <meta name="description" content="Manage your academic schedule with Ufazien's calendar." />
+      </Helmet>
+      <div className="min-h-screen bg-gray-50 flex">
+        {/* Sidebar */}
+        <aside
+          className={`fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0 ${
+            isSidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
         <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200">
@@ -632,6 +638,7 @@ export default function Calendar() {
         <div className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden" onClick={() => setIsSidebarOpen(false)} />
       )}
     </div>
+  </>
   )
 }
 

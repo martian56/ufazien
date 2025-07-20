@@ -416,8 +416,13 @@ export default function Blog() {
   }, [activeTab, selectedCategory, debouncedSearchQuery, pageSize])
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
-      {/* Sidebar */}
+    <>
+      <Helmet>
+        <title>Ufazien | Blog</title>
+        <meta name="description" content="Read and share articles on Ufazien's blog." />
+      </Helmet>
+      <div className="min-h-screen bg-gray-50 flex">
+        {/* Sidebar */}
         <SideBar
           isSidebarOpen={isSidebarOpen}
           setIsSidebarOpen={setIsSidebarOpen}
@@ -883,6 +888,7 @@ export default function Blog() {
         <div className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden" onClick={() => setIsSidebarOpen(false)} />
       )}
     </div>
+  </>
   )
 }
 

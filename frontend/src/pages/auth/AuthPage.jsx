@@ -4,16 +4,22 @@ import { useState } from "react"
 import SignInForm from "./SignInForm"
 import SignUpForm from "./SignUpForm"
 import SocialAuth from "./SocialAuth"
+import { Helmet } from "react-helmet"
 
 export default function AuthPage() {
   const [activeTab, setActiveTab] = useState("signin")
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-blue-50 via-white to-indigo-50">
-      <div className="w-full max-w-md">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full flex items-center justify-center mx-auto mb-4">
+    <>
+      <Helmet>
+        <title>Ufazien | Auth</title>
+        <meta name="description" content="User authentication page for sign in and sign up." />
+      </Helmet>
+      <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-blue-50 via-white to-indigo-50">
+        <div className="w-full max-w-md">
+          {/* Header */}
+          <div className="text-center mb-8">
+            <div className="w-16 h-16 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full flex items-center justify-center mx-auto mb-4">
             <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
                 strokeLinecap="round"
@@ -93,5 +99,6 @@ export default function AuthPage() {
         </div>
       </div>
     </div>
+  </>
   )
 }
