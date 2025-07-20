@@ -3,13 +3,12 @@
  * Handles REST API communication with the Django backend
  */
 
-const API_BASE_URL = process.env.NODE_ENV === 'production' 
-    ? window.location.origin 
-    : 'http://localhost:8000';
+const API_URL = import.meta.env.VITE_API_URL
+
 
 class CampusApiService {
     constructor() {
-        this.baseUrl = `${API_BASE_URL}/api/game`;
+        this.baseUrl = `${API_URL}/api/game`;
     }
 
     /**
@@ -369,14 +368,14 @@ class CampusApiService {
      * @param {string} token - JWT access token
      */
     setAuthToken(token) {
-        localStorage.setItem('access_token', token);
+        localStorage.setItem('access', token);
     }
 
     /**
      * Clear authentication token
      */
     clearAuthToken() {
-        localStorage.removeItem('access_token');
+        localStorage.removeItem('access');
     }
 
     /**
@@ -384,7 +383,7 @@ class CampusApiService {
      * @returns {Promise<string>} New access token
      */
     async refreshToken() {
-        const refreshToken = localStorage.getItem('refresh_token');
+        const refreshToken = localStorage.getItem('refresh');
         if (!refreshToken) {
             throw new Error('No refresh token available');
         }

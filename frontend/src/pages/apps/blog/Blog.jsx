@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { replace, useNavigate } from "react-router-dom"
+import { Helmet } from "react-helmet"
 import { PenTool, Search, Heart, MessageCircle,Share2,
   Bookmark, Eye, Calendar, Clock, Plus,Menu,X,ThumbsUp,MoreHorizontal,
   Twitter, Facebook, Linkedin, Copy,

@@ -929,7 +929,7 @@ function UniversityCampus({ doors, onDoorInteract }) {
 
       {/* Enhanced Science Complex */}
       <group position={[35, 0, -15]}>
-        <mesh position={[0, 3.5, 0]} castShadow receive Shadow>
+        <mesh position={[0, 3.5, 0]} castShadow receiveShadow>
           <boxGeometry args={[12, 7, 14]} />
           <meshStandardMaterial color="#228B22" />
         </mesh>
