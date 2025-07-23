@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom"
 import Home from "./pages/Home"
+import Profile from "./pages/Profile"
 import AuthPage from "./pages/auth/AuthPage"
 import Dashboard from "./pages/DashBoard"
 import AverageCalculator from "./pages/apps/average/AverageCalculator"
@@ -25,6 +26,8 @@ function App() {
         <Route path="/" element={<Home />} />
         <Route path="/auth" element={<AuthPage />} />
         {/* Protected routes */}
+        <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+        <Route path="/profile/:userId" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
         <Route path="/gpa-calculator" element={<ProtectedRoute><GpaCalculator /></ProtectedRoute>} />
         <Route path="/average-calculator" element={<ProtectedRoute><AverageCalculator /></ProtectedRoute>} />
         <Route path="/blog" element={<ProtectedRoute><Blog /></ProtectedRoute>} />

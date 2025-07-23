@@ -8,6 +8,7 @@ import { Label } from "../components/ui/label"
 import { Checkbox } from "../components/ui/checkbox"
 import SideBar from "../components/ui/SideBar"
 import { majorOptions, getMajorDisplayName } from "../utils/majorUtils"
+import { useToast, ToastContainer } from "../hooks/useToast"
 import axios from "axios"
 import { Helmet } from "react-helmet"
 
@@ -15,6 +16,7 @@ const API_URL = import.meta.env.VITE_API_URL
 
 const Settings = () => {
   const navigate = useNavigate()
+  const { notifications, toast, removeNotification } = useToast()
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -91,7 +93,6 @@ const Settings = () => {
 
   // Active Tab State
   const [activeTab, setActiveTab] = useState("profile")
-  const [saveMessage, setSaveMessage] = useState("")
 
   // API Integration Functions
   const fetchUserProfile = async () => {
@@ -129,7 +130,7 @@ const Settings = () => {
         localStorage.removeItem("refresh");
         navigate("/auth");
       }
-      setSaveMessage("Error loading profile data.");
+      toast.error("Error loading profile data.");
     }
   };
 
@@ -213,11 +214,10 @@ const Settings = () => {
       localStorage.setItem("ufaz_app_settings", JSON.stringify(appSettings));
       localStorage.setItem("ufaz_security_settings", JSON.stringify(securitySettings));
 
-      setSaveMessage("Settings saved successfully!");
-      setTimeout(() => setSaveMessage(""), 3000);
+      toast.success("Settings saved successfully!");
     } catch (error) {
       console.error("Error saving settings:", error);
-      setSaveMessage("Error saving settings. Please try again.");
+      toast.error("Error saving settings. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -270,16 +270,14 @@ const Settings = () => {
 
         // Validate file size (max 5MB)
         if (file.size > 5 * 1024 * 1024) {
-          setSaveMessage("File size must be less than 5MB.");
-          setTimeout(() => setSaveMessage(""), 3000);
+          toast.error("File size must be less than 5MB.");
           return;
         }
 
         // Validate file type
         const allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
         if (!allowedTypes.includes(file.type)) {
-          setSaveMessage("Please upload a valid image file (JPEG, PNG, or GIF).");
-          setTimeout(() => setSaveMessage(""), 3000);
+          toast.error("Please upload a valid image file (JPEG, PNG, or GIF).");
           return;
         }
 
@@ -307,17 +305,15 @@ const Settings = () => {
           avatar_url: response.data.avatar_url,
         }));
 
-        setSaveMessage("Avatar uploaded successfully!");
-        setTimeout(() => setSaveMessage(""), 3000);
+        toast.success("Avatar uploaded successfully!");
       } catch (error) {
         console.error("Error uploading avatar:", error);
         if (error.response?.data) {
           console.error("Error details:", error.response.data);
-          setSaveMessage(`Error: ${error.response.data.detail || error.response.data.avatar?.[0] || "Failed to upload avatar"}`);
+          toast.error(`Error: ${error.response.data.detail || error.response.data.avatar?.[0] || "Failed to upload avatar"}`);
         } else {
-          setSaveMessage("Error uploading avatar. Please try again.");
+          toast.error("Error uploading avatar. Please try again.");
         }
-        setTimeout(() => setSaveMessage(""), 5000);
       }
     }
   };
@@ -378,17 +374,6 @@ const Settings = () => {
                   <p className="text-sm text-gray-500">Manage your UFAZ account preferences</p>
                 </div>
               </div>
-
-              {/* Save Message */}
-              {saveMessage && (
-                <div className={`px-4 py-2 rounded-lg text-sm ${
-                  saveMessage.includes("Error")
-                    ? "bg-red-100 text-red-700 border border-red-200"
-                    : "bg-green-100 text-green-700 border border-green-200"
-                }`}>
-                  {saveMessage}
-                </div>
-              )}
             </div>
 
             {/* Tab Navigation */}
@@ -873,6 +858,10 @@ const Settings = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden" onClick={() => setIsSidebarOpen(false)} />
       )}
     </div>
+    <ToastContainer 
+      notifications={notifications} 
+      removeNotification={removeNotification} 
+    />
   </>
   )
 }
