@@ -34,7 +34,7 @@ class SignupView(APIView):
             return Response({
                 "access": str(refresh.access_token),
                 "refresh": str(refresh),
-                "user": UserSerializer(user).data
+                "user": UserSerializer(user, context={'request': request}).data
             })
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -55,7 +55,7 @@ class LoginView(APIView):
             return Response({
                 "access": str(refresh.access_token),
                 "refresh": str(refresh),
-                "user": UserSerializer(user).data
+                "user": UserSerializer(user, context={'request': request}).data
             })
         return Response({"detail": "Invalid credentials."}, status=status.HTTP_401_UNAUTHORIZED)
 
