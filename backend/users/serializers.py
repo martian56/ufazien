@@ -25,8 +25,54 @@ class LoginSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField()
 
+class PublicUserSerializer(serializers.ModelSerializer):
+    """
+    Serializer for public user information - excludes sensitive data like email, phone, GPA
+    This should be used for displaying user info to other users (e.g., in blog posts, comments)
+    """
+    followers_count = serializers.IntegerField(source='followers.count', read_only=True)
+    is_staff = serializers.BooleanField(read_only=True)
+    is_active = serializers.BooleanField(read_only=True)
+    avatar_url = serializers.SerializerMethodField()
+    is_following = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "username",
+            "first_name",
+            "last_name",
+            "followers_count",
+            "is_following",
+            "year",
+            "bio",
+            "avatar",
+            "avatar_url",
+            "major",
+            "completed_credits",
+            "is_staff",
+            "is_active"
+        ]
+
+    def get_avatar_url(self, obj):
+        request = self.context.get('request')
+        if obj.avatar and hasattr(obj.avatar, 'url'):
+            if request is not None:
+                return request.build_absolute_uri(obj.avatar.url)
+            return obj.avatar.url
+        return None
+
+    def get_is_following(self, obj):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            return request.user.following.filter(id=obj.id).exists()
+        return False
+
 class UserSerializer(serializers.ModelSerializer):
     followers_count = serializers.IntegerField(source='followers.count', read_only=True)
+    is_staff = serializers.BooleanField(read_only=True)
+    is_active = serializers.BooleanField(read_only=True)
     avatar_url = serializers.SerializerMethodField()
     is_following = serializers.SerializerMethodField()
 
@@ -47,11 +93,40 @@ class UserSerializer(serializers.ModelSerializer):
             "major",
             "gpa",
             "completed_credits",
-            "phone"
+            "phone",
+            "is_staff",
+            "is_active"
         ]
         extra_kwargs = {
             'password': {'write_only': True}
         }
+
+    def to_representation(self, instance):
+        """
+        Override to_representation to hide sensitive fields from other users
+        """
+        data = super().to_representation(instance)
+        request = self.context.get('request')
+        
+        # If no request context or user is not authenticated, hide sensitive info
+        if not request or not request.user.is_authenticated:
+            self._hide_sensitive_fields(data)
+            return data
+            
+        # If the requesting user is not the profile owner, hide sensitive info
+        if request.user.id != instance.id:
+            self._hide_sensitive_fields(data)
+            
+        return data
+    
+    def _hide_sensitive_fields(self, data):
+        """
+        Remove sensitive fields from the serialized data
+        """
+        sensitive_fields = ['email', 'phone', 'gpa']
+        for field in sensitive_fields:
+            if field in data:
+                del data[field]
 
     def get_avatar_url(self, obj):
         request = self.context.get('request')

@@ -286,6 +286,7 @@ useEffect(() => {
               {/* User Profile */}
               <div className="flex items-center gap-3">
                 <img
+                  onClick={() => navigate('/profile')}
                   src={user.avatar || "/placeholder.svg"}
                   alt={user.name}
                   className="w-8 h-8 rounded-full border-2 border-gray-200"
