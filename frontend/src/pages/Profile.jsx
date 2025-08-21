@@ -266,7 +266,9 @@ export default function Profile() {
           pageTitle="Profile"
         />
       
-      <div className="flex-1 lg:ml-64">
+      <div className={`flex-1 transition-all duration-300 ${
+        isSidebarOpen ? 'lg:ml-64' : ''
+      }`}>
         {/* Mobile header */}
         <div className="lg:hidden bg-white shadow-sm border-b border-gray-200 px-4 py-3 flex items-center justify-between">
           <button

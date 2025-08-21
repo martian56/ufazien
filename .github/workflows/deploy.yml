@@ -1,359 +1,359 @@
-name: UFAZIEN CI/CD Pipeline
+# name: UFAZIEN CI/CD Pipeline
 
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+# on:
+#   push:
+#     branches: [main]
+#   pull_request:
+#     branches: [main]
 
-env:
-  NODE_VERSION: '24.3.0'
-  PYTHON_VERSION: '3.12.3'
+# env:
+#   NODE_VERSION: '24.3.0'
+#   PYTHON_VERSION: '3.12.3'
 
-jobs:
-  # Testing Job - Runs on every push and PR
-  test:
-    name: Run Tests
-    runs-on: ubuntu-latest
+# jobs:
+#   # Testing Job - Runs on every push and PR
+#   test:
+#     name: Run Tests
+#     runs-on: ubuntu-latest
 
-    steps:
-    - name: 📥 Checkout Repository
-      uses: actions/checkout@v4
+#     steps:
+#     - name: 📥 Checkout Repository
+#       uses: actions/checkout@v4
 
-    - name: 🐍 Set up Python ${{ env.PYTHON_VERSION }}
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ env.PYTHON_VERSION }}
+#     - name: 🐍 Set up Python ${{ env.PYTHON_VERSION }}
+#       uses: actions/setup-python@v5
+#       with:
+#         python-version: ${{ env.PYTHON_VERSION }}
 
-    - name: ⚡ Set up Node.js ${{ env.NODE_VERSION }}
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ env.NODE_VERSION }}
-        cache: 'npm'
-        cache-dependency-path: frontend/package-lock.json
+#     - name: ⚡ Set up Node.js ${{ env.NODE_VERSION }}
+#       uses: actions/setup-node@v4
+#       with:
+#         node-version: ${{ env.NODE_VERSION }}
+#         cache: 'npm'
+#         cache-dependency-path: frontend/package-lock.json
 
-    - name: 🔄 Cache Python Dependencies
-      uses: actions/cache@v4
-      with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-pip-
+#     - name: 🔄 Cache Python Dependencies
+#       uses: actions/cache@v4
+#       with:
+#         path: ~/.cache/pip
+#         key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements.txt') }}
+#         restore-keys: |
+#           ${{ runner.os }}-pip-
 
-    - name: 📦 Install Python Dependencies
-      run: |
-        cd backend
-        python -m pip install --upgrade pip
-        # Install requirements but skip psycopg2 for SQLite testing
-        pip install -r requirements.txt || pip install $(grep -v psycopg2 requirements.txt)
+#     - name: 📦 Install Python Dependencies
+#       run: |
+#         cd backend
+#         python -m pip install --upgrade pip
+#         # Install requirements but skip psycopg2 for SQLite testing
+#         pip install -r requirements.txt || pip install $(grep -v psycopg2 requirements.txt)
 
-    - name: 🔧 Configure Django Settings for Tests
-      run: |
-        cd backend
-        echo "
-        import os
-        from .settings import *
+#     - name: 🔧 Configure Django Settings for Tests
+#       run: |
+#         cd backend
+#         echo "
+#         import os
+#         from .settings import *
         
-        # Use SQLite in-memory for testing (completely isolated)
-        DATABASES = {
-            'default': {
-                'ENGINE': 'django.db.backends.sqlite3',
-                'NAME': ':memory:',
-            }
-        }
+#         # Use SQLite in-memory for testing (completely isolated)
+#         DATABASES = {
+#             'default': {
+#                 'ENGINE': 'django.db.backends.sqlite3',
+#                 'NAME': ':memory:',
+#             }
+#         }
         
-        # Test-specific settings
-        SECRET_KEY = 'test-secret-key-for-ci-cd-pipeline-only'
-        DEBUG = True
-        ALLOWED_HOSTS = ['*']  # Allow all hosts for testing
+#         # Test-specific settings
+#         SECRET_KEY = 'test-secret-key-for-ci-cd-pipeline-only'
+#         DEBUG = True
+#         ALLOWED_HOSTS = ['*']  # Allow all hosts for testing
         
-        # Disable migrations for faster tests
-        class DisableMigrations:
-            def __contains__(self, item):
-                return True
-            def __getitem__(self, item):
-                return None
+#         # Disable migrations for faster tests
+#         class DisableMigrations:
+#             def __contains__(self, item):
+#                 return True
+#             def __getitem__(self, item):
+#                 return None
         
-        MIGRATION_MODULES = DisableMigrations()
+#         MIGRATION_MODULES = DisableMigrations()
         
-        # Test-specific configurations
-        PASSWORD_HASHERS = [
-            'django.contrib.auth.hashers.MD5PasswordHasher',
-        ]
+#         # Test-specific configurations
+#         PASSWORD_HASHERS = [
+#             'django.contrib.auth.hashers.MD5PasswordHasher',
+#         ]
         
-        # Disable logging during tests
-        LOGGING_CONFIG = None
-        " > ufazien/test_settings.py
+#         # Disable logging during tests
+#         LOGGING_CONFIG = None
+#         " > ufazien/test_settings.py
 
-    - name: 🗄️ Run Django Migrations
-      env:
-        SECRET_KEY: 'test-secret-key-for-ci-cd-pipeline-only'
-        DEBUG: 'True'
-        ALLOWED_HOSTS: 'localhost,127.0.0.1'
-      run: |
-        cd backend
-        python manage.py migrate --settings=ufazien.test_settings --run-syncdb
+#     - name: 🗄️ Run Django Migrations
+#       env:
+#         SECRET_KEY: 'test-secret-key-for-ci-cd-pipeline-only'
+#         DEBUG: 'True'
+#         ALLOWED_HOSTS: 'localhost,127.0.0.1'
+#       run: |
+#         cd backend
+#         python manage.py migrate --settings=ufazien.test_settings --run-syncdb
 
-    - name: 🧪 Run Django Tests
-      env:
-        SECRET_KEY: 'test-secret-key-for-ci-cd-pipeline-only'
-        DEBUG: 'True'
-        ALLOWED_HOSTS: 'localhost,127.0.0.1'
-      run: |
-        cd backend
-        # Ensure we're using test settings and in-memory database
-        export DJANGO_SETTINGS_MODULE=ufazien.test_settings
-        python manage.py test --settings=ufazien.test_settings
+#     - name: 🧪 Run Django Tests
+#       env:
+#         SECRET_KEY: 'test-secret-key-for-ci-cd-pipeline-only'
+#         DEBUG: 'True'
+#         ALLOWED_HOSTS: 'localhost,127.0.0.1'
+#       run: |
+#         cd backend
+#         # Ensure we're using test settings and in-memory database
+#         export DJANGO_SETTINGS_MODULE=ufazien.test_settings
+#         python manage.py test --settings=ufazien.test_settings
 
-    - name: 🔒 Verify Test Isolation
-      run: |
-        cd backend
-        echo "✅ Tests completed with isolated SQLite in-memory database"
-        echo "✅ No impact on production server database"
+#     - name: 🔒 Verify Test Isolation
+#       run: |
+#         cd backend
+#         echo "✅ Tests completed with isolated SQLite in-memory database"
+#         echo "✅ No impact on production server database"
 
-    - name: 📦 Install Frontend Dependencies
-      run: |
-        cd frontend
-        npm install
+#     - name: 📦 Install Frontend Dependencies
+#       run: |
+#         cd frontend
+#         npm install
 
-    - name: 🏗️ Build Frontend Application
-      run: |
-        cd frontend
-        NODE_OPTIONS="--max-old-space-size=1024" npm run build
+#     - name: 🏗️ Build Frontend Application
+#       run: |
+#         cd frontend
+#         NODE_OPTIONS="--max-old-space-size=1024" npm run build
 
-    - name: ✅ Frontend Build Verification
-      run: |
-        cd frontend
-        if [ ! -d "dist" ]; then
-          echo "❌ Frontend build failed - dist directory not found"
-          exit 1
-        fi
-        if [ ! -f "dist/index.html" ]; then
-          echo "❌ Frontend build failed - index.html not found"
-          exit 1
-        fi
-        echo "✅ Frontend build successful"
+#     - name: ✅ Frontend Build Verification
+#       run: |
+#         cd frontend
+#         if [ ! -d "dist" ]; then
+#           echo "❌ Frontend build failed - dist directory not found"
+#           exit 1
+#         fi
+#         if [ ! -f "dist/index.html" ]; then
+#           echo "❌ Frontend build failed - index.html not found"
+#           exit 1
+#         fi
+#         echo "✅ Frontend build successful"
 
-    - name: 📤 Upload Build Artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: frontend-build-${{ github.sha }}
-        path: frontend/dist
-        retention-days: 7
+#     - name: 📤 Upload Build Artifacts
+#       uses: actions/upload-artifact@v4
+#       with:
+#         name: frontend-build-${{ github.sha }}
+#         path: frontend/dist
+#         retention-days: 7
 
-  # Deployment Job - Only runs on main branch after tests pass
-  deploy:
-    name: Deploy to EC2
-    needs: test
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+#   # Deployment Job - Only runs on main branch after tests pass
+#   deploy:
+#     name: Deploy to EC2
+#     needs: test
+#     runs-on: ubuntu-latest
+#     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     
-    steps:
-    - name: 🚀 Deploy to Production EC2
-      uses: appleboy/ssh-action@v1.1.0
-      with:
-        host: ${{ secrets.EC2_HOST }}
-        username: ${{ secrets.EC2_USERNAME }}
-        key: ${{ secrets.EC2_SSH_KEY }}
-        port: 22
-        timeout: 600s
-        script: |
-          set -e
+#     steps:
+#     - name: 🚀 Deploy to Production EC2
+#       uses: appleboy/ssh-action@v1.1.0
+#       with:
+#         host: ${{ secrets.EC2_HOST }}
+#         username: ${{ secrets.EC2_USERNAME }}
+#         key: ${{ secrets.EC2_SSH_KEY }}
+#         port: 22
+#         timeout: 600s
+#         script: |
+#           set -e
           
-          # Color codes for output
-          RED='\033[0;31m'
-          GREEN='\033[0;32m'
-          YELLOW='\033[1;33m'
-          BLUE='\033[0;34m'
-          NC='\033[0m'
+#           # Color codes for output
+#           RED='\033[0;31m'
+#           GREEN='\033[0;32m'
+#           YELLOW='\033[1;33m'
+#           BLUE='\033[0;34m'
+#           NC='\033[0m'
           
-          log() {
-              echo -e "${BLUE}[$(date +'%Y-%m-%d %H:%M:%S')]${NC} $1"
-          }
+#           log() {
+#               echo -e "${BLUE}[$(date +'%Y-%m-%d %H:%M:%S')]${NC} $1"
+#           }
           
-          success() {
-              echo -e "${GREEN}[SUCCESS]${NC} $1"
-          }
+#           success() {
+#               echo -e "${GREEN}[SUCCESS]${NC} $1"
+#           }
           
-          error() {
-              echo -e "${RED}[ERROR]${NC} $1"
-              exit 1
-          }
+#           error() {
+#               echo -e "${RED}[ERROR]${NC} $1"
+#               exit 1
+#           }
           
-          warning() {
-              echo -e "${YELLOW}[WARNING]${NC} $1"
-          }
+#           warning() {
+#               echo -e "${YELLOW}[WARNING]${NC} $1"
+#           }
           
-          log "🚀 Starting UFAZIEN deployment..."
+#           log "🚀 Starting UFAZIEN deployment..."
           
-          # Verify project directory exists
-          if [ ! -d "/home/ubuntu/ufazien" ]; then
-              error "Project directory /home/ubuntu/ufazien not found!"
-          fi
+#           # Verify project directory exists
+#           if [ ! -d "/home/ubuntu/ufazien" ]; then
+#               error "Project directory /home/ubuntu/ufazien not found!"
+#           fi
           
-          # Navigate to project directory
-          cd /home/ubuntu/ufazien
+#           # Navigate to project directory
+#           cd /home/ubuntu/ufazien
           
-          # Get current commit info before pulling
-          OLD_COMMIT=$(git rev-parse --short HEAD)
-          log "Current commit: $OLD_COMMIT"
+#           # Get current commit info before pulling
+#           OLD_COMMIT=$(git rev-parse --short HEAD)
+#           log "Current commit: $OLD_COMMIT"
           
-          # Pull latest changes
-          log "📥 Pulling latest changes from main branch..."
-          git fetch origin
-          git reset --hard origin/main
+#           # Pull latest changes
+#           log "📥 Pulling latest changes from main branch..."
+#           git fetch origin
+#           git reset --hard origin/main
           
-          # Get new commit info
-          NEW_COMMIT=$(git rev-parse --short HEAD)
-          COMMIT_MSG=$(git log -1 --pretty=%B)
-          log "New commit: $NEW_COMMIT - $COMMIT_MSG"
+#           # Get new commit info
+#           NEW_COMMIT=$(git rev-parse --short HEAD)
+#           COMMIT_MSG=$(git log -1 --pretty=%B)
+#           log "New commit: $NEW_COMMIT - $COMMIT_MSG"
           
-          # Backend Deployment
-          log "🐍 Starting backend deployment..."
-          cd /home/ubuntu/ufazien/backend
+#           # Backend Deployment
+#           log "🐍 Starting backend deployment..."
+#           cd /home/ubuntu/ufazien/backend
           
-          # Verify virtual environment
-          if [ ! -d "venv" ]; then
-              warning "Virtual environment not found, creating new one..."
-              python3 -m venv venv
-          fi
+#           # Verify virtual environment
+#           if [ ! -d "venv" ]; then
+#               warning "Virtual environment not found, creating new one..."
+#               python3 -m venv venv
+#           fi
           
-          # Activate virtual environment
-          source venv/bin/activate
+#           # Activate virtual environment
+#           source venv/bin/activate
           
-          # Verify Python version
-          PYTHON_VERSION=$(python --version)
-          log "Using Python: $PYTHON_VERSION"
+#           # Verify Python version
+#           PYTHON_VERSION=$(python --version)
+#           log "Using Python: $PYTHON_VERSION"
           
-          # Install/update dependencies
-          log "📦 Installing Python dependencies..."
-          pip install --upgrade pip
-          pip install -r requirements.txt
+#           # Install/update dependencies
+#           log "📦 Installing Python dependencies..."
+#           pip install --upgrade pip
+#           pip install -r requirements.txt
           
-          # Database operations (SQLite - PRODUCTION SAFE)
-          log "🗄️ Running database operations..."
+#           # Database operations (SQLite - PRODUCTION SAFE)
+#           log "🗄️ Running database operations..."
           
-          # Generate migrations (this won't affect existing database)
-          python manage.py makemigrations --dry-run > migration_plan.txt || true
+#           # Generate migrations (this won't affect existing database)
+#           python manage.py makemigrations --dry-run > migration_plan.txt || true
           
-          # Run migrations safely
-          if [ -f "db.sqlite3" ]; then
-              log "🔄 Running database migrations (existing database)..."
-              python manage.py migrate --fake-initial || python manage.py migrate
-          else
-              log "🔄 Running database migrations (new database)..."
-              python manage.py migrate
-          fi
+#           # Run migrations safely
+#           if [ -f "db.sqlite3" ]; then
+#               log "🔄 Running database migrations (existing database)..."
+#               python manage.py migrate --fake-initial || python manage.py migrate
+#           else
+#               log "🔄 Running database migrations (new database)..."
+#               python manage.py migrate
+#           fi
           
-          # Collect static files
-          log "🗂️ Collecting static files..."
-          python manage.py collectstatic --noinput
+#           # Collect static files
+#           log "🗂️ Collecting static files..."
+#           python manage.py collectstatic --noinput
           
-          # Django system check
-          log "🔍 Running Django system checks..."
-          python manage.py check
+#           # Django system check
+#           log "🔍 Running Django system checks..."
+#           python manage.py check
           
-          # Restart backend service
-          log "🔄 Restarting backend service..."
-          sudo systemctl restart ufazien_backend.service
+#           # Restart backend service
+#           log "🔄 Restarting backend service..."
+#           sudo systemctl restart ufazien_backend.service
           
-          # Wait for service to start
-          sleep 5
+#           # Wait for service to start
+#           sleep 5
           
-          # Verify backend service
-          if sudo systemctl is-active --quiet ufazien_backend.service; then
-              success "✅ Backend service is running"
-          else
-              error "❌ Backend service failed to start"
-          fi
+#           # Verify backend service
+#           if sudo systemctl is-active --quiet ufazien_backend.service; then
+#               success "✅ Backend service is running"
+#           else
+#               error "❌ Backend service failed to start"
+#           fi
           
-          # Frontend Deployment
-          log "⚛️ Starting frontend deployment..."
-          cd /home/ubuntu/ufazien/frontend
+#           # Frontend Deployment
+#           log "⚛️ Starting frontend deployment..."
+#           cd /home/ubuntu/ufazien/frontend
 
-          export NVM_DIR="$HOME/.nvm"
-          [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-          nvm use 24.3.0
+#           export NVM_DIR="$HOME/.nvm"
+#           [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+#           nvm use 24.3.0
           
-          # Verify Node.js version
-          NODE_VERSION=$(node --version)
-          log "Using Node.js: $NODE_VERSION"
+#           # Verify Node.js version
+#           NODE_VERSION=$(node --version)
+#           log "Using Node.js: $NODE_VERSION"
           
-          # Install/update dependencies
-          log "📦 Installing Node.js dependencies..."
-          npm i
+#           # Install/update dependencies
+#           log "📦 Installing Node.js dependencies..."
+#           npm i
           
-          # Build application
-          log "🏗️ Building React application..."
-          NODE_OPTIONS="--max-old-space-size=1024" npm run build
+#           # Build application
+#           log "🏗️ Building React application..."
+#           NODE_OPTIONS="--max-old-space-size=1024" npm run build
           
-          # Verify build output
-          if [ ! -d "dist" ]; then
-              error "❌ Frontend build failed - dist directory not found"
-          fi
+#           # Verify build output
+#           if [ ! -d "dist" ]; then
+#               error "❌ Frontend build failed - dist directory not found"
+#           fi
           
-          if [ ! -f "dist/index.html" ]; then
-              error "❌ Frontend build failed - index.html not found"
-          fi
+#           if [ ! -f "dist/index.html" ]; then
+#               error "❌ Frontend build failed - index.html not found"
+#           fi
           
-          # Deploy new frontend
-          log "🚀 Deploying frontend files..."
-          sudo mkdir -p /var/www/ufazien
-          sudo rm -rf /var/www/ufazien/*
-          sudo cp -r dist/* /var/www/ufazien/
-          sudo chown -R www-data:www-data /var/www/ufazien
-          sudo chmod -R 755 /var/www/ufazien
+#           # Deploy new frontend
+#           log "🚀 Deploying frontend files..."
+#           sudo mkdir -p /var/www/ufazien
+#           sudo rm -rf /var/www/ufazien/*
+#           sudo cp -r dist/* /var/www/ufazien/
+#           sudo chown -R www-data:www-data /var/www/ufazien
+#           sudo chmod -R 755 /var/www/ufazien
           
-          # Test nginx configuration
-          log "🧪 Testing Nginx configuration..."
-          sudo nginx -t
+#           # Test nginx configuration
+#           log "🧪 Testing Nginx configuration..."
+#           sudo nginx -t
           
-          # Restart nginx
-          log "🔄 Restarting Nginx..."
-          sudo systemctl restart nginx
+#           # Restart nginx
+#           log "🔄 Restarting Nginx..."
+#           sudo systemctl restart nginx
           
-          # Verify nginx service
-          if sudo systemctl is-active --quiet nginx; then
-              success "✅ Nginx service is running"
-          else
-              error "❌ Nginx service failed to start"
-          fi
+#           # Verify nginx service
+#           if sudo systemctl is-active --quiet nginx; then
+#               success "✅ Nginx service is running"
+#           else
+#               error "❌ Nginx service failed to start"
+#           fi
           
-          # Final summary
-          success "🎉 Deployment completed successfully!"
-          log "📊 Deployment Summary:"
-          log "   • Old commit: $OLD_COMMIT"
-          log "   • New commit: $NEW_COMMIT"
-          log "   • Backend status: Running"
-          log "   • Frontend status: Running"
-          log "   • Deployment time: $(date)"
+#           # Final summary
+#           success "🎉 Deployment completed successfully!"
+#           log "📊 Deployment Summary:"
+#           log "   • Old commit: $OLD_COMMIT"
+#           log "   • New commit: $NEW_COMMIT"
+#           log "   • Backend status: Running"
+#           log "   • Frontend status: Running"
+#           log "   • Deployment time: $(date)"
           
-          success "🚀 UFAZIEN is now live!"
+#           success "🚀 UFAZIEN is now live!"
 
-  # Deployment Status Job
-  status:
-    name: Deployment Status
-    needs: [test, deploy]
-    runs-on: ubuntu-latest
-    if: always()
+#   # Deployment Status Job
+#   status:
+#     name: Deployment Status
+#     needs: [test, deploy]
+#     runs-on: ubuntu-latest
+#     if: always()
     
-    steps:
-    - name: 📊 Deployment Summary
-      run: |
-        echo "## 📊 Deployment Summary" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "**Repository:** ${{ github.repository }}" >> $GITHUB_STEP_SUMMARY
-        echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
-        echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-        echo "**Author:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
-        echo "**Timestamp:** $(date)" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "**Test Status:** ${{ needs.test.result }}" >> $GITHUB_STEP_SUMMARY
-        echo "**Deploy Status:** ${{ needs.deploy.result }}" >> $GITHUB_STEP_SUMMARY
+#     steps:
+#     - name: 📊 Deployment Summary
+#       run: |
+#         echo "## 📊 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+#         echo "" >> $GITHUB_STEP_SUMMARY
+#         echo "**Repository:** ${{ github.repository }}" >> $GITHUB_STEP_SUMMARY
+#         echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+#         echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+#         echo "**Author:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+#         echo "**Timestamp:** $(date)" >> $GITHUB_STEP_SUMMARY
+#         echo "" >> $GITHUB_STEP_SUMMARY
+#         echo "**Test Status:** ${{ needs.test.result }}" >> $GITHUB_STEP_SUMMARY
+#         echo "**Deploy Status:** ${{ needs.deploy.result }}" >> $GITHUB_STEP_SUMMARY
         
-        if [ "${{ needs.deploy.result }}" == "success" ]; then
-          echo "**✅ Deployment:** Successful" >> $GITHUB_STEP_SUMMARY
-          echo "**🌐 Live URL:** https://ufazien.com" >> $GITHUB_STEP_SUMMARY
-        else
-          echo "**❌ Deployment:** Failed" >> $GITHUB_STEP_SUMMARY
-        fi
+#         if [ "${{ needs.deploy.result }}" == "success" ]; then
+#           echo "**✅ Deployment:** Successful" >> $GITHUB_STEP_SUMMARY
+#           echo "**🌐 Live URL:** https://ufazien.com" >> $GITHUB_STEP_SUMMARY
+#         else
+#           echo "**❌ Deployment:** Failed" >> $GITHUB_STEP_SUMMARY
+#         fi
