@@ -28,7 +28,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.getenv("SECRET_KEY", "django-insecure-default-key-for-development")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv("DEBUG", "False") == "True"
+DEBUG = True  # Temporarily enable for debugging
 
 # Fix ALLOWED_HOSTS with fallback
 ALLOWED_HOSTS_ENV = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1")
@@ -60,6 +60,7 @@ INSTALLED_APPS = [
     'gpa',
     'game',
     'ai_tools',
+    'hosting'
 ]
 
 
@@ -176,7 +177,7 @@ if os.getenv("ENVIRONMENT") == "production":
             'NAME': os.getenv('DB_NAME', 'ufazien_test'),
             'USER': os.getenv('DB_USER', 'ufazien_test_user'),
             'PASSWORD': os.getenv('DB_PASSWORD', 'test_password'),
-            'HOST': 'localhost', 
+            'HOST': 'ufazien.com', 
             'PORT': '',
         }
     }
