@@ -37,6 +37,7 @@
     "react-dom": "^19.1.0",
     "react-helmet": "^6.1.0",
     "react-router-dom": "^7.6.3",
+    "recharts": "^3.1.2",
     "tailwindcss": "^4.1.11",
     "three": "^0.178.0",
     "tiptap-react-image-resize": "^1.2.3"

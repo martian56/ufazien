@@ -289,7 +289,7 @@ useEffect(() => {
                   onClick={() => navigate('/profile')}
                   src={user.avatar || "/placeholder.svg"}
                   alt={user.name}
-                  className="w-8 h-8 rounded-full border-2 border-gray-200"
+                  className="w-8 h-8 rounded-full border-2 border-gray-200 cursor-pointer"
                 />
                 <div className="hidden sm:block">
                   <p className="text-sm font-medium text-gray-900">{user.name}</p>
