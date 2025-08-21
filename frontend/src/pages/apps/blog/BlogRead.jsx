@@ -588,34 +588,34 @@ export default function BlogRead() {
         <title>Ufazien | Blog Read</title>
         <meta name="description" content="Read the full articles on Ufazien's blog." />
       </Helmet>
+
       <div
         className={`min-h-screen flex transition-colors duration-300 ${darkMode ? "bg-gray-900 text-white" : "bg-gray-50 text-gray-900"}`}
       >
-        {/* Reading Progress Bar */}
-        <div className="fixed top-0 left-0 w-full h-1 bg-gray-200 z-50">
-        <div
-          className="h-full bg-gradient-to-r from-blue-600 to-purple-600 transition-all duration-300"
-          style={{ width: `${readingProgress}%` }}
-        ></div>
-      </div>
+        {/* Sidebar Overlay for Mobile */}
+        {isSidebarOpen && (
+          <div
+            className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+            onClick={() => setIsSidebarOpen(false)}
+          ></div>
+        )}
 
-      {/* Sidebar Overlay for Mobile */}
-      {isSidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
-          onClick={() => setIsSidebarOpen(false)}
-        ></div>
-      )}
+        {/* Sidebar */}
+        <SideBar isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen} pageTitle="Blog" />
 
-      {/* Sidebar */}
-      <SideBar isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen} pageTitle="Blog" />
-
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header */}
-        <header
-          className={`sticky top-1 z-30 backdrop-blur-sm border-b ${darkMode ? "bg-gray-900/90 border-gray-700" : "bg-white/90 border-gray-200"}`}
-        >
+        {/* Main Content */}
+        <div className="flex-1 lg:ml-64">
+          {/* Reading Progress Bar */}
+          <div className="fixed top-0 left-0 lg:left-64 w-full lg:w-[calc(100%-16rem)] h-1 bg-gray-200 z-50">
+            <div
+              className="h-full bg-gradient-to-r from-blue-600 to-purple-600 transition-all duration-300"
+              style={{ width: `${readingProgress}%` }}
+            ></div>
+          </div>
+          {/* Header */}
+          <header
+            className={`sticky top-1 z-30 backdrop-blur-sm border-b ${darkMode ? "bg-gray-900/90 border-gray-700" : "bg-white/90 border-gray-200"}`}
+          >
           <div className="flex items-center justify-between h-16 px-6">
             <div className="flex items-center space-x-4">
               {/* Mobile Menu Button */}
@@ -815,8 +815,8 @@ export default function BlogRead() {
         </header>
 
         {/* Article Content */}
-        <main className="max-w-4xl mx-auto px-6 py-8">
-          <article ref={contentRef}>
+        <main className="px-6 py-8">
+          <article ref={contentRef} className="max-w-4xl">
             {/* Article Header */}
             <header className="mb-8">
               <h1
@@ -1476,7 +1476,7 @@ export default function BlogRead() {
         notifications={toastNotifications} 
         removeNotification={removeNotification} 
       />
-    </div>
-  </>
+      </div>
+    </>
   )
 }
