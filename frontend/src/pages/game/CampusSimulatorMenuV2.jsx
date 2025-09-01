@@ -219,7 +219,7 @@ const CampusSimulatorMenu = () => {
     const matchesSearch = !searchTerm || 
       lobby.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       lobby.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (lobby.host?.username || '').toLowerCase().includes(searchTerm.toLowerCase());
+      (lobby.host?.first_name + ' ' + lobby.host?.last_name || '').toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchesPassword = passwordFilter === 'all' ||
       (passwordFilter === 'public' && !lobby.is_private) ||
@@ -266,7 +266,7 @@ const CampusSimulatorMenu = () => {
                 <Users className="w-4 h-4" />
                 {lobby.current_players_count}/{lobby.max_players}
               </span>
-              <span>Host: {lobby.host?.username || lobby.host || 'Unknown'}</span>
+              <span>Host: {lobby.host?.first_name + ' ' + lobby.host?.last_name || 'Unknown'}</span>
               <span>{lobby.created_at ? new Date(lobby.created_at).toLocaleDateString() : 'Recently created'}</span>
             </div>
           </div>

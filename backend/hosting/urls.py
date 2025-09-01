@@ -28,6 +28,9 @@ urlpatterns = [
     path('analytics/bandwidth/', views.BandwidthAnalyticsAPIView.as_view(), name='bandwidth-analytics'),
     path('create-sample-logs/', views.create_sample_logs, name='create-sample-logs'),
 
+    # Public endpoints
+    path('public/websites/', views.PublicWebsiteList.as_view(), name='public-websites-list'),
+
     # Webhook endpoints
     path('webhooks/deployment-status/', views.webhook_deployment_status, name='webhook-deployment'),
     path('webhooks/analytics/', views.webhook_analytics, name='webhook-analytics'),

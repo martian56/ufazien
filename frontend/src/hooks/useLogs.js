@@ -67,6 +67,39 @@ export const useLogs = () => {
     fetchAllLogs();
   };
 
+  const loadMoreActivity = async () => {
+    if (!pagination.activity.next) return;
+    // Determine next page number
+    const url = new URL(pagination.activity.next, window.location.origin);
+    const page = url.searchParams.get('page');
+    const response = await hostingApi.getActivityLog({ page });
+    setActivityLogs(prev => [...prev, ...(response.results || [])]);
+    setPagination(prev => ({
+      ...prev,
+      activity: {
+        count: response.count || 0,
+        next: response.next || null,
+        previous: response.previous || null
+      }
+    }));
+  };
+
+  const loadMoreDeployment = async () => {
+    if (!pagination.deployment.next) return;
+    const url = new URL(pagination.deployment.next, window.location.origin);
+    const page = url.searchParams.get('page');
+    const response = await hostingApi.getDeploymentLogs(null, { page });
+    setDeploymentLogs(prev => [...prev, ...(response.results || [])]);
+    setPagination(prev => ({
+      ...prev,
+      deployment: {
+        count: response.count || 0,
+        next: response.next || null,
+        previous: response.previous || null
+      }
+    }));
+  };
+
   useEffect(() => {
     fetchAllLogs();
   }, []);
@@ -105,8 +138,10 @@ export const useLogs = () => {
     deploymentLogs,
     pagination,
     refreshLogs,
-    fetchActivityLogs,
-    fetchDeploymentLogs
+  fetchActivityLogs,
+  fetchDeploymentLogs,
+  loadMoreActivity,
+  loadMoreDeployment
   };
 };
 

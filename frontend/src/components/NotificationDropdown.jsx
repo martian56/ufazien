@@ -141,8 +141,11 @@ export default function NotificationDropdown({ unreadCount, onCountUpdate }) {
             onClick={() => setIsOpen(false)}
           />
 
-          {/* Dropdown Content */}
-          <div className="absolute right-0 mt-2 w-96 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+      {/* Dropdown Content (responsive)
+        - On small screens: fixed and centered (inset-x) so it doesn't overflow
+        - On sm+ screens: positioned absolute at the right as before
+      */}
+          <div className="fixed inset-x-4 top-20 sm:absolute sm:inset-auto sm:right-0 sm:mt-2 w-auto sm:w-96 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900">Notifications</h3>
@@ -195,7 +198,7 @@ export default function NotificationDropdown({ unreadCount, onCountUpdate }) {
             )}
 
             {/* Notifications List */}
-            <div className="max-h-96 overflow-y-auto">
+            <div className="max-h-[70vh] sm:max-h-96 overflow-y-auto">
               {loading ? (
                 <div className="p-4 text-center text-gray-500">
                   <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto mb-2"></div>

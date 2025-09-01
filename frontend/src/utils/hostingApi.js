@@ -69,8 +69,8 @@ export const hostingApi = {
   getActivityLog: (params = {}) => {
     const queryParams = new URLSearchParams();
     if (params.action) queryParams.append('action', params.action);
-    if (params.limit) queryParams.append('limit', params.limit);
-    if (params.offset) queryParams.append('offset', params.offset);
+  if (params.page) queryParams.append('page', params.page);
+  if (params.page_size) queryParams.append('page_size', params.page_size);
     
     const url = `/hosting/activity-logs/${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
     return apiClient.get(url);
@@ -81,13 +81,19 @@ export const hostingApi = {
     const queryParams = new URLSearchParams();
     if (websiteId) queryParams.append('website', websiteId);
     if (params.status) queryParams.append('status', params.status);
-    if (params.limit) queryParams.append('limit', params.limit);
-    if (params.offset) queryParams.append('offset', params.offset);
+  if (params.page) queryParams.append('page', params.page);
+  if (params.page_size) queryParams.append('page_size', params.page_size);
     
     const url = `/hosting/deployments/${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
     return apiClient.get(url);
   },
-};
+  uploadFiles: (websiteId, formData) => apiClient.post(`/hosting/websites/${websiteId}/upload_files/`, formData),
+  uploadZip: (websiteId, formData) => apiClient.post(`/hosting/websites/${websiteId}/upload_zip/`, formData),
+  // File management
+  listFiles: (websiteId) => apiClient.get(`/hosting/websites/${websiteId}/list_files/`),
+  deleteFile: (websiteId, filename) => apiClient.post(`/hosting/websites/${websiteId}/delete_file/`, { filename }),
+  downloadFile: (websiteId, filename) => apiClient.get(`/hosting/websites/${websiteId}/download_file/?filename=${encodeURIComponent(filename)}`),
+  };
 
 // Auth API Services
 export const authApi = {

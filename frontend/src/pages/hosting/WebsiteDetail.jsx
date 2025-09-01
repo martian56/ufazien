@@ -65,6 +65,9 @@ export default function WebsiteDetail() {
   })
   const [envVars, setEnvVars] = useState([])
   const [editingEnvVars, setEditingEnvVars] = useState(false)
+  const [files, setFiles] = useState([])
+  const [uploading, setUploading] = useState(false)
+  const [selectedFiles, setSelectedFiles] = useState([])
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, loading: false })
   const { deployWebsite, deleteWebsite } = useWebsites()
 
@@ -123,6 +126,59 @@ export default function WebsiteDetail() {
       fetchWebsiteData()
     }
   }, [websiteId])
+
+  // File manager helpers
+  const refreshFiles = async () => {
+    try {
+      const res = await hostingApi.listFiles(websiteId)
+      setFiles(res.files || [])
+    } catch (err) {
+      console.error('Failed to list files:', err)
+      setFiles([])
+    }
+  }
+
+  const handleUpload = async () => {
+    if (selectedFiles.length === 0) return
+    setUploading(true)
+    try {
+      const fd = new FormData()
+      selectedFiles.forEach(f => fd.append('files', f))
+      await hostingApi.uploadFiles(websiteId, fd)
+      setSelectedFiles([])
+      await refreshFiles()
+    } catch (err) {
+      alert('Upload failed: ' + (err.message || err))
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleFileDelete = async (filename) => {
+    if (!confirm(`Delete ${filename}?`)) return
+    try {
+      await hostingApi.deleteFile(websiteId, filename)
+      await refreshFiles()
+    } catch (err) {
+      alert('Delete failed: ' + (err.message || err))
+    }
+  }
+
+  const handleDownload = async (filename) => {
+    try {
+      // Browser will handle download; open in new tab
+      const url = `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/hosting/websites/${websiteId}/download_file/?filename=${encodeURIComponent(filename)}`
+      window.open(url, '_blank')
+    } catch (err) {
+      alert('Download failed: ' + (err.message || err))
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab === 'files') {
+      refreshFiles()
+    }
+  }, [activeTab, websiteId])
 
   const handleDeploy = async () => {
     try {
@@ -401,9 +457,13 @@ export default function WebsiteDetail() {
                   </div>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                  <a 
+                    href={`https://${getWebsiteUrl()}`} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                  >
                     <ExternalLink className="w-5 h-5 text-gray-600" />
-                  </button>
+                  </a>
                   <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
                     <RefreshCw className="w-5 h-5 text-gray-600" />
                   </button>
@@ -634,22 +694,73 @@ export default function WebsiteDetail() {
                 <div className="flex items-center justify-between mb-6">
                   <h3 className="text-lg font-semibold text-gray-900">File Manager</h3>
                   <div className="flex space-x-2">
-                    <button className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
-                      <Upload className="w-4 h-4 mr-2 inline" />
-                      Upload
-                    </button>
-                    <button className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
-                      <Download className="w-4 h-4 mr-2 inline" />
-                      Download
-                    </button>
+                            <label className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer inline-flex items-center">
+                              <Upload className="w-4 h-4 mr-2 inline" />
+                              <input type="file" multiple className="hidden" onChange={(e) => setSelectedFiles(Array.from(e.target.files))} />
+                              Upload
+                            </label>
+                            <button onClick={async () => { await refreshFiles() }} className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
+                              <RefreshCw className="w-4 h-4 mr-2 inline" />
+                              Refresh
+                            </button>
                   </div>
                 </div>
                 
-                <div className="h-96 flex items-center justify-center border-2 border-dashed border-gray-300 rounded-lg">
-                  <div className="text-center">
-                    <FileText className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-                    <p className="text-gray-600">File manager will be implemented here</p>
-                    <p className="text-sm text-gray-500 mt-1">Browse, edit, and manage your website files</p>
+                <div className="h-96 border-2 border-dashed border-gray-300 rounded-lg p-4 overflow-auto">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="text-sm text-gray-600">{files.length} files</div>
+                    <div className="text-sm text-gray-500">{website.storage_used_mb ? formatStorage(website.storage_used_mb) : ''}</div>
+                  </div>
+
+                  {selectedFiles.length > 0 && (
+                    <div className="mb-4">
+                      <div className="text-sm font-medium text-gray-700 mb-2">Files to upload</div>
+                      <ul className="space-y-2">
+                        {selectedFiles.map((f, idx) => (
+                          <li key={idx} className="flex items-center justify-between bg-gray-50 p-2 rounded">
+                            <span className="text-sm text-gray-800">{f.name}</span>
+                            <span className="text-xs text-gray-500">{(f.size/1024).toFixed(1)} KB</span>
+                          </li>
+                        ))}
+                      </ul>
+                      <div className="mt-2 flex space-x-2">
+                        <button disabled={uploading} onClick={async () => await handleUpload()} className="px-3 py-1 bg-blue-600 text-white rounded">Upload</button>
+                        <button onClick={() => setSelectedFiles([])} className="px-3 py-1 border rounded">Cancel</button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    {files.length === 0 ? (
+                      <div className="text-center py-8">
+                        <FileText className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+                        <p className="text-gray-600">No files uploaded yet</p>
+                      </div>
+                    ) : (
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-left text-xs text-gray-500">
+                            <th>Name</th>
+                            <th>Size</th>
+                            <th>Modified</th>
+                            <th></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {files.map((f) => (
+                            <tr key={f.name} className="border-t">
+                              <td className="py-2">{f.name}</td>
+                              <td className="py-2 text-gray-500">{(f.size/1024).toFixed(1)} KB</td>
+                              <td className="py-2 text-gray-500">{f.modified ? new Date(f.modified).toLocaleString() : '-'}</td>
+                              <td className="py-2 text-right">
+                                <button onClick={() => handleDownload(f.name)} className="px-2 py-1 text-sm mr-2 bg-gray-100 rounded">Download</button>
+                                <button onClick={() => handleFileDelete(f.name)} className="px-2 py-1 text-sm bg-red-50 text-red-600 rounded">Delete</button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
                   </div>
                 </div>
               </div>

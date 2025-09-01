@@ -603,8 +603,8 @@ export default function BlogRead() {
         {/* Sidebar */}
         <SideBar isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen} pageTitle="Blog" />
 
-        {/* Main Content */}
-        <div className="flex-1 lg:ml-64">
+  {/* Main Content */}
+  <div className="flex-1 flex flex-col overflow-hidden">
           {/* Reading Progress Bar */}
           <div className="fixed top-0 left-0 lg:left-64 w-full lg:w-[calc(100%-16rem)] h-1 bg-gray-200 z-50">
             <div
@@ -814,8 +814,8 @@ export default function BlogRead() {
           )}
         </header>
 
-        {/* Article Content */}
-        <main className="px-6 py-8">
+          {/* Article Content */}
+        <main className="flex-1 overflow-y-auto px-6 py-8">
           <article ref={contentRef} className="max-w-4xl">
             {/* Article Header */}
             <header className="mb-8">

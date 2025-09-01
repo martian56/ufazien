@@ -8,6 +8,10 @@ import campusWebSocket from '../services/campusWebSocket';
 import campusApi from '../services/campusApi';
 
 export const useCampusSimulator = (lobbyId = null) => {
+    // Defensive: ignore string values that may come from route params like 'null' or 'undefined'
+    if (typeof lobbyId === 'string' && (lobbyId === 'null' || lobbyId === 'undefined')) {
+        lobbyId = null;
+    }
     // Connection state
     const [isConnected, setIsConnected] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
@@ -31,6 +35,7 @@ export const useCampusSimulator = (lobbyId = null) => {
     const positionRef = useRef(userPosition);
     const lastSentPositionRef = useRef({ x: 0, y: 0, direction: 'down' });
     const positionThrottleRef = useRef(null);
+        const wsEverConnectedRef = useRef(false);
 
     // Update position ref when userPosition changes
     useEffect(() => {
@@ -50,9 +55,24 @@ export const useCampusSimulator = (lobbyId = null) => {
         try {
             // First, join the lobby via REST API
             console.log('Calling joinLobby API with ID:', targetLobbyId);
-            const lobbyData = await campusApi.joinLobby(targetLobbyId);
-            console.log('Successfully joined lobby:', lobbyData);
-            setCurrentLobby(lobbyData.lobby);
+            let lobbyData;
+            try {
+                lobbyData = await campusApi.joinLobby(targetLobbyId);
+            } catch (err) {
+                const msg = String(err.message || '').toLowerCase();
+                if (msg.includes('already in this lobby') || msg.includes('you are already in this lobby')) {
+                    console.warn('Backend says user already in lobby; fetching lobby details instead');
+                    const lobbyObj = await campusApi.getLobby(targetLobbyId);
+                    lobbyData = { lobby: lobbyObj };
+                } else {
+                    throw err;
+                }
+            }
+
+            console.log('Successfully joined or retrieved lobby:', lobbyData);
+            // Accept both shapes: { lobby: ... } or raw lobby object
+            const lobbyObj = lobbyData && lobbyData.lobby ? lobbyData.lobby : lobbyData;
+            setCurrentLobby(lobbyObj);
 
             // Then connect to WebSocket
             campusWebSocket.connect(targetLobbyId);
@@ -77,11 +97,13 @@ export const useCampusSimulator = (lobbyId = null) => {
             console.log('WebSocket connected');
             setIsConnected(true);
             setError(null);
+                wsEverConnectedRef.current = true;
         });
 
         campusWebSocket.on('disconnected', () => {
             console.log('WebSocket disconnected');
             setIsConnected(false);
+                // Do not immediately force-leave the lobby here; only mark disconnected
         });
 
         // Lobby state received
@@ -243,7 +265,12 @@ export const useCampusSimulator = (lobbyId = null) => {
         try {
             if (currentLobby?.id) {
                 console.log('Leaving lobby:', currentLobby.id);
-                await campusApi.leaveLobby(currentLobby.id);
+                    // Only call API leave if the WebSocket had previously connected (to avoid leaving on handshake failures)
+                    if (wsEverConnectedRef.current) {
+                        await campusApi.leaveLobby(currentLobby.id);
+                    } else {
+                        console.log('Skipping API leave because WebSocket never connected');
+                    }
                 
                 // Clean up lobby-specific state
                 setCurrentLobby(null);

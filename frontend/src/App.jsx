@@ -33,6 +33,7 @@ import Billing from "./pages/hosting/Billing"
 import Upgrade from "./pages/hosting/Upgrade"
 import ApiTest from "./components/ApiTest"
 import CreateDatabase from "./pages/hosting/CreateDatabase.jsx"
+import UserSites from "./pages/hosting/UserSites.jsx"
 
 // Wrapper component for hosting routes with subscription context
 const HostingRoutes = () => (
@@ -79,6 +80,7 @@ function App() {
         <Route path="/campus-simulator" element={<ProtectedRoute><CampusSimulatorMenuV2 /></ProtectedRoute>} />
         <Route path="/ai-tools" element={<ProtectedRoute><AiToolsMenu /></ProtectedRoute>} />
         <Route path="/ai-tools/humanizer" element={<ProtectedRoute><Humanizer /></ProtectedRoute>} />
+        <Route path="/user-sites" element={<ProtectedRoute><UserSites /></ProtectedRoute>} />
         <Route path="/api-test" element={<ApiTest />} />
         {/* Hosting routes with subscription context */}
         <Route path="/hosting/*" element={<HostingRoutes />} />

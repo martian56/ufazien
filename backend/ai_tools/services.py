@@ -31,23 +31,24 @@ class AIService:
             api_version=settings.AZURE_OPENAI_API_VERSION
         )
         self.deployment_name = settings.AZURE_OPENAI_DEPLOYMENT_NAME
-    
+        
     def humanize_text(self, task: AITask) -> str:
         """
-        Advanced humanization method for rewriting AI-generated text to appear 100% human-written.
-        Optimized to evade all AI detectors (e.g., QuillBot, Originality.ai).
+        Humanization pipeline: rewrites AI-generated text to pass as 100% human-written.
+        Uses style prompts + randomness + post-processing quirks to reduce AI detectability.
         """
         try:
-            humanizer_task = getattr(task, 'humanizer_details', None)
+            humanizer_task = getattr(task, "humanizer_details", None)
             if not humanizer_task:
                 raise ValueError("Humanizer task details not found")
 
+            # Style presets with more natural imperfection baked in
             style_prompts = {
-                WritingStyle.NATURAL: "Rewrite this as if it were written by a real person having a natural conversation with a friend.",
-                WritingStyle.ACADEMIC: "Rewrite this in a formal academic tone, but make it sound like it was written by a real graduate student, not AI.",
-                WritingStyle.CASUAL: "Rewrite this casually, like a personal blog post or a relaxed conversation over coffee.",
-                WritingStyle.PROFESSIONAL: "Rewrite with a business-professional tone, like an experienced manager wrote it.",
-                WritingStyle.CREATIVE: "Rewrite this in a fresh and imaginative way, like a creative human with a distinct personality wrote it."
+                WritingStyle.NATURAL: "Rewrite this like you’re talking to a friend—loose, warm, slightly messy.",
+                WritingStyle.ACADEMIC: "Rewrite like a grad student pulling an all-nighter: smart, a bit rough around the edges, not robotic.",
+                WritingStyle.CASUAL: "Rewrite casually, like a blog post or late-night ramble, with little asides.",
+                WritingStyle.PROFESSIONAL: "Rewrite in a business-professional tone—clear and confident, but still human.",
+                WritingStyle.CREATIVE: "Rewrite with imagination and personal voice—quirky, unexpected turns allowed."
             }
 
             style_instruction = style_prompts.get(
@@ -55,30 +56,30 @@ class AIService:
                 style_prompts[WritingStyle.NATURAL]
             )
 
+            # Core humanizer prompt
             prompt = f"""
-    You are a skilled ghostwriter, not an AI. Your job is to rewrite text so that it feels *entirely human-written*.
+    You are not an AI—you are a human ghostwriter. Rewrite the text so it feels
+    completely human: authentic, slightly unpredictable, and not machine-polished.
 
-    Hard Rules:
+    Guidelines (don’t follow like a checklist, just keep in mind):
     - {style_instruction}
-    - Avoid robotic or AI-style structure and phrasing
-    - Use natural language patterns, idiomatic expressions, and subtle human quirks
-    - Break perfect grammar and flow *slightly* where appropriate (e.g., sentence fragments, casual tone)
-    - Vary sentence lengths and structures: mix short, punchy lines with longer ones
-    - Use contractions and relaxed phrasing when tone allows
-    - DO NOT add explanations or "rewritten" labels. Output ONLY the rewritten text.
-    - Never copy large phrases verbatim. Rewrite in a way that AI detectors will see as fully human-authored.
-
+    - Use natural rhythms: short bursts + longer reflections
+    - Throw in contractions, casual connectors ("anyway", "honestly", "to be fair")
+    - Allow fragments, tangents, or asides (like real people)
+    - Avoid robotic transitions (no "In conclusion", "Overall", etc.)
+    - Imperfection is good—don’t make grammar spotless
+    - Never label output as rewritten text; just write it
     """
 
             if humanizer_task.target_tone:
-                prompt += f"\nTone: Maintain a {humanizer_task.target_tone} tone throughout."
+                prompt += f"\nTone: Keep a consistent {humanizer_task.target_tone} tone."
 
             if humanizer_task.preserve_formatting:
-                prompt += "\nPreserve all original formatting and paragraph structure."
+                prompt += "\nPreserve the original formatting and paragraph breaks."
 
             prompt += f"\n\nOriginal text:\n{task.input_text}"
 
-            logger.info(f"Making enhanced API call to Azure OpenAI for task {task.id}")
+            logger.info(f"Calling Azure OpenAI for humanization task {task.id}")
             logger.debug(f"Deployment: {self.deployment_name}")
 
             try:
@@ -88,21 +89,17 @@ class AIService:
                         {
                             "role": "system",
                             "content": (
-                                "You are a professional human editor. You rewrite content so well "
-                                "that it passes all AI detection tools by sounding 100% human. "
-                                "You're not an AI. You write like a nuanced, real person."
+                                "You are a human editor. Rewrite text so well that no AI detector"
+                                " can flag it. Write with quirks, rhythm, and voice—the way a real person would."
                             )
                         },
-                        {
-                            "role": "user",
-                            "content": prompt
-                        }
+                        {"role": "user", "content": prompt}
                     ],
-                    temperature=0.95,
+                    temperature=0.99,        # more randomness for unpredictability
                     max_tokens=4000,
-                    top_p=0.95,
-                    frequency_penalty=0.5,
-                    presence_penalty=0.4
+                    top_p=0.97,             # widen vocabulary diversity
+                    frequency_penalty=0.7,  # suppress repetition patterns
+                    presence_penalty=0.65   # encourage fresh phrasing
                 )
             except Exception as e:
                 logger.error(f"Azure OpenAI API call failed for task {task.id}: {str(e)}")
@@ -110,13 +107,43 @@ class AIService:
 
             humanized_text = response.choices[0].message.content.strip()
 
-            logger.info(f"Successfully produced human-like text for task {task.id}")
+            # --- Post-processing tweaks (to break detector patterns further) ---
+            import random, re
 
+            tweaks = [
+                # Replace overly AI-ish connectors with looser phrasing
+                lambda t: re.sub(r"\bfor example\b", random.choice(["say", "like", "let’s say"]), t, 1) if "for example" in t else t,
+                lambda t: re.sub(r"\bIn conclusion\b", random.choice(["So yeah, to wrap it up", "Anyway, bottom line is", "Long story short"]), t, 1) if "In conclusion" in t else t,
+
+                # Randomly insert a subtle human aside
+                lambda t: t + random.choice([
+                    "\n\n(That’s just how I see it, anyway.)",
+                    "\n\nWeird side note, but it felt worth saying.",
+                    "\n\nAnyway—take that for what it’s worth."])
+                if random.random() < 0.25 else t
+            ]
+
+            for tweak in tweaks:
+                humanized_text = tweak(humanized_text)
+
+            # Occasionally shuffle sentence order in a paragraph (small human-like imperfection)
+            if random.random() < 0.15:
+                paragraphs = humanized_text.split("\n")
+                shuffled = []
+                for p in paragraphs:
+                    sentences = re.split(r'(?<=[.!?]) +', p)
+                    if len(sentences) > 2:
+                        random.shuffle(sentences)
+                    shuffled.append(" ".join(sentences))
+                humanized_text = "\n".join(shuffled)
+
+            logger.info(f"Successfully humanized text for task {task.id}")
             return humanized_text
 
         except Exception as e:
             logger.error(f"Humanization failed for task {task.id}: {str(e)}")
             raise
+
 
 
 

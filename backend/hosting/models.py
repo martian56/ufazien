@@ -65,11 +65,16 @@ class UserSubscription(models.Model):
         websites_count = self.user.websites.filter(status__in=['active', 'building']).count()
         databases_count = self.user.databases.count()
         
-        # Calculate storage usage (sum of all website storage)
-        storage_used = sum(
-            website.storage_used_mb or 0 
+        # Calculate storage usage (sum of website storage + database sizes)
+        website_storage = sum(
+            website.storage_used_mb or 0
             for website in self.user.websites.all()
         )
+        database_storage = sum(
+            db.size_mb or 0
+            for db in self.user.databases.all()
+        )
+        storage_used = website_storage + database_storage
         
         # Calculate bandwidth usage (this month)
         from django.utils import timezone
@@ -85,7 +90,9 @@ class UserSubscription(models.Model):
         return {
             'websites': websites_count,
             'databases': databases_count,
-            'storage_mb': storage_used,
+            'storage_used_mb': storage_used,
+            'storage_websites_mb': website_storage,
+            'storage_databases_mb': database_storage,
             'bandwidth_mb': bandwidth_used,
         }
 
@@ -136,15 +143,17 @@ class Database(models.Model):
     ]
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    name = models.CharField(max_length=100)
+    name = models.CharField(max_length=100, unique=True)
     db_type = models.CharField(max_length=20, choices=DB_TYPES, default='mysql')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='creating')
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='databases')
     host = models.CharField(max_length=255, default='db.ufazien.com')
     port = models.IntegerField(default=3306)
-    username = models.CharField(max_length=100)
-    password = models.CharField(max_length=255)  # Should be encrypted in production
+    username = models.CharField(max_length=100, blank=True)
+    password = models.CharField(max_length=255, blank=True)  # encrypted storage recommended
     size_mb = models.IntegerField(default=0)
+    error_message = models.TextField(blank=True)
+    connection_info = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
