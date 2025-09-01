@@ -30,12 +30,19 @@ COPY . /app/
 # Create directories for static files and media
 RUN mkdir -p /app/static /app/media
 
+# Create hosting directory and set permissions
+RUN mkdir -p /srv/hosting \
+    && chmod 755 /srv/hosting
+
 # Collect static files
 RUN python manage.py collectstatic --noinput
+RUN python manage.py migrate
+RUN python manage.py create_subscription_plans
 
 # Create a non-root user
 RUN adduser --disabled-password --gecos '' appuser \
-    && chown -R appuser:appuser /app
+    && chown -R appuser:appuser /app \
+    && chown -R appuser:appuser /srv/hosting
 USER appuser
 
 # Expose port
@@ -46,4 +53,5 @@ HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/api/ || exit 1
 
 # Run the application
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "3", "--timeout", "120", "ufazien.wsgi:application"]
+CMD ["uvicorn", "ufazien.asgi:application", "--host", "0.0.0.0", "--port", "8000", "--workers", "3", "--timeout-keep-alive", "120"]
+

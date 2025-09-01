@@ -442,7 +442,9 @@ function StudyAreaInteraction({ area, campusHook }) {
 // Main Campus component with backend integration
 const CampusWithBackend = () => {
   const navigate = useNavigate()
-  const { lobbyId } = useParams()
+  const { lobbyId: rawLobbyId } = useParams()
+  // Sanitize route param: some callers may accidentally navigate to '/campus-simulator/null'
+  const lobbyId = (rawLobbyId === 'null' || rawLobbyId === 'undefined') ? null : rawLobbyId;
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
 

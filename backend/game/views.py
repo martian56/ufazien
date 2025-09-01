@@ -160,11 +160,12 @@ def join_lobby(request):
     
     lobby = get_object_or_404(Lobby, id=lobby_id, is_active=True)
     
-    # Check if user is already in the lobby
+    # Check if user is already in the lobby — treat as idempotent success
     if LobbyMember.objects.filter(lobby=lobby, user=request.user).exists():
+        # Return current lobby data instead of an error so clients can proceed idempotently
         return Response(
-            {'error': 'You are already in this lobby'}, 
-            status=status.HTTP_400_BAD_REQUEST
+            LobbySerializer(lobby).data,
+            status=status.HTTP_200_OK
         )
     
     # Check password for private lobbies
@@ -217,7 +218,7 @@ def leave_lobby(request, lobby_id):
                 lobby.host = remaining_members.first().user
                 lobby.save()
             else:
-                lobby.is_active = False
+                # lobby.is_active = False
                 lobby.save()
         
         return Response({'message': 'Left lobby successfully'})

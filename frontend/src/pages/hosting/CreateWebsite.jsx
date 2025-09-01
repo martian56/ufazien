@@ -214,13 +214,22 @@ export default function CreateWebsite() {
       
       // Handle file uploads if deployment method is upload or zip
       if (formData.deploymentMethod === "upload" && formData.files.length > 0) {
-        // TODO: Implement file upload functionality
-        console.log("File upload not implemented yet")
+        const uploadFormData = new FormData();
+        formData.files.forEach((file, index) => {
+          uploadFormData.append(`files`, file);
+        });
+        uploadFormData.append('website_id', website.id);
+        
+        // Send to your backend endpoint
+        await hostingApi.uploadFiles(website.id, uploadFormData);
       }
       
       if (formData.deploymentMethod === "zip" && formData.zipFile) {
-        // TODO: Implement ZIP file upload functionality
-        console.log("ZIP upload not implemented yet")
+        const zipFormData = new FormData();
+        zipFormData.append('zip_file', formData.zipFile);
+        zipFormData.append('website_id', website.id);
+        
+        await hostingApi.uploadZip(website.id, zipFormData);
       }
 
       // Navigate to website detail or websites list

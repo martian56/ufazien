@@ -27,24 +27,23 @@ class LobbyConsumer(AsyncWebsocketConsumer):
         if not self.user.is_authenticated:
             await self.close()
             return
-            
         # Check if lobby exists and user is a member
         lobby_exists = await self.check_lobby_membership()
         if not lobby_exists:
             await self.close()
             return
-        
+
         # Join lobby group
         await self.channel_layer.group_add(
             self.lobby_group_name,
             self.channel_name
         )
-        
+
         await self.accept()
-        
+
         # Send initial lobby state
         await self.send_lobby_state()
-        
+
         # Notify other users that someone joined
         await self.channel_layer.group_send(
             self.lobby_group_name,
@@ -55,7 +54,7 @@ class LobbyConsumer(AsyncWebsocketConsumer):
             }
         )
 
-    async def disconnect(self, close_code):
+    async def disconnect(self, code):
         """Handle WebSocket disconnection."""
         if hasattr(self, 'lobby_group_name'):
             # Notify other users that someone left
@@ -74,10 +73,11 @@ class LobbyConsumer(AsyncWebsocketConsumer):
                 self.channel_name
             )
 
-    async def receive(self, text_data):
+    async def receive(self, text_data=None, bytes_data=None):
         """Handle incoming WebSocket messages."""
         try:
-            data = json.loads(text_data)
+            payload = text_data if text_data is not None else (bytes_data.decode('utf-8') if bytes_data else '')
+            data = json.loads(payload)
             message_type = data.get('type')
             
             if message_type == 'player_position':
@@ -236,7 +236,8 @@ class LobbyConsumer(AsyncWebsocketConsumer):
     def check_lobby_membership(self):
         """Check if the lobby exists and user is a member."""
         try:
-            lobby = Lobby.objects.get(lobby_id=self.lobby_id)
+            # Lobby model uses `id` as the primary key (8-digit string)
+            lobby = Lobby.objects.get(id=self.lobby_id)
             return LobbyMember.objects.filter(lobby=lobby, user=self.user).exists()
         except Lobby.DoesNotExist:
             return False
@@ -245,11 +246,14 @@ class LobbyConsumer(AsyncWebsocketConsumer):
     def update_player_position(self, position_data):
         """Update player position in the database."""
         try:
-            lobby = Lobby.objects.get(lobby_id=self.lobby_id)
+            lobby = Lobby.objects.get(id=self.lobby_id)
+            # Only accept the PlayerPosition fields that actually exist on the model
+            allowed = {'x', 'y', 'direction', 'is_moving', 'current_room'}
+            defaults = {k: v for k, v in position_data.items() if k in allowed}
             position, created = PlayerPosition.objects.update_or_create(
                 lobby=lobby,
                 user=self.user,
-                defaults=position_data
+                defaults=defaults
             )
             return position
         except Lobby.DoesNotExist:
@@ -259,7 +263,7 @@ class LobbyConsumer(AsyncWebsocketConsumer):
     def save_chat_message(self, message):
         """Save chat message to the database."""
         try:
-            lobby = Lobby.objects.get(lobby_id=self.lobby_id)
+            lobby = Lobby.objects.get(id=self.lobby_id)
             chat_message = ChatMessage.objects.create(
                 lobby=lobby,
                 user=self.user,
@@ -273,7 +277,7 @@ class LobbyConsumer(AsyncWebsocketConsumer):
     def get_lobby_state(self):
         """Get current lobby state including active players and recent messages."""
         try:
-            lobby = Lobby.objects.get(lobby_id=self.lobby_id)
+            lobby = Lobby.objects.get(id=self.lobby_id)
             
             # Get active members
             members = list(LobbyMember.objects.filter(lobby=lobby).select_related('user'))
@@ -282,7 +286,7 @@ class LobbyConsumer(AsyncWebsocketConsumer):
             positions = list(PlayerPosition.objects.filter(lobby=lobby).select_related('user'))
             
             # Get recent chat messages (last 50)
-            messages = list(ChatMessage.objects.filter(lobby=lobby).select_related('user').order_by('-timestamp')[:50])
+            messages = list(ChatMessage.objects.filter(lobby=lobby).select_related('user').order_by('-created_at')[:50])
             
             return {
                 'lobby': lobby,
@@ -304,7 +308,8 @@ class LobbyConsumer(AsyncWebsocketConsumer):
             {
                 'user_id': member.user.id,
                 'username': member.user.username,
-                'is_host': member.is_host,
+                # LobbyMember model doesn't have is_host; compute from lobby.host
+                'is_host': member.user.id == lobby_state['lobby'].host_id,
                 'joined_at': member.joined_at.isoformat(),
             }
             for member in lobby_state['members']
@@ -315,12 +320,11 @@ class LobbyConsumer(AsyncWebsocketConsumer):
             {
                 'user_id': position.user.id,
                 'username': position.user.username,
+                # Send only the fields our frontend expects (x, y, direction, is_moving)
                 'x': position.x,
                 'y': position.y,
-                'z': position.z,
-                'rotation_x': position.rotation_x,
-                'rotation_y': position.rotation_y,
-                'rotation_z': position.rotation_z,
+                'direction': getattr(position, 'direction', None),
+                'is_moving': getattr(position, 'is_moving', False),
                 'last_updated': position.last_updated.isoformat(),
             }
             for position in lobby_state['positions']
@@ -333,7 +337,7 @@ class LobbyConsumer(AsyncWebsocketConsumer):
                 'user_id': message.user.id,
                 'username': message.user.username,
                 'message': message.message,
-                'timestamp': message.timestamp.isoformat(),
+                'timestamp': message.created_at.isoformat(),
             }
             for message in reversed(lobby_state['messages'])
         ]
@@ -341,11 +345,11 @@ class LobbyConsumer(AsyncWebsocketConsumer):
         await self.send(text_data=json.dumps({
             'type': 'lobby_state',
             'lobby': {
-                'lobby_id': lobby_state['lobby'].lobby_id,
+                'id': lobby_state['lobby'].id,
                 'name': lobby_state['lobby'].name,
                 'description': lobby_state['lobby'].description,
                 'max_players': lobby_state['lobby'].max_players,
-                'is_public': lobby_state['lobby'].is_public,
+                'is_private': lobby_state['lobby'].is_private,
                 'created_at': lobby_state['lobby'].created_at.isoformat(),
             },
             'members': members,

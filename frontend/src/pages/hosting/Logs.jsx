@@ -20,7 +20,8 @@ import HostingSidebar from "../../components/hosting/HostingSidebar"
 import { useLogs } from "../../hooks/useLogs"
 
 export default function Logs() {
-  const { loading, error, logs, refreshLogs } = useLogs()
+  const { loading, error, logs, refreshLogs, loadMoreActivity, pagination } = useLogs()
+  const [loadingMore, setLoadingMore] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
   const [typeFilter, setTypeFilter] = useState("all")
   const [levelFilter, setLevelFilter] = useState("all")
@@ -359,16 +360,21 @@ export default function Logs() {
             )}
 
             {/* Load More Button */}
-            {filteredLogs.length > 0 && (filteredLogs.length % 20 === 0) && (
+            {filteredLogs.length > 0 && pagination?.activity?.next && (
               <div className="text-center mt-8">
                 <button
-                  onClick={() => {
-                    // Load more logs logic
-                    console.log('Load more logs')
+                  onClick={async () => {
+                    setLoadingMore(true)
+                    try {
+                      await loadMoreActivity()
+                    } finally {
+                      setLoadingMore(false)
+                    }
                   }}
-                  className="inline-flex items-center px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                  disabled={loading || loadingMore}
+                  className="inline-flex items-center px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Load More Logs
+                  {loadingMore ? 'Loading...' : 'Load More Logs'}
                 </button>
               </div>
             )}

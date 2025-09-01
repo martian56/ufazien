@@ -18,14 +18,37 @@ class SubscriptionPlanSerializer(serializers.ModelSerializer):
 
 class UserSubscriptionSerializer(serializers.ModelSerializer):
     plan = SubscriptionPlanSerializer(read_only=True)
+    # Expose computed usage fields so frontend can read subscription.storage_used_mb directly
+    storage_used_mb = serializers.SerializerMethodField()
+    storage_websites_mb = serializers.SerializerMethodField()
+    storage_databases_mb = serializers.SerializerMethodField()
+    bandwidth_used_mb = serializers.SerializerMethodField()
     
     class Meta:
         model = UserSubscription
         fields = [
             'plan', 'status', 'started_at', 'expires_at', 'next_billing_date',
-            'cancelled_at'
+            'cancelled_at', 'storage_used_mb', 'storage_websites_mb', 'storage_databases_mb', 'bandwidth_used_mb'
         ]
         read_only_fields = ['started_at', 'expires_at', 'next_billing_date', 'cancelled_at']
+
+    def _usage(self, obj):
+        try:
+            return obj.get_usage_stats() or {}
+        except Exception:
+            return {}
+
+    def get_storage_used_mb(self, obj):
+        return self._usage(obj).get('storage_used_mb', 0)
+
+    def get_storage_websites_mb(self, obj):
+        return self._usage(obj).get('storage_websites_mb', 0)
+
+    def get_storage_databases_mb(self, obj):
+         return self._usage(obj).get('storage_databases_mb', 0)
+
+    def get_bandwidth_used_mb(self, obj):
+         return self._usage(obj).get('bandwidth_mb', 0)
 
 
 class DomainSerializer(serializers.ModelSerializer):
@@ -43,12 +66,22 @@ class DatabaseSerializer(serializers.ModelSerializer):
         model = Database
         fields = [
             'id', 'name', 'db_type', 'status', 'host', 'port', 'username', 'password',
-            'size_mb', 'created_at', 'updated_at'
+            'size_mb', 'created_at', 'updated_at', 'error_message', 'connection_info'
         ]
         read_only_fields = [
             'id', 'status', 'host', 'port', 
-            'size_mb', 'created_at', 'updated_at'
+            'size_mb', 'created_at', 'updated_at', 'error_message', 'connection_info'
         ]
+        extra_kwargs = {
+            'password': {'required': False}
+        }
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        # Password is intentionally shown to the user (not write-only).
+        if instance.status != 'active':
+            data['connection_info'] = {}
+        return data
 
 
 class WebsiteSerializer(serializers.ModelSerializer):
@@ -273,6 +306,22 @@ class WebsiteSummarySerializer(serializers.ModelSerializer):
             'id', 'name', 'website_type', 'status', 'domain_name',
             'storage_used_mb', 'total_visits', 'last_deployment', 'created_at'
         ]
+
+
+class PublicWebsiteSerializer(serializers.ModelSerializer):
+    """Serializer used for public listing of websites (for main app)"""
+    domain = serializers.CharField(source='domain.name', read_only=True)
+    creator = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Website
+        fields = ('id', 'name', 'domain', 'creator', 'description', 'website_type', 'storage_used_mb', 'total_visits', 'status', 'created_at')
+
+    def get_creator(self, obj):
+        owner = getattr(obj, 'owner', None) or getattr(obj, 'user', None)
+        if not owner:
+            return None
+        return getattr(owner, 'first_name', None) + ' ' + getattr(owner, 'last_name', None)
 
 
 class DatabaseSummarySerializer(serializers.ModelSerializer):
