@@ -46,6 +46,19 @@ class Command(BaseCommand):
                 'priority_support': True,
                 'backup_frequency_days': 1,
             },
+            {
+                'name': 'special',
+                'display_name': 'Special',
+                'price': 50.00,
+                'max_websites': 100,
+                'max_databases': 100,
+                'storage_limit_mb': 51200,  # 50GB
+                'bandwidth_limit_mb': 512000,  # 500GB
+                'ssl_included': True,
+                'custom_domains': True,
+                'priority_support': True,
+                'backup_frequency_days': 1,
+            },
         ]
 
         for plan_data in plans:

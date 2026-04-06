@@ -28,10 +28,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.getenv("SECRET_KEY", "django-insecure-default-key-for-development")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True  # Temporarily enable for debugging
-
+#DEBUG = os.getenv("DJANGO_DEBUG", "True")
+DEBUG=True
 # Fix ALLOWED_HOSTS with fallback
-ALLOWED_HOSTS_ENV = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1")
+ALLOWED_HOSTS_ENV = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1,testserver,api.ufazien.com")
 ALLOWED_HOSTS = [host.strip() for host in ALLOWED_HOSTS_ENV.split(",") if host.strip()]
 
 
@@ -47,12 +47,15 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     # Third-party apps
     'rest_framework',
+    'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
     'channels',
+    'auditlog',
     # Api Docs
     'drf_spectacular',
     'drf_spectacular_sidecar',
     # Local apps
+    'ufazien.apps.UfazienConfig',  # Custom app config for auditlog
     'api',
     'blog',
     'users',
@@ -60,12 +63,15 @@ INSTALLED_APPS = [
     'gpa',
     'game',
     'ai_tools',
-    'hosting'
+    'hosting',
+    'community'
 ]
 
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'auditlog.middleware.AuditlogMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'corsheaders.middleware.CorsMiddleware',
@@ -75,12 +81,16 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
+
+
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173", 
     "http://localhost:5174", 
     "http://ufazien.com",  
     "https://ufazien.com", 
-    "http://13.42.171.119"
+    "http://13.42.171.119",
+    "http://api.ufazien.com",
+    "https://api.ufazien.com"
 ]
 
 CORS_ALLOW_CREDENTIALS = True
@@ -93,7 +103,9 @@ CSRF_TRUSTED_ORIGINS = [
     "http://localhost:5174", 
     "http://ufazien.com",
     "https://ufazien.com",
-    "http://13.42.171.119"
+    "http://13.42.171.119",
+    "http://api.ufazien.com",
+    "https://api.ufazien.com"
 ]
 
 REST_FRAMEWORK = {
@@ -101,6 +113,10 @@ REST_FRAMEWORK = {
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    'DEFAULT_THROTTLE_RATES': {
+        'feedback': '12/hour',  # 12 per hour = 1 per 5 minutes
+    },
+    'PAGE_SIZE': 10,  # Default page size for pagination
 }
 
 # REST_AUTH = {
@@ -155,17 +171,6 @@ CHANNEL_LAYERS = {
     },
 }
 
-# For production with Redis:
-# CHANNEL_LAYERS = {
-#     'default': {
-#         'BACKEND': 'channels_redis.core.RedisChannelLayer',
-#         'CONFIG': {
-#             "hosts": [('127.0.0.1', 6379)],
-#         },
-#     },
-# }
-
-
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
@@ -177,7 +182,7 @@ if os.getenv("ENVIRONMENT") == "production":
             'NAME': os.getenv('DB_NAME', 'ufazien_test'),
             'USER': os.getenv('DB_USER', 'ufazien_test_user'),
             'PASSWORD': os.getenv('DB_PASSWORD', 'test_password'),
-            'HOST': 'ufazien.com', 
+            'HOST': 'db.ufazien.com', 
             'PORT': '',
         }
     }
@@ -248,6 +253,19 @@ STATIC_ROOT = BASE_DIR / 'static'
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
+
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+        "OPTIONS": {
+            "location": MEDIA_ROOT,
+        },
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
+
 # File upload settings
 FILE_UPLOAD_MAX_MEMORY_SIZE = 5242880  # 5MB
 DATA_UPLOAD_MAX_MEMORY_SIZE = 5242880  # 5MB
@@ -277,7 +295,6 @@ from datetime import timedelta
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=1440),    # 1 day
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),      # 1 week
-    # Optional: Other settings
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
     # ...
@@ -300,6 +317,61 @@ CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = "UTC"
 
+# Celery Beat schedule: run storage computation periodically.
+# By default this schedules compute_storage_for_all_users to run hourly.
+from celery.schedules import crontab
+
+CELERY_BEAT_SCHEDULE = {
+    'compute-storage-every-hour': {
+        'task': 'hosting.tasks.compute_storage_for_all_users',
+    # run every 10 minutes
+    'schedule': crontab(minute='*/1'),
+        'options': {'queue': 'maintenance'},
+    },
+}
+
 # AI Tools Rate Limiting
 DEFAULT_RATE_LIMIT = int(os.getenv("DEFAULT_RATE_LIMIT", "100"))
 PREMIUM_RATE_LIMIT = int(os.getenv("PREMIUM_RATE_LIMIT", "1000"))
+
+# Django Auditlog Configuration
+AUDITLOG_INCLUDE_ALL_MODELS = True  # Log all model changes
+AUDITLOG_EXCLUDE_TRACKING_FIELDS = ['created_at', 'updated_at']  # Exclude timestamp fields
+AUDITLOG_DISABLE_ON_RAW_SAVE = False  # Track raw saves too
+AUDITLOG_USE_CONNECTION_HANDLING = True  # Better performance
+AUDITLOG_READONLY_EVENTS = True  # Track read events
+AUDITLOG_READONLY_EVENTS_ACTIONS = ['read']  # Track read actions
+
+
+# Admin credentials for remote DB provisioning (used by provisioning Celery task)
+# Example: set DB_ADMIN_POSTGRES_USER, DB_ADMIN_POSTGRES_PASSWORD in environment
+DB_ADMIN = {
+    'postgresql': {
+        'host': os.getenv('DB_ADMIN_POSTGRES_HOST', 'postgres.ufazien.com'),
+        'port': int(os.getenv('DB_ADMIN_POSTGRES_PORT', '5433')),
+        'user': os.getenv('DB_ADMIN_POSTGRES_USER', ''),
+        'password': os.getenv('DB_ADMIN_POSTGRES_PASSWORD', ''),
+        # SSL intentionally disabled for provisioning per project requirement
+    },
+    'mysql': {
+        'host': os.getenv('DB_ADMIN_MYSQL_HOST', 'mysql.ufazien.com'),
+        'port': int(os.getenv('DB_ADMIN_MYSQL_PORT', '3306')),
+        'user': os.getenv('DB_ADMIN_MYSQL_USER', ''),
+        'password': os.getenv('DB_ADMIN_MYSQL_PASSWORD', ''),
+    }
+}
+# Cloudflare / Traefik Cookie & Proxy Fixes
+CSRF_TRUSTED_ORIGINS = [
+    "https://api.ufazien.com",
+    "https://ufazien.com",
+    "https://www.ufazien.com",
+]
+
+CSRF_COOKIE_SECURE = True
+CSRF_COOKIE_SAMESITE = "None"
+
+SESSION_COOKIE_SECURE = True
+SESSION_COOKIE_SAMESITE = "None"
+
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+USE_X_FORWARDED_HOST = True

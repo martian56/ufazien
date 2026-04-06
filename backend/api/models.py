@@ -85,3 +85,40 @@ class Notification(models.Model):
     
     def __str__(self):
         return f"{self.title} - {self.recipient.username}"
+
+class Feedback(models.Model):
+    """User feedback model"""
+    FEEDBACK_TYPES = [
+        ('bug', 'Bug Report'),
+        ('vulnerability', 'Security Vulnerability'),
+        ('feature', 'Feature Request'),
+        ('improvement', 'Improvement Suggestion'),
+        ('share_me_on_testimonials', 'Share Me on Testimonials'),
+        ('general', 'General Feedback'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('in_review', 'In Review'),
+        ('resolved', 'Resolved'),
+        ('closed', 'Closed'),
+    ]
+    
+    feedback_type = models.CharField(max_length=30, choices=FEEDBACK_TYPES)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='feedbacks')
+    subject = models.CharField(max_length=255)
+    message = models.TextField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    admin_response = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', '-created_at']),
+            models.Index(fields=['status']),
+        ]
+    
+    def __str__(self):
+        return f"Feedback from {self.user.username} - {self.feedback_type} - {self.subject}"

@@ -91,6 +91,14 @@ const Settings = () => {
     activeDevices: 3,
   })
 
+  // Password Setup State (for Google OAuth users)
+  const [hasPassword, setHasPassword] = useState(true)
+  const [passwordData, setPasswordData] = useState({
+    password: "",
+    password_confirm: "",
+  })
+  const [settingPassword, setSettingPassword] = useState(false)
+
   // Active Tab State
   const [activeTab, setActiveTab] = useState("profile")
 
@@ -123,6 +131,9 @@ const Settings = () => {
         completed_credits: data.completed_credits || 0,
         followers_count: data.followers_count || 0,
       });
+      
+      // Check if user has a password set
+      setHasPassword(data.has_password !== false);
     } catch (error) {
       console.error("Error fetching user profile:", error);
       if (error.response?.status === 401) {
@@ -180,6 +191,64 @@ const Settings = () => {
       ...prev,
       [field]: value,
     }))
+  }
+
+  // Handle Password Setup (for Google OAuth users)
+  const handlePasswordChange = (field, value) => {
+    setPasswordData((prev) => ({
+      ...prev,
+      [field]: value,
+    }))
+  }
+
+  // Set Password for OAuth users
+  const handleSetPassword = async () => {
+    if (!passwordData.password || !passwordData.password_confirm) {
+      toast.error("Please fill in all password fields.");
+      return;
+    }
+
+    if (passwordData.password !== passwordData.password_confirm) {
+      toast.error("Passwords do not match.");
+      return;
+    }
+
+    if (passwordData.password.length < 8) {
+      toast.error("Password must be at least 8 characters long.");
+      return;
+    }
+
+    setSettingPassword(true);
+    try {
+      const access = localStorage.getItem("access");
+      if (!access) {
+        navigate("/auth");
+        return;
+      }
+
+      const response = await axios.post(
+        `${API_URL}/api/auth/set-password/`,
+        {
+          password: passwordData.password,
+          password_confirm: passwordData.password_confirm,
+        },
+        {
+          headers: { Authorization: `Bearer ${access}` }
+        }
+      );
+
+      toast.success(response.data.message || "Password set successfully!");
+      setHasPassword(true);
+      setPasswordData({ password: "", password_confirm: "" });
+    } catch (error) {
+      console.error("Error setting password:", error);
+      toast.error(
+        error.response?.data?.detail || 
+        "Error setting password. Please try again."
+      );
+    } finally {
+      setSettingPassword(false);
+    }
   }
 
   // Save Settings
@@ -526,7 +595,7 @@ const Settings = () => {
                         <option value="2">2nd Year</option>
                         <option value="3">3rd Year</option>
                         <option value="4">4th Year</option>
-                        <option value="Graduate">Graduate</option>
+                        <option value="5">Graduate</option>
                       </select>
                     </div>
                     <div className="md:col-span-2 space-y-2">
@@ -824,8 +893,154 @@ const Settings = () => {
                 </div>
               )}
 
+              {/* Security Settings */}
+              {activeTab === "security" && (
+                <div className="p-8">
+                  <div className="flex items-center gap-4 mb-8">
+                    <div className="w-12 h-12 bg-gradient-to-r from-red-500 to-orange-600 rounded-xl flex items-center justify-center">
+                      <span className="text-white text-xl">🛡️</span>
+                    </div>
+                    <div>
+                      <h2 className="text-2xl font-bold text-gray-900">Security Settings</h2>
+                      <p className="text-gray-600">Manage your account security and authentication</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-8">
+                    {/* Password Setup for OAuth Users */}
+                    {!hasPassword && (
+                      <div className="p-6 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-xl border-2 border-yellow-200">
+                        <div className="flex items-start gap-4 mb-4">
+                          <div className="w-10 h-10 bg-yellow-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                            <span className="text-white text-xl">🔑</span>
+                          </div>
+                          <div className="flex-1">
+                            <h3 className="text-lg font-bold text-gray-900 mb-2">
+                              Set Up Password for CLI Access
+                            </h3>
+                            <p className="text-sm text-gray-700 mb-4">
+                              You signed up with Google OAuth and don't have a password set. 
+                              Set a password to use the CLI tool for hosting services.
+                            </p>
+                            
+                            <div className="space-y-4">
+                              <div className="space-y-2">
+                                <Label htmlFor="password" className="text-sm font-semibold text-gray-700">
+                                  New Password
+                                </Label>
+                                <Input
+                                  id="password"
+                                  type="password"
+                                  value={passwordData.password}
+                                  onChange={(e) => handlePasswordChange("password", e.target.value)}
+                                  placeholder="Enter your password (min 8 characters)"
+                                  className="border-gray-300 focus:border-blue-500 focus:ring-blue-500 rounded-xl"
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="password_confirm" className="text-sm font-semibold text-gray-700">
+                                  Confirm Password
+                                </Label>
+                                <Input
+                                  id="password_confirm"
+                                  type="password"
+                                  value={passwordData.password_confirm}
+                                  onChange={(e) => handlePasswordChange("password_confirm", e.target.value)}
+                                  placeholder="Confirm your password"
+                                  className="border-gray-300 focus:border-blue-500 focus:ring-blue-500 rounded-xl"
+                                />
+                              </div>
+                              <Button
+                                onClick={handleSetPassword}
+                                disabled={settingPassword || !passwordData.password || !passwordData.password_confirm}
+                                className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white border-0 shadow-lg"
+                              >
+                                {settingPassword ? "Setting Password..." : "Set Password"}
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Password Status */}
+                    {hasPassword && (
+                      <div className="p-6 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl border border-green-200">
+                        <div className="flex items-center gap-4">
+                          <div className="w-10 h-10 bg-green-500 rounded-lg flex items-center justify-center">
+                            <span className="text-white text-xl">✓</span>
+                          </div>
+                          <div>
+                            <h3 className="text-lg font-bold text-gray-900 mb-1">
+                              Password Set
+                            </h3>
+                            <p className="text-sm text-gray-700">
+                              You have a password set and can use email/password authentication for CLI tools.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Other Security Settings */}
+                    <div>
+                      <h3 className="font-semibold text-gray-900 mb-4 text-lg">Security Preferences</h3>
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between p-4 bg-white rounded-xl border border-gray-200">
+                          <div>
+                            <Label className="font-semibold text-gray-900">Login Alerts</Label>
+                            <p className="text-sm text-gray-500">Get notified when someone logs into your account</p>
+                          </div>
+                          <Checkbox
+                            checked={securitySettings.loginAlerts}
+                            onCheckedChange={(checked) => handleSecurityChange("loginAlerts", checked)}
+                            className="data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
+                          />
+                        </div>
+                        <div className="flex items-center justify-between p-4 bg-white rounded-xl border border-gray-200">
+                          <div>
+                            <Label className="font-semibold text-gray-900">Two-Factor Authentication</Label>
+                            <p className="text-sm text-gray-500">Add an extra layer of security to your account</p>
+                          </div>
+                          <Checkbox
+                            checked={securitySettings.twoFactorAuth}
+                            onCheckedChange={(checked) => handleSecurityChange("twoFactorAuth", checked)}
+                            className="data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
+                            disabled
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Session Management */}
+                    <div>
+                      <h3 className="font-semibold text-gray-900 mb-4 text-lg">Session Management</h3>
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="sessionTimeout" className="text-sm font-semibold text-gray-700">
+                            Session Timeout (minutes)
+                          </Label>
+                          <select
+                            id="sessionTimeout"
+                            value={securitySettings.sessionTimeout}
+                            onChange={(e) => handleSecurityChange("sessionTimeout", e.target.value)}
+                            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          >
+                            <option value="15">15 minutes</option>
+                            <option value="30">30 minutes</option>
+                            <option value="60">1 hour</option>
+                            <option value="120">2 hours</option>
+                            <option value="240">4 hours</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Other tab contents */}
-              {!["profile", "academic", "notifications"].includes(activeTab) && (
+              {!["profile", "academic", "notifications", "security"].includes(activeTab) && (
                 <div className="p-8">
                   <div className="text-center py-12">
                     <div className="text-6xl mb-4">🚧</div>

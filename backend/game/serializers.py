@@ -9,7 +9,7 @@ class UserSerializer(serializers.ModelSerializer):
     """Basic user info for game display"""
     class Meta:
         model = User
-        fields = ['id', 'username', 'first_name', 'last_name']
+        fields = ['id', 'first_name', 'last_name']
 
 
 class LobbyMemberSerializer(serializers.ModelSerializer):

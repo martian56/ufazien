@@ -1,1 +1,10 @@
 @import "tailwindcss";
+
+/* Blog content list styling */
+.blog-content li {
+  @apply text-gray-700;
+}
+
+.blog-content.dark li {
+  @apply text-gray-300;
+}

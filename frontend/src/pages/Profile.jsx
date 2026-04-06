@@ -26,6 +26,7 @@ import {
   Ban
 } from "lucide-react"
 import SideBar from "../components/ui/SideBar"
+import { formatYearDisplay, getYearDisplay } from "../utils/majorUtils"
 
 const API_URL = import.meta.env.VITE_API_URL
 
@@ -108,7 +109,8 @@ export default function Profile() {
           setFollowing(userData.is_following || false)
           setStats(prev => ({
             ...prev,
-            followers: userData.followers_count || 0
+            followers: userData.followers_count || 0,
+            following: userData.following_count || 0
           }))
         } else {
           console.error('Failed to fetch user profile:', response.status, response.statusText)
@@ -193,10 +195,14 @@ export default function Profile() {
       })
 
       if (response.ok) {
+        const responseData = await response.json()
+        const isOwnProfile = currentUser && user && currentUser.id === user.id
         setFollowing(!following)
         setStats(prev => ({
           ...prev,
-          followers: following ? prev.followers - 1 : prev.followers + 1
+          followers: following ? prev.followers - 1 : prev.followers + 1,
+          // Update following count if this is the current user's own profile
+          ...(isOwnProfile && { following: responseData.following_count || prev.following })
         }))
       } else {
         console.error('Failed to toggle follow:', response.status, response.statusText)
@@ -379,7 +385,7 @@ export default function Profile() {
                 {user.year && (
                   <div className="flex items-center text-gray-600">
                     <Calendar className="w-4 h-4 mr-2" />
-                    <span>Year {user.year}</span>
+                    <span>{formatYearDisplay(user.year)}</span>
                   </div>
                 )}
                 {user.email && isOwnProfile && (
@@ -626,7 +632,7 @@ export default function Profile() {
                       </p>
                       {isOwnProfile && (
                         <button
-                          onClick={() => navigate('/blog/create')}
+                          onClick={() => navigate('/blog/new')}
                           className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                         >
                           Write your first post
@@ -658,7 +664,7 @@ export default function Profile() {
                       {user.year && (
                         <div>
                           <h4 className="text-sm font-medium text-gray-700 mb-1">Year</h4>
-                          <p className="text-gray-600">Year {user.year}</p>
+                          <p className="text-gray-600">{formatYearDisplay(user.year)}</p>
                         </div>
                       )}
                       {user.completed_credits && (

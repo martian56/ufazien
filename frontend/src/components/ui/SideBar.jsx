@@ -1,6 +1,6 @@
 import { BookOpen,Calculator,TrendingUp,PenTool,
   Users,Settings,LogOut,Calendar,Activity,X, Gamepad,
-  Brain,
+  Brain, Telescope, MessageSquare,
   HomeIcon
 } from "lucide-react"
 
@@ -25,8 +25,10 @@ export default function SideBar({ isSidebarOpen, setIsSidebarOpen, pageTitle }) 
     { name: "Hosting", icon: HomeIcon, url: "/hosting" },
     { name: "AI Tools", icon: Brain, url: "/ai-tools" },
     { name: "Blog", icon: PenTool, url: "/blog" },
+    { name: "User Sites", icon: Telescope, url: "/user-sites" },
     { name: "Community", icon: Users, url: "/community" },
     { name: "Calendar", icon: Calendar, url: "/calendar" },
+    { name: "Feedback", icon: MessageSquare, url: "/feedback" },
     { name: "Settings", icon: Settings, url: "/settings" },
   ]
   for (let i = 0; i < sidebarItems.length; i++) {

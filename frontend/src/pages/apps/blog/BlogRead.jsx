@@ -11,7 +11,7 @@ import { ArrowLeft, Heart, MessageCircle, Share2, Bookmark, Eye, Clock,
   Menu, X,
 } from "lucide-react"
 
-import { getMajorDisplayName } from "../../../utils/majorUtils"
+import { getMajorDisplayName, formatYearDisplay } from "../../../utils/majorUtils"
 import SideBar from "../../../components/ui/SideBar"
 // import "../../../components/RichTextEditor.css"
 // import "../../../components/BlogContent.css"
@@ -603,8 +603,8 @@ export default function BlogRead() {
         {/* Sidebar */}
         <SideBar isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen} pageTitle="Blog" />
 
-        {/* Main Content */}
-        <div className="flex-1 lg:ml-64">
+  {/* Main Content */}
+  <div className="flex-1 flex flex-col overflow-hidden">
           {/* Reading Progress Bar */}
           <div className="fixed top-0 left-0 lg:left-64 w-full lg:w-[calc(100%-16rem)] h-1 bg-gray-200 z-50">
             <div
@@ -814,8 +814,8 @@ export default function BlogRead() {
           )}
         </header>
 
-        {/* Article Content */}
-        <main className="px-6 py-8">
+          {/* Article Content */}
+        <main className="flex-1 overflow-y-auto px-6 py-8">
           <article ref={contentRef} className="max-w-4xl">
             {/* Article Header */}
             <header className="mb-8">
@@ -837,7 +837,7 @@ export default function BlogRead() {
                   <div>
                     <h3 className="font-semibold text-lg">{`${post.author?.first_name || ""} ${post.author?.last_name || ""}`.trim() || "Anonymous"}</h3>
                     <p className="text-gray-600 text-sm">
-                      {post.author?.year ? `Year ${post.author.year}` : "Student"} • {getMajorDisplayName(post.author?.major)}
+                      {post.author?.year ? formatYearDisplay(post.author.year) : "Student"} • {getMajorDisplayName(post.author?.major)}
                     </p>
                   </div>
                 </div>
@@ -1041,7 +1041,7 @@ export default function BlogRead() {
                   )}
                 </div>
                 <p className="text-blue-600 font-medium mb-2">
-                  {post.author?.year ? `Year ${post.author.year}` : "Student"} • {getMajorDisplayName(post.author?.major)}
+                  {post.author?.year ? formatYearDisplay(post.author.year) : "Student"} • {getMajorDisplayName(post.author?.major)}
                 </p>
                 {post.author?.bio && (
                   <p className="text-gray-600 mb-3 text-sm leading-relaxed">

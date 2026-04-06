@@ -29,14 +29,14 @@ class ApiClient {
     const url = `${this.baseURL}${endpoint}`;
     const config = {
       headers: {
-        'Content-Type': 'application/json',
+        ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
         ...(this.token && { Authorization: `Bearer ${this.token}` }),
         ...options.headers,
       },
       ...options,
     };
 
-    if (config.body && typeof config.body === 'object') {
+    if (config.body && typeof config.body === 'object' && !(config.body instanceof FormData)) {
       config.body = JSON.stringify(config.body);
     }
 
@@ -76,9 +76,9 @@ class ApiClient {
         }
         
         // If refresh failed or no refresh token, logout
-        this.removeToken();
-        window.location.href = '/auth';
-        return null;
+        // this.removeToken();
+        // window.location.href = '/auth';
+        // return null;
       }
 
       if (!response.ok) {

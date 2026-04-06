@@ -214,13 +214,22 @@ export default function CreateWebsite() {
       
       // Handle file uploads if deployment method is upload or zip
       if (formData.deploymentMethod === "upload" && formData.files.length > 0) {
-        // TODO: Implement file upload functionality
-        console.log("File upload not implemented yet")
+        const uploadFormData = new FormData();
+        formData.files.forEach((file, index) => {
+          uploadFormData.append(`files`, file);
+        });
+        uploadFormData.append('website_id', website.id);
+        
+        // Send to your backend endpoint
+        await hostingApi.uploadFiles(website.id, uploadFormData);
       }
       
       if (formData.deploymentMethod === "zip" && formData.zipFile) {
-        // TODO: Implement ZIP file upload functionality
-        console.log("ZIP upload not implemented yet")
+        const zipFormData = new FormData();
+        zipFormData.append('zip_file', formData.zipFile);
+        zipFormData.append('website_id', website.id);
+        
+        await hostingApi.uploadZip(website.id, zipFormData);
       }
 
       // Navigate to website detail or websites list
@@ -248,9 +257,17 @@ export default function CreateWebsite() {
 
   const handleFileUpload = (event) => {
     const files = Array.from(event.target.files)
+    
+    // Preserve folder structure using webkitRelativePath if available
+    const filesWithPaths = files.map(file => {
+      // If webkitRelativePath exists, use it; otherwise use just the name
+      const relativePath = file.webkitRelativePath || file.name
+      return Object.assign(file, { relativePath })
+    })
+    
     setFormData(prev => ({
       ...prev,
-      files: [...prev.files, ...files]
+      files: [...prev.files, ...filesWithPaths]
     }))
   }
 
@@ -727,29 +744,52 @@ export default function CreateWebsite() {
                             <label className="block text-sm font-medium text-gray-700 mb-2">
                               Upload Files
                             </label>
-                            <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-                              <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
-                              <div className="text-sm text-gray-600 mb-2">
-                                Drag and drop files here, or
+                            
+                            <div className="space-y-3">
+                              {/* Individual Files Upload */}
+                              <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                                <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                                <div className="text-sm text-gray-600 mb-2">
+                                  Upload individual files
+                                </div>
+                                <label className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer">
+                                  <span>Browse Files</span>
+                                  <input
+                                    type="file"
+                                    multiple
+                                    onChange={handleFileUpload}
+                                    className="sr-only"
+                                  />
+                                </label>
                               </div>
-                              <label className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer">
-                                <span>Browse Files</span>
-                                <input
-                                  type="file"
-                                  multiple
-                                  onChange={handleFileUpload}
-                                  className="sr-only"
-                                />
-                              </label>
+                              
+                              {/* Folder Upload */}
+                              <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                                <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                                <div className="text-sm text-gray-600 mb-2">
+                                  Upload entire folder
+                                </div>
+                                <label className="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 cursor-pointer">
+                                  <span>Browse Folder</span>
+                                  <input
+                                    type="file"
+                                    webkitdirectory=""
+                                    directory=""
+                                    multiple
+                                    onChange={handleFileUpload}
+                                    className="sr-only"
+                                  />
+                                </label>
+                              </div>
                             </div>
                             
                             {formData.files.length > 0 && (
                               <div className="mt-4">
                                 <h4 className="text-sm font-medium text-gray-700 mb-2">Uploaded Files:</h4>
-                                <div className="space-y-2">
+                                <div className="space-y-2 max-h-48 overflow-y-auto">
                                   {formData.files.map((file, index) => (
                                     <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                                      <span className="text-sm">{file.name}</span>
+                                      <span className="text-sm">{file.webkitRelativePath || file.name}</span>
                                       <button
                                         onClick={() => removeFile(index)}
                                         className="text-red-600 hover:text-red-800"

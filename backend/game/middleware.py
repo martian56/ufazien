@@ -9,7 +9,7 @@ from channels.middleware import BaseMiddleware
 from urllib.parse import parse_qs
 from rest_framework_simplejwt.tokens import UntypedToken
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
-from jwt import decode as jwt_decode
+from rest_framework_simplejwt.backends import TokenBackend
 from django.conf import settings
 
 User = get_user_model()
@@ -23,17 +23,20 @@ def get_user_by_token(token):
     try:
         # Validate the token
         UntypedToken(token)
-        
-        # Decode the token to get user info
-        decoded_data = jwt_decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+        # Decode the token using Simple JWT's TokenBackend (keeps decoding consistent)
+        token_backend = TokenBackend(algorithm=getattr(settings, 'SIMPLE_JWT', {}).get('ALGORITHM', 'HS256'), signing_key=settings.SECRET_KEY)
+        decoded_data = token_backend.decode(token)
         user_id = decoded_data.get('user_id')
-        
+
         if user_id:
             user = User.objects.get(id=user_id)
             return user
     except (InvalidToken, TokenError, User.DoesNotExist) as e:
+        # Known/simplejwt errors and missing user -> treat as anonymous
         print(f"JWT Auth error: {e}")
-        pass
+    except Exception as e:
+        # Catch-all to avoid unexpected decode exceptions (e.g. PyJWT errors)
+        print(f"Unexpected JWT decode error: {e}")
     return AnonymousUser()
 
 

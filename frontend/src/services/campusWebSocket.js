@@ -22,6 +22,7 @@ class CampusWebSocketService {
         };
         this.reconnectAttempts = 0;
         this.maxReconnectAttempts = 5;
+    this.reconnectTimer = null;
     }
 
     /**
@@ -29,28 +30,46 @@ class CampusWebSocketService {
      * @param {string} lobbyId - The 8-digit lobby ID
      */
     connect(lobbyId) {
+        if (!lobbyId) {
+            console.warn('campusWebSocket.connect called without lobbyId, skipping');
+            return;
+        }
+
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             this.disconnect();
         }
 
         this.lobbyId = lobbyId;
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const host = process.env.NODE_ENV === 'production' 
-            ? window.location.host 
-            : 'localhost:8000';
+        // Prefer connecting to the API host (VITE_API_URL) when configured, otherwise fall back to window.location.host
+        const API_URL = import.meta.env.VITE_API_URL || '';
+        let protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        let host;
+        try {
+            if (API_URL) {
+                const parsed = new URL(API_URL);
+                host = parsed.host;
+                protocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
+            } else {
+                host = process.env.NODE_ENV === 'production' ? window.location.host : 'localhost:8000';
+            }
+        } catch (e) {
+            // Fallback
+            host = process.env.NODE_ENV === 'production' ? window.location.host : 'localhost:8000';
+        }
         
         // Get JWT token from localStorage
         const token = localStorage.getItem('access');
         const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
         
         const wsUrl = `${protocol}//${host}/ws/game/lobby/${lobbyId}/${tokenParam}`;
-        
+        console.log('Opening WebSocket URL:', wsUrl);
+
         try {
             this.ws = new WebSocket(wsUrl);
             this.setupEventHandlers();
         } catch (error) {
             console.error('Failed to create WebSocket connection:', error);
-            this.emit('error', { message: 'Failed to connect to lobby' });
+            this.emit('error', { message: 'Failed to connect to lobby', detail: String(error) });
         }
     }
 
@@ -79,13 +98,40 @@ class CampusWebSocketService {
             this.isConnected = false;
             this.emit('disconnected', { code: event.code, reason: event.reason });
             
+            // Handle specific error codes
+            if (event.code === 4001) {
+                this.emit('error', { message: 'Authentication failed. Please log in again.' });
+                return;
+            } else if (event.code === 4003) {
+                this.emit('error', { message: 'You are not a member of this lobby.' });
+                return;
+            } else if (event.code === 4004) {
+                this.emit('error', { message: 'Lobby not found or inactive.' });
+                return;
+            }
+            
+            // Attempt to reconnect unless it was a normal closure
             if (event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts) {
-                // Attempt to reconnect unless it was a normal closure
-                setTimeout(() => {
+                const idToReconnect = this.lobbyId;
+                if (!idToReconnect) {
+                    console.log('No lobbyId available for reconnect; aborting reconnect');
+                    return;
+                }
+
+                // clear any existing timer
+                if (this.reconnectTimer) {
+                    clearTimeout(this.reconnectTimer);
+                    this.reconnectTimer = null;
+                }
+
+                this.reconnectTimer = setTimeout(() => {
                     this.reconnectAttempts++;
                     console.log(`Reconnection attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts}`);
-                    this.connect(this.lobbyId);
-                }, 2000 * this.reconnectAttempts);
+                    this.reconnectTimer = null;
+                    this.connect(idToReconnect);
+                }, 2000 * Math.max(1, this.reconnectAttempts));
+            } else if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+                this.emit('error', { message: 'Max reconnection attempts reached. Please refresh the page.' });
             }
         };
 
@@ -251,8 +297,15 @@ class CampusWebSocketService {
             this.ws.close(1000, 'User disconnected');
             this.ws = null;
             this.isConnected = false;
-            this.lobbyId = null;
         }
+
+        // Clear pending reconnect attempts and clear stored lobby id
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+        }
+
+        this.lobbyId = null;
     }
 
     /**

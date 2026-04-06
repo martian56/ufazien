@@ -30,7 +30,7 @@ export default function AuthPage() {
             </svg>
           </div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Ufazien Web</h1>
-          <p className="text-gray-600">A palce for ufaziens</p>
+          <p className="text-gray-600">A place for ufaziens</p>
         </div>
 
         {/* Auth Card */}
