@@ -4,7 +4,7 @@ services:
     container_name: ufazien-hosting
     restart: unless-stopped
     ports:
-      - "80:80"
+      - "8080:80"
     volumes:
       - /etc/data/hosting:/var/www/html
       - ./nginx/hosting.conf:/etc/nginx/conf.d/default.conf:ro
