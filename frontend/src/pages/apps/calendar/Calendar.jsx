@@ -440,7 +440,10 @@ export default function Calendar() {
                 <Menu className="w-5 h-5" />
               </button>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Calendar</h1>
+                <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                  Calendar
+                  <span className="px-2 py-1 text-xs bg-yellow-100 text-yellow-800 rounded-full">In Development</span>
+                </h1>
                 <p className="text-sm text-gray-500">Manage your academic schedule</p>
               </div>
             </div>

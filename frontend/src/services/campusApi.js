@@ -168,11 +168,32 @@ class CampusApiService {
     async joinLobby(lobbyId, password = '') {
         console.log('joinLobby called with:', { lobbyId, password });
         
-        // First try to leave any current lobby to avoid "already in lobby" errors
+        // Check if we're already in the target lobby. If so, skip force-leave
         try {
-            await this.forceLeaveCurrentLobby();
-        } catch (error) {
-            console.log('No current lobby to leave or failed to leave:', error.message);
+            const myLobbies = await this.apiRequest('/my-lobbies/', { method: 'GET' });
+            const alreadyInTarget = Array.isArray(myLobbies) && myLobbies.some(l => String(l.id) === String(lobbyId));
+            if (alreadyInTarget) {
+                console.log('Already in target lobby; returning existing lobby details');
+                // Return the lobby object from myLobbies if available, else fetch it
+                const existing = myLobbies.find(l => String(l.id) === String(lobbyId));
+                if (existing) return existing;
+                const lobbyObj = await this.getLobby(lobbyId);
+                return lobbyObj;
+            }
+
+            // Leave any other current lobbies first to avoid "already in lobby" errors
+            try {
+                await this.forceLeaveCurrentLobby();
+            } catch (error) {
+                console.log('No current lobby to leave or failed to leave:', error.message);
+            }
+        } catch (err) {
+            console.warn('Failed to check current lobbies before join, proceeding:', err);
+            try {
+                await this.forceLeaveCurrentLobby();
+            } catch (error) {
+                console.log('No current lobby to leave or failed to leave:', error.message);
+            }
         }
         
         const requestBody = {
@@ -204,8 +225,8 @@ class CampusApiService {
         return this.apiRequest('/quick-join/', {
             method: 'POST',
             body: JSON.stringify({
-                max_players,
-                public_only
+                max_players_preference: max_players,
+                preferred_lobby_type: public_only ? 'public' : 'any'
             })
         });
     }

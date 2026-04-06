@@ -9,6 +9,7 @@ import { PenTool, Search, Heart, MessageCircle,Share2,
 } from "lucide-react"
 
 import SideBar from "../../../components/ui/SideBar"
+import { formatYearWithOrdinal } from "../../../utils/majorUtils"
 
 const API_URL = import.meta.env.VITE_API_URL
 
@@ -74,7 +75,6 @@ export default function Blog() {
   // Debounce search query
   useEffect(() => {
     const timer = setTimeout(() => {
-      console.log("Search query debounced:", searchQuery)
       setDebouncedSearchQuery(searchQuery)
     }, 500)
 
@@ -92,7 +92,6 @@ export default function Blog() {
         return res.json();
       })
       .then((data) => {
-        console.log("Fetched user profile:", data);
         setUser(data);
       })
       .catch((error) => {
@@ -112,7 +111,7 @@ export default function Blog() {
         if (!res.ok) throw new Error("Failed to fetch categories");
         
         const data = await res.json();
-        console.log("Fetched categories:", data);
+        // console.log("Fetched categories:", data);
         setCategories([{ id: 'all', name: 'All' }, ...data.results]);
       } catch (error) {
         console.error("Error fetching categories:", error);
@@ -160,8 +159,8 @@ export default function Blog() {
           url += `&search=${encodeURIComponent(debouncedSearchQuery)}`;
         }
         
-        console.log("Fetching from URL:", url);
-        console.log("Current pageSize state:", pageSize);
+        // console.log("Fetching from URL:", url);
+        // console.log("Current pageSize state:", pageSize);
         
         const res = await fetch(url, {
           headers: { Authorization: `Bearer ${access}` },
@@ -169,8 +168,8 @@ export default function Blog() {
         if (!res.ok) throw new Error("Failed to fetch blog posts");
         
         const data = await res.json();
-        console.log("Fetched blog posts:", data);
-        console.log("Backend page_size:", data.page_size, "Frontend pageSize:", pageSize);
+        // console.log("Fetched blog posts:", data);
+        // console.log("Backend page_size:", data.page_size, "Frontend pageSize:", pageSize);
         
         // Handle pagination data
         setBlogPosts(data.results || data);
@@ -209,7 +208,7 @@ export default function Blog() {
         if (!res.ok) throw new Error("Failed to fetch trending tags");
         
         const data = await res.json();
-        console.log("Fetched trending tags:", data);
+        // console.log("Fetched trending tags:", data);
         setTrendingTags(data);
       } catch (error) {
         console.error("Error fetching trending tags:", error);
@@ -242,7 +241,7 @@ export default function Blog() {
         if (!res.ok) throw new Error("Failed to fetch popular posts");
         
         const data = await res.json();
-        console.log("Fetched popular posts:", data);
+        // console.log("Fetched popular posts:", data);
         setPopularPosts(data || []);
       } catch (error) {
         console.error("Error fetching popular posts:", error);
@@ -267,7 +266,7 @@ export default function Blog() {
         if (!res.ok) throw new Error("Failed to fetch categories with counts");
         
         const data = await res.json();
-        console.log("Fetched categories with counts:", data);
+        // console.log("Fetched categories with counts:", data);
         setCategoriesWithCounts(data || []);
       } catch (error) {
         console.error("Error fetching categories with counts:", error);
@@ -919,7 +918,7 @@ function BlogPostCard({ post, onLike, onBookmark, onPostClick, onSelect, current
           <div>
             <h3 className="font-medium text-gray-900">{`${post.author.first_name} ${post.author.last_name}`}</h3>
             <p className="text-sm text-gray-500">
-              {post.author.year}th Year • {post.author.major}
+              {post.author.year ? formatYearWithOrdinal(post.author.year) : 'Student'} • {post.author.major}
             </p>
           </div>
         </div>

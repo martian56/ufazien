@@ -6,42 +6,24 @@ import { gsap } from "gsap"
 import { ScrollTrigger } from "gsap/ScrollTrigger"
 import { TextPlugin } from "gsap/TextPlugin"
 import {
-  Calculator,
-  TrendingUp,
-  PenTool,
-  MessageCircle,
-  Users,
-  Sparkles,
-  ChevronRight,
-  BookOpen,
-  ArrowRight,
-  CheckCircle,
-  BarChart3,
-  Calendar,
-  Award,
-  Target,
-  Zap,
-  Globe,
-  Shield,
-  Rocket,
-  Brain,
-  Heart,
-  Play,
-  Menu,
-  X,
-  Star,
-  Activity,
-  Github,
-  Twitter,
-  Linkedin,
-  Instagram,
-  Code,
-  Database,
-  Smartphone,
-  Cloud,
-  Layers,
+  Calculator, TrendingUp, PenTool, MessageCircle,
+  Users, Sparkles, ChevronRight, BookOpen, ArrowRight,
+  CheckCircle, BarChart3, Calendar, Award, Target, Zap,
+  Globe, Shield, Rocket, Brain, Heart, Play, Menu,
+  X, Star, Activity, Github, Twitter, Linkedin,
+  Instagram, Layers, House, SwatchBook
 } from "lucide-react"
 
+import { 
+  SiReact, SiDjango, SiTensorflow, 
+  SiAmazonec2, SiPostgresql, SiAwslambda,
+  SiAmazonroute53, SiDocker, SiTraefikproxy,
+  SiNginx, SiNodedotjs, SiRedis 
+} from "react-icons/si";
+
+import { FaMobileAlt, FaChartBar,FaAws  } from "react-icons/fa";
+import { TbApi } from "react-icons/tb";
+import { MdSecurity } from "react-icons/md";
 // Register GSAP plugins
 gsap.registerPlugin(ScrollTrigger, TextPlugin)
 
@@ -265,49 +247,40 @@ export default function Home() {
 
   const features = [
     {
-      icon: Calculator,
-      title: "AI-Powered GPA Calculator",
-      description: "Advanced GPA tracking with UFAZ's 20-point system, predictive analytics, and semester planning.",
-      link: "/gpa-calculator",
-      color: "from-blue-500 to-cyan-500",
-      stats: "25,000+ calculations",
-      badge: "Most Popular",
-    },
-    {
       icon: TrendingUp,
-      title: "Smart Average Calculator",
-      description: "Comprehensive grade analysis with weighted averages, trend tracking, and performance insights.",
+      title: "Average Calculator",
+      description: "Comprehensive grade analysis with weighted averages, public and private schemas, and performance insights.",
       link: "/average-calculator",
       color: "from-green-500 to-emerald-500",
-      stats: "12,500+ users",
+      stats: "500+ users",
       badge: "Trending",
     },
     {
-      icon: PenTool,
-      title: "Advanced Blog Platform",
-      description: "AI-powered writing tools, rich editor, collaborative features, and community engagement.",
-      link: "/blog",
-      color: "from-purple-500 to-pink-500",
-      stats: "5,300+ posts",
-      badge: "New Features",
+      icon: Calculator,
+      title: "GPA Calculator",
+      description: "Advanced GPA tracking with UFAZ's 20-point system, predictive analytics, and semester planning.",
+      link: "/gpa-calculator",
+      color: "from-blue-500 to-cyan-500",
+      stats: "4,000+ calculations",
+      badge: "Most Popular",
     },
     {
-      icon: MessageCircle,
-      title: "Study Groups & Chat",
-      description: "Real-time collaboration, course-specific groups, video calls, and peer-to-peer learning.",
-      link: "/community",
-      color: "from-orange-500 to-red-500",
-      stats: "280+ active groups",
-      badge: "Community",
+      icon: House,
+      title: "Website Hosting",
+      description: "Deploy and manage your personal academic website with custom domains, SSL, and one-click setup.",
+      link: "/hosting",
+      color: "from-green-500 to-emerald-500",
+      stats: "50+ websites",
+      badge: "Free Tier",
     },
     {
-      icon: Calendar,
-      title: "Smart Academic Calendar",
-      description: "AI-powered scheduling, deadline tracking, and integration with UFAZ academic calendar.",
-      link: "/calendar",
-      color: "from-indigo-500 to-purple-500",
-      stats: "15,000+ events",
-      badge: "Essential",
+      icon: BarChart3,
+      title: "User Sites",
+      description: "Showcase your projects, blogs, and portfolios with our easy-to-use hosting platform.",
+      link: "/user-sites",
+      color: "from-teal-500 to-blue-500",
+      stats: "50+ sites",
+      badge: "Public",
     },
     {
       icon: BarChart3,
@@ -318,58 +291,111 @@ export default function Home() {
       stats: "Real-time insights",
       badge: "Pro Feature",
     },
+    {
+      icon: PenTool,
+      title: "Blog Platform",
+      description: "AI-powered writing tools, rich editor, collaborative features, and community engagement.",
+      link: "/blog",
+      color: "from-purple-500 to-pink-500",
+      stats: "50+ posts",
+      badge: "New Features",
+    },
+    {
+      icon: Brain,
+      title: "AI Tools",
+      description: "Humanizer, summarizer, translator, and research assistant to enhance your academic work.",
+      link: "/ai-tools",
+      color: "from-teal-500 to-blue-500",
+      stats: "10+ tools",
+      badge: "AI Powered",
+    },
+    {
+      icon: MessageCircle,
+      title: "Study Groups & Chat",
+      description: "Real-time collaboration, course-specific groups, video calls, and peer-to-peer learning.",
+      link: "/community",
+      color: "from-orange-500 to-red-500",
+      stats: "20+ active groups",
+      badge: "Community",
+    },
+    {
+      icon: Calendar,
+      title: "Smart Academic Calendar",
+      description: "AI-powered scheduling, deadline tracking, and integration with UFAZ academic calendar.",
+      link: "/calendar",
+      color: "from-indigo-500 to-purple-500",
+      stats: "1,000+ events",
+      badge: "Essential",
+    }
   ]
 
   const stats = [
-    { number: "5,500+", label: "Active Students", icon: Users, color: "text-blue-600", growth: "+23%" },
-    { number: "45,000+", label: "GPA Calculations", icon: Calculator, color: "text-green-600", growth: "+156%" },
-    { number: "8,300+", label: "Blog Posts", icon: PenTool, color: "text-purple-600", growth: "+89%" },
-    { number: "280+", label: "Study Groups", icon: MessageCircle, color: "text-orange-600", growth: "+67%" },
+    { number: "200+", label: "Active Students", icon: Users, color: "text-blue-600", growth: "+23%" },
+    { number: "4,000+", label: "GPA Calculations", icon: Calculator, color: "text-green-600", growth: "+156%" },
+    { number: "5,000+", label: "Average Calculations", icon: Calculator, color: "text-red-600", growth: "+197%" },
+    { number: "300+", label: "Average Schemas", icon: SwatchBook, color: "text-purple-600", growth: "+89%" },
+    { number: "100+", label: "Hosted Websites", icon: House, color: "text-cyan-600", growth: "+45%" },
+    { number: "10+", label: "AI Tools", icon: Brain, color: "text-blue-600", growth: "+10%" },
+    { number: "50+", label: "Blog Posts", icon: PenTool, color: "text-purple-600", growth: "+89%" },
+    { number: "20+", label: "Study Groups", icon: MessageCircle, color: "text-orange-600", growth: "+67%" },
   ]
 
   const testimonials = [
     {
-      name: "Sarah Johnson",
+      name: "Nadir Askarov",
       role: "Computer Science, 3rd Year",
-      avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?fm=jpg&q=60&w=3000&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Mnx8dXNlciUyMHByb2ZpbGV8ZW58MHx8MHx8fDA%3D",
+      avatar: "https://ik.imagekit.io/ufazien/testimonials/nadir_askarov.jpeg?updatedAt=1756327720548",
       content:
-        "Ufazien completely transformed how I manage my academics. The GPA calculator with AI predictions helped me plan my semester perfectly!",
+        "The average calculator is really useful! It is simple, clear, and practical for students, making it much easier to keep track of grades and stay organized.",
       rating: 5,
       verified: true,
     },
     {
-      name: "Ahmed Hassan",
-      role: "Geo Physics, 2nd Year",
-      avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?fm=jpg&q=60&w=3000&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8M3x8dXNlciUyMHByb2ZpbGV8ZW58MHx8MHx8fDA%3D",
+      name: "Zeynalabdin Huseynli",
+      role: "Computer Science, 3rd Year",
+      avatar: "https://ik.imagekit.io/ufazien/testimonials/zeynal.jpg?updatedAt=1757576718681",
       content:
-        "The study groups feature is incredible. I found amazing study partners and our group chat keeps us all motivated and on track.",
+        "The GPA Calculator is incredible. It was always tricky to calculate my GPA manually, but this tool made it so easy and accurate. Highly recommend it!",
       rating: 5,
       verified: true,
     },
     {
-      name: "Maria Rodriguez",
-      role: "Chemistry, 4th Year",
-      avatar: "https://img.freepik.com/free-photo/horizontal-portrait-smiling-happy-young-pleasant-looking-female-wears-denim-shirt-stylish-glasses-with-straight-blonde-hair-expresses-positiveness-poses_176420-13176.jpg?semt=ais_hybrid&w=740",
+      name: "Valiyyaddin Aliyev",
+      role: "Computer Science, 3th Year",
+      avatar: "https://ik.imagekit.io/ufazien/testimonials/valiyyaddin_aliyev.jpeg?updatedAt=1756362329574",
       content:
-        "The blog platform helped me share my research and connect with professors. It's like having a professional portfolio built-in!",
+        "The Hosting service with free tier is a game changer for me. It allows me to experiment with my projects without worrying about costs.",
       rating: 5,
       verified: true,
     },
   ]
 
   const technologies = [
-    { name: "React 18", icon: Code, color: "text-blue-500", description: "Modern UI framework" },
-    { name: "Django", icon: Database, color: "text-green-500", description: "Scalable backend" },
-    { name: "AI/ML", icon: Brain, color: "text-purple-500", description: "Intelligent features" },
-    { name: "Cloud", icon: Cloud, color: "text-cyan-500", description: "Global infrastructure" },
-    { name: "Mobile", icon: Smartphone, color: "text-pink-500", description: "Cross-platform" },
-    { name: "Analytics", icon: BarChart3, color: "text-indigo-500", description: "Data insights" },
-  ]
+    { name: "React 19", icon: SiReact, color: "text-sky-500", description: "Modern UI framework" },
+    { name: "Django", icon: SiDjango, color: "text-green-600", description: "Scalable backend" },
+    { name: "Django REST Framework", icon: TbApi, color: "text-red-500", description: "Powerful API layer" },
+    { name: "AllAuth", icon: MdSecurity, color: "text-purple-600", description: "Authentication system" },
+    { name: "AI/ML", icon: SiTensorflow, color: "text-orange-500", description: "Intelligent features" },
+    { name: "AWS", icon: FaAws, color: "text-yellow-500", description: "Cloud platform" },
+    { name: "Mobile", icon: FaMobileAlt, color: "text-pink-500", description: "Cross-platform" },
+    { name: "EC2", icon: SiAmazonec2, color: "text-orange-500", description: "Compute instances" },
+    { name: "Aurora", icon: SiPostgresql, color: "text-blue-600", description: "Managed SQL database" },
+    { name: "Lambdas", icon: SiAwslambda , color: "text-emerald-600", description: "Serverless compute" },
+    { name: "Route53", icon: SiAmazonroute53 , color: "text-indigo-500", description: "DNS & traffic routing" },
+    { name: "WebSockets", icon: TbApi, color: "text-pink-500", description: "Realtime communication" },
+    { name: "Docker", icon: SiDocker, color: "text-blue-500", description: "Containerization" },
+    { name: "Traefik", icon: SiTraefikproxy, color: "text-orange-600", description: "Edge router & proxy" },
+    { name: "Nginx", icon: SiNginx, color: "text-green-700", description: "Web server & reverse proxy" },
+    { name: "Node.js", icon: SiNodedotjs, color: "text-green-500", description: "JS runtime" },
+    { name: "Redis", icon: SiRedis, color: "text-red-600", description: "In-memory cache" },
+    { name: "PostgreSQL", icon: SiPostgresql, color: "text-blue-600", description: "Relational database" },
+  ];
+
 
   const achievements = [
-    { icon: Award, title: "Best Student Platform 2024", org: "UFAZ Innovation Awards" },
-    { icon: Star, title: "4.9/5 Student Rating", org: "Based on 2,500+ reviews" },
-    { icon: Shield, title: "ISO 27001 Certified", org: "Enterprise Security Standard" },
+    { icon: Users, title: "200+ Active Students", org: "Growing UFAZ Community" },
+    { icon: Star, title: "4.9/5 Student Rating", org: "Based on 200+ reviews" },
+    { icon: Shield, title: "Secure & Private", org: "Student Data Protection" },
     { icon: Rocket, title: "99.9% Uptime", org: "Reliable & Always Available" },
   ]
 
@@ -563,7 +589,7 @@ export default function Home() {
           </div>
 
           {/* Hero Stats */}
-          <div ref={statsRef} className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 max-w-6xl mx-auto px-4">
+          <div id="stats" ref={statsRef} className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 max-w-6xl mx-auto px-4">
             {stats.map((stat, index) => (
               <div
                 key={index}
@@ -899,12 +925,13 @@ export default function Home() {
               <h3 className="font-black mb-6 sm:mb-8 text-lg sm:text-xl">Quick Access</h3>
               <div className="space-y-3 sm:space-y-4">
                 {[
+                  { name: "Analytics Dashboard", link: "/dashboard" },
                   { name: "GPA Calculator", link: "/gpa-calculator" },
                   { name: "Average Calculator", link: "/average-calculator" },
-                  { name: "Blog Platform", link: "/blog" },
-                  { name: "Study Groups", link: "/community" },
                   { name: "Academic Calendar", link: "/calendar" },
-                  { name: "Analytics Dashboard", link: "/dashboard" },
+                  { name: "Ufazien Hosting", link: "/hosting" },
+                  { name: "Blog Platform", link: "/blog" },
+                  { name: "AI Tools", link: "/ai-tools" },
                 ].map((item) => (
                   <a
                     key={item.name}
@@ -922,19 +949,19 @@ export default function Home() {
               <h3 className="font-black mb-6 sm:mb-8 text-lg sm:text-xl">Support</h3>
               <div className="space-y-3 sm:space-y-4">
                 {[
-                  "Help Center",
-                  "Contact Us",
-                  "Privacy Policy",
-                  "Terms of Service",
-                  "API Documentation",
-                  "System Status",
+                  {name:"Help Center", link:"/help"},
+                  {name:"Contact Us", link:"/contact"},
+                  {name:"Privacy Policy", link:"/privacy"},
+                  {name:"Terms of Service", link:"/terms"},
+                  {name:"API Documentation", link:"https://api.ufazien.com/api/docs"},
+                  {name:"System Status", link:"/status"},
                 ].map((item) => (
                   <a
-                    key={item}
-                    href="#"
+                    key={item.name}
+                    href={item.link}
                     className="block text-gray-400 hover:text-white transition-all duration-300 hover:translate-x-2 transform font-medium text-sm sm:text-base"
                   >
-                    {item}
+                    {item.name}
                   </a>
                 ))}
               </div>
@@ -951,10 +978,10 @@ export default function Home() {
               {/* Social Links */}
               <div className="flex items-center gap-3 sm:gap-4">
                 {[
-                  { icon: Github, href: "https://github.com/martian58" },
+                  { icon: Github, href: "https://github.com/martian56" },
                   { icon: Twitter, href: "https://twitter.com/martian588" },
                   { icon: Linkedin, href: "https://www.linkedin.com/in/martian58" },
-                  { icon: Instagram, href: "https://instagram.com/ufaz" },
+                  { icon: Instagram, href: "https://instagram.com/ufaz.university" },
                 ].map((social, index) => (
                   <a
                     key={index}

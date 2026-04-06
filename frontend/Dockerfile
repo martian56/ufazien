@@ -1,7 +1,7 @@
 # Multi-stage build for React frontend
 
 # Build stage
-FROM node:18-alpine AS builder
+FROM node:24-alpine AS builder
 
 # Set working directory
 WORKDIR /app
@@ -10,7 +10,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install all dependencies (including dev dependencies for build)
-RUN npm ci
+RUN npm i
 
 # Copy source code
 COPY . .

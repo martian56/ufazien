@@ -4,20 +4,11 @@ import { useState, useEffect } from "react"
 import { Helmet } from "react-helmet"
 import { useNavigate } from "react-router-dom"
 import {
-  Users,
   MessageCircle,
   Search,
   Plus,
   Filter,
   Menu,
-  User,
-  X,
-  BookOpen,
-  BarChart3,
-  Calculator,
-  TrendingUp,
-  FileText,
-  CalendarIcon,
   Send,
   Lock,
   Globe,
@@ -37,10 +28,24 @@ import {
   Eye,
   MessageSquare,
   Bookmark,
-  Activity,
+  BookOpen,
+  Calculator,
+  Home,
+  Gamepad2,
+  Brain,
+  Telescope,
+  TrendingUp,
   PenTool,
+  Users,
   Settings,
+  Activity,
+  X,
+  Calendar
 } from "lucide-react"
+
+import { useCommunityData, useGroupChat } from "../../../hooks/useCommunity"
+import { communityAPI } from "../../../services/communityAPI"
+import { getYearDisplay } from "../../../utils/majorUtils"
 
 export default function Community() {
   const navigate = useNavigate()
@@ -49,305 +54,259 @@ export default function Community() {
   const [selectedGroup, setSelectedGroup] = useState(null)
   const [selectedForum, setSelectedForum] = useState(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [createModalType, setCreateModalType] = useState("group") // "group", "forum", "post"
   const [showJoinModal, setShowJoinModal] = useState(false)
+  const [showPrivateChatModal, setShowPrivateChatModal] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [filterCategory, setFilterCategory] = useState("all")
   const [showFilters, setShowFilters] = useState(false)
   const [newMessage, setNewMessage] = useState("")
   const [newPost, setNewPost] = useState({ title: "", content: "", category: "general" })
 
-  const [user] = useState({
-    id: 1,
-    name: "Sarah Johnson",
-    avatar: "/placeholder.svg?height=40&width=40",
-    year: "3rd Year",
-    major: "Computer Science",
-    role: "student",
+  // Use community data hook
+  const {
+    groups,
+    forums,
+    posts,
+    chats,
+    loading,
+    error,
+    loadAllData,
+    joinGroup,
+    leaveGroup,
+    likePost,
+    bookmarkPost,
+    createPost,
+    createGroup,
+    createForum,
+    createChat
+  } = useCommunityData()
+
+  // Debug logging for state changes
+  useEffect(() => {
+    console.log('🎯 Community component state update:', {
+      loading,
+      error,
+      groupsCount: groups.length,
+      forumsCount: forums.length,
+      postsCount: posts.length,
+      timestamp: new Date().toISOString()
+    });
+  }, [loading, error, groups.length, forums.length, posts.length]);
+
+  // Chat functionality
+  const {
+    messages: chatMessages,
+    isConnected,
+    sendMessage: sendChatMessage,
+    sendTyping,
+    sendStopTyping
+  } = useGroupChat(selectedGroup?.id)
+
+  const [user, setUser] = useState(null)
+  
+  // Load current user data
+  useEffect(() => {
+    const loadCurrentUser = async () => {
+      try {
+        const token = localStorage.getItem('access')
+        if (token) {
+          const response = await fetch('/api/auth/me/', {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          })
+          if (response.ok) {
+            const userData = await response.json()
+            setUser({
+              id: userData.id,
+              name: userData.get_full_name || userData.username,
+              avatar: userData.avatar || "/placeholder.svg?height=40&width=40",
+              year: userData.year || "Student",
+              major: userData.major || "UFAZ",
+              role: "student",
+            })
+          }
+        }
+      } catch (error) {
+        console.error('Error loading user data:', error)
+        // Fallback user data
+        setUser({
+          id: 1,
+          name: "Guest User",
+          avatar: "/placeholder.svg?height=40&width=40",
+          year: "Student",
+          major: "UFAZ",
+          role: "student",
+        })
+      }
+    }
+    
+    loadCurrentUser()
+  }, [])
+
+  // Load data on component mount
+  useEffect(() => {
+    console.log('🎬 Community component mounted, starting data load...');
+    
+    const timeoutId = setTimeout(() => {
+      if (loading) {
+        console.error('⏰ Loading timeout - API might be down or authentication failed');
+        console.error('⏰ Current state at timeout:', {
+          loading,
+          error,
+          groupsCount: groups.length,
+          forumsCount: forums.length,
+          postsCount: posts.length
+        });
+      }
+    }, 10000); // 10 second timeout
+
+    loadAllData()
+      .then(() => {
+        console.log('🎉 loadAllData completed successfully');
+      })
+      .catch((err) => {
+        console.error('💥 loadAllData failed:', err);
+      })
+      .finally(() => {
+        clearTimeout(timeoutId);
+        console.log('🏁 loadAllData promise resolved');
+      });
+
+    return () => {
+      console.log('🧹 Community component cleanup');
+      clearTimeout(timeoutId);
+    };
+  }, [])  // Remove dependencies to prevent re-runs
+
+  // Filter data based on search and category
+  const filteredGroups = groups.filter((group) => {
+    const matchesSearch =
+      group.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      group.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (group.tags && group.tags.some((tag) => tag.toLowerCase().includes(searchQuery.toLowerCase())))
+
+    const matchesCategory = filterCategory === "all" || group.category === filterCategory
+
+    return matchesSearch && matchesCategory
   })
 
-  const [groups, setGroups] = useState([
-    {
-      id: 1,
-      name: "CS301 - Database Systems",
-      description:
-        "Study group for Database Systems course. Share notes, discuss assignments, and prepare for exams together.",
-      category: "study",
-      type: "public",
-      members: 24,
-      maxMembers: 30,
-      avatar: "/placeholder.svg?height=48&width=48",
-      courseCode: "CS301",
-      professor: "Dr. Smith",
-      isJoined: true,
-      isOwner: false,
-      lastActivity: "2 hours ago",
-      tags: ["database", "sql", "study-group"],
-      messages: [
-        {
-          id: 1,
-          sender: "Alice Chen",
-          avatar: "/placeholder.svg?height=32&width=32",
-          message: "Hey everyone! I've uploaded my notes from today's lecture on query optimization.",
-          timestamp: "10:30 AM",
-          type: "text",
-        },
-        {
-          id: 2,
-          sender: "Bob Wilson",
-          avatar: "/placeholder.svg?height=32&width=32",
-          message: "Thanks Alice! Really helpful. Does anyone understand the B-tree indexing part?",
-          timestamp: "10:45 AM",
-          type: "text",
-        },
-        {
-          id: 3,
-          sender: "Sarah Johnson",
-          avatar: "/placeholder.svg?height=32&width=32",
-          message: "I can explain that! Let's meet in the library tomorrow at 2 PM?",
-          timestamp: "11:00 AM",
-          type: "text",
-        },
-      ],
-    },
-    {
-      id: 2,
-      name: "UFAZ Developers",
-      description:
-        "Community for aspiring developers at UFAZ. Share projects, collaborate on code, and discuss tech trends.",
-      category: "tech",
-      type: "public",
-      members: 156,
-      maxMembers: 200,
-      avatar: "/placeholder.svg?height=48&width=48",
-      isJoined: true,
-      isOwner: false,
-      lastActivity: "1 hour ago",
-      tags: ["programming", "web-dev", "mobile-dev", "projects"],
-      messages: [
-        {
-          id: 1,
-          sender: "David Kim",
-          avatar: "/placeholder.svg?height=32&width=32",
-          message: "Just finished my React portfolio project! Would love some feedback 🚀",
-          timestamp: "9:15 AM",
-          type: "text",
-        },
-        {
-          id: 2,
-          sender: "Emma Rodriguez",
-          avatar: "/placeholder.svg?height=32&width=32",
-          message: "Looks amazing David! The animations are smooth. What did you use for deployment?",
-          timestamp: "9:30 AM",
-          type: "text",
-        },
-      ],
-    },
-    {
-      id: 3,
-      name: "French Language Exchange",
-      description:
-        "Practice French with native speakers and fellow learners. Improve your language skills in a friendly environment.",
-      category: "language",
-      type: "public",
-      members: 43,
-      maxMembers: 50,
-      avatar: "/placeholder.svg?height=48&width=48",
-      isJoined: false,
-      isOwner: false,
-      lastActivity: "3 hours ago",
-      tags: ["french", "language-exchange", "conversation"],
-      messages: [],
-    },
-    {
-      id: 4,
-      name: "UFAZ Photography Club",
-      description:
-        "Share your photography, get feedback, and organize photo walks around Baku. All skill levels welcome!",
-      category: "hobby",
-      type: "public",
-      members: 89,
-      maxMembers: 100,
-      avatar: "/placeholder.svg?height=48&width=48",
-      isJoined: true,
-      isOwner: false,
-      lastActivity: "5 hours ago",
-      tags: ["photography", "art", "baku", "photo-walks"],
-      messages: [],
-    },
-    {
-      id: 5,
-      name: "Final Year Project Team",
-      description: "Private group for our capstone project on AI-powered learning systems.",
-      category: "project",
-      type: "private",
-      members: 4,
-      maxMembers: 5,
-      avatar: "/placeholder.svg?height=48&width=48",
-      isJoined: true,
-      isOwner: true,
-      lastActivity: "30 minutes ago",
-      tags: ["ai", "machine-learning", "capstone"],
-      messages: [],
-    },
-  ])
+  const filteredForums = forums.filter((forum) => {
+    const matchesSearch =
+      forum.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      forum.description.toLowerCase().includes(searchQuery.toLowerCase())
 
-  const [forums, setForums] = useState([
-    {
-      id: 1,
-      title: "General Discussion",
-      description: "General topics and campus life discussions",
-      category: "general",
-      posts: 1247,
-      members: 892,
-      lastPost: {
-        title: "New cafeteria menu - thoughts?",
-        author: "Mike Chen",
-        timestamp: "2 hours ago",
-      },
-      icon: MessageCircle,
-      color: "bg-blue-500",
-    },
-    {
-      id: 2,
-      title: "Academic Help",
-      description: "Get help with courses, assignments, and study tips",
-      category: "academic",
-      posts: 2156,
-      members: 654,
-      lastPost: {
-        title: "Linear Algebra - Eigenvalues explanation needed",
-        author: "Anna Petrov",
-        timestamp: "1 hour ago",
-      },
-      icon: Book,
-      color: "bg-green-500",
-    },
-    {
-      id: 3,
-      title: "Career & Internships",
-      description: "Job opportunities, internship experiences, and career advice",
-      category: "career",
-      posts: 543,
-      members: 423,
-      lastPost: {
-        title: "Google internship interview experience",
-        author: "Alex Johnson",
-        timestamp: "4 hours ago",
-      },
-      icon: Briefcase,
-      color: "bg-purple-500",
-    },
-    {
-      id: 4,
-      title: "Tech Talk",
-      description: "Latest technology trends, programming discussions, and project showcases",
-      category: "tech",
-      posts: 876,
-      members: 321,
-      lastPost: {
-        title: "React vs Vue - which one to learn first?",
-        author: "Sofia Martinez",
-        timestamp: "3 hours ago",
-      },
-      icon: Code,
-      color: "bg-indigo-500",
-    },
-    {
-      id: 5,
-      title: "Student Life",
-      description: "Campus events, social activities, and student experiences",
-      category: "social",
-      posts: 1089,
-      members: 567,
-      lastPost: {
-        title: "Best study spots on campus?",
-        author: "James Wilson",
-        timestamp: "6 hours ago",
-      },
-      icon: Coffee,
-      color: "bg-orange-500",
-    },
-    {
-      id: 6,
-      title: "Hobbies & Interests",
-      description: "Share your hobbies, find activity partners, and organize meetups",
-      category: "hobby",
-      posts: 432,
-      members: 289,
-      lastPost: {
-        title: "Anyone interested in hiking this weekend?",
-        author: "Lisa Zhang",
-        timestamp: "5 hours ago",
-      },
-      icon: Camera,
-      color: "bg-pink-500",
-    },
-  ])
+    const matchesCategory = filterCategory === "all" || forum.category === filterCategory
 
-  const [forumPosts, setForumPosts] = useState([
-    {
-      id: 1,
-      title: "Tips for acing your Database Systems final exam",
-      content: "After taking the exam last semester, here are some key tips that helped me get an A...",
-      author: {
-        name: "Alice Chen",
-        avatar: "/placeholder.svg?height=32&width=32",
-        year: "4th Year",
-        major: "Computer Science",
-      },
-      category: "academic",
-      tags: ["database", "exams", "study-tips"],
-      timestamp: "2 hours ago",
-      likes: 24,
-      replies: 8,
-      views: 156,
-      isLiked: false,
-      isBookmarked: true,
-      isPinned: false,
-    },
-    {
-      id: 2,
-      title: "Google internship interview experience - AMA",
-      content:
-        "Just finished my Google internship interview process. Happy to answer any questions about the experience...",
-      author: {
-        name: "David Kim",
-        avatar: "/placeholder.svg?height=32&width=32",
-        year: "3rd Year",
-        major: "Computer Science",
-      },
-      category: "career",
-      tags: ["google", "internship", "interview", "tech"],
-      timestamp: "4 hours ago",
-      likes: 67,
-      replies: 23,
-      views: 445,
-      isLiked: true,
-      isBookmarked: false,
-      isPinned: true,
-    },
-    {
-      id: 3,
-      title: "Best programming languages to learn in 2024",
-      content:
-        "With the tech industry evolving rapidly, here's my take on which programming languages are worth learning...",
-      author: {
-        name: "Emma Rodriguez",
-        avatar: "/placeholder.svg?height=32&width=32",
-        year: "2nd Year",
-        major: "Software Engineering",
-      },
-      category: "tech",
-      tags: ["programming", "career", "2024", "languages"],
-      timestamp: "1 day ago",
-      likes: 89,
-      replies: 34,
-      views: 678,
-      isLiked: false,
-      isBookmarked: true,
-      isPinned: false,
-    },
-  ])
+    return matchesSearch && matchesCategory
+  })
+
+  const filteredPosts = posts.filter((post) => {
+    const matchesSearch =
+      post.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      post.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (post.tags && post.tags.some((tag) => tag.toLowerCase().includes(searchQuery.toLowerCase())))
+
+    const matchesCategory = filterCategory === "all" || post.author?.category === filterCategory
+
+    return matchesSearch && matchesCategory
+  })
+
+  // Handle creating new content
+  const handleCreateGroup = async (groupData) => {
+    try {
+      await createGroup(groupData)
+      setShowCreateModal(false)
+    } catch (error) {
+      console.error("Error creating group:", error)
+    }
+  }
+
+  const handleCreateForum = async (forumData) => {
+    try {
+      await createForum(forumData)
+      setShowCreateModal(false)
+    } catch (error) {
+      console.error("Error creating forum:", error)
+    }
+  }
+
+  const handleCreatePost = async (postData) => {
+    try {
+      await createPost(postData)
+      setShowCreateModal(false)
+    } catch (error) {
+      console.error("Error creating post:", error)
+    }
+  }
+
+  // Handle joining a group
+  const handleJoinGroup = async (groupId) => {
+    try {
+      await joinGroup(groupId)
+    } catch (error) {
+      console.error("Error joining group:", error)
+    }
+  }
+
+  // Handle leaving a group
+  const handleLeaveGroup = async (groupId) => {
+    try {
+      await leaveGroup(groupId)
+    } catch (error) {
+      console.error("Error leaving group:", error)
+    }
+  }
+
+  // Handle sending a message
+  const handleSendMessage = async (chatId) => {
+    if (!newMessage.trim() || !chatId) return
+
+    try {
+      // Send message via API
+      await communityAPI.sendChatMessage(chatId, newMessage)
+      
+      // Clear the message input
+      setNewMessage("")
+      
+      // Optionally reload chat data to show the new message
+      // In a real implementation, this would be handled by WebSocket
+      console.log(`Message sent to chat ${chatId}`)
+      
+    } catch (error) {
+      console.error('Error sending message:', error)
+      // You could show a toast notification here
+    }
+  }
+
+  // Handle post interactions
+  const handleLikePost = async (postId) => {
+    try {
+      await likePost(postId)
+    } catch (error) {
+      console.error("Error liking post:", error)
+    }
+  }
+
+  const handleBookmarkPost = async (postId) => {
+    try {
+      await bookmarkPost(postId)
+    } catch (error) {
+      console.error("Error bookmarking post:", error)
+    }
+  }
+
+  // Handle typing indicators
+  const handleTyping = () => {
+    sendTyping()
+    // Stop typing after 1 second of inactivity
+    clearTimeout(window.typingTimeout)
+    window.typingTimeout = setTimeout(() => {
+      sendStopTyping()
+    }, 1000)
+  }
 
   const categories = [
     { id: "all", name: "All", icon: Globe, color: "bg-gray-500" },
@@ -361,104 +320,58 @@ export default function Community() {
     { id: "career", name: "Career", icon: TrendingUp, color: "bg-yellow-500" },
   ]
 
-
-  // Filter groups based on search and category
-  const filteredGroups = groups.filter((group) => {
-    const matchesSearch =
-      group.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      group.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      group.tags.some((tag) => tag.toLowerCase().includes(searchQuery.toLowerCase()))
-
-    const matchesCategory = filterCategory === "all" || group.category === filterCategory
-
-    return matchesSearch && matchesCategory
-  })
-
-  // Filter forums based on search and category
-  const filteredForums = forums.filter((forum) => {
-    const matchesSearch =
-      forum.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      forum.description.toLowerCase().includes(searchQuery.toLowerCase())
-
-    const matchesCategory = filterCategory === "all" || forum.category === filterCategory
-
-    return matchesSearch && matchesCategory
-  })
-
-  // Filter forum posts
-  const filteredPosts = forumPosts.filter((post) => {
-    const matchesSearch =
-      post.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      post.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      post.tags.some((tag) => tag.toLowerCase().includes(searchQuery.toLowerCase()))
-
-    const matchesCategory = filterCategory === "all" || post.category === filterCategory
-
-    return matchesSearch && matchesCategory
-  })
-
-  // Handle joining a group
-  const handleJoinGroup = (groupId) => {
-    setGroups(
-      groups.map((group) => (group.id === groupId ? { ...group, isJoined: true, members: group.members + 1 } : group)),
-    )
-  }
-
-  // Handle leaving a group
-  const handleLeaveGroup = (groupId) => {
-    setGroups(
-      groups.map((group) => (group.id === groupId ? { ...group, isJoined: false, members: group.members - 1 } : group)),
-    )
-  }
-
-  // Handle sending a message
-  const handleSendMessage = (groupId) => {
-    if (!newMessage.trim()) return
-
-    const message = {
-      id: Date.now(),
-      sender: user.name,
-      avatar: user.avatar,
-      message: newMessage,
-      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      type: "text",
-    }
-
-    setGroups(
-      groups.map((group) => (group.id === groupId ? { ...group, messages: [...group.messages, message] } : group)),
-    )
-
-    setNewMessage("")
-  }
-
-  // Handle post interactions
-  const handleLikePost = (postId) => {
-    setForumPosts(
-      forumPosts.map((post) =>
-        post.id === postId
-          ? {
-              ...post,
-              isLiked: !post.isLiked,
-              likes: post.isLiked ? post.likes - 1 : post.likes + 1,
-            }
-          : post,
-      ),
-    )
-  }
-
-  const handleBookmarkPost = (postId) => {
-    setForumPosts(forumPosts.map((post) => (post.id === postId ? { ...post, isBookmarked: !post.isBookmarked } : post)))
-  }
-
   const sidebarItems = [
-    { name: "Dashboard", icon: Activity, link: "/dashboard" },
-    { name: "GPA Calculator", icon: Calculator, link: "/gpa-calculator" },
-    { name: "Average Calculator", icon: TrendingUp, link: "/average-calculator" },
-    { name: "Blog", icon: PenTool, link: "/blog" },
-    { name: "Community", icon: Users, active: true },
-    { name: "Calendar", icon: CalendarIcon, link: "/calendar" },
-    { name: "Settings", icon: Settings, link: "/settings" },
+    { name: "Dashboard", icon: Activity, url: "/dashboard" },
+    { name: "GPA Calculator", icon: Calculator, url: "/gpa-calculator" },
+    { name: "Average Calculator", icon: TrendingUp, url: "/average-calculator" },
+    { name: "Campus Simulator", icon: Gamepad2, url: "/campus-simulator" },
+    { name: "Hosting", icon: Home, url: "/hosting" },
+    { name: "AI Tools", icon: Brain, url: "/ai-tools" },
+    { name: "Blog", icon: PenTool, url: "/blog" },
+    { name: "User Sites", icon: Telescope, url: "/user-sites" },
+    { name: "Community", icon: Users, url: "/community" },
+    { name: "Calendar", icon: Calendar, url: "/calendar" },
+    { name: "Settings", icon: Settings, url: "/settings" },
   ]
+
+  if (loading) {
+    console.log('🔄 Rendering loading screen, current state:', { loading, error, groupsCount: groups.length });
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-2 text-gray-600">Loading community...</p>
+          <p className="mt-1 text-xs text-gray-400">Check console for debug logs</p>
+          {error && <p className="mt-2 text-red-500 text-sm">Error: {error}</p>}
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    console.log('❌ Rendering error screen:', error);
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-red-600">Error loading community: {error}</p>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="mt-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  console.log('🎨 Rendering Community component with data:', {
+    loading,
+    error,
+    groupsCount: groups.length,
+    forumsCount: forums.length,
+    postsCount: posts.length
+  });
 
   return (
     <>
@@ -491,7 +404,7 @@ export default function Community() {
           {sidebarItems.map((item, index) => (
             <a
               key={index}
-              href={item.link || "#"}
+              href={item.url || "#"}
               className={`flex items-center gap-3 px-3 py-2 rounded-lg mb-1 transition-colors ${
                 item.active ? "bg-blue-50 text-blue-600 border-r-2 border-blue-600" : "text-gray-700 hover:bg-gray-100"
               }`}
@@ -509,15 +422,15 @@ export default function Community() {
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-gray-600">Groups Joined</span>
-                <span className="font-medium">{groups.filter((g) => g.isJoined).length}</span>
+                <span className="font-medium">{groups.filter((g) => g.is_joined).length}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Posts Liked</span>
-                <span className="font-medium">{forumPosts.filter((p) => p.isLiked).length}</span>
+                <span className="font-medium">{posts.filter((p) => p.is_liked).length}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Bookmarked</span>
-                <span className="font-medium">{forumPosts.filter((p) => p.isBookmarked).length}</span>
+                <span className="font-medium">{posts.filter((p) => p.is_bookmarked).length}</span>
               </div>
             </div>
           </div>
@@ -534,7 +447,10 @@ export default function Community() {
                 <Menu className="w-5 h-5" />
               </button>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Community</h1>
+                <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                  Community
+                  <span className="px-2 py-1 text-xs bg-yellow-100 text-yellow-800 rounded-full">In Development</span>
+                </h1>
                 <p className="text-sm text-gray-500">Connect with fellow UFAZ students</p>
               </div>
             </div>
@@ -561,13 +477,29 @@ export default function Community() {
               </button>
 
               {/* Create Button */}
-              <button
-                onClick={() => setShowCreateModal(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-                <span className="hidden sm:inline">Create</span>
-              </button>
+              <div className="relative">
+                <button
+                  onClick={() => {
+                    if (activeTab === "groups") {
+                      setCreateModalType("group")
+                    } else if (activeTab === "forums") {
+                      setCreateModalType("forum")
+                    } else if (activeTab === "chat") {
+                      setShowPrivateChatModal(true)
+                      return
+                    }
+                    setShowCreateModal(true)
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span className="hidden sm:inline">
+                    {activeTab === "groups" && "Create Group"}
+                    {activeTab === "forums" && "Create Forum"}
+                    {activeTab === "chat" && "New Chat"}
+                  </span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -649,13 +581,18 @@ export default function Community() {
               onSelectForum={setSelectedForum}
               onLikePost={handleLikePost}
               onBookmarkPost={handleBookmarkPost}
+              onCreatePost={() => {
+                setCreateModalType("post")
+                setShowCreateModal(true)
+              }}
               user={user}
             />
           )}
 
           {activeTab === "chat" && (
             <ChatView
-              groups={groups.filter((g) => g.isJoined)}
+              groups={groups.filter((g) => g.is_joined)}
+              chats={chats}
               selectedGroup={selectedGroup}
               onSelectGroup={setSelectedGroup}
               newMessage={newMessage}
@@ -670,6 +607,34 @@ export default function Community() {
       {/* Mobile Sidebar Overlay */}
       {isSidebarOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden" onClick={() => setIsSidebarOpen(false)} />
+      )}
+
+      {/* Create Modals */}
+      {showCreateModal && (
+        <CreateModal
+          type={createModalType}
+          onClose={() => setShowCreateModal(false)}
+          onCreateGroup={handleCreateGroup}
+          onCreateForum={handleCreateForum}
+          onCreatePost={handleCreatePost}
+          forums={forums}
+          categories={categories}
+        />
+      )}
+
+      {/* Private Chat Modal */}
+      {showPrivateChatModal && (
+        <PrivateChatModal
+          onClose={() => setShowPrivateChatModal(false)}
+          onCreateChat={async (chatData) => {
+            try {
+              await createChat(chatData);
+              setShowPrivateChatModal(false);
+            } catch (error) {
+              console.error('Error creating private chat:', error);
+            }
+          }}
+        />
       )}
     </div>
   </>
@@ -708,7 +673,7 @@ function GroupsView({ groups, onJoinGroup, onLeaveGroup, onSelectGroup, user }) 
 }
 
 // Forums View Component
-function ForumsView({ forums, posts, onSelectForum, onLikePost, onBookmarkPost, user }) {
+function ForumsView({ forums, posts, onSelectForum, onLikePost, onBookmarkPost, onCreatePost, user }) {
   return (
     <div className="p-4 sm:p-6 lg:p-8">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -724,7 +689,16 @@ function ForumsView({ forums, posts, onSelectForum, onLikePost, onBookmarkPost, 
 
         {/* Recent Posts */}
         <div className="lg:col-span-2">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Recent Posts</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold text-gray-900">Recent Posts</h2>
+            <button
+              onClick={onCreatePost}
+              className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+            >
+              <Plus className="w-4 h-4" />
+              Create Post
+            </button>
+          </div>
           <div className="space-y-4">
             {posts.map((post) => (
               <PostCard
@@ -743,21 +717,209 @@ function ForumsView({ forums, posts, onSelectForum, onLikePost, onBookmarkPost, 
 }
 
 // Chat View Component
-function ChatView({ groups, selectedGroup, onSelectGroup, newMessage, onMessageChange, onSendMessage, user }) {
-  if (!selectedGroup) {
+function ChatView({ groups, chats, selectedGroup, onSelectGroup, newMessage, onMessageChange, onSendMessage, user }) {
+  const [selectedChat, setSelectedChat] = useState(null)
+  const [chatType, setChatType] = useState("groups") // "groups" or "private"
+  const [messages, setMessages] = useState([])
+  const [loadingMessages, setLoadingMessages] = useState(false)
+
+  // Load messages when a chat or group is selected
+  useEffect(() => {
+    const loadMessages = async () => {
+      const currentChat = selectedGroup || selectedChat
+      if (!currentChat) {
+        setMessages([])
+        return
+      }
+
+      setLoadingMessages(true)
+      try {
+        let messagesData = []
+        if (selectedGroup) {
+          // Load group messages
+          messagesData = await communityAPI.getGroupMessages(selectedGroup.id)
+        } else if (selectedChat) {
+          // Load private chat messages
+          messagesData = await communityAPI.getChatMessages(selectedChat.id)
+        }
+        
+        setMessages(messagesData.results || messagesData || [])
+      } catch (error) {
+        console.error('Error loading messages:', error)
+        setMessages([])
+      } finally {
+        setLoadingMessages(false)
+      }
+    }
+
+    loadMessages()
+  }, [selectedGroup, selectedChat])
+
+  if (!selectedGroup && !selectedChat) {
     return (
       <div className="flex h-full">
-        {/* Groups List */}
+        {/* Chat List */}
         <div className="w-80 border-r border-gray-200 bg-white">
           <div className="p-4 border-b border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-900">Your Groups</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-gray-900">Messages</h2>
+            </div>
+            
+            {/* Chat Type Tabs */}
+            <div className="flex bg-gray-100 rounded-lg p-1">
+              <button
+                onClick={() => setChatType("groups")}
+                className={`flex-1 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                  chatType === "groups"
+                    ? "bg-white text-gray-900 shadow-sm"
+                    : "text-gray-600 hover:text-gray-900"
+                }`}
+              >
+                Study Groups
+              </button>
+              <button
+                onClick={() => setChatType("private")}
+                className={`flex-1 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                  chatType === "private"
+                    ? "bg-white text-gray-900 shadow-sm"
+                    : "text-gray-600 hover:text-gray-900"
+                }`}
+              >
+                Private Chats
+              </button>
+            </div>
           </div>
+
           <div className="overflow-y-auto">
-            {groups.map((group) => (
+            {chatType === "groups" ? (
+              /* Study Groups */
+              groups.map((group) => (
+                <div
+                  key={group.id}
+                  onClick={() => onSelectGroup(group)}
+                  className="p-4 border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <img
+                      src={group.avatar || "/placeholder.svg"}
+                      alt={group.name}
+                      className="w-10 h-10 rounded-full border-2 border-gray-200"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-medium text-gray-900 truncate">{group.name}</h3>
+                      <p className="text-sm text-gray-500">{group.member_count} members</p>
+                    </div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              /* Private Chats */
+              chats.map((chat) => (
+                <div
+                  key={chat.id}
+                  onClick={() => setSelectedChat(chat)}
+                  className="p-4 border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center">
+                      {chat.is_group_chat ? (
+                        <Users className="w-5 h-5 text-gray-600" />
+                      ) : (
+                        <MessageCircle className="w-5 h-5 text-gray-600" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-medium text-gray-900 truncate">
+                        {chat.name || (chat.participants && chat.participants.length > 0 
+                          ? chat.participants.map(p => p.name).join(", ")
+                          : "Chat"
+                        )}
+                      </h3>
+                      <p className="text-sm text-gray-500 truncate">
+                        {chat.last_message ? chat.last_message.content : "No messages yet"}
+                      </p>
+                    </div>
+                    {chat.unread_count > 0 && (
+                      <span className="bg-blue-600 text-white text-xs px-2 py-1 rounded-full">
+                        {chat.unread_count}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Empty State */}
+        <div className="flex-1 flex items-center justify-center bg-gray-50">
+          <div className="text-center">
+            <MessageCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
+              Select a {chatType === "groups" ? "group" : "chat"} to start messaging
+            </h3>
+            <p className="text-gray-600">
+              Choose a {chatType === "groups" ? "study group" : "private chat"} from the sidebar to view messages and participate in discussions
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Show selected group chat or private chat
+  const currentChat = selectedGroup || selectedChat
+  const isGroupChat = !!selectedGroup
+  
+  return (
+    <div className="flex h-full">
+      {/* Chat List Sidebar */}
+      <div className="w-80 border-r border-gray-200 bg-white">
+        <div className="p-4 border-b border-gray-200">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">Messages</h2>
+          </div>
+          
+          {/* Chat Type Tabs */}
+          <div className="flex bg-gray-100 rounded-lg p-1">
+            <button
+              onClick={() => {
+                setChatType("groups")
+                setSelectedChat(null)
+              }}
+              className={`flex-1 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                chatType === "groups"
+                  ? "bg-white text-gray-900 shadow-sm"
+                  : "text-gray-600 hover:text-gray-900"
+              }`}
+            >
+              Study Groups
+            </button>
+            <button
+              onClick={() => {
+                setChatType("private")
+                onSelectGroup(null)
+              }}
+              className={`flex-1 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                chatType === "private"
+                  ? "bg-white text-gray-900 shadow-sm"
+                  : "text-gray-600 hover:text-gray-900"
+              }`}
+            >
+              Private Chats
+            </button>
+          </div>
+        </div>
+
+        <div className="overflow-y-auto">
+          {chatType === "groups" ? (
+            groups.map((group) => (
               <div
                 key={group.id}
                 onClick={() => onSelectGroup(group)}
-                className="p-4 border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors"
+                className={`p-4 border-b border-gray-100 cursor-pointer transition-colors ${
+                  selectedGroup?.id === group.id ? "bg-blue-50 border-blue-200" : "hover:bg-gray-50"
+                }`}
               >
                 <div className="flex items-center gap-3">
                   <img
@@ -767,61 +929,48 @@ function ChatView({ groups, selectedGroup, onSelectGroup, newMessage, onMessageC
                   />
                   <div className="flex-1 min-w-0">
                     <h3 className="font-medium text-gray-900 truncate">{group.name}</h3>
-                    <p className="text-sm text-gray-500">{group.members} members</p>
+                    <p className="text-sm text-gray-500">{group.member_count} members</p>
                   </div>
-                  {group.messages.length > 0 && <div className="w-2 h-2 bg-blue-600 rounded-full" />}
                 </div>
               </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Empty State */}
-        <div className="flex-1 flex items-center justify-center bg-gray-50">
-          <div className="text-center">
-            <MessageCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Select a group to start chatting</h3>
-            <p className="text-gray-600">
-              Choose a group from the sidebar to view messages and participate in discussions
-            </p>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="flex h-full">
-      {/* Groups List */}
-      <div className="w-80 border-r border-gray-200 bg-white">
-        <div className="p-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Your Groups</h2>
-        </div>
-        <div className="overflow-y-auto">
-          {groups.map((group) => (
-            <div
-              key={group.id}
-              onClick={() => onSelectGroup(group)}
-              className={`p-4 border-b border-gray-100 cursor-pointer transition-colors ${
-                selectedGroup.id === group.id ? "bg-blue-50 border-blue-200" : "hover:bg-gray-50"
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <img
-                  src={group.avatar || "/placeholder.svg"}
-                  alt={group.name}
-                  className="w-10 h-10 rounded-full border-2 border-gray-200"
-                />
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-medium text-gray-900 truncate">{group.name}</h3>
-                  <p className="text-sm text-gray-500">{group.members} members</p>
+            ))
+          ) : (
+            chats.map((chat) => (
+              <div
+                key={chat.id}
+                onClick={() => setSelectedChat(chat)}
+                className={`p-4 border-b border-gray-100 cursor-pointer transition-colors ${
+                  selectedChat?.id === chat.id ? "bg-blue-50 border-blue-200" : "hover:bg-gray-50"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center">
+                    {chat.is_group_chat ? (
+                      <Users className="w-5 h-5 text-gray-600" />
+                    ) : (
+                      <MessageCircle className="w-5 h-5 text-gray-600" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-medium text-gray-900 truncate">
+                      {chat.name || (chat.participants && chat.participants.length > 0 
+                        ? chat.participants.map(p => p.name).join(", ")
+                        : "Chat"
+                      )}
+                    </h3>
+                    <p className="text-sm text-gray-500 truncate">
+                      {chat.last_message ? chat.last_message.content : "No messages yet"}
+                    </p>
+                  </div>
+                  {chat.unread_count > 0 && (
+                    <span className="bg-blue-600 text-white text-xs px-2 py-1 rounded-full">
+                      {chat.unread_count}
+                    </span>
+                  )}
                 </div>
-                {group.messages.length > 0 && selectedGroup.id !== group.id && (
-                  <div className="w-2 h-2 bg-blue-600 rounded-full" />
-                )}
               </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </div>
 
@@ -831,14 +980,34 @@ function ChatView({ groups, selectedGroup, onSelectGroup, newMessage, onMessageC
         <div className="p-4 border-b border-gray-200">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <img
-                src={selectedGroup.avatar || "/placeholder.svg"}
-                alt={selectedGroup.name}
-                className="w-10 h-10 rounded-full border-2 border-gray-200"
-              />
+              {isGroupChat ? (
+                <img
+                  src={currentChat.avatar || "/placeholder.svg"}
+                  alt={currentChat.name}
+                  className="w-10 h-10 rounded-full border-2 border-gray-200"
+                />
+              ) : (
+                <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center">
+                  {currentChat.is_group_chat ? (
+                    <Users className="w-5 h-5 text-gray-600" />
+                  ) : (
+                    <MessageCircle className="w-5 h-5 text-gray-600" />
+                  )}
+                </div>
+              )}
               <div>
-                <h3 className="font-medium text-gray-900">{selectedGroup.name}</h3>
-                <p className="text-sm text-gray-500">{selectedGroup.members} members</p>
+                <h3 className="font-medium text-gray-900">
+                  {currentChat.name || (currentChat.participants 
+                    ? currentChat.participants.map(p => p.name).join(", ")
+                    : "Chat"
+                  )}
+                </h3>
+                <p className="text-sm text-gray-500">
+                  {isGroupChat 
+                    ? `${currentChat.member_count} members` 
+                    : (currentChat.is_group_chat ? "Group Chat" : "Private Chat")
+                  }
+                </p>
               </div>
             </div>
             <button className="p-2 text-gray-400 hover:text-gray-600 rounded-lg">
@@ -847,24 +1016,41 @@ function ChatView({ groups, selectedGroup, onSelectGroup, newMessage, onMessageC
           </div>
         </div>
 
-        {/* Messages */}
+        {/* Messages Area */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {selectedGroup.messages.map((message) => (
-            <div key={message.id} className="flex items-start gap-3">
-              <img
-                src={message.avatar || "/placeholder.svg"}
-                alt={message.sender}
-                className="w-8 h-8 rounded-full border-2 border-gray-200"
-              />
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="font-medium text-gray-900">{message.sender}</span>
-                  <span className="text-xs text-gray-500">{message.timestamp}</span>
-                </div>
-                <p className="text-gray-700">{message.message}</p>
-              </div>
+          {loadingMessages ? (
+            <div className="text-center text-gray-500 py-8">
+              <div className="animate-spin w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full mx-auto mb-2"></div>
+              <p>Loading messages...</p>
             </div>
-          ))}
+          ) : messages.length > 0 ? (
+            messages.map((message) => (
+              <div key={message.id} className="flex items-start gap-3">
+                <img
+                  src={message.sender_avatar || "/placeholder.svg"}
+                  alt={message.sender_name || "User"}
+                  className="w-8 h-8 rounded-full border-2 border-gray-200"
+                />
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-medium text-gray-900">
+                      {message.sender?.username || message.sender?.first_name || "Unknown User"}
+                    </span>
+                    <span className="text-xs text-gray-500">
+                      {new Date(message.created_at).toLocaleTimeString()}
+                    </span>
+                  </div>
+                  <p className="text-gray-700">{message.content}</p>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="text-center text-gray-500 py-8">
+              <MessageCircle className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+              <p>No messages yet</p>
+              <p className="text-xs">Start the conversation!</p>
+            </div>
+          )}
         </div>
 
         {/* Message Input */}
@@ -875,11 +1061,11 @@ function ChatView({ groups, selectedGroup, onSelectGroup, newMessage, onMessageC
               placeholder="Type a message..."
               value={newMessage}
               onChange={(e) => onMessageChange(e.target.value)}
-              onKeyPress={(e) => e.key === "Enter" && onSendMessage(selectedGroup.id)}
+              onKeyPress={(e) => e.key === "Enter" && onSendMessage(currentChat.id)}
               className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
             <button
-              onClick={() => onSendMessage(selectedGroup.id)}
+              onClick={() => onSendMessage(currentChat.id)}
               disabled={!newMessage.trim()}
               className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
@@ -932,10 +1118,10 @@ function GroupCard({ group, onJoin, onLeave, onSelect, user }) {
       <p className="text-gray-600 text-sm mb-4 line-clamp-3">{group.description}</p>
 
       {/* Course Info */}
-      {group.courseCode && (
+      {group.course_code && (
         <div className="flex items-center gap-2 mb-3 text-sm text-gray-600">
           <Book className="w-4 h-4" />
-          <span>{group.courseCode}</span>
+          <span>{group.course_code}</span>
           {group.professor && <span>• {group.professor}</span>}
         </div>
       )}
@@ -959,18 +1145,18 @@ function GroupCard({ group, onJoin, onLeave, onSelect, user }) {
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1">
             <Users className="w-4 h-4" />
-            {group.members}/{group.maxMembers}
+            {group.member_count}/{group.max_members}
           </span>
           <span className="flex items-center gap-1">
             <Clock className="w-4 h-4" />
-            {group.lastActivity}
+            {group.last_activity ? new Date(group.last_activity).toLocaleDateString() : 'No activity'}
           </span>
         </div>
       </div>
 
       {/* Actions */}
       <div className="flex gap-2">
-        {group.isJoined ? (
+        {group.is_joined ? (
           <>
             <button
               onClick={onSelect}
@@ -988,10 +1174,10 @@ function GroupCard({ group, onJoin, onLeave, onSelect, user }) {
         ) : (
           <button
             onClick={onJoin}
-            disabled={group.members >= group.maxMembers}
+            disabled={group.member_count >= group.max_members}
             className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            {group.members >= group.maxMembers ? "Full" : "Join Group"}
+            {group.member_count >= group.max_members ? "Full" : "Join Group"}
           </button>
         )}
       </div>
@@ -1001,7 +1187,17 @@ function GroupCard({ group, onJoin, onLeave, onSelect, user }) {
 
 // Forum Card Component
 function ForumCard({ forum, onSelect }) {
-  const ForumIcon = forum.icon
+  // Import icons dynamically based on icon_name from API
+  const iconMap = {
+    MessageCircle,
+    Book,
+    Briefcase,
+    Code,
+    Coffee,
+    Camera
+  };
+  
+  const ForumIcon = iconMap[forum.icon_name] || MessageCircle;
 
   return (
     <div
@@ -1009,7 +1205,7 @@ function ForumCard({ forum, onSelect }) {
       className="p-4 bg-white rounded-lg border border-gray-200 hover:shadow-md cursor-pointer transition-all"
     >
       <div className="flex items-center gap-3 mb-3">
-        <div className={`w-10 h-10 ${forum.color} rounded-lg flex items-center justify-center`}>
+        <div className={`w-10 h-10 ${forum.color_class || 'bg-blue-500'} rounded-lg flex items-center justify-center`}>
           <ForumIcon className="w-5 h-5 text-white" />
         </div>
         <div>
@@ -1019,17 +1215,23 @@ function ForumCard({ forum, onSelect }) {
       </div>
 
       <div className="flex items-center justify-between text-sm text-gray-500 mb-2">
-        <span>{forum.posts} posts</span>
-        <span>{forum.members} members</span>
+        <span>{forum.post_count || 0} posts</span>
+        <span>{forum.member_count || 0} members</span>
       </div>
 
-      <div className="text-xs text-gray-400">
-        <span className="font-medium">{forum.lastPost.title}</span>
-        <span>
-          {" "}
-          by {forum.lastPost.author} • {forum.lastPost.timestamp}
-        </span>
-      </div>
+      {forum.last_post ? (
+        <div className="text-xs text-gray-400">
+          <span className="font-medium">{forum.last_post.title}</span>
+          <span>
+            {" "}
+            by {forum.last_post.author} • {new Date(forum.last_post.timestamp).toLocaleDateString()}
+          </span>
+        </div>
+      ) : (
+        <div className="text-xs text-gray-400">
+          No posts yet
+        </div>
+      )}
     </div>
   )
 }
@@ -1047,15 +1249,15 @@ function PostCard({ post, onLike, onBookmark, user }) {
             className="w-10 h-10 rounded-full border-2 border-gray-200"
           />
           <div>
-            <h3 className="font-medium text-gray-900">{post.author.name}</h3>
+            <h3 className="font-medium text-gray-900">{post.author.full_name || post.author.username}</h3>
             <p className="text-sm text-gray-500">
-              {post.author.year} • {post.author.major}
+              {post.author.year ? (getYearDisplay(post.author.year) === 'Graduate' ? 'Graduate' : `${getYearDisplay(post.author.year)} Year`) : 'Student'} • {post.author.major || 'UFAZ'}
             </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {post.isPinned && <Pin className="w-4 h-4 text-blue-600" />}
-          <span className="text-sm text-gray-500">{post.timestamp}</span>
+          {post.is_pinned && <Pin className="w-4 h-4 text-blue-600" />}
+          <span className="text-sm text-gray-500">{new Date(post.created_at).toLocaleDateString()}</span>
         </div>
       </div>
 
@@ -1081,11 +1283,11 @@ function PostCard({ post, onLike, onBookmark, user }) {
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1">
             <Eye className="w-4 h-4" />
-            {post.views}
+            {post.view_count || 0}
           </span>
           <span className="flex items-center gap-1">
             <MessageSquare className="w-4 h-4" />
-            {post.replies}
+            {post.reply_count || 0}
           </span>
         </div>
       </div>
@@ -1096,13 +1298,13 @@ function PostCard({ post, onLike, onBookmark, user }) {
           <button
             onClick={onLike}
             className={`flex items-center gap-2 px-3 py-1 rounded-lg transition-colors ${
-              post.isLiked
+              post.is_liked
                 ? "text-red-600 bg-red-50 hover:bg-red-100"
                 : "text-gray-600 hover:text-red-600 hover:bg-red-50"
             }`}
           >
-            <Heart className={`w-4 h-4 ${post.isLiked ? "fill-current" : ""}`} />
-            <span>{post.likes}</span>
+            <Heart className={`w-4 h-4 ${post.is_liked ? "fill-current" : ""}`} />
+            <span>{post.like_count}</span>
           </button>
 
           <button className="flex items-center gap-2 px-3 py-1 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
@@ -1120,12 +1322,12 @@ function PostCard({ post, onLike, onBookmark, user }) {
           <button
             onClick={onBookmark}
             className={`p-2 rounded-lg transition-colors ${
-              post.isBookmarked
+              post.is_bookmarked
                 ? "text-blue-600 bg-blue-50 hover:bg-blue-100"
                 : "text-gray-400 hover:text-blue-600 hover:bg-blue-50"
             }`}
           >
-            <Bookmark className={`w-4 h-4 ${post.isBookmarked ? "fill-current" : ""}`} />
+            <Bookmark className={`w-4 h-4 ${post.is_bookmarked ? "fill-current" : ""}`} />
           </button>
           <button className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
             <Flag className="w-4 h-4" />
@@ -1133,5 +1335,544 @@ function PostCard({ post, onLike, onBookmark, user }) {
         </div>
       </div>
     </article>
+  )
+}
+
+// Create Modal Component
+function CreateModal({ type, onClose, onCreateGroup, onCreateForum, onCreatePost, forums, categories }) {
+  const [formData, setFormData] = useState({
+    name: "",
+    title: "",
+    description: "",
+    category: "general",
+    type: "public",
+    maxMembers: 30,
+    tags: [],
+    courseCode: "",
+    professor: "",
+    content: "",
+    forumId: "",
+    iconName: "MessageCircle",
+    colorClass: "bg-blue-500"
+  })
+  const [tagInput, setTagInput] = useState("")
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    
+    try {
+      if (type === "group") {
+        await onCreateGroup({
+          name: formData.name,
+          description: formData.description,
+          category: formData.category,
+          type: formData.type,
+          max_members: formData.maxMembers,
+          tags: formData.tags,
+          course_code: formData.courseCode || null,
+          professor: formData.professor || null
+        })
+      } else if (type === "forum") {
+        await onCreateForum({
+          title: formData.title,
+          description: formData.description,
+          category: formData.category,
+          icon_name: formData.iconName,
+          color_class: formData.colorClass
+        })
+      } else if (type === "post") {
+        await onCreatePost({
+          title: formData.title,
+          content: formData.content,
+          forum: formData.forumId,
+          tags: formData.tags
+        })
+      }
+    } catch (error) {
+      console.error("Error creating:", error)
+    }
+  }
+
+  const addTag = () => {
+    if (tagInput.trim() && !formData.tags.includes(tagInput.trim())) {
+      setFormData(prev => ({
+        ...prev,
+        tags: [...prev.tags, tagInput.trim()]
+      }))
+      setTagInput("")
+    }
+  }
+
+  const removeTag = (tagToRemove) => {
+    setFormData(prev => ({
+      ...prev,
+      tags: prev.tags.filter(tag => tag !== tagToRemove)
+    }))
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-semibold text-gray-900">
+              Create {type === "group" ? "Study Group" : type === "forum" ? "Forum" : "Post"}
+            </h2>
+            <button
+              onClick={onClose}
+              className="p-2 text-gray-400 hover:text-gray-600 rounded-lg"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Title/Name Field */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                {type === "group" ? "Group Name" : "Title"}
+              </label>
+              <input
+                type="text"
+                value={type === "group" ? formData.name : formData.title}
+                onChange={(e) => setFormData(prev => ({
+                  ...prev,
+                  [type === "group" ? "name" : "title"]: e.target.value
+                }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                required
+              />
+            </div>
+
+            {/* Description/Content Field */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                {type === "post" ? "Content" : "Description"}
+              </label>
+              <textarea
+                value={type === "post" ? formData.content : formData.description}
+                onChange={(e) => setFormData(prev => ({
+                  ...prev,
+                  [type === "post" ? "content" : "description"]: e.target.value
+                }))}
+                rows={type === "post" ? 6 : 3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                required
+              />
+            </div>
+
+            {/* Forum Selection for Posts */}
+            {type === "post" && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Forum
+                </label>
+                <select
+                  value={formData.forumId}
+                  onChange={(e) => setFormData(prev => ({ ...prev, forumId: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  required
+                >
+                  <option value="">Select a forum</option>
+                  {forums.map((forum) => (
+                    <option key={forum.id} value={forum.id}>
+                      {forum.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Category */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Category
+              </label>
+              <select
+                value={formData.category}
+                onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                {categories.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Group-specific fields */}
+            {type === "group" && (
+              <>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Group Type
+                    </label>
+                    <select
+                      value={formData.type}
+                      onChange={(e) => setFormData(prev => ({ ...prev, type: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="public">Public</option>
+                      <option value="private">Private</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Max Members
+                    </label>
+                    <input
+                      type="number"
+                      value={formData.maxMembers}
+                      onChange={(e) => setFormData(prev => ({ ...prev, maxMembers: parseInt(e.target.value) }))}
+                      min="2"
+                      max="100"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Course Code (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.courseCode}
+                      onChange={(e) => setFormData(prev => ({ ...prev, courseCode: e.target.value }))}
+                      placeholder="e.g., CS301"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Professor (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.professor}
+                      onChange={(e) => setFormData(prev => ({ ...prev, professor: e.target.value }))}
+                      placeholder="e.g., Dr. Smith"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Forum-specific fields */}
+            {type === "forum" && (
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Icon
+                  </label>
+                  <select
+                    value={formData.iconName}
+                    onChange={(e) => setFormData(prev => ({ ...prev, iconName: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="MessageCircle">Message Circle</option>
+                    <option value="Book">Book</option>
+                    <option value="Briefcase">Briefcase</option>
+                    <option value="Code">Code</option>
+                    <option value="Coffee">Coffee</option>
+                    <option value="Camera">Camera</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Color
+                  </label>
+                  <select
+                    value={formData.colorClass}
+                    onChange={(e) => setFormData(prev => ({ ...prev, colorClass: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="bg-blue-500">Blue</option>
+                    <option value="bg-green-500">Green</option>
+                    <option value="bg-purple-500">Purple</option>
+                    <option value="bg-red-500">Red</option>
+                    <option value="bg-yellow-500">Yellow</option>
+                    <option value="bg-indigo-500">Indigo</option>
+                  </select>
+                </div>
+              </div>
+            )}
+
+            {/* Tags */}
+            {(type === "group" || type === "post") && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Tags
+                </label>
+                <div className="flex gap-2 mb-2">
+                  <input
+                    type="text"
+                    value={tagInput}
+                    onChange={(e) => setTagInput(e.target.value)}
+                    onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), addTag())}
+                    placeholder="Add a tag"
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <button
+                    type="button"
+                    onClick={addTag}
+                    className="px-3 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+                  >
+                    Add
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {formData.tags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs flex items-center gap-1"
+                    >
+                      #{tag}
+                      <button
+                        type="button"
+                        onClick={() => removeTag(tag)}
+                        className="text-blue-500 hover:text-blue-700"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Submit Buttons */}
+            <div className="flex gap-3 pt-4">
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Create {type === "group" ? "Group" : type === "forum" ? "Forum" : "Post"}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Private Chat Modal Component
+function PrivateChatModal({ onClose, onCreateChat }) {
+  const [searchQuery, setSearchQuery] = useState("")
+  const [selectedUsers, setSelectedUsers] = useState([])
+  const [chatName, setChatName] = useState("")
+  const [isGroupChat, setIsGroupChat] = useState(false)
+  const [searchResults, setSearchResults] = useState([])
+  const [isSearching, setIsSearching] = useState(false)
+  const [searchError, setSearchError] = useState(null)
+
+  // Real user search using API
+  useEffect(() => {
+    const searchUsers = async () => {
+      if (searchQuery.trim().length < 2) {
+        setSearchResults([])
+        return
+      }
+
+      setIsSearching(true)
+      setSearchError(null)
+      
+      try {
+        const response = await communityAPI.searchUsers(searchQuery.trim())
+        setSearchResults(response.results || [])
+      } catch (error) {
+        console.error('Error searching users:', error)
+        setSearchError('Failed to search users')
+        setSearchResults([])
+      } finally {
+        setIsSearching(false)
+      }
+    }
+
+    const debounceTimer = setTimeout(searchUsers, 300) // Debounce search
+    return () => clearTimeout(debounceTimer)
+  }, [searchQuery])
+
+  const handleUserSelect = (user) => {
+    if (!selectedUsers.find(u => u.id === user.id)) {
+      setSelectedUsers(prev => [...prev, user])
+    }
+  }
+
+  const handleUserRemove = (userId) => {
+    setSelectedUsers(prev => prev.filter(u => u.id !== userId))
+  }
+
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    if (selectedUsers.length === 0) return
+
+    onCreateChat({
+      participant_ids: selectedUsers.map(u => u.id),
+      name: isGroupChat ? chatName : null,
+      is_group_chat: isGroupChat
+    })
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl max-w-md w-full">
+        <div className="p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-semibold text-gray-900">Start New Chat</h2>
+            <button
+              onClick={onClose}
+              className="p-2 text-gray-400 hover:text-gray-600 rounded-lg"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Group Chat Toggle */}
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                id="group-chat"
+                checked={isGroupChat}
+                onChange={(e) => setIsGroupChat(e.target.checked)}
+                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+              />
+              <label htmlFor="group-chat" className="text-sm font-medium text-gray-700">
+                Group Chat
+              </label>
+            </div>
+
+            {/* Group Chat Name */}
+            {isGroupChat && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Chat Name
+                </label>
+                <input
+                  type="text"
+                  value={chatName}
+                  onChange={(e) => setChatName(e.target.value)}
+                  placeholder="Enter chat name"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  required={isGroupChat}
+                />
+              </div>
+            )}
+
+            {/* User Search */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Search Users by Name
+              </label>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search by first or last name"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              {isSearching && (
+                <div className="text-sm text-gray-500 mt-1">Searching...</div>
+              )}
+              {searchError && (
+                <div className="text-sm text-red-500 mt-1">{searchError}</div>
+              )}
+            </div>
+
+            {/* Selected Users */}
+            {selectedUsers.length > 0 && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Selected ({selectedUsers.length})
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {selectedUsers.map((user) => (
+                    <span
+                      key={user.id}
+                      className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm flex items-center gap-2"
+                    >
+                      {user.name}
+                      <button
+                        type="button"
+                        onClick={() => handleUserRemove(user.id)}
+                        className="text-blue-500 hover:text-blue-700"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Search Results */}
+            {searchQuery.length >= 2 && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Search Results
+                </label>
+                <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-lg">
+                  {searchResults.map((user) => (
+                    <button
+                      key={user.id}
+                      type="button"
+                      onClick={() => handleUserSelect(user)}
+                      disabled={selectedUsers.find(u => u.id === user.id)}
+                      className="w-full p-3 text-left hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-3"
+                    >
+                      <img
+                        src={user.avatar || "/placeholder.svg"}
+                        alt={user.name}
+                        className="w-8 h-8 rounded-full bg-gray-200"
+                      />
+                      <div>
+                        <div className="font-medium text-gray-900">{user.name}</div>
+                        <div className="text-sm text-gray-500">
+                          {user.year && user.major && `${getYearDisplay(user.year)} Year ${user.major}`}
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                  {!isSearching && searchResults.length === 0 && searchQuery.length >= 2 && (
+                    <div className="p-3 text-gray-500 text-center">No users found</div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Submit Buttons */}
+            <div className="flex gap-3 pt-4">
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={selectedUsers.length === 0}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Start Chat
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
   )
 }

@@ -160,11 +160,12 @@ def join_lobby(request):
     
     lobby = get_object_or_404(Lobby, id=lobby_id, is_active=True)
     
-    # Check if user is already in the lobby
+    # Check if user is already in the lobby — treat as idempotent success
     if LobbyMember.objects.filter(lobby=lobby, user=request.user).exists():
+        # Return current lobby data instead of an error so clients can proceed idempotently
         return Response(
-            {'error': 'You are already in this lobby'}, 
-            status=status.HTTP_400_BAD_REQUEST
+            LobbySerializer(lobby).data,
+            status=status.HTTP_200_OK
         )
     
     # Check password for private lobbies
@@ -217,7 +218,7 @@ def leave_lobby(request, lobby_id):
                 lobby.host = remaining_members.first().user
                 lobby.save()
             else:
-                lobby.is_active = False
+                # lobby.is_active = False
                 lobby.save()
         
         return Response({'message': 'Left lobby successfully'})
@@ -280,7 +281,7 @@ def quick_join(request):
         defaults={'x': 400.0, 'y': 300.0}
     )
     
-    return Response(LobbySerializer(lobby).data)
+    return Response({'lobby': LobbySerializer(lobby).data})
 
 
 @api_view(['GET'])
@@ -349,3 +350,19 @@ def remove_saved_lobby(request, lobby_id):
             {'error': 'Lobby not in saved list'}, 
             status=status.HTTP_404_NOT_FOUND
         )
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def lobby_stats(request):
+    """Get lobby statistics"""
+    stats = {
+        'total_lobbies': Lobby.objects.filter(is_active=True).count(),
+        'total_players': LobbyMember.objects.filter(is_online=True).count(),
+        'public_lobbies': Lobby.objects.filter(is_active=True, is_private=False).count(),
+        'private_lobbies': Lobby.objects.filter(is_active=True, is_private=True).count(),
+        'user_lobbies': LobbyMember.objects.filter(user=request.user, lobby__is_active=True).count(),
+        'user_saved_lobbies': SavedLobby.objects.filter(user=request.user).count(),
+    }
+    
+    return Response(stats)

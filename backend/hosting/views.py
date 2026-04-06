@@ -8,11 +8,12 @@ from django.utils import timezone
 from django.db.models import Q, Sum, Count
 from django.core.paginator import Paginator
 from django.core.exceptions import ValidationError
-from rest_framework import viewsets, status, permissions
+from rest_framework import viewsets, status, permissions, generics, filters
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.exceptions import ValidationError as DRFValidationError
+from rest_framework.pagination import PageNumberPagination
 from datetime import datetime, timedelta
 import json
 import uuid
@@ -28,6 +29,14 @@ from .serializers import (
     SSLCertificateSerializer, WebsiteAnalyticsSerializer, BackupJobSerializer,
     InvoiceSerializer, ActivityLogSerializer
 )
+from .tasks import provision_database, compute_storage_for_user
+
+
+# Standard pagination for hosting endpoints
+class StandardResultsSetPagination(PageNumberPagination):
+    page_size = 20
+    page_size_query_param = 'page_size'
+    max_page_size = 100
 
 
 class SubscriptionPlanViewSet(viewsets.ReadOnlyModelViewSet):
@@ -247,7 +256,9 @@ class WebsiteViewSet(viewsets.ModelViewSet):
                 raise DRFValidationError('Invalid database ID or database does not belong to you.')
         
         website = serializer.save(user=self.request.user, domain=domain, database=database)
-        
+        website.last_deployment = timezone.now()
+        website.save()
+
         # Log activity
         ActivityLog.objects.create(
             user=self.request.user,
@@ -257,6 +268,8 @@ class WebsiteViewSet(viewsets.ModelViewSet):
             user_agent=self.request.META.get('HTTP_USER_AGENT', ''),
             metadata={'website_id': str(website.id)}
         )
+        
+        compute_storage_for_user.delay(self.request.user.id)
 
     def perform_update(self, serializer):
         """Log website updates"""
@@ -271,7 +284,9 @@ class WebsiteViewSet(viewsets.ModelViewSet):
         }
         
         updated_instance = serializer.save()
-        
+        updated_instance.last_deployment = timezone.now()
+        updated_instance.save()
+
         # Check what changed
         changes = []
         if old_data['name'] != updated_instance.name:
@@ -301,6 +316,7 @@ class WebsiteViewSet(viewsets.ModelViewSet):
                     'old_data': old_data
                 }
             )
+        compute_storage_for_user.delay(self.request.user.id)
 
     @action(detail=True, methods=['post'])
     def deploy(self, request, pk=None):
@@ -317,9 +333,12 @@ class WebsiteViewSet(viewsets.ModelViewSet):
         
         # Here you would trigger the actual deployment process
         # For now, we'll simulate it
-        deployment.status = 'building'
+        deployment.status = 'success'
         deployment.save()
-        
+
+        website.last_deployment = timezone.now()
+        website.save()
+
         # Log activity
         ActivityLog.objects.create(
             user=request.user,
@@ -329,6 +348,7 @@ class WebsiteViewSet(viewsets.ModelViewSet):
             user_agent=request.META.get('HTTP_USER_AGENT', ''),
             metadata={'website_id': str(website.id), 'deployment_id': str(deployment.id)}
         )
+        compute_storage_for_user.delay(self.request.user.id)
         
         return Response({
             'deployment_id': deployment.id,
@@ -476,8 +496,38 @@ class WebsiteViewSet(viewsets.ModelViewSet):
 
     def perform_destroy(self, instance):
         """Custom destroy method - domains are kept available for reuse"""
+        import os
+        import shutil
+        
         # Store domain reference before deletion for logging
         domain_name = instance.domain.name if instance.domain else None
+        website_name = instance.name
+        
+        # Get subdomain to determine folder path
+        if instance.domain and instance.domain.name:
+            subdomain = instance.domain.name.split('.')[0]
+        else:
+            subdomain = instance.name
+        
+        # Delete the website folder if it exists
+        website_dir = f"/srv/hosting/{subdomain}"
+        if os.path.exists(website_dir):
+            try:
+                shutil.rmtree(website_dir)
+            except Exception as e:
+                # Log error but don't prevent deletion
+                ActivityLog.objects.create(
+                    user=self.request.user,
+                    action='website_folder_deletion_failed',
+                    description=f'Failed to delete website folder for {website_name}: {str(e)}',
+                    ip_address=self.request.META.get('REMOTE_ADDR'),
+                    user_agent=self.request.META.get('HTTP_USER_AGENT', ''),
+                    metadata={
+                        'website_name': website_name,
+                        'folder_path': website_dir,
+                        'error': str(e)
+                    }
+                )
         
         # Delete the website (domain remains available for reuse)
         instance.delete()
@@ -486,14 +536,343 @@ class WebsiteViewSet(viewsets.ModelViewSet):
         ActivityLog.objects.create(
             user=self.request.user,
             action='website_deleted',
-            description=f'Deleted website: {instance.name}' + (f' (domain: {domain_name})' if domain_name else ''),
+            description=f'Deleted website: {website_name}' + (f' (domain: {domain_name})' if domain_name else ''),
             ip_address=self.request.META.get('REMOTE_ADDR'),
             user_agent=self.request.META.get('HTTP_USER_AGENT', ''),
             metadata={
-                'website_name': instance.name,
+                'website_name': website_name,
                 'domain_name': domain_name
             }
         )
+        compute_storage_for_user.delay(self.request.user.id)
+
+    @action(detail=True, methods=['post'])
+    def upload_files(self, request, pk=None):
+        """Upload files to website directory"""
+        import os
+        import shutil
+        
+        website = self.get_object()
+        
+        # Get subdomain from website domain
+        if not website.domain:
+            return Response({'error': 'Website has no domain'}, status=400)
+        
+        subdomain = website.domain.name.split('.')[0]  # Extract subdomain
+        website_dir = f"/srv/hosting/{subdomain}"
+        
+        # Create directory if it doesn't exist
+        os.makedirs(website_dir, exist_ok=True)
+        
+        # Process uploaded files
+        uploaded_files = request.FILES.getlist('files')
+        saved_files = []
+        
+        for file in uploaded_files:
+            print(f"Upload debug: Processing file '{file.name}' (size: {file.size} bytes)")
+            
+            # Handle folder uploads - file.name includes relative path
+            if '/' in file.name:
+                # This is a file from a folder upload
+                file_path = os.path.join(website_dir, file.name)
+                # Create directory structure if it doesn't exist
+                file_dir = os.path.dirname(file_path)
+                os.makedirs(file_dir, exist_ok=True)
+                print(f"Upload debug: Created directory structure for '{file.name}' -> '{file_path}'")
+            else:
+                # Regular file upload
+                file_path = os.path.join(website_dir, file.name)
+                print(f"Upload debug: Regular file upload '{file.name}' -> '{file_path}'")
+            
+            # Save file to disk
+            with open(file_path, 'wb+') as destination:
+                for chunk in file.chunks():
+                    destination.write(chunk)
+            
+            saved_files.append(file.name)
+        self.write_env_file_from_dict(website.environment_variables or {}, website_dir)
+
+        website.status = 'active'
+        website.save()
+
+        compute_storage_for_user.delay(self.request.user.id)
+        
+        return Response({
+            'message': f'Uploaded {len(saved_files)} files',
+            'files': saved_files,
+            'website_url': f'http://{website.domain.name}'
+        })
+
+    @action(detail=True, methods=['post'])  
+    def upload_zip(self, request, pk=None):
+        """Upload and extract ZIP file to website directory"""
+        import os
+        import zipfile
+        import tempfile
+        import shutil
+        
+        website = self.get_object()
+        
+        if not website.domain:
+            return Response({'error': 'Website has no domain'}, status=400)
+        
+        subdomain = website.domain.name.split('.')[0]
+        website_dir = f"/srv/hosting/{subdomain}"
+        
+        # Create website directory if it doesn't exist
+        os.makedirs(website_dir, exist_ok=True)
+        
+        # Get uploaded ZIP file
+        zip_file = request.FILES.get('zip_file')
+        if not zip_file:
+            print(f"ZIP upload debug: Available files in request: {list(request.FILES.keys())}")
+            return Response({'error': 'No ZIP file provided'}, status=400)
+        
+        print(f"ZIP upload debug: Received file '{zip_file.name}' with size {zip_file.size} bytes")
+        
+        # Extract ZIP to website directory
+        try:
+            # Preserve .env file if it exists (contains database credentials)
+            env_file_path = os.path.join(website_dir, '.env')
+            env_content = None
+            if os.path.exists(env_file_path):
+                with open(env_file_path, 'r') as f:
+                    env_content = f.read()
+                print("ZIP upload debug: Preserved .env file")
+            
+            # Clear existing files in website directory (except .env which we'll restore)
+            if os.path.exists(website_dir):
+                for item in os.listdir(website_dir):
+                    item_path = os.path.join(website_dir, item)
+                    try:
+                        if os.path.isdir(item_path):
+                            shutil.rmtree(item_path)
+                        else:
+                            # Skip .env file - we'll restore it later
+                            if item != '.env':
+                                os.remove(item_path)
+                    except Exception as e:
+                        print(f"ZIP upload debug: Warning - could not delete {item_path}: {e}")
+            
+            with tempfile.TemporaryDirectory() as temp_dir:
+                zip_path = os.path.join(temp_dir, 'upload.zip')
+                extract_dir = os.path.join(temp_dir, 'extracted')
+                
+                # Save ZIP file temporarily
+                with open(zip_path, 'wb+') as destination:
+                    for chunk in zip_file.chunks():
+                        destination.write(chunk)
+                
+                # Extract ZIP file to temporary directory
+                with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                    zip_ref.extractall(extract_dir)
+                
+                # Move contents from extracted directory to website directory
+                # If there's only one folder in the extracted directory, move its contents
+                extracted_items = os.listdir(extract_dir)
+                if len(extracted_items) == 1 and os.path.isdir(os.path.join(extract_dir, extracted_items[0])):
+                    # Single folder - move its contents
+                    source_dir = os.path.join(extract_dir, extracted_items[0])
+                    for item in os.listdir(source_dir):
+                        source_path = os.path.join(source_dir, item)
+                        dest_path = os.path.join(website_dir, item)
+                        if os.path.isdir(source_path):
+                            shutil.copytree(source_path, dest_path, dirs_exist_ok=True)
+                        else:
+                            shutil.copy2(source_path, dest_path)
+                else:
+                    # Multiple items or files - move them directly
+                    for item in extracted_items:
+                        source_path = os.path.join(extract_dir, item)
+                        dest_path = os.path.join(website_dir, item)
+                        if os.path.isdir(source_path):
+                            shutil.copytree(source_path, dest_path, dirs_exist_ok=True)
+                        else:
+                            shutil.copy2(source_path, dest_path)
+                
+                # Restore .env file if it was preserved (only if not in the new ZIP)
+                if env_content is not None:
+                    new_env_path = os.path.join(website_dir, '.env')
+                    # Only restore if .env wasn't included in the new deployment
+                    if not os.path.exists(new_env_path):
+                        with open(new_env_path, 'w') as f:
+                            f.write(env_content)
+                        print("ZIP upload debug: Restored preserved .env file")
+                
+                website.status = 'active'
+                website.save()
+                    
+            self.write_env_file_from_dict(website.environment_variables or {}, website_dir)
+
+            compute_storage_for_user.delay(self.request.user.id)
+
+            return Response({
+                'message': 'ZIP file extracted successfully',
+                'website_url': f'http://{website.domain.name}'
+            })
+            
+        except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            print(f"ZIP upload error: {str(e)}")
+            print(f"Traceback: {error_details}")
+            return Response({'error': f'Failed to extract ZIP: {str(e)}'}, status=400)
+    @action(detail=True, methods=['get'])
+    def list_files(self, request, pk=None):
+        """List files and folders in the website directory"""
+        import os
+        import datetime
+
+        website = self.get_object()
+        if not website.domain:
+            return Response({'error': 'Website has no domain'}, status=400)
+
+        subdomain = website.domain.name.split('.')[0]
+        website_dir = f"/srv/hosting/{subdomain}"
+
+        if not os.path.exists(website_dir):
+            return Response({'files': [], 'folders': []})
+
+        files = []
+        folders = []
+        
+        for item_name in os.listdir(website_dir):
+            item_path = os.path.join(website_dir, item_name)
+            
+            if os.path.isfile(item_path):
+                statinfo = os.stat(item_path)
+                try:
+                    modified = timezone.make_aware(datetime.datetime.fromtimestamp(statinfo.st_mtime)).isoformat()
+                except Exception:
+                    modified = None
+                files.append({
+                    'name': item_name,
+                    'size': statinfo.st_size,
+                    'modified': modified,
+                    'type': 'file'
+                })
+            elif os.path.isdir(item_path):
+                statinfo = os.stat(item_path)
+                try:
+                    modified = timezone.make_aware(datetime.datetime.fromtimestamp(statinfo.st_mtime)).isoformat()
+                    # Count files in folder
+                    file_count = len([f for f in os.listdir(item_path) if os.path.isfile(os.path.join(item_path, f))])
+                except Exception:
+                    modified = None
+                    file_count = 0
+                folders.append({
+                    'name': item_name,
+                    'modified': modified,
+                    'type': 'folder',
+                    'file_count': file_count
+                })
+
+        return Response({'files': files, 'folders': folders})
+
+    @action(detail=True, methods=['post'])
+    def delete_file(self, request, pk=None):
+        """Delete a file or folder from the website directory"""
+        import os
+        import shutil
+
+        website = self.get_object()
+        if not website.domain:
+            return Response({'error': 'Website has no domain'}, status=400)
+
+        filename = request.data.get('filename')
+        if not filename:
+            return Response({'error': 'filename is required'}, status=400)
+
+        subdomain = website.domain.name.split('.')[0]
+        website_dir = f"/srv/hosting/{subdomain}"
+        file_path = os.path.normpath(os.path.join(website_dir, filename))
+
+        # Prevent path traversal
+        if not file_path.startswith(os.path.abspath(website_dir)):
+            return Response({'error': 'invalid filename'}, status=400)
+
+        if os.path.exists(file_path):
+            try:
+                if os.path.isfile(file_path):
+                    os.remove(file_path)
+                    return Response({'message': 'File deleted'})
+                elif os.path.isdir(file_path):
+                    shutil.rmtree(file_path)
+                    return Response({'message': 'Folder deleted'})
+            except Exception as e:
+                return Response({'error': str(e)}, status=400)
+        compute_storage_for_user.delay(self.request.user.id)
+
+        return Response({'error': 'file not found'}, status=404)
+
+    @action(detail=True, methods=['get'])
+    def download_file(self, request, pk=None):
+        """Download a specific file or folder from the website directory"""
+        import os
+        import zipfile
+        import tempfile
+        from django.http import FileResponse
+
+        website = self.get_object()
+        if not website.domain:
+            return Response({'error': 'Website has no domain'}, status=400)
+
+        filename = request.query_params.get('filename')
+        if not filename:
+            return Response({'error': 'filename is required'}, status=400)
+
+        subdomain = website.domain.name.split('.')[0]
+        website_dir = f"/srv/hosting/{subdomain}"
+        file_path = os.path.normpath(os.path.join(website_dir, filename))
+
+        # Prevent path traversal
+        if not file_path.startswith(os.path.abspath(website_dir)):
+            return Response({'error': 'invalid filename'}, status=400)
+
+        if os.path.exists(file_path):
+            try:
+                if os.path.isfile(file_path):
+                    return FileResponse(open(file_path, 'rb'), as_attachment=True, filename=os.path.basename(file_path))
+                elif os.path.isdir(file_path):
+                    # Create a ZIP file for folders
+                    temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
+                    with zipfile.ZipFile(temp_zip.name, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                        for root, dirs, files in os.walk(file_path):
+                            for file in files:
+                                file_path_full = os.path.join(root, file)
+                                # Calculate relative path from the folder being zipped
+                                arcname = os.path.relpath(file_path_full, file_path)
+                                zipf.write(file_path_full, arcname)
+                    
+                    return FileResponse(open(temp_zip.name, 'rb'), as_attachment=True, filename=f"{os.path.basename(file_path)}.zip")
+            except Exception as e:
+                return Response({'error': str(e)}, status=400)
+
+        return Response({'error': 'file not found'}, status=404)
+
+    def write_env_file_from_dict(self, env_dict, target_dir):
+        """
+        env_dict: dict of {KEY: value}
+        target_dir: directory where .env will be created (string)
+        """
+        import os
+        if not env_dict:
+            return
+
+        tmp_path = os.path.join(target_dir, ".env.tmp")
+        final_path = os.path.join(target_dir, ".env")
+
+        lines = []
+        for key, val in env_dict.items():
+            if val is None:
+                continue
+            s = str(val)
+            lines.append(f"{key}={s}")
+
+        # write atomically
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+        os.replace(tmp_path, final_path)
 
 
 class DatabaseViewSet(viewsets.ModelViewSet):
@@ -516,37 +895,42 @@ class DatabaseViewSet(viewsets.ModelViewSet):
                 f'Database limit exceeded. Upgrade your plan to create more databases.'
             )
         
-        # Use provided credentials from frontend, or generate if not provided
-        username = serializer.validated_data.get('username', f"db_{uuid.uuid4().hex[:8]}")
-        password = serializer.validated_data.get('password', uuid.uuid4().hex)
-        
-        # Set port based on database type
+        # Use provided credentials from frontend, or leave blank to generate in task
+        username = serializer.validated_data.get('username', '')
+        password = serializer.validated_data.get('password', '')
+
+        # Set port based on database type (postgres uses 5433 per request)
         db_type = serializer.validated_data.get('db_type', 'mysql')
-        port = 5432 if db_type == 'postgresql' else 3306
-        
-        # Generate unique host based on user and database name
-        db_name = serializer.validated_data.get('name', 'database')
-        user_id_short = str(self.request.user.id)[:8] if hasattr(self.request.user, 'id') else 'user'
-        random_suffix = uuid.uuid4().hex[:4]
-        host = f"{db_name}-{user_id_short}-{random_suffix}.db.ufazien.com"
-        
+        port = 5433 if db_type == 'postgresql' else 3306
+
+        # host name is mysql.ufazien.com or postgres.ufazien.com
+        host = "mysql.ufazien.com" if db_type == 'mysql' else "postgres.ufazien.com"
+
+        # Create DB record in 'creating' state and enqueue provisioning
         database = serializer.save(
             user=self.request.user,
             username=username,
             password=password,
             port=port,
-            host=host
+            host=host,
+            status='creating',
+            error_message='',
+            connection_info={}
         )
-        
-        # Log activity
+
+        # Log provisioning start
         ActivityLog.objects.create(
             user=self.request.user,
-            action='database_created',
-            description=f'Created database: {database.name}',
+            action='database_provisioning_started',
+            description=f'Started provisioning database: {database.name}',
             ip_address=self.request.META.get('REMOTE_ADDR'),
             user_agent=self.request.META.get('HTTP_USER_AGENT', ''),
             metadata={'database_id': str(database.id)}
         )
+
+        # Enqueue background task to provision the database
+        provision_database.delay(str(database.id))
+        compute_storage_for_user.delay(self.request.user.id)
 
     def perform_update(self, serializer):
         # Log password changes specifically
@@ -626,24 +1010,31 @@ class DatabaseViewSet(viewsets.ModelViewSet):
         # Check if database is being used by any websites
         websites_using_database = Website.objects.filter(database=instance)
         website_names = [website.name for website in websites_using_database]
-        
-        # Delete the database
-        instance.delete()
-        
-        # Log database deletion activity
+        # If database is in use, prevent deletion
+        if website_names:
+            raise DRFValidationError(f'Cannot delete database; it is used by websites: {", ".join(website_names)}')
+
+        # Mark as deleting and enqueue remote deletion task
+        instance.status = 'deleting'
+        instance.save()
+
         ActivityLog.objects.create(
             user=self.request.user,
-            action='database_deleted',
-            description=f'Deleted {database_type} database: {database_name}' + (f' (used by websites: {", ".join(website_names)})' if website_names else ''),
+            action='database_deletion_scheduled',
+            description=f'Scheduled deletion for {database_type} database: {database_name}',
             ip_address=self.request.META.get('REMOTE_ADDR'),
             user_agent=self.request.META.get('HTTP_USER_AGENT', ''),
             metadata={
                 'database_id': database_id,
                 'database_name': database_name,
-                'database_type': database_type,
-                'websites_affected': website_names
+                'database_type': database_type
             }
         )
+
+        # Enqueue background task to delete remote DB and then local record
+        from .tasks import delete_provisioned_database
+        delete_provisioned_database.delay(str(instance.id))
+        compute_storage_for_user.delay(self.request.user.id)
 
 
 class DomainViewSet(viewsets.ModelViewSet):
@@ -985,6 +1376,7 @@ class ActivityLogViewSet(viewsets.ReadOnlyModelViewSet):
     """
     serializer_class = ActivityLogSerializer
     permission_classes = [permissions.IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
         return ActivityLog.objects.filter(user=self.request.user).order_by('-created_at')
@@ -996,6 +1388,7 @@ class DeploymentViewSet(viewsets.ReadOnlyModelViewSet):
     """
     serializer_class = DeploymentSerializer
     permission_classes = [permissions.IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
         queryset = Deployment.objects.filter(website__user=self.request.user).order_by('-started_at')
@@ -1073,6 +1466,39 @@ class DashboardAPIView(APIView):
             'recent_activity': ActivityLogSerializer(recent_activity, many=True).data,
             'recent_deployments': DeploymentSerializer(recent_deployments, many=True).data,
         })
+
+
+class PublicWebsiteList(generics.ListAPIView):
+    """Public listing of active websites for main application (no auth)."""
+    serializer_class = None
+    permission_classes = [permissions.AllowAny]
+    pagination_class = StandardResultsSetPagination
+    filter_backends = [filters.OrderingFilter]
+    ordering_fields = ['total_visits', 'created_at', 'name']
+    ordering = ['-total_visits']  # Default ordering by total_visits descending
+
+    def get_serializer_class(self):
+        from .serializers import PublicWebsiteSerializer
+        return PublicWebsiteSerializer
+
+    def get_queryset(self):
+        # Base: only active websites
+        qs = Website.objects.filter(status='active').select_related('domain', 'user')
+
+        # Support ?search= query across name, domain, description and creator fields
+        q = self.request.query_params.get('search', '')
+        if q:
+            q = q.strip()
+            qs = qs.filter(
+                Q(name__icontains=q) |
+                Q(domain__name__icontains=q) |
+                Q(description__icontains=q) |
+                Q(user__first_name__icontains=q) |
+                Q(user__last_name__icontains=q) |
+                Q(user__username__icontains=q)
+            )
+
+        return qs
 
 
 class AnalyticsAPIView(APIView):
