@@ -6,7 +6,7 @@ import { Button } from "../../components/ui/button"
 import { Input } from "../../components/ui/input"
 import { Label } from "../../components/ui/label"
 import { Checkbox } from "../../components/ui/checkbox"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, useSearchParams } from "react-router-dom"
 
 const API_URL = import.meta.env.VITE_API_URL
 const API_LOGIN = `${API_URL}/api/auth/login/`
@@ -23,6 +23,7 @@ export default function SignInForm() {
   const [isLoading, setIsLoading] = useState(false)
   const [success, setSuccess] = useState(false)
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
 
   const validateForm = () => {
     const newErrors = {}
@@ -78,7 +79,10 @@ export default function SignInForm() {
       if (data.access && data.refresh) {
         localStorage.setItem("access", data.access)
         localStorage.setItem("refresh", data.refresh)
-        navigate("/dashboard")
+        
+        // Redirect to the original page or dashboard
+        const redirectPath = searchParams.get("redirect") || "/dashboard"
+        navigate(redirectPath)
       }
       // Optionally store user info
       // localStorage.setItem("user", JSON.stringify(data.user))

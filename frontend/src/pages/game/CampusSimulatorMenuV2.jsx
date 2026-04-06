@@ -10,6 +10,9 @@ const CampusSimulatorMenu = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showCreateLobby, setShowCreateLobby] = useState(false);
   const [showQuickJoin, setShowQuickJoin] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [passwordModalLobbyId, setPasswordModalLobbyId] = useState(null);
+  const [passwordInput, setPasswordInput] = useState('');
   const [filterOpen, setFilterOpen] = useState(true);
   const [passwordFilter, setPasswordFilter] = useState('all'); // 'all', 'public', 'private'
   const [playerCountFilter, setPlayerCountFilter] = useState('all');
@@ -139,17 +142,50 @@ const CampusSimulatorMenu = () => {
   };
 
   /**
+   * Handle click on join button - check if password is needed
+   */
+  const handleJoinButtonClick = (lobby) => {
+    if (lobby.is_private) {
+      // Show password modal for password-protected lobbies
+      setPasswordModalLobbyId(lobby.id);
+      setPasswordInput('');
+      setShowPasswordModal(true);
+    } else {
+      // Join directly if no password required
+      handleJoinLobby(lobby.id);
+    }
+  };
+
+  /**
    * Join a specific lobby
    */
   const handleJoinLobby = async (lobbyId, password = '') => {
     setIsLoading(true);
     try {
       await campusApi.joinLobby(lobbyId, password);
+      // Close password modal if open
+      setShowPasswordModal(false);
+      setPasswordInput('');
+      setPasswordModalLobbyId(null);
       navigate(`/campus-simulator/${lobbyId}`);
     } catch (err) {
       setError(err.message || 'Failed to join lobby');
+      // Keep password modal open on error so user can retry
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  /**
+   * Handle password modal submit
+   */
+  const handlePasswordSubmit = () => {
+    if (!passwordInput.trim()) {
+      setError('Please enter a password');
+      return;
+    }
+    if (passwordModalLobbyId) {
+      handleJoinLobby(passwordModalLobbyId, passwordInput);
     }
   };
 
@@ -165,7 +201,9 @@ const CampusSimulatorMenu = () => {
       setIsLoading(true);
       try {
         const response = await campusApi.quickJoinLobby(20, true);
-        navigate(`/campus-simulator/${response.lobby.id}`);
+        // Handle both response formats: {lobby: {...}} or direct lobby object
+        const lobby = response.lobby || response;
+        navigate(`/campus-simulator/${lobby.id}`);
       } catch (err) {
         setError(err.message || 'No available lobbies found');
       } finally {
@@ -300,7 +338,7 @@ const CampusSimulatorMenu = () => {
         </div>
 
         <button
-          onClick={() => handleJoinLobby(lobby.id)}
+          onClick={() => handleJoinButtonClick(lobby)}
           disabled={isFull || isLoading}
           className={`w-full py-3 px-4 rounded-lg font-medium transition-all ${
             isFull
@@ -744,6 +782,69 @@ const CampusSimulatorMenu = () => {
                   className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isLoading ? 'Joining...' : 'Join Now'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Password Modal for Password-Protected Lobbies */}
+        {showPasswordModal && passwordModalLobbyId && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-gray-800 rounded-xl border border-gray-700 p-6 w-full max-w-md">
+              <h2 className="text-2xl font-bold text-white mb-2">Password Required</h2>
+              <p className="text-gray-400 text-sm mb-6">
+                This lobby is password-protected. Please enter the password to join.
+              </p>
+              
+              {error && (
+                <div className="mb-4 p-3 bg-red-900/50 border border-red-500/50 rounded-lg text-red-200 text-sm">
+                  {error}
+                </div>
+              )}
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Password *
+                  </label>
+                  <input
+                    type="password"
+                    value={passwordInput}
+                    onChange={(e) => {
+                      setPasswordInput(e.target.value);
+                      setError(null); // Clear error when user types
+                    }}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') {
+                        handlePasswordSubmit();
+                      }
+                    }}
+                    placeholder="Enter lobby password..."
+                    autoFocus
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:border-blue-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => {
+                    setShowPasswordModal(false);
+                    setPasswordModalLobbyId(null);
+                    setPasswordInput('');
+                    setError(null);
+                  }}
+                  className="flex-1 px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg font-medium transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handlePasswordSubmit}
+                  disabled={!passwordInput.trim() || isLoading}
+                  className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isLoading ? 'Joining...' : 'Join Lobby'}
                 </button>
               </div>
             </div>

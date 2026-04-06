@@ -26,7 +26,7 @@ class WebsiteAdmin(admin.ModelAdmin):
     list_display = ['name', 'user', 'website_type', 'status', 'storage_used_mb', 'total_visits', 'created_at']
     list_filter = ['website_type', 'status', 'created_at']
     search_fields = ['name', 'user__username', 'description']
-    readonly_fields = ['id', 'storage_used_mb', 'total_visits', 'last_deployment', 'created_at', 'updated_at']
+    readonly_fields = ['id', 'storage_used_mb', 'last_deployment', 'created_at', 'updated_at']
     
     fieldsets = (
         ('Basic Information', {

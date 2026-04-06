@@ -23,14 +23,19 @@ class LobbyConsumer(AsyncWebsocketConsumer):
         self.lobby_group_name = f'lobby_{self.lobby_id}'
         self.user = self.scope["user"]
         
+        print(f"WebSocket connection attempt - Lobby: {self.lobby_id}, User: {self.user}")
+        
         # Check if user is authenticated
         if not self.user.is_authenticated:
-            await self.close()
+            print(f"User not authenticated: {self.user}")
+            await self.close(code=4001)
             return
+            
         # Check if lobby exists and user is a member
         lobby_exists = await self.check_lobby_membership()
+        print(f"User {self.user.username} is member of lobby {self.lobby_id}: {lobby_exists}")
         if not lobby_exists:
-            await self.close()
+            await self.close(code=4003)
             return
 
         # Join lobby group
@@ -40,6 +45,7 @@ class LobbyConsumer(AsyncWebsocketConsumer):
         )
 
         await self.accept()
+        print(f"WebSocket connected for user {self.user.username} to lobby {self.lobby_id}")
 
         # Send initial lobby state
         await self.send_lobby_state()
@@ -120,6 +126,7 @@ class LobbyConsumer(AsyncWebsocketConsumer):
                 'type': 'position_update',
                 'user_id': self.user.id,
                 'username': self.user.username,
+                'full_name': self.user.get_full_name() or self.user.username,  # Fallback to username if full_name is empty
                 'position': position_data,
             }
         )
@@ -142,7 +149,7 @@ class LobbyConsumer(AsyncWebsocketConsumer):
                 'user_id': self.user.id,
                 'username': self.user.username,
                 'message': message,
-                'timestamp': chat_message.timestamp.isoformat(),
+                'timestamp': chat_message.created_at.isoformat(),
             }
         )
 
@@ -199,6 +206,7 @@ class LobbyConsumer(AsyncWebsocketConsumer):
                 'type': 'position_update',
                 'user_id': event['user_id'],
                 'username': event['username'],
+                'full_name': event.get('full_name', event['username']),  # Include full_name, fallback to username
                 'position': event['position'],
             }))
 
@@ -320,6 +328,7 @@ class LobbyConsumer(AsyncWebsocketConsumer):
             {
                 'user_id': position.user.id,
                 'username': position.user.username,
+                'full_name': position.user.get_full_name() or position.user.username,  # Fallback to username if full_name is empty
                 # Send only the fields our frontend expects (x, y, direction, is_moving)
                 'x': position.x,
                 'y': position.y,

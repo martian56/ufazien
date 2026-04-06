@@ -7,16 +7,19 @@ import { useNavigate, useParams } from "react-router-dom"
 import { MessageCircle, Users, Settings, LogOut, Mic, MicOff, Video, VideoOff } from "lucide-react"
 import { useCampusSimulator } from '../../hooks/useCampusSimulator'
 
-// Enhanced user data with backend integration
-const currentUser = {
-  id: 1,
-  name: "Sarah Johnson",
-  avatar: "👩‍🎓",
-  year: "3rd Year",
-  major: "Computer Science",
-  color: "#4F46E5",
-  level: 15,
-  achievements: ["Explorer", "Study Buddy", "Campus Guide"],
+// User data will be fetched from backend
+const getCurrentUser = () => {
+  // This will be replaced with actual user data from the backend
+  return {
+    id: null,
+    name: "Loading...",
+    avatar: "👤",
+    year: "Student",
+    major: "UFAZ",
+    color: "#4F46E5",
+    level: 1,
+    achievements: [],
+  }
 }
 
 // Key controls for player movement
@@ -269,10 +272,10 @@ function PlayerAvatar({ position, userData, isCurrentUser = false }) {
         <meshStandardMaterial color="#FDBCB4" />
       </mesh>
 
-      {/* Username Label */}
+      {/* Full Name Label */}
       <Html position={[0, 2, 0]} center>
         <div className="bg-black bg-opacity-75 text-white px-2 py-1 rounded text-xs whitespace-nowrap pointer-events-none">
-          {userData.username || userData.name}
+          {userData.full_name || userData.username || userData.name}
           {userData.activity && (
             <div className="text-green-400 text-xs">{userData.activity}</div>
           )}
@@ -341,26 +344,28 @@ function Player({ campusHook }) {
     camera.position.z = MathUtils.clamp(camera.position.z, -50, 50)
     camera.position.y = Math.max(camera.position.y, 1.5)
 
-    // Update backend position (convert 3D to 2D coordinates)
-    if (direction.current.length() > 0 || Math.abs(velocity.current.y) > 0.1) {
-      const backendCoords = worldTo2D(camera.position.x, camera.position.z)
-      
-      // Determine direction based on movement
-      let playerDirection = 'down'
+    // Always update backend position (even when not moving, to send final position on stop)
+    const backendCoords = worldTo2D(camera.position.x, camera.position.z)
+    const isMoving = direction.current.length() > 0
+    
+    // Determine direction based on movement
+    let playerDirection = 'down'
+    if (isMoving) {
       if (Math.abs(direction.current.x) > Math.abs(direction.current.z)) {
         playerDirection = direction.current.x > 0 ? 'right' : 'left'
       } else if (Math.abs(direction.current.z) > 0.1) {
         playerDirection = direction.current.z > 0 ? 'down' : 'up'
       }
-
-      updatePosition({
-        x: backendCoords.x,
-        y: backendCoords.y,
-        direction: playerDirection,
-        is_moving: direction.current.length() > 0,
-        current_room: null // TODO: Detect current room
-      })
     }
+
+    // Update position every frame - the hook will throttle and handle sending updates
+    updatePosition({
+      x: backendCoords.x,
+      y: backendCoords.y,
+      direction: playerDirection,
+      is_moving: isMoving,
+      current_room: null // TODO: Detect current room
+    })
   })
 
   return null
@@ -447,6 +452,7 @@ const CampusWithBackend = () => {
   const lobbyId = (rawLobbyId === 'null' || rawLobbyId === 'undefined') ? null : rawLobbyId;
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [currentUser, setCurrentUser] = useState(getCurrentUser())
 
   // Initialize campus simulation hook
   const campusHook = useCampusSimulator(lobbyId)
@@ -462,6 +468,40 @@ const CampusWithBackend = () => {
     coordsTo3D
   } = campusHook
 
+  // Fetch current user data
+  useEffect(() => {
+    const fetchCurrentUser = async () => {
+      try {
+        const token = localStorage.getItem('access')
+        if (token) {
+          const response = await fetch('/api/auth/me/', {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          })
+          if (response.ok) {
+            const userData = await response.json()
+            setCurrentUser({
+              id: userData.id,
+              name: userData.full_name || userData.username,
+              avatar: "👤",
+              year: userData.year || "Student",
+              major: userData.major || "UFAZ",
+              color: `hsl(${userData.id * 137.5 % 360}, 70%, 60%)`,
+              level: 1,
+              achievements: [],
+            })
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch user data:', error)
+      }
+    }
+
+    fetchCurrentUser()
+  }, [])
+
   // Handle disconnect and navigation
   const handleDisconnect = () => {
     disconnect()
@@ -469,21 +509,28 @@ const CampusWithBackend = () => {
   }
 
   // Convert backend player positions to 3D world coordinates
+  // Filter out current user's position since they control their own camera (first-person view)
   const playerAvatars = useMemo(() => {
     const avatars = []
+    const currentUserId = currentUser?.id
     playerPositions.forEach((position, userId) => {
+      // Skip current user's position - they control their own camera, not a separate avatar
+      if (userId === currentUserId) {
+        return
+      }
       const worldPos = coordsTo3D(position.x, position.y)
       avatars.push({
         id: userId,
         position: { x: worldPos.x, z: worldPos.z },
         userData: {
           username: position.username,
+          full_name: position.full_name || position.username,  // Use full_name, fallback to username
           color: `hsl(${userId * 137.5 % 360}, 70%, 60%)` // Generate color from user ID
         }
       })
     })
     return avatars
-  }, [playerPositions, coordsTo3D])
+  }, [playerPositions, coordsTo3D, currentUser?.id])
 
   if (isLoading) {
     return (

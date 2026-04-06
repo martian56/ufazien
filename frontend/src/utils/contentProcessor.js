@@ -117,7 +117,7 @@ export const processblogContent = (htmlContent) => {
   // Enhance lists
   content = content.replace(/<ul([^>]*)>/g, '<ul class="list-disc list-inside my-4 space-y-2 pl-4"$1>')
   content = content.replace(/<ol([^>]*)>/g, '<ol class="list-decimal list-inside my-4 space-y-2 pl-4"$1>')
-  content = content.replace(/<li([^>]*)>/g, '<li class="text-gray-700 dark:text-gray-300"$1>')
+  content = content.replace(/<li([^>]*)>/g, '<li$1>')
 
   // Enhance tables
   content = content.replace(/<table([^>]*)>/g, '<div class="table-wrapper overflow-x-auto my-6"><table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg"$1>')

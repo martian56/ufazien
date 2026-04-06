@@ -9,6 +9,7 @@ import { PenTool, Search, Heart, MessageCircle,Share2,
 } from "lucide-react"
 
 import SideBar from "../../../components/ui/SideBar"
+import { formatYearWithOrdinal } from "../../../utils/majorUtils"
 
 const API_URL = import.meta.env.VITE_API_URL
 
@@ -917,7 +918,7 @@ function BlogPostCard({ post, onLike, onBookmark, onPostClick, onSelect, current
           <div>
             <h3 className="font-medium text-gray-900">{`${post.author.first_name} ${post.author.last_name}`}</h3>
             <p className="text-sm text-gray-500">
-              {post.author.year}th Year • {post.author.major}
+              {post.author.year ? formatYearWithOrdinal(post.author.year) : 'Student'} • {post.author.major}
             </p>
           </div>
         </div>

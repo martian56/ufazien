@@ -118,6 +118,25 @@ def provision_database(self, database_id: str):
             cur.execute(sql.SQL("CREATE DATABASE {};").format(sql.Identifier(db_name)))
             cur.execute(sql.SQL("CREATE ROLE {} WITH LOGIN PASSWORD %s;").format(sql.Identifier(username)), [password])
             cur.execute(sql.SQL("GRANT ALL PRIVILEGES ON DATABASE {} TO {};").format(sql.Identifier(db_name), sql.Identifier(username)))
+            
+            # Revoke access to system databases to prevent cross-database access
+            cur.execute(sql.SQL("REVOKE CONNECT ON DATABASE postgres FROM {};").format(sql.Identifier(username)))
+            cur.execute(sql.SQL("REVOKE CONNECT ON DATABASE template1 FROM {};").format(sql.Identifier(username)))
+
+            cur.close()
+            conn.close()
+
+            # Connect to the newly created database to grant schema permissions
+            conn = psycopg2.connect(host=admin_host, port=admin_port, user=admin_user, password=admin_password, dbname=db_name)
+            conn.autocommit = True
+            cur = conn.cursor()
+
+            # Grant all privileges on the public schema so user can create tables
+            cur.execute(sql.SQL("GRANT ALL ON SCHEMA public TO {};").format(sql.Identifier(username)))
+            cur.execute(sql.SQL("GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO {};").format(sql.Identifier(username)))
+            cur.execute(sql.SQL("GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO {};").format(sql.Identifier(username)))
+            cur.execute(sql.SQL("ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO {};").format(sql.Identifier(username)))
+            cur.execute(sql.SQL("ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO {};").format(sql.Identifier(username)))
 
             cur.close()
             conn.close()

@@ -10,10 +10,10 @@ class BlogPostAdmin(admin.ModelAdmin):
     raw_id_fields = ('author',)
 
 class CategoryAdmin(admin.ModelAdmin):
-    list_display = ('name',)
+    list_display = ('name', 'id')
     search_fields = ('name',) 
 class TagAdmin(admin.ModelAdmin):
-    list_display = ('name',)
+    list_display = ('name', 'id')
     search_fields = ('name',)
 class CommentAdmin(admin.ModelAdmin):
     list_display = ('post', 'author', 'published_at', 'parent')

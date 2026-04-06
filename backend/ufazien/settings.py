@@ -28,10 +28,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.getenv("SECRET_KEY", "django-insecure-default-key-for-development")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv("DJANGO_DEBUG", "True")
-
+#DEBUG = os.getenv("DJANGO_DEBUG", "True")
+DEBUG=True
 # Fix ALLOWED_HOSTS with fallback
-ALLOWED_HOSTS_ENV = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1")
+ALLOWED_HOSTS_ENV = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1,testserver,api.ufazien.com")
 ALLOWED_HOSTS = [host.strip() for host in ALLOWED_HOSTS_ENV.split(",") if host.strip()]
 
 
@@ -50,10 +50,12 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
     'channels',
+    'auditlog',
     # Api Docs
     'drf_spectacular',
     'drf_spectacular_sidecar',
     # Local apps
+    'ufazien.apps.UfazienConfig',  # Custom app config for auditlog
     'api',
     'blog',
     'users',
@@ -61,12 +63,14 @@ INSTALLED_APPS = [
     'gpa',
     'game',
     'ai_tools',
-    'hosting'
+    'hosting',
+    'community'
 ]
 
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'auditlog.middleware.AuditlogMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -109,6 +113,10 @@ REST_FRAMEWORK = {
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    'DEFAULT_THROTTLE_RATES': {
+        'feedback': '12/hour',  # 12 per hour = 1 per 5 minutes
+    },
+    'PAGE_SIZE': 10,  # Default page size for pagination
 }
 
 # REST_AUTH = {
@@ -174,7 +182,7 @@ if os.getenv("ENVIRONMENT") == "production":
             'NAME': os.getenv('DB_NAME', 'ufazien_test'),
             'USER': os.getenv('DB_USER', 'ufazien_test_user'),
             'PASSWORD': os.getenv('DB_PASSWORD', 'test_password'),
-            'HOST': 'ufazien.com', 
+            'HOST': 'db.ufazien.com', 
             'PORT': '',
         }
     }
@@ -326,6 +334,14 @@ CELERY_BEAT_SCHEDULE = {
 DEFAULT_RATE_LIMIT = int(os.getenv("DEFAULT_RATE_LIMIT", "100"))
 PREMIUM_RATE_LIMIT = int(os.getenv("PREMIUM_RATE_LIMIT", "1000"))
 
+# Django Auditlog Configuration
+AUDITLOG_INCLUDE_ALL_MODELS = True  # Log all model changes
+AUDITLOG_EXCLUDE_TRACKING_FIELDS = ['created_at', 'updated_at']  # Exclude timestamp fields
+AUDITLOG_DISABLE_ON_RAW_SAVE = False  # Track raw saves too
+AUDITLOG_USE_CONNECTION_HANDLING = True  # Better performance
+AUDITLOG_READONLY_EVENTS = True  # Track read events
+AUDITLOG_READONLY_EVENTS_ACTIONS = ['read']  # Track read actions
+
 
 # Admin credentials for remote DB provisioning (used by provisioning Celery task)
 # Example: set DB_ADMIN_POSTGRES_USER, DB_ADMIN_POSTGRES_PASSWORD in environment
@@ -344,3 +360,18 @@ DB_ADMIN = {
         'password': os.getenv('DB_ADMIN_MYSQL_PASSWORD', ''),
     }
 }
+# Cloudflare / Traefik Cookie & Proxy Fixes
+CSRF_TRUSTED_ORIGINS = [
+    "https://api.ufazien.com",
+    "https://ufazien.com",
+    "https://www.ufazien.com",
+]
+
+CSRF_COOKIE_SECURE = True
+CSRF_COOKIE_SAMESITE = "None"
+
+SESSION_COOKIE_SECURE = True
+SESSION_COOKIE_SAMESITE = "None"
+
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+USE_X_FORWARDED_HOST = True

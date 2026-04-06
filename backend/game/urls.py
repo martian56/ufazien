@@ -19,4 +19,7 @@ urlpatterns = [
     # Saved lobbies
     path('saved-lobbies/', views.saved_lobbies, name='saved_lobbies'),
     path('saved-lobbies/<str:lobby_id>/', views.remove_saved_lobby, name='remove_saved_lobby'),
+    
+    # Statistics
+    path('lobbies/stats/', views.lobby_stats, name='lobby_stats'),
 ]

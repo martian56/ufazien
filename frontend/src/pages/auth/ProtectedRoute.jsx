@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Navigate } from "react-router-dom"
+import { Navigate, useLocation } from "react-router-dom"
 import axios from "axios"
 
 const API_URL = import.meta.env.VITE_API_URL
@@ -10,6 +10,7 @@ const API_REFRESH = `${API_URL}/api/auth/token/refresh/`
 export default function ProtectedRoute({ children }) {
   const [checked, setChecked] = useState(false)
   const [authenticated, setAuthenticated] = useState(false)
+  const location = useLocation()
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -50,6 +51,9 @@ export default function ProtectedRoute({ children }) {
   }, [])
 
   if (!checked) return <div></div>
-  if (!authenticated) return <Navigate to="/auth" replace />
+  if (!authenticated) {
+    const redirectPath = `${location.pathname}${location.search}`
+    return <Navigate to={`/auth?redirect=${encodeURIComponent(redirectPath)}`} replace />
+  }
   return children
 }

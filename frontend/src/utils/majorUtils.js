@@ -19,3 +19,27 @@ export const getMajorCode = (displayName) => {
   const major = majorOptions.find(m => m.display === displayName)
   return major ? major.code : 'UD'
 }
+
+// Utility function to format year display (converts "5" to "Graduate")
+export const formatYearDisplay = (year) => {
+  if (!year) return ''
+  if (year === '5') return 'Graduate'
+  return `Year ${year}`
+}
+
+// Utility function to get year display text (for use in "Year X" format)
+export const getYearDisplay = (year) => {
+  if (!year) return ''
+  if (year === '5') return 'Graduate'
+  return year
+}
+
+// Utility function to format year with ordinal suffix (1st, 2nd, 3rd, 4th) or "Graduate" for 5
+export const formatYearWithOrdinal = (year) => {
+  if (!year) return ''
+  if (year === '5') return 'Graduate'
+  const num = parseInt(year)
+  if (isNaN(num)) return year
+  const suffix = num === 1 ? 'st' : num === 2 ? 'nd' : num === 3 ? 'rd' : 'th'
+  return `${num}${suffix} Year`
+}
