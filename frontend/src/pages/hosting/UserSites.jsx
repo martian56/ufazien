@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Helmet } from 'react-helmet'
-import { ExternalLink, Globe, Search, X, Tag, Menu } from 'lucide-react'
+import { ExternalLink, Globe, Search, X, Tag, Menu, ChevronDown } from 'lucide-react'
 import SideBar from '../../components/ui/SideBar'
 const API_URL = import.meta.env.VITE_API_URL || ''
 
@@ -15,20 +15,22 @@ export default function UserSites() {
   const [pageSize, setPageSize] = useState(20)
   const [totalCount, setTotalCount] = useState(0)
   const [totalPages, setTotalPages] = useState(1)
+  const [sortBy, setSortBy] = useState('-total_visits') // Default: most visited first
 
   // Debounced load for search
-  const buildQuery = (search, page, page_size) => {
+  const buildQuery = (search, page, page_size, ordering) => {
     const params = new URLSearchParams()
     if (search) params.set('search', search)
     if (page) params.set('page', page)
     if (page_size) params.set('page_size', page_size)
+    if (ordering) params.set('ordering', ordering)
     const s = params.toString()
     return s ? `?${s}` : ''
   }
 
-  const load = async (search = '', page = 1, page_size = 20) => {
+  const load = async (search = '', page = 1, page_size = 20, ordering = sortBy) => {
     setLoading(true); setError(null)
-    const q = buildQuery(search, page, page_size)
+    const q = buildQuery(search, page, page_size, ordering)
     setLastQuery(q || '/')
     try {
       const url = `${API_URL}/api/hosting/public/websites/${q}`
@@ -80,14 +82,14 @@ export default function UserSites() {
     // Reset to first page when search term changes
     setCurrentPage(1)
     const s = searchTerm ? searchTerm : ''
-    t = setTimeout(() => load(s, 1, pageSize), 300)
+    t = setTimeout(() => load(s, 1, pageSize, sortBy), 300)
     return () => clearTimeout(t)
-  }, [searchTerm])
+  }, [searchTerm, sortBy])
 
   // Reload when page or pageSize changes
   useEffect(() => {
     const s = searchTerm ? searchTerm : ''
-    load(s, currentPage, pageSize)
+    load(s, currentPage, pageSize, sortBy)
   }, [currentPage, pageSize])
 
   const formatDate = (s) => {
@@ -241,7 +243,7 @@ export default function UserSites() {
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         // Trigger immediate search on Enter: reset to page 1
-                        load(searchTerm || '', 1, pageSize)
+                        load(searchTerm || '', 1, pageSize, sortBy)
                       }
                     }}
                     placeholder="Search sites..."
@@ -252,6 +254,29 @@ export default function UserSites() {
                       <X className="w-4 h-4" />
                     </button>
                   )}
+                </div>
+                
+                {/* Sort Dropdown */}
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-600">Sort by:</span>
+                  <div className="relative">
+                    <select
+                      value={sortBy}
+                      onChange={(e) => {
+                        setSortBy(e.target.value)
+                        setCurrentPage(1) // Reset to first page when sorting changes
+                      }}
+                      className="appearance-none bg-white border border-gray-300 rounded-lg px-4 py-2 pr-8 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="-total_visits">Most Visited</option>
+                      <option value="total_visits">Least Visited</option>
+                      <option value="-created_at">Newest First</option>
+                      <option value="created_at">Oldest First</option>
+                      <option value="name">Name A-Z</option>
+                      <option value="-name">Name Z-A</option>
+                    </select>
+                    <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4 pointer-events-none" />
+                  </div>
                 </div>
               </div>
 

@@ -24,6 +24,7 @@ import {
   X,
 } from "lucide-react"
 import SideBar from "../../../components/ui/SideBar"
+import BuyMeACoffee from "../../../components/ui/BuyMeACoffee"
 import axios from "axios"
 
 const API_URL = import.meta.env.VITE_API_URL
@@ -475,6 +476,7 @@ export default function GpaCalculator() {
             </div>
 
             <div className="flex items-center gap-4">
+              <BuyMeACoffee />
               <button
                 onClick={() => setShowConversionTable(true)}
                 className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"

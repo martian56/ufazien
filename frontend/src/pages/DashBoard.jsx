@@ -8,10 +8,11 @@ import {Calculator, TrendingUp,MessageCircle,
   Award,Target,Activity,BookMarked,GraduationCap,
   Menu,X } from "lucide-react"
 import SideBar from "../components/ui/SideBar"
+import BuyMeACoffee from "../components/ui/BuyMeACoffee"
 import NotificationDropdown from "../components/NotificationDropdown"
 import notificationsAPI from "../services/notificationsAPI"
 import pushNotificationService from "../services/pushNotificationService"
-import { getMajorDisplayName } from "../utils/majorUtils"
+import { getMajorDisplayName, formatYearWithOrdinal } from "../utils/majorUtils"
 
 
 const API_URL = import.meta.env.VITE_API_URL
@@ -104,7 +105,7 @@ useEffect(() => {
       setUser({
         name: `${data.first_name} ${data.last_name}` || "Sarah Johnson",
         email: data.email || "sarah.johnson@ufaz.edu.az",
-        year: data.year ? `${data.year}${data.year === "1" ? "st" : data.year === "2" ? "nd" : data.year === "3" ? "rd" : "th"} Year` : "3rd Year",
+        year: data.year ? formatYearWithOrdinal(data.year) : "3rd Year",
         major: getMajorDisplayName(data.major || "UD"),
         avatar: data.avatar_url || "/placeholder.svg?height=40&width=40",
         gpa: parseFloat(data.gpa) || 0.00,
@@ -258,7 +259,10 @@ useEffect(() => {
               </div>
             </div>
 
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 sm:gap-4">
+              {/* Buy Me a Coffee Button */}
+              <BuyMeACoffee />
+
               {/* Search */}
               <div className="hidden sm:block relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />

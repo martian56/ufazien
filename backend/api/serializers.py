@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Notification, NotificationPreference, PushSubscription
+from .models import Notification, NotificationPreference, PushSubscription, Feedback
 
 class NotificationPreferenceSerializer(serializers.ModelSerializer):
     class Meta:
@@ -45,3 +45,32 @@ class NotificationSerializer(serializers.ModelSerializer):
     def get_time_since(self, obj):
         from django.utils.timesince import timesince
         return timesince(obj.created_at)
+
+
+class FeedbackSerializer(serializers.ModelSerializer):
+    """Serializer for creating feedback"""
+    user_username = serializers.CharField(source='user.username', read_only=True)
+    time_since = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Feedback
+        fields = [
+            'id', 'feedback_type', 'subject', 'message', 
+            'status', 'admin_response', 'created_at', 
+            'updated_at', 'user_username', 'time_since'
+        ]
+        read_only_fields = ['id', 'status', 'admin_response', 'created_at', 'updated_at', 'user_username', 'time_since']
+    
+    def get_time_since(self, obj):
+        from django.utils.timesince import timesince
+        return timesince(obj.created_at)
+    
+    def validate_subject(self, value):
+        if len(value.strip()) < 5:
+            raise serializers.ValidationError("Subject must be at least 5 characters long.")
+        return value.strip()
+    
+    def validate_message(self, value):
+        if len(value.strip()) < 10:
+            raise serializers.ValidationError("Message must be at least 10 characters long.")
+        return value.strip()

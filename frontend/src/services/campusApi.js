@@ -225,8 +225,8 @@ class CampusApiService {
         return this.apiRequest('/quick-join/', {
             method: 'POST',
             body: JSON.stringify({
-                max_players,
-                public_only
+                max_players_preference: max_players,
+                preferred_lobby_type: public_only ? 'public' : 'any'
             })
         });
     }

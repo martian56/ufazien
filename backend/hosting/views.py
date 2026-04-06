@@ -8,7 +8,7 @@ from django.utils import timezone
 from django.db.models import Q, Sum, Count
 from django.core.paginator import Paginator
 from django.core.exceptions import ValidationError
-from rest_framework import viewsets, status, permissions, generics
+from rest_framework import viewsets, status, permissions, generics, filters
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -496,8 +496,38 @@ class WebsiteViewSet(viewsets.ModelViewSet):
 
     def perform_destroy(self, instance):
         """Custom destroy method - domains are kept available for reuse"""
+        import os
+        import shutil
+        
         # Store domain reference before deletion for logging
         domain_name = instance.domain.name if instance.domain else None
+        website_name = instance.name
+        
+        # Get subdomain to determine folder path
+        if instance.domain and instance.domain.name:
+            subdomain = instance.domain.name.split('.')[0]
+        else:
+            subdomain = instance.name
+        
+        # Delete the website folder if it exists
+        website_dir = f"/srv/hosting/{subdomain}"
+        if os.path.exists(website_dir):
+            try:
+                shutil.rmtree(website_dir)
+            except Exception as e:
+                # Log error but don't prevent deletion
+                ActivityLog.objects.create(
+                    user=self.request.user,
+                    action='website_folder_deletion_failed',
+                    description=f'Failed to delete website folder for {website_name}: {str(e)}',
+                    ip_address=self.request.META.get('REMOTE_ADDR'),
+                    user_agent=self.request.META.get('HTTP_USER_AGENT', ''),
+                    metadata={
+                        'website_name': website_name,
+                        'folder_path': website_dir,
+                        'error': str(e)
+                    }
+                )
         
         # Delete the website (domain remains available for reuse)
         instance.delete()
@@ -506,11 +536,11 @@ class WebsiteViewSet(viewsets.ModelViewSet):
         ActivityLog.objects.create(
             user=self.request.user,
             action='website_deleted',
-            description=f'Deleted website: {instance.name}' + (f' (domain: {domain_name})' if domain_name else ''),
+            description=f'Deleted website: {website_name}' + (f' (domain: {domain_name})' if domain_name else ''),
             ip_address=self.request.META.get('REMOTE_ADDR'),
             user_agent=self.request.META.get('HTTP_USER_AGENT', ''),
             metadata={
-                'website_name': instance.name,
+                'website_name': website_name,
                 'domain_name': domain_name
             }
         )
@@ -539,7 +569,20 @@ class WebsiteViewSet(viewsets.ModelViewSet):
         saved_files = []
         
         for file in uploaded_files:
-            file_path = os.path.join(website_dir, file.name)
+            print(f"Upload debug: Processing file '{file.name}' (size: {file.size} bytes)")
+            
+            # Handle folder uploads - file.name includes relative path
+            if '/' in file.name:
+                # This is a file from a folder upload
+                file_path = os.path.join(website_dir, file.name)
+                # Create directory structure if it doesn't exist
+                file_dir = os.path.dirname(file_path)
+                os.makedirs(file_dir, exist_ok=True)
+                print(f"Upload debug: Created directory structure for '{file.name}' -> '{file_path}'")
+            else:
+                # Regular file upload
+                file_path = os.path.join(website_dir, file.name)
+                print(f"Upload debug: Regular file upload '{file.name}' -> '{file_path}'")
             
             # Save file to disk
             with open(file_path, 'wb+') as destination:
@@ -566,6 +609,7 @@ class WebsiteViewSet(viewsets.ModelViewSet):
         import os
         import zipfile
         import tempfile
+        import shutil
         
         website = self.get_object()
         
@@ -575,26 +619,88 @@ class WebsiteViewSet(viewsets.ModelViewSet):
         subdomain = website.domain.name.split('.')[0]
         website_dir = f"/srv/hosting/{subdomain}"
         
+        # Create website directory if it doesn't exist
+        os.makedirs(website_dir, exist_ok=True)
+        
         # Get uploaded ZIP file
         zip_file = request.FILES.get('zip_file')
         if not zip_file:
+            print(f"ZIP upload debug: Available files in request: {list(request.FILES.keys())}")
             return Response({'error': 'No ZIP file provided'}, status=400)
+        
+        print(f"ZIP upload debug: Received file '{zip_file.name}' with size {zip_file.size} bytes")
         
         # Extract ZIP to website directory
         try:
+            # Preserve .env file if it exists (contains database credentials)
+            env_file_path = os.path.join(website_dir, '.env')
+            env_content = None
+            if os.path.exists(env_file_path):
+                with open(env_file_path, 'r') as f:
+                    env_content = f.read()
+                print("ZIP upload debug: Preserved .env file")
+            
+            # Clear existing files in website directory (except .env which we'll restore)
+            if os.path.exists(website_dir):
+                for item in os.listdir(website_dir):
+                    item_path = os.path.join(website_dir, item)
+                    try:
+                        if os.path.isdir(item_path):
+                            shutil.rmtree(item_path)
+                        else:
+                            # Skip .env file - we'll restore it later
+                            if item != '.env':
+                                os.remove(item_path)
+                    except Exception as e:
+                        print(f"ZIP upload debug: Warning - could not delete {item_path}: {e}")
+            
             with tempfile.TemporaryDirectory() as temp_dir:
                 zip_path = os.path.join(temp_dir, 'upload.zip')
+                extract_dir = os.path.join(temp_dir, 'extracted')
                 
                 # Save ZIP file temporarily
                 with open(zip_path, 'wb+') as destination:
                     for chunk in zip_file.chunks():
                         destination.write(chunk)
                 
-                # Extract ZIP file
+                # Extract ZIP file to temporary directory
                 with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                    zip_ref.extractall(website_dir)
-                    website.status = 'active'
-                    website.save()
+                    zip_ref.extractall(extract_dir)
+                
+                # Move contents from extracted directory to website directory
+                # If there's only one folder in the extracted directory, move its contents
+                extracted_items = os.listdir(extract_dir)
+                if len(extracted_items) == 1 and os.path.isdir(os.path.join(extract_dir, extracted_items[0])):
+                    # Single folder - move its contents
+                    source_dir = os.path.join(extract_dir, extracted_items[0])
+                    for item in os.listdir(source_dir):
+                        source_path = os.path.join(source_dir, item)
+                        dest_path = os.path.join(website_dir, item)
+                        if os.path.isdir(source_path):
+                            shutil.copytree(source_path, dest_path, dirs_exist_ok=True)
+                        else:
+                            shutil.copy2(source_path, dest_path)
+                else:
+                    # Multiple items or files - move them directly
+                    for item in extracted_items:
+                        source_path = os.path.join(extract_dir, item)
+                        dest_path = os.path.join(website_dir, item)
+                        if os.path.isdir(source_path):
+                            shutil.copytree(source_path, dest_path, dirs_exist_ok=True)
+                        else:
+                            shutil.copy2(source_path, dest_path)
+                
+                # Restore .env file if it was preserved (only if not in the new ZIP)
+                if env_content is not None:
+                    new_env_path = os.path.join(website_dir, '.env')
+                    # Only restore if .env wasn't included in the new deployment
+                    if not os.path.exists(new_env_path):
+                        with open(new_env_path, 'w') as f:
+                            f.write(env_content)
+                        print("ZIP upload debug: Restored preserved .env file")
+                
+                website.status = 'active'
+                website.save()
                     
             self.write_env_file_from_dict(website.environment_variables or {}, website_dir)
 
@@ -606,10 +712,14 @@ class WebsiteViewSet(viewsets.ModelViewSet):
             })
             
         except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            print(f"ZIP upload error: {str(e)}")
+            print(f"Traceback: {error_details}")
             return Response({'error': f'Failed to extract ZIP: {str(e)}'}, status=400)
     @action(detail=True, methods=['get'])
     def list_files(self, request, pk=None):
-        """List files in the website directory"""
+        """List files and folders in the website directory"""
         import os
         import datetime
 
@@ -621,29 +731,49 @@ class WebsiteViewSet(viewsets.ModelViewSet):
         website_dir = f"/srv/hosting/{subdomain}"
 
         if not os.path.exists(website_dir):
-            return Response({'files': []})
+            return Response({'files': [], 'folders': []})
 
         files = []
-        for fname in os.listdir(website_dir):
-            path = os.path.join(website_dir, fname)
-            if os.path.isfile(path):
-                statinfo = os.stat(path)
+        folders = []
+        
+        for item_name in os.listdir(website_dir):
+            item_path = os.path.join(website_dir, item_name)
+            
+            if os.path.isfile(item_path):
+                statinfo = os.stat(item_path)
                 try:
                     modified = timezone.make_aware(datetime.datetime.fromtimestamp(statinfo.st_mtime)).isoformat()
                 except Exception:
                     modified = None
                 files.append({
-                    'name': fname,
+                    'name': item_name,
                     'size': statinfo.st_size,
                     'modified': modified,
+                    'type': 'file'
+                })
+            elif os.path.isdir(item_path):
+                statinfo = os.stat(item_path)
+                try:
+                    modified = timezone.make_aware(datetime.datetime.fromtimestamp(statinfo.st_mtime)).isoformat()
+                    # Count files in folder
+                    file_count = len([f for f in os.listdir(item_path) if os.path.isfile(os.path.join(item_path, f))])
+                except Exception:
+                    modified = None
+                    file_count = 0
+                folders.append({
+                    'name': item_name,
+                    'modified': modified,
+                    'type': 'folder',
+                    'file_count': file_count
                 })
 
-        return Response({'files': files})
+        return Response({'files': files, 'folders': folders})
 
     @action(detail=True, methods=['post'])
     def delete_file(self, request, pk=None):
-        """Delete a file from the website directory"""
+        """Delete a file or folder from the website directory"""
         import os
+        import shutil
 
         website = self.get_object()
         if not website.domain:
@@ -661,10 +791,14 @@ class WebsiteViewSet(viewsets.ModelViewSet):
         if not file_path.startswith(os.path.abspath(website_dir)):
             return Response({'error': 'invalid filename'}, status=400)
 
-        if os.path.exists(file_path) and os.path.isfile(file_path):
+        if os.path.exists(file_path):
             try:
-                os.remove(file_path)
-                return Response({'message': 'File deleted'})
+                if os.path.isfile(file_path):
+                    os.remove(file_path)
+                    return Response({'message': 'File deleted'})
+                elif os.path.isdir(file_path):
+                    shutil.rmtree(file_path)
+                    return Response({'message': 'Folder deleted'})
             except Exception as e:
                 return Response({'error': str(e)}, status=400)
         compute_storage_for_user.delay(self.request.user.id)
@@ -673,8 +807,11 @@ class WebsiteViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['get'])
     def download_file(self, request, pk=None):
-        """Download a specific file from the website directory"""
+        """Download a specific file or folder from the website directory"""
         import os
+        import zipfile
+        import tempfile
+        from django.http import FileResponse
 
         website = self.get_object()
         if not website.domain:
@@ -692,9 +829,22 @@ class WebsiteViewSet(viewsets.ModelViewSet):
         if not file_path.startswith(os.path.abspath(website_dir)):
             return Response({'error': 'invalid filename'}, status=400)
 
-        if os.path.exists(file_path) and os.path.isfile(file_path):
+        if os.path.exists(file_path):
             try:
-                return FileResponse(open(file_path, 'rb'), as_attachment=True, filename=os.path.basename(file_path))
+                if os.path.isfile(file_path):
+                    return FileResponse(open(file_path, 'rb'), as_attachment=True, filename=os.path.basename(file_path))
+                elif os.path.isdir(file_path):
+                    # Create a ZIP file for folders
+                    temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
+                    with zipfile.ZipFile(temp_zip.name, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                        for root, dirs, files in os.walk(file_path):
+                            for file in files:
+                                file_path_full = os.path.join(root, file)
+                                # Calculate relative path from the folder being zipped
+                                arcname = os.path.relpath(file_path_full, file_path)
+                                zipf.write(file_path_full, arcname)
+                    
+                    return FileResponse(open(temp_zip.name, 'rb'), as_attachment=True, filename=f"{os.path.basename(file_path)}.zip")
             except Exception as e:
                 return Response({'error': str(e)}, status=400)
 
@@ -1323,6 +1473,9 @@ class PublicWebsiteList(generics.ListAPIView):
     serializer_class = None
     permission_classes = [permissions.AllowAny]
     pagination_class = StandardResultsSetPagination
+    filter_backends = [filters.OrderingFilter]
+    ordering_fields = ['total_visits', 'created_at', 'name']
+    ordering = ['-total_visits']  # Default ordering by total_visits descending
 
     def get_serializer_class(self):
         from .serializers import PublicWebsiteSerializer
@@ -1345,7 +1498,7 @@ class PublicWebsiteList(generics.ListAPIView):
                 Q(user__username__icontains=q)
             )
 
-        return qs.order_by('-created_at')
+        return qs
 
 
 class AnalyticsAPIView(APIView):

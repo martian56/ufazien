@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, useSearchParams } from "react-router-dom"
 import { GoogleOAuthProvider, useGoogleLogin } from "@react-oauth/google"
 import axios from "axios"
 import { Button } from "../../components/ui/button"
@@ -12,6 +12,7 @@ const API_URL = import.meta.env.VITE_API_URL
 
 function GoogleLoginButton({ loadingProvider, setLoadingProvider }) {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const login = useGoogleLogin({
     flow: "auth-code",
     ux_mode: "popup",
@@ -27,7 +28,10 @@ function GoogleLoginButton({ loadingProvider, setLoadingProvider }) {
         console.log("Google login successful:", res.data)
         localStorage.setItem("access", res.data.access)
         localStorage.setItem("refresh", res.data.refresh)
-        navigate('/dashboard') // Assuming you have a Navigate function to redirect
+        
+        // Redirect to the original page or dashboard
+        const redirectPath = searchParams.get("redirect") || "/dashboard"
+        navigate(redirectPath)
       } catch (err) {
         console.error("Google login failed:", err.response?.data || err.message)
       } finally {

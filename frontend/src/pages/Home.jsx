@@ -351,11 +351,11 @@ export default function Home() {
       verified: true,
     },
     {
-      name: "Ahmed Hassan",
-      role: "Geo Physics, 2nd Year",
-      avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?fm=jpg&q=60&w=3000&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8M3x8dXNlciUyMHByb2ZpbGV8ZW58MHx8MHx8fDA%3D",
+      name: "Zeynalabdin Huseynli",
+      role: "Computer Science, 3rd Year",
+      avatar: "https://ik.imagekit.io/ufazien/testimonials/zeynal.jpg?updatedAt=1757576718681",
       content:
-        "The study groups feature is incredible. I found amazing study partners and our group chat keeps us all motivated and on track.",
+        "The GPA Calculator is incredible. It was always tricky to calculate my GPA manually, but this tool made it so easy and accurate. Highly recommend it!",
       rating: 5,
       verified: true,
     },
@@ -393,9 +393,9 @@ export default function Home() {
 
 
   const achievements = [
-    { icon: Award, title: "Best Student Platform 2025", org: "UFAZ Innovation Awards" },
+    { icon: Users, title: "200+ Active Students", org: "Growing UFAZ Community" },
     { icon: Star, title: "4.9/5 Student Rating", org: "Based on 200+ reviews" },
-    { icon: Shield, title: "ISO 27001 Certified", org: "Enterprise Security Standard" },
+    { icon: Shield, title: "Secure & Private", org: "Student Data Protection" },
     { icon: Rocket, title: "99.9% Uptime", org: "Reliable & Always Available" },
   ]
 

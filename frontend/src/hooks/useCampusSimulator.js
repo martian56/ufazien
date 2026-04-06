@@ -7,6 +7,28 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import campusWebSocket from '../services/campusWebSocket';
 import campusApi from '../services/campusApi';
 
+/**
+ * Decode JWT token to get user ID
+ * @returns {number|null} User ID or null if token is invalid
+ */
+function getCurrentUserId() {
+    try {
+        const token = localStorage.getItem('access');
+        if (!token) return null;
+        
+        // JWT tokens have 3 parts: header.payload.signature
+        const payload = token.split('.')[1];
+        if (!payload) return null;
+        
+        // Decode base64 payload
+        const decoded = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+        return decoded.user_id || null;
+    } catch (error) {
+        console.error('Failed to decode user ID from token:', error);
+        return null;
+    }
+}
+
 export const useCampusSimulator = (lobbyId = null) => {
     // Defensive: ignore string values that may come from route params like 'null' or 'undefined'
     if (typeof lobbyId === 'string' && (lobbyId === 'null' || lobbyId === 'undefined')) {
@@ -35,7 +57,16 @@ export const useCampusSimulator = (lobbyId = null) => {
     const positionRef = useRef(userPosition);
     const lastSentPositionRef = useRef({ x: 0, y: 0, direction: 'down' });
     const positionThrottleRef = useRef(null);
-        const wsEverConnectedRef = useRef(false);
+    const positionIntervalRef = useRef(null);
+    const isMovingRef = useRef(false);
+    const wsEverConnectedRef = useRef(false);
+    const currentLobbyIdRef = useRef(null);
+    const currentUserIdRef = useRef(null);
+
+    // Get current user ID on mount
+    useEffect(() => {
+        currentUserIdRef.current = getCurrentUserId();
+    }, []);
 
     // Update position ref when userPosition changes
     useEffect(() => {
@@ -73,6 +104,8 @@ export const useCampusSimulator = (lobbyId = null) => {
             // Accept both shapes: { lobby: ... } or raw lobby object
             const lobbyObj = lobbyData && lobbyData.lobby ? lobbyData.lobby : lobbyData;
             setCurrentLobby(lobbyObj);
+            // Store lobby ID in ref for cleanup
+            currentLobbyIdRef.current = targetLobbyId;
 
             // Then connect to WebSocket
             campusWebSocket.connect(targetLobbyId);
@@ -97,7 +130,7 @@ export const useCampusSimulator = (lobbyId = null) => {
             console.log('WebSocket connected');
             setIsConnected(true);
             setError(null);
-                wsEverConnectedRef.current = true;
+            wsEverConnectedRef.current = true;
         });
 
         campusWebSocket.on('disconnected', () => {
@@ -113,17 +146,22 @@ export const useCampusSimulator = (lobbyId = null) => {
             setLobbyMembers(data.members || []);
             setChatMessages(data.messages || []);
             
-            // Update player positions
+            // Update player positions (exclude current user's position - we control our own camera)
+            const currentUserId = currentUserIdRef.current;
             const positionsMap = new Map();
             (data.positions || []).forEach(pos => {
-                positionsMap.set(pos.user_id, {
-                    x: pos.x,
-                    y: pos.y,
-                    direction: pos.direction || 'down',
-                    is_moving: pos.is_moving || false,
-                    last_updated: pos.last_updated,
-                    username: pos.username
-                });
+                // Filter out current user's position - they control their own camera in first-person view
+                if (pos.user_id !== currentUserId) {
+                    positionsMap.set(pos.user_id, {
+                        x: pos.x,
+                        y: pos.y,
+                        direction: pos.direction || 'down',
+                        is_moving: pos.is_moving || false,
+                        last_updated: pos.last_updated,
+                        username: pos.username,
+                        full_name: pos.full_name || pos.username  // Use full_name, fallback to username
+                    });
+                }
             });
             setPlayerPositions(positionsMap);
         });
@@ -158,6 +196,12 @@ export const useCampusSimulator = (lobbyId = null) => {
 
         // Position update received
         campusWebSocket.on('positionUpdate', (data) => {
+            // Filter out current user's position updates - we control our own camera
+            const currentUserId = currentUserIdRef.current;
+            if (data.user_id === currentUserId) {
+                return; // Ignore our own position updates
+            }
+            
             setPlayerPositions(prev => {
                 const newPositions = new Map(prev);
                 newPositions.set(data.user_id, {
@@ -166,7 +210,8 @@ export const useCampusSimulator = (lobbyId = null) => {
                     direction: data.position.direction || 'down',
                     is_moving: data.position.is_moving || false,
                     last_updated: new Date().toISOString(),
-                    username: data.username
+                    username: data.username,
+                    full_name: data.full_name || data.username  // Use full_name, fallback to username
                 });
                 return newPositions;
             });
@@ -205,30 +250,78 @@ export const useCampusSimulator = (lobbyId = null) => {
 
     /**
      * Update user position (throttled)
+     * Uses setInterval for continuous updates while moving, instead of debouncing
      */
     const updatePosition = useCallback((newPosition) => {
         setUserPosition(newPosition);
+        // Update positionRef immediately for interval to use
+        positionRef.current = newPosition;
 
-        // Throttle position updates to backend (max 10 updates per second)
-        if (positionThrottleRef.current) {
-            clearTimeout(positionThrottleRef.current);
-        }
+        const isMoving = newPosition.is_moving || false;
+        const wasMoving = isMovingRef.current;
 
-        positionThrottleRef.current = setTimeout(() => {
-            const currentPos = positionRef.current;
-            const lastPos = lastSentPositionRef.current;
-
-            // Only send if position actually changed significantly
-            const hasMovedSignificantly = 
-                Math.abs(currentPos.x - lastPos.x) > 0.5 ||
-                Math.abs(currentPos.y - lastPos.y) > 0.5 ||
-                currentPos.direction !== lastPos.direction;
-
-            if (hasMovedSignificantly && campusWebSocket.getConnectionStatus()) {
-                campusWebSocket.sendPositionUpdate(currentPos);
-                lastSentPositionRef.current = { ...currentPos };
+        // Only manage interval when movement state changes (starting or stopping)
+        if (isMoving && !wasMoving) {
+            // Movement just started - send initial update and start interval
+            if (campusWebSocket.getConnectionStatus()) {
+                campusWebSocket.sendPositionUpdate(newPosition);
+                lastSentPositionRef.current = { ...newPosition };
             }
-        }, 100); // 100ms throttle
+
+            // Set up interval to send position updates every 100ms while moving
+            positionIntervalRef.current = setInterval(() => {
+                if (!campusWebSocket.getConnectionStatus()) {
+                    clearInterval(positionIntervalRef.current);
+                    positionIntervalRef.current = null;
+                    isMovingRef.current = false;
+                    return;
+                }
+
+                const currentPos = positionRef.current;
+                const lastPos = lastSentPositionRef.current;
+
+                // Check if still moving - if not, clear interval and send final position
+                if (!currentPos.is_moving) {
+                    clearInterval(positionIntervalRef.current);
+                    positionIntervalRef.current = null;
+                    isMovingRef.current = false;
+                    // Send final position when movement stops
+                    campusWebSocket.sendPositionUpdate(currentPos);
+                    lastSentPositionRef.current = { ...currentPos };
+                    return;
+                }
+
+                // Only send if position actually changed significantly
+                const hasMovedSignificantly = 
+                    Math.abs(currentPos.x - lastPos.x) > 0.5 ||
+                    Math.abs(currentPos.y - lastPos.y) > 0.5 ||
+                    currentPos.direction !== lastPos.direction;
+
+                if (hasMovedSignificantly) {
+                    campusWebSocket.sendPositionUpdate(currentPos);
+                    lastSentPositionRef.current = { ...currentPos };
+                }
+            }, 100); // Send updates every 100ms (10 updates per second) while moving
+            
+            isMovingRef.current = true;
+        }
+        // If stopping movement (isMoving = false and wasMoving = true)
+        else if (!isMoving && wasMoving) {
+            // Clear the interval if it exists
+            if (positionIntervalRef.current) {
+                clearInterval(positionIntervalRef.current);
+                positionIntervalRef.current = null;
+            }
+            // Send final position when movement stops
+            if (campusWebSocket.getConnectionStatus()) {
+                campusWebSocket.sendPositionUpdate(newPosition);
+                lastSentPositionRef.current = { ...newPosition };
+            }
+            isMovingRef.current = false;
+        }
+        // If still moving (isMoving = true and wasMoving = true), interval is already running
+        // The interval will check positionRef.current on each tick and send updates
+        // If still stopped (isMoving = false and wasMoving = false), do nothing
     }, []);
 
     /**
@@ -263,17 +356,20 @@ export const useCampusSimulator = (lobbyId = null) => {
      */
     const leaveLobby = useCallback(async () => {
         try {
-            if (currentLobby?.id) {
-                console.log('Leaving lobby:', currentLobby.id);
-                    // Only call API leave if the WebSocket had previously connected (to avoid leaving on handshake failures)
-                    if (wsEverConnectedRef.current) {
-                        await campusApi.leaveLobby(currentLobby.id);
-                    } else {
-                        console.log('Skipping API leave because WebSocket never connected');
-                    }
+            const lobbyIdToLeave = currentLobbyIdRef.current;
+            if (lobbyIdToLeave) {
+                console.log('Leaving lobby:', lobbyIdToLeave);
+                // Only call API leave if the WebSocket had previously connected (to avoid leaving on handshake failures)
+                if (wsEverConnectedRef.current) {
+                    await campusApi.leaveLobby(lobbyIdToLeave);
+                } else {
+                    console.log('Skipping API leave because WebSocket never connected');
+                }
                 
                 // Clean up lobby-specific state
                 setCurrentLobby(null);
+                currentLobbyIdRef.current = null;
+                wsEverConnectedRef.current = false;
                 setLobbyMembers([]);
                 setPlayerPositions(new Map());
                 setChatMessages([]);
@@ -286,17 +382,21 @@ export const useCampusSimulator = (lobbyId = null) => {
             console.error('Failed to leave lobby:', error);
             setError(`Failed to leave lobby: ${error.message}`);
         }
-    }, [currentLobby]);
+    }, []);
 
     /**
      * Disconnect from lobby
      */
     const disconnect = useCallback(async () => {
         try {
-            // First, leave the lobby via API if we're in one
-            if (currentLobby?.id) {
-                console.log('Leaving lobby via API:', currentLobby.id);
-                await campusApi.leaveLobby(currentLobby.id);
+            // First, leave the lobby via API if we're in one and WebSocket was connected
+            // Only leave if WebSocket was successfully connected (to avoid leaving on handshake failures)
+            const lobbyIdToLeave = currentLobbyIdRef.current;
+            if (lobbyIdToLeave && wsEverConnectedRef.current) {
+                console.log('Leaving lobby via API:', lobbyIdToLeave);
+                await campusApi.leaveLobby(lobbyIdToLeave);
+            } else if (lobbyIdToLeave) {
+                console.log('Skipping API leave - WebSocket never successfully connected');
             }
         } catch (error) {
             console.warn('Failed to leave lobby via API:', error);
@@ -307,11 +407,13 @@ export const useCampusSimulator = (lobbyId = null) => {
         campusWebSocket.disconnect();
         setIsConnected(false);
         setCurrentLobby(null);
+        currentLobbyIdRef.current = null;
+        wsEverConnectedRef.current = false;
         setLobbyMembers([]);
         setPlayerPositions(new Map());
         setChatMessages([]);
         setError(null);
-    }, [currentLobby]);
+    }, []);
 
     /**
      * Get nearby players based on distance
@@ -382,12 +484,34 @@ export const useCampusSimulator = (lobbyId = null) => {
         };
     }, [lobbyId, connectToLobby]);
 
-    // Cleanup on unmount
+    // Cleanup on unmount only (not when disconnect function changes)
     useEffect(() => {
         return () => {
-            disconnect();
+            // Clear position update interval
+            if (positionIntervalRef.current) {
+                clearInterval(positionIntervalRef.current);
+                positionIntervalRef.current = null;
+            }
+            
+            // Clear position throttle timeout if any
+            if (positionThrottleRef.current) {
+                clearTimeout(positionThrottleRef.current);
+                positionThrottleRef.current = null;
+            }
+            
+            // Only leave lobby on actual unmount if WebSocket was connected
+            const lobbyIdToLeave = currentLobbyIdRef.current;
+            if (lobbyIdToLeave && wsEverConnectedRef.current) {
+                console.log('Component unmounting - leaving lobby:', lobbyIdToLeave);
+                campusApi.leaveLobby(lobbyIdToLeave).catch(error => {
+                    console.warn('Failed to leave lobby on unmount:', error);
+                });
+            }
+            // Always disconnect WebSocket on unmount
+            campusWebSocket.disconnect();
         };
-    }, [disconnect]);
+        // Empty dependency array ensures this only runs on mount/unmount, not when other state changes
+    }, []);
 
     return {
         // Connection state

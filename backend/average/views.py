@@ -5,6 +5,7 @@ from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
 from django.shortcuts import get_object_or_404
 from django.db import transaction
+from django.db.models import Count, F
 from .models import AverageSchema, SchemaField, UserSchemaGrades, FieldGrade, SavedSchema
 from .serializers import (
     AverageSchemaSerializer, UserSchemaGradesSerializer, 
@@ -48,11 +49,20 @@ class PublicSchemasList(generics.ListAPIView):
     
     def get_queryset(self):
         search = self.request.query_params.get('search', '')
-        queryset = AverageSchema.objects.filter(is_public=True).prefetch_related(
+        queryset = AverageSchema.objects.filter(is_public=True).annotate(
+            # Count direct usage (UserSchemaGrades) - using lowercase model name for Count
+            direct_usage_count=Count('userschemagrades', distinct=True),
+            # Count saves (SavedSchema)
+            saves_count=Count('saved_by_users', distinct=True),
+            # Total usage count (sum of both)
+            total_usage_count=F('direct_usage_count') + F('saves_count')
+        ).prefetch_related(
             'userschemagrades_set', 'saved_by_users', 'fields'
         )
         if search:
             queryset = queryset.filter(name__icontains=search)
+        # Order by total usage count (most used first), then by created_at for tie-breaking
+        queryset = queryset.order_by('-total_usage_count', '-created_at')
         return queryset
     
     def get_serializer_context(self):

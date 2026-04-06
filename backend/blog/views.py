@@ -114,6 +114,23 @@ class BlogPostDetailView(generics.RetrieveUpdateDestroyAPIView):
     def get_serializer_context(self):
         return {'request': self.request}
 
+    def get_object(self):
+        """
+        Override get_object to ensure user can only access their own posts for update/delete operations
+        """
+        obj = super().get_object()
+        
+        # For safe methods (GET), allow access to any post
+        if self.request.method in permissions.SAFE_METHODS:
+            return obj
+        
+        # For unsafe methods (PUT, PATCH, DELETE), check ownership
+        if obj.author != self.request.user:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("You can only modify your own blog posts.")
+        
+        return obj
+
     def perform_update(self, serializer):
         # Sanitize input data for updates
         data = self.request.data.copy()
@@ -134,7 +151,8 @@ class BlogPostDetailView(generics.RetrieveUpdateDestroyAPIView):
         except ValidationError as e:
             raise ValidationError(str(e))
         
-        serializer.save(author=self.request.user)
+        # Don't change the author - keep the original author
+        serializer.save()
 
 # Toggle like on a post
 class ToggleLikeView(APIView):

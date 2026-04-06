@@ -97,6 +97,19 @@ class CampusWebSocketService {
             console.log('WebSocket connection closed:', event.code, event.reason);
             this.isConnected = false;
             this.emit('disconnected', { code: event.code, reason: event.reason });
+            
+            // Handle specific error codes
+            if (event.code === 4001) {
+                this.emit('error', { message: 'Authentication failed. Please log in again.' });
+                return;
+            } else if (event.code === 4003) {
+                this.emit('error', { message: 'You are not a member of this lobby.' });
+                return;
+            } else if (event.code === 4004) {
+                this.emit('error', { message: 'Lobby not found or inactive.' });
+                return;
+            }
+            
             // Attempt to reconnect unless it was a normal closure
             if (event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts) {
                 const idToReconnect = this.lobbyId;
@@ -117,6 +130,8 @@ class CampusWebSocketService {
                     this.reconnectTimer = null;
                     this.connect(idToReconnect);
                 }, 2000 * Math.max(1, this.reconnectAttempts));
+            } else if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+                this.emit('error', { message: 'Max reconnection attempts reached. Please refresh the page.' });
             }
         };
 

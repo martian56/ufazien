@@ -1,20 +1,23 @@
-
-
-
-
-
 # Create a default JSON response fro 'api/' endpoint
 # THAT will include api documentation urls and a status message
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import generics
 from rest_framework.pagination import PageNumberPagination
+from django.utils import timezone
+from datetime import timedelta
 
-from .models import Notification, NotificationPreference, PushSubscription
-from .serializers import NotificationSerializer, NotificationPreferenceSerializer, PushSubscriptionSerializer
+from .models import Notification, NotificationPreference, PushSubscription, Feedback
+from .serializers import (
+    NotificationSerializer, 
+    NotificationPreferenceSerializer, 
+    PushSubscriptionSerializer,
+    FeedbackSerializer
+)
+from .throttles import FeedbackRateThrottle
 
 class ApiStatus(APIView):
     """
@@ -128,3 +131,97 @@ def get_vapid_public_key(request):
         return Response({'error': 'VAPID public key not configured'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     return Response({'publicKey': public_key})
+
+
+# Feedback Views
+class FeedbackPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = 'page_size'
+    max_page_size = 50
+
+class FeedbackListCreateView(generics.ListCreateAPIView):
+    """
+    List user's feedback submissions and create new feedback.
+    Rate limited to 1 feedback per 5 minutes.
+    """
+    serializer_class = FeedbackSerializer
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [FeedbackRateThrottle]
+    pagination_class = FeedbackPagination
+    
+    def get_queryset(self):
+        """Return only the authenticated user's feedback"""
+        return Feedback.objects.filter(user=self.request.user).order_by('-created_at')
+    
+    def perform_create(self, serializer):
+        """Automatically set the user when creating feedback"""
+        serializer.save(user=self.request.user)
+    
+    def create(self, request, *args, **kwargs):
+        """Override create to return additional info on success"""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        
+        return Response({
+            'message': 'Feedback submitted successfully. Thank you!',
+            'feedback': serializer.data,
+            'next_allowed_at': (timezone.now() + timedelta(minutes=5)).isoformat()
+        }, status=status.HTTP_201_CREATED, headers=headers)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def feedback_rate_limit_status(request):
+    """
+    Check if user can submit feedback and when they can submit next.
+    Returns:
+        - can_submit: boolean
+        - next_allowed_at: ISO timestamp (if can't submit)
+        - seconds_remaining: seconds until next allowed (if can't submit)
+    """
+    # Get user's last feedback
+    last_feedback = Feedback.objects.filter(user=request.user).order_by('-created_at').first()
+    
+    if not last_feedback:
+        return Response({
+            'can_submit': True,
+            'message': 'You can submit feedback now.'
+        })
+    
+    # Calculate time since last feedback
+    now = timezone.now()
+    time_since_last = now - last_feedback.created_at
+    wait_time = timedelta(minutes=5)
+    
+    if time_since_last >= wait_time:
+        return Response({
+            'can_submit': True,
+            'message': 'You can submit feedback now.'
+        })
+    else:
+        time_remaining = wait_time - time_since_last
+        next_allowed_at = last_feedback.created_at + wait_time
+        
+        return Response({
+            'can_submit': False,
+            'message': 'Please wait before submitting another feedback.',
+            'next_allowed_at': next_allowed_at.isoformat(),
+            'seconds_remaining': int(time_remaining.total_seconds()),
+            'last_feedback_at': last_feedback.created_at.isoformat()
+        })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def feedback_types(request):
+    """Get available feedback types"""
+    from .models import Feedback as FeedbackModel
+    
+    types = [
+        {'value': choice[0], 'label': choice[1]} 
+        for choice in FeedbackModel.FEEDBACK_TYPES
+    ]
+    
+    return Response({'feedback_types': types})

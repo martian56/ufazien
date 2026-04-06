@@ -31,6 +31,7 @@ class PublicUserSerializer(serializers.ModelSerializer):
     This should be used for displaying user info to other users (e.g., in blog posts, comments)
     """
     followers_count = serializers.IntegerField(source='followers.count', read_only=True)
+    following_count = serializers.IntegerField(source='following.count', read_only=True)
     is_staff = serializers.BooleanField(read_only=True)
     is_active = serializers.BooleanField(read_only=True)
     avatar_url = serializers.SerializerMethodField()
@@ -44,6 +45,7 @@ class PublicUserSerializer(serializers.ModelSerializer):
             "first_name",
             "last_name",
             "followers_count",
+            "following_count",
             "is_following",
             "year",
             "bio",
@@ -71,10 +73,12 @@ class PublicUserSerializer(serializers.ModelSerializer):
 
 class UserSerializer(serializers.ModelSerializer):
     followers_count = serializers.IntegerField(source='followers.count', read_only=True)
+    following_count = serializers.IntegerField(source='following.count', read_only=True)
     is_staff = serializers.BooleanField(read_only=True)
     is_active = serializers.BooleanField(read_only=True)
     avatar_url = serializers.SerializerMethodField()
     is_following = serializers.SerializerMethodField()
+    has_password = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -85,6 +89,7 @@ class UserSerializer(serializers.ModelSerializer):
             "first_name",
             "last_name",
             "followers_count",
+            "following_count",
             "is_following",
             "year",
             "bio",
@@ -95,11 +100,23 @@ class UserSerializer(serializers.ModelSerializer):
             "completed_credits",
             "phone",
             "is_staff",
-            "is_active"
+            "is_active",
+            "has_password"
         ]
         extra_kwargs = {
             'password': {'write_only': True}
         }
+    
+    def get_has_password(self, obj):
+        """Check if user has a usable password set by examining the password field directly"""
+        from django.contrib.auth.hashers import UNUSABLE_PASSWORD_PREFIX
+        if not obj.password:
+            return False
+        # Check if password is marked as unusable (starts with UNUSABLE_PASSWORD_PREFIX)
+        if obj.password.startswith(UNUSABLE_PASSWORD_PREFIX):
+            return False
+        # If password exists and is not unusable, user has a password
+        return True
 
     def to_representation(self, instance):
         """
@@ -116,6 +133,10 @@ class UserSerializer(serializers.ModelSerializer):
         # If the requesting user is not the profile owner, hide sensitive info
         if request.user.id != instance.id:
             self._hide_sensitive_fields(data)
+        else:
+            # Only show has_password to the user themselves
+            # It's already included in the data, so we don't need to do anything
+            pass
             
         return data
     
@@ -123,7 +144,7 @@ class UserSerializer(serializers.ModelSerializer):
         """
         Remove sensitive fields from the serialized data
         """
-        sensitive_fields = ['email', 'phone', 'gpa']
+        sensitive_fields = ['email', 'phone', 'gpa', 'has_password']
         for field in sensitive_fields:
             if field in data:
                 del data[field]
