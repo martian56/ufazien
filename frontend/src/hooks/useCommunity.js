@@ -107,64 +107,11 @@ export const useCommunityData = () => {
       console.error('💥 Error stack:', err.stack);
       setError(err.message);
       
-      console.log('🔄 Falling back to mock data...');
-      // Fallback to mock data if API fails
-      setGroups([
-        {
-          id: 1,
-          name: "CS301 - Database Systems",
-          description: "Study group for Database Systems course",
-          category: "study",
-          type: "public",
-          member_count: 24,
-          max_members: 30,
-          is_member: true,
-          tags: ["database", "sql", "study-group"]
-        }
-      ]);
-      
-      setForums([
-        {
-          id: 1,
-          title: "General Discussion",
-          description: "General topics and campus life discussions",
-          category: "general",
-          icon_name: "MessageCircle",
-          color_class: "bg-blue-500",
-          post_count: 1247,
-          member_count: 892,
-          last_post: {
-            id: "1",
-            title: "New cafeteria menu - thoughts?",
-            author: "Mike Chen",
-            timestamp: new Date().toISOString()
-          }
-        }
-      ]);
-      
-      setPosts([
-        {
-          id: 1,
-          title: "Tips for acing your Database Systems final exam",
-          content: "After taking the exam last semester, here are some key tips...",
-          author: {
-            name: "Alice Chen",
-            avatar: "/placeholder.svg",
-            year: "4th Year",
-            major: "Computer Science"
-          },
-          category: "academic",
-          tags: ["database", "exams", "study-tips"],
-          created_at: new Date().toISOString(),
-          like_count: 24,
-          reply_count: 8,
-          view_count: 156,
-          is_liked: false,
-          is_bookmarked: true
-        }
-      ]);
-      
-      console.log('✅ Mock data loaded as fallback');
+      // No mock fallback. Showing invented groups and posts hid real API
+      // failures from users and from us; the page renders an error state.
+      setGroups([]);
+      setForums([]);
+      setPosts([]);
     } finally {
       setLoading(false);
       console.log('✅ Loading state set to false');
