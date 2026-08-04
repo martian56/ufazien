@@ -34,10 +34,12 @@ RUN mkdir -p /app/static /app/media
 RUN mkdir -p /srv/hosting \
     && chmod 755 /srv/hosting
 
-# Collect static files
+# Collect static files. Needs no database, so it stays at build time.
+# migrate / create_subscription_plans moved to entrypoint.sh: running them here
+# required a live production database during every image build.
 RUN python manage.py collectstatic --noinput
-RUN python manage.py migrate
-RUN python manage.py create_subscription_plans
+
+RUN chmod +x /app/entrypoint.sh
 
 # Create a non-root user
 RUN adduser --disabled-password --gecos '' appuser \
@@ -54,5 +56,6 @@ HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
 
 # Run the application
 # Note: Using single worker for WebSocket support (multiple workers don't work with WebSockets)
+ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["uvicorn", "ufazien.asgi:application", "--host", "0.0.0.0", "--port", "8000", "--timeout-keep-alive", "120"]
 
