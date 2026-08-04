@@ -29,7 +29,6 @@ import {
   AlertCircle
 } from "lucide-react"
 import SideBar from "../../../components/ui/SideBar"
-import BuyMeACoffee from "../../../components/ui/BuyMeACoffee"
 import AverageTab from "./AverageTab"
 import MySchemasTab from "./MySchemasTab"
 import PublicSchemasTab from "./PublicSchemasTab"
@@ -344,7 +343,6 @@ export default function AverageCalculator() {
             </div>
 
             <div className="flex items-center gap-4">
-              <BuyMeACoffee />
               <TrendingUp className="w-8 h-8 text-blue-600" />
             </div>
           </div>
