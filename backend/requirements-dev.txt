@@ -1,0 +1,7 @@
+# Test-only dependencies. Not installed into the production image.
+-r requirements.txt
+
+# channels.testing imports ChannelsLiveServerTestCase at package level, which
+# needs daphne, even when only WebsocketCommunicator is used. Production serves
+# ASGI with uvicorn.
+daphne==4.1.2

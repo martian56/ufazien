@@ -107,13 +107,17 @@ class LobbyConsumer(AsyncWebsocketConsumer):
 
     async def handle_player_position(self, data):
         """Handle player position updates."""
+        # These are the fields PlayerPosition actually has, and the ones the
+        # client sends. The previous z/rotation_* keys existed on neither, so
+        # direction, is_moving and current_room were dropped from every update:
+        # remote players never animated, never faced the right way, and room
+        # presence never propagated.
         position_data = {
             'x': data.get('x', 0),
             'y': data.get('y', 0),
-            'z': data.get('z', 0),
-            'rotation_x': data.get('rotation_x', 0),
-            'rotation_y': data.get('rotation_y', 0),
-            'rotation_z': data.get('rotation_z', 0),
+            'direction': data.get('direction', 'down'),
+            'is_moving': data.get('is_moving', False),
+            'current_room': data.get('current_room'),
         }
         
         # Update player position in database

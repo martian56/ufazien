@@ -4,8 +4,10 @@ from . import views
 app_name = 'game'
 
 urlpatterns = [
-    # Lobby management
+    # Lobby management.
+    # stats/ must precede <lobby_id>/ or it is captured as a lobby id and 404s.
     path('lobbies/', views.lobby_list_create, name='lobby_list_create'),
+    path('lobbies/stats/', views.lobby_stats, name='lobby_stats'),
     path('lobbies/<str:lobby_id>/', views.lobby_detail, name='lobby_detail'),
     path('lobbies/<str:lobby_id>/leave/', views.leave_lobby, name='leave_lobby'),
     
@@ -19,7 +21,4 @@ urlpatterns = [
     # Saved lobbies
     path('saved-lobbies/', views.saved_lobbies, name='saved_lobbies'),
     path('saved-lobbies/<str:lobby_id>/', views.remove_saved_lobby, name='remove_saved_lobby'),
-    
-    # Statistics
-    path('lobbies/stats/', views.lobby_stats, name='lobby_stats'),
 ]
