@@ -63,7 +63,8 @@ INSTALLED_APPS = [
     'game',
     'ai_tools',
     'hosting',
-    'community'
+    'community',
+    'schedule',
 ]
 
 
