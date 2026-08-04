@@ -37,9 +37,10 @@ services:
       # generates a Host() rule. Hence custom labels + "Readonly labels" off.
       - "traefik.http.routers.ufazien-hosting.rule=HostRegexp(`^.+\\.ufazien\\.com$`)"
       - "traefik.http.routers.ufazien-hosting.entrypoints=http"
-      # Lower than the main app so ufazien.com / api.ufazien.com win over the
-      # wildcard. Those routers are priority 1 by default; anything >1 here
-      # would swallow them.
+      # Deliberately low. Traefik v3 defaults an unset priority to the LENGTH of
+      # the rule, so Host(`api.ufazien.com`) scores ~24 and beats this. That is
+      # what keeps ufazien.com / www / api routing to the apps instead of being
+      # swallowed by the wildcard. Do not "fix" this by raising it.
       - "traefik.http.routers.ufazien-hosting.priority=2"
       - "traefik.http.services.ufazien-hosting.loadbalancer.server.port=80"
       #
