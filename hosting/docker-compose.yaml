@@ -16,11 +16,16 @@
 
 services:
   hosting:
-    image: nginx:alpine
+    # Built rather than using nginx:alpine directly, so hosting.conf ships in
+    # the image. Coolify rewrites relative bind mounts to
+    # /data/coolify/applications/<uuid>/..., not the git checkout, so mounting
+    # ./nginx/hosting.conf silently resolves to a nonexistent path.
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
     restart: unless-stopped
     volumes:
       - /data/ufazien/hosting:/var/www/html
-      - ./nginx/hosting.conf:/etc/nginx/conf.d/default.conf:ro
     expose:
       - "80"
     depends_on:
