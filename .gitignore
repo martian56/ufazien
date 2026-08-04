@@ -14,3 +14,4 @@ id_ed25519*
 *.env
 !.env.example
 !*.env.example
+.venv/

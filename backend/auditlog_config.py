@@ -3,6 +3,8 @@ Django Auditlog Configuration
 This file registers all models for comprehensive audit logging
 """
 
+import logging
+
 from auditlog.registry import auditlog
 from django.contrib.auth import get_user_model
 
@@ -100,5 +102,5 @@ def register_all_models():
 # Call the registration function
 register_all_models()
 
-print("✅ All models registered for audit logging!")
+logging.getLogger(__name__).info("All models registered for audit logging")
 
