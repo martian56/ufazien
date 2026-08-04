@@ -82,30 +82,25 @@ MIDDLEWARE = [
 
 
 
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173", 
-    "http://localhost:5174", 
-    "http://ufazien.com",  
-    "https://ufazien.com", 
-    "http://13.42.171.119",
+# Comma-separated env override; the list below is the fallback default.
+def _env_list(name, default):
+    raw = os.getenv(name, "")
+    return [v.strip() for v in raw.split(",") if v.strip()] or default
+
+
+CORS_ALLOWED_ORIGINS = _env_list("DJANGO_CORS_ALLOWED_ORIGINS", [
+    "http://localhost:5173",
+    "http://localhost:5174",
+    "http://ufazien.com",
+    "https://ufazien.com",
     "http://api.ufazien.com",
-    "https://api.ufazien.com"
-]
+    "https://api.ufazien.com",
+])
 
 CORS_ALLOW_CREDENTIALS = True
 
 # Allow all headers for multipart/form-data uploads
 CORS_ALLOW_ALL_HEADERS = True
-
-CSRF_TRUSTED_ORIGINS = [
-    "http://localhost:5173",
-    "http://localhost:5174", 
-    "http://ufazien.com",
-    "https://ufazien.com",
-    "http://13.42.171.119",
-    "http://api.ufazien.com",
-    "https://api.ufazien.com"
-]
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
@@ -360,11 +355,11 @@ DB_ADMIN = {
     }
 }
 # Cloudflare / Traefik Cookie & Proxy Fixes
-CSRF_TRUSTED_ORIGINS = [
+CSRF_TRUSTED_ORIGINS = _env_list("DJANGO_CSRF_TRUSTED_ORIGINS", [
     "https://api.ufazien.com",
     "https://ufazien.com",
     "https://www.ufazien.com",
-]
+])
 
 CSRF_COOKIE_SECURE = True
 CSRF_COOKIE_SAMESITE = "None"
