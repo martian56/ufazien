@@ -43,20 +43,19 @@ services:
       - "traefik.http.routers.ufazien-hosting.priority=2"
       - "traefik.http.services.ufazien-hosting.loadbalancer.server.port=80"
       #
-      # TLS is deliberately NOT enabled yet. A wildcard cert cannot be issued
-      # over HTTP-01; it needs the Cloudflare DNS-01 resolver configured in
-      # Coolify's Traefik static config. Enabling these before that exists
-      # would just burn Let's Encrypt failed-validation rate limits.
-      # Once the DNS-01 resolver is in place, add:
-      #
-      # - "traefik.http.routers.ufazien-hosting-tls.rule=HostRegexp(`^.+\\.ufazien\\.com$`)"
-      # - "traefik.http.routers.ufazien-hosting-tls.entrypoints=https"
-      # - "traefik.http.routers.ufazien-hosting-tls.priority=2"
-      # - "traefik.http.routers.ufazien-hosting-tls.tls=true"
-      # - "traefik.http.routers.ufazien-hosting-tls.tls.certresolver=letsencrypt"
-      # - "traefik.http.routers.ufazien-hosting-tls.tls.domains[0].main=ufazien.com"
-      # - "traefik.http.routers.ufazien-hosting-tls.tls.domains[0].sans=*.ufazien.com"
-      # - "traefik.http.services.ufazien-hosting-tls.loadbalancer.server.port=80"
+      # HTTPS. certresolver must be `cloudflare` (DNS-01), not Coolify's default
+      # `letsencrypt` (HTTP-01): Let's Encrypt will not issue a wildcard over
+      # HTTP-01, and Traefik has no hostname list to work from with HostRegexp.
+      # tls.domains is what tells it to request the wildcard explicitly.
+      - "traefik.http.routers.ufazien-hosting-tls.rule=HostRegexp(`^.+\\.ufazien\\.com$`)"
+      - "traefik.http.routers.ufazien-hosting-tls.entrypoints=https"
+      - "traefik.http.routers.ufazien-hosting-tls.priority=2"
+      - "traefik.http.routers.ufazien-hosting-tls.tls=true"
+      - "traefik.http.routers.ufazien-hosting-tls.tls.certresolver=cloudflare"
+      - "traefik.http.routers.ufazien-hosting-tls.tls.domains[0].main=ufazien.com"
+      - "traefik.http.routers.ufazien-hosting-tls.tls.domains[0].sans=*.ufazien.com"
+      # Reuse the service defined above rather than declaring a second one.
+      - "traefik.http.routers.ufazien-hosting-tls.service=ufazien-hosting"
 
   php:
     build: .
