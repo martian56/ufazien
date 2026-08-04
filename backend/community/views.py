@@ -1,5 +1,5 @@
 from django.shortcuts import render
-from django.db.models import Q, Count, Prefetch
+from django.db.models import Q, Count, F, Prefetch
 from django.utils import timezone
 from rest_framework import viewsets, status, permissions, filters
 from rest_framework.decorators import action
@@ -84,22 +84,44 @@ class GroupViewSet(viewsets.ModelViewSet):
         Override get_object to ensure user can only access groups they own or moderate for update/delete operations
         """
         obj = super().get_object()
-        
-        # For safe methods (GET), allow access to any group (with existing filters)
+
+        # Safe methods are open to anyone who can see the group.
         if self.request.method in permissions.SAFE_METHODS:
             return obj
-        
-        # For unsafe methods (PUT, PATCH, DELETE), check ownership or moderation rights
+
+        # join and leave are POSTs, but they change the caller's membership,
+        # not the group itself. Gating them on ownership meant nobody could
+        # join a group they did not already own.
+        if self.action in {'join', 'leave'}:
+            return obj
+
+        # Everything else that writes (PUT, PATCH, DELETE) needs ownership or
+        # moderation rights.
         if not (obj.owner == self.request.user or obj.moderators.filter(id=self.request.user.id).exists()):
             from rest_framework.exceptions import PermissionDenied
             raise PermissionDenied("You can only modify groups you own or moderate.")
-        
+
         return obj
     
     def get_serializer_class(self):
         if self.action == 'create':
             return GroupCreateSerializer
         return GroupSerializer
+
+    def create(self, request, *args, **kwargs):
+        """Return the full group after creating it.
+
+        GroupCreateSerializer omits id, so the client had no way to reference
+        the group it had just made without refetching the whole list.
+        """
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        output = GroupSerializer(
+            serializer.instance, context=self.get_serializer_context()
+        )
+        headers = self.get_success_headers(output.data)
+        return Response(output.data, status=status.HTTP_201_CREATED, headers=headers)
     
     def perform_create(self, serializer):
         """Create group and add creator as owner member"""
@@ -313,7 +335,23 @@ class ForumPostViewSet(viewsets.ModelViewSet):
         if self.action == 'create':
             return ForumPostCreateSerializer
         return ForumPostSerializer
-    
+
+    def create(self, request, *args, **kwargs):
+        """Return the full post after creating it.
+
+        ForumPostCreateSerializer only declares title/content/tags/forum_id, so
+        responding with it gave the client no id and no author, leaving the UI
+        unable to open, like or update the post it had just created.
+        """
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        output = ForumPostSerializer(
+            serializer.instance, context=self.get_serializer_context()
+        )
+        headers = self.get_success_headers(output.data)
+        return Response(output.data, status=status.HTTP_201_CREATED, headers=headers)
+
     def retrieve(self, request, *args, **kwargs):
         """Increment view count when post is viewed"""
         instance = self.get_object()
@@ -567,23 +605,25 @@ class RecommendedGroupsView(APIView):
         for group in user_groups:
             user_tags.extend(group.tags)
         
-        # Find groups with similar categories or tags
+        # is_full and member_count are Python properties, not columns, so they
+        # cannot be used in exclude()/annotate(). Count members in the query and
+        # compare against max_members instead.
         recommended = Group.objects.filter(
             is_active=True,
             type='public'
         ).exclude(
             members=user
-        ).exclude(
-            is_full=True
+        ).annotate(
+            num_members=Count('members', distinct=True)
+        ).filter(
+            num_members__lt=F('max_members')
         )
-        
+
         if user_categories:
-            recommended = recommended.filter(category__in=user_categories)
-        
+            recommended = recommended.filter(category__in=list(user_categories))
+
         # Order by relevance and limit results
-        recommended = recommended.annotate(
-            member_count=Count('members')
-        ).order_by('-member_count')[:10]
+        recommended = recommended.order_by('-num_members')[:10]
         
         serializer = GroupSerializer(recommended, many=True, context={'request': request})
         return Response(serializer.data)
