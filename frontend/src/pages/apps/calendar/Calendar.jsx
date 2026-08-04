@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { Helmet } from "react-helmet"
 import { useNavigate } from "react-router-dom"
+import { calendarApi } from "../../../services/calendarApi"
 import {
   CalendarIcon,
   ChevronLeft,
@@ -59,111 +60,31 @@ export default function Calendar() {
     recurring: "none",
   })
 
-  const [events, setEvents] = useState([
-    {
-      id: 1,
-      title: "Database Systems Lecture",
-      description: "Chapter 5: Query Optimization",
-      date: "2024-01-15",
-      startTime: "09:00",
-      endTime: "10:30",
-      location: "Room A-201",
-      category: "class",
-      priority: "high",
-      professor: "Dr. Smith",
-      courseCode: "CS301",
-      recurring: "weekly",
-      color: "bg-blue-500",
-    },
-    {
-      id: 2,
-      title: "Web Development Assignment Due",
-      description: "Final project submission deadline",
-      date: "2024-01-16",
-      startTime: "23:59",
-      endTime: "23:59",
-      location: "Online Submission",
-      category: "assignment",
-      priority: "high",
-      courseCode: "CS205",
-      color: "bg-red-500",
-    },
-    {
-      id: 3,
-      title: "Study Group - Algorithms",
-      description: "Preparing for midterm exam",
-      date: "2024-01-17",
-      startTime: "14:00",
-      endTime: "16:00",
-      location: "Library Study Room 3",
-      category: "study",
-      priority: "medium",
-      participants: ["Alice", "Bob", "Charlie"],
-      color: "bg-green-500",
-    },
-    {
-      id: 4,
-      title: "Career Fair",
-      description: "Annual UFAZ Career Fair - Tech Companies",
-      date: "2024-01-18",
-      startTime: "10:00",
-      endTime: "17:00",
-      location: "Main Campus Hall",
-      category: "event",
-      priority: "medium",
-      color: "bg-purple-500",
-    },
-    {
-      id: 5,
-      title: "Office Hours - Prof. Johnson",
-      description: "Questions about Linear Algebra",
-      date: "2024-01-19",
-      startTime: "15:00",
-      endTime: "16:00",
-      location: "Office B-305",
-      category: "meeting",
-      priority: "low",
-      professor: "Prof. Johnson",
-      color: "bg-orange-500",
-    },
-    {
-      id: 6,
-      title: "Midterm Exam - Data Structures",
-      description: "Covers chapters 1-8",
-      date: "2024-01-22",
-      startTime: "10:00",
-      endTime: "12:00",
-      location: "Exam Hall A",
-      category: "exam",
-      priority: "high",
-      courseCode: "CS202",
-      color: "bg-red-600",
-    },
-    {
-      id: 7,
-      title: "CS Club Meeting",
-      description: "Planning for hackathon event",
-      date: "2024-01-20",
-      startTime: "18:00",
-      endTime: "19:30",
-      location: "Student Center Room 201",
-      category: "club",
-      priority: "low",
-      color: "bg-indigo-500",
-    },
-    {
-      id: 8,
-      title: "Lunch with Sarah",
-      description: "Catch up and discuss project",
-      date: "2024-01-16",
-      startTime: "12:30",
-      endTime: "13:30",
-      location: "Campus Cafeteria",
-      category: "personal",
-      priority: "low",
-      color: "bg-pink-500",
-    },
-  ])
+  const [events, setEvents] = useState([])
+  const [eventsLoading, setEventsLoading] = useState(true)
+  const [eventsError, setEventsError] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setEventsLoading(true)
+    calendarApi
+      .list()
+      .then((data) => {
+        if (!cancelled) {
+          setEvents(data)
+          setEventsError(null)
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) setEventsError(err?.message || "Failed to load events")
+      })
+      .finally(() => {
+        if (!cancelled) setEventsLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const categories = [
     { id: "all", name: "All Events", color: "bg-gray-500", icon: CalendarIcon },
@@ -278,13 +199,14 @@ export default function Calendar() {
   const handleCreateEvent = () => {
     if (!newEvent.title || !newEvent.date || !newEvent.startTime) return
 
-    const event = {
-      id: Date.now(),
-      ...newEvent,
-      color: categories.find((cat) => cat.id === newEvent.category)?.color || "bg-gray-500",
-    }
+    calendarApi
+      .create(newEvent)
+      .then((created) => {
+        setEvents((current) => [...current, created])
+        setEventsError(null)
+      })
+      .catch((err) => setEventsError(err?.message || "Failed to create event"))
 
-    setEvents([...events, event])
     setNewEvent({
       title: "",
       description: "",
@@ -302,9 +224,15 @@ export default function Calendar() {
 
   // Handle event deletion
   const handleDeleteEvent = (eventId) => {
+    const previous = events
     setEvents(events.filter((event) => event.id !== eventId))
     setShowEventDetails(false)
     setSelectedEvent(null)
+    calendarApi.remove(eventId).catch((err) => {
+      // Put it back if the server rejected the delete.
+      setEvents(previous)
+      setEventsError(err?.message || "Failed to delete event")
+    })
   }
 
   // Export calendar to CSV
@@ -367,6 +295,16 @@ export default function Calendar() {
         <meta name="description" content="Manage your academic schedule with Ufazien's calendar." />
       </Helmet>
       <div className="min-h-screen bg-gray-50 flex">
+        {eventsError && (
+          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[60] bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded-lg shadow-sm">
+            Could not sync your calendar: {eventsError}
+          </div>
+        )}
+        {eventsLoading && (
+          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[60] bg-white border border-gray-200 text-gray-600 px-4 py-2 rounded-lg shadow-sm">
+            Loading your events...
+          </div>
+        )}
         {/* Sidebar */}
         <aside
           className={`fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0 ${
