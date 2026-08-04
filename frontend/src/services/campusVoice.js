@@ -36,7 +36,7 @@ export class CampusVoice {
   }
 
   async connect(lobbyId) {
-    const { data } = await apiClient.post(`/game/lobbies/${lobbyId}/livekit-token/`)
+    const data = await apiClient.post(`/game/lobbies/${lobbyId}/livekit-token/`)
     this.canPublishSources = data.can_publish_sources || []
     this.isHost = Boolean(data.is_host)
 
@@ -57,8 +57,15 @@ export class CampusVoice {
 
     await this.room.connect(data.url, data.token)
 
+    // Publishing a mic is best effort. If the user denies permission or has no
+    // input device, they should still be connected and able to hear everyone
+    // else rather than losing voice altogether.
     if (this.canPublishSources.includes("microphone")) {
-      await this.room.localParticipant.setMicrophoneEnabled(true)
+      try {
+        await this.room.localParticipant.setMicrophoneEnabled(true)
+      } catch (err) {
+        this.microphoneError = err?.message || "Microphone unavailable"
+      }
     }
 
     this._notifyParticipants()
@@ -230,7 +237,7 @@ export class CampusVoice {
 
   /** Re-mint the token after the host changes this member's permissions. */
   async refreshPermissions(lobbyId) {
-    const { data } = await apiClient.post(`/game/lobbies/${lobbyId}/livekit-token/`)
+    const data = await apiClient.post(`/game/lobbies/${lobbyId}/livekit-token/`)
     this.canPublishSources = data.can_publish_sources || []
     this.isHost = Boolean(data.is_host)
     if (!this.canPublishSources.includes("microphone") && this.microphoneEnabled) {
@@ -245,15 +252,15 @@ export class CampusVoice {
 
 export const campusHostApi = {
   permissions: (lobbyId) =>
-    apiClient.get(`/game/lobbies/${lobbyId}/permissions/`).then((r) => r.data),
+    apiClient.get(`/game/lobbies/${lobbyId}/permissions/`),
   setMuted: (lobbyId, userId, muted) =>
     apiClient
       .post(`/game/lobbies/${lobbyId}/members/${userId}/mute/`, { muted })
-      .then((r) => r.data),
+      ,
   setScreenShare: (lobbyId, userId, allowed) =>
     apiClient
       .post(`/game/lobbies/${lobbyId}/members/${userId}/screen-share/`, { allowed })
-      .then((r) => r.data),
+      ,
 }
 
 export default CampusVoice
