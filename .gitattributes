@@ -6,3 +6,4 @@
 *.css text eol=lf
 *.yml text eol=lf
 *.env text eol=lf
+*.sh text eol=lf
