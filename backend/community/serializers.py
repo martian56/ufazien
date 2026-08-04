@@ -9,7 +9,20 @@ from .models import (
 User = get_user_model()
 
 
-class UserBasicSerializer(serializers.ModelSerializer):
+class OwnEmailOnlyMixin(serializers.Serializer):
+    """Expose `email` only to the user it belongs to; null for everyone else."""
+
+    email = serializers.SerializerMethodField()
+
+    def get_email(self, obj):
+        request = self.context.get('request')
+        viewer = getattr(request, 'user', None)
+        if viewer is not None and viewer.is_authenticated and viewer.pk == obj.pk:
+            return obj.email
+        return None
+
+
+class UserBasicSerializer(OwnEmailOnlyMixin, serializers.ModelSerializer):
     """Basic user serializer for nested relationships"""
     class Meta:
         model = User
@@ -17,15 +30,15 @@ class UserBasicSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'username', 'email']
 
 
-class UserProfileSerializer(serializers.ModelSerializer):
+class UserProfileSerializer(OwnEmailOnlyMixin, serializers.ModelSerializer):
     """Extended user serializer with profile information"""
     full_name = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = User
         fields = ['id', 'username', 'first_name', 'last_name', 'email', 'full_name', 'date_joined']
         read_only_fields = ['id', 'username', 'email', 'date_joined']
-    
+
     def get_full_name(self, obj):
         return f"{obj.first_name} {obj.last_name}".strip() or obj.username
 
