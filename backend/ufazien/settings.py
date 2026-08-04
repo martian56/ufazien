@@ -28,8 +28,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.getenv("SECRET_KEY", "django-insecure-default-key-for-development")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-#DEBUG = os.getenv("DJANGO_DEBUG", "True")
-DEBUG=True
+DEBUG = os.getenv("DJANGO_DEBUG", "False").strip().lower() in ("true", "1", "yes", "on")
 # Fix ALLOWED_HOSTS with fallback
 ALLOWED_HOSTS_ENV = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1,testserver,api.ufazien.com")
 ALLOWED_HOSTS = [host.strip() for host in ALLOWED_HOSTS_ENV.split(",") if host.strip()]
@@ -182,8 +181,8 @@ if os.getenv("ENVIRONMENT") == "production":
             'NAME': os.getenv('DB_NAME', 'ufazien_test'),
             'USER': os.getenv('DB_USER', 'ufazien_test_user'),
             'PASSWORD': os.getenv('DB_PASSWORD', 'test_password'),
-            'HOST': 'db.ufazien.com', 
-            'PORT': '',
+            'HOST': os.getenv('DB_HOST', 'db.ufazien.com'),
+            'PORT': os.getenv('DB_PORT', '5432'),
         }
     }
 else:
