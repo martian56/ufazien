@@ -30,6 +30,7 @@
     "dompurify": "^3.2.6",
     "framer-motion": "^12.19.3",
     "gsap": "^3.13.0",
+    "livekit-client": "^2.21.0",
     "lowlight": "^3.3.0",
     "lucide-react": "^0.525.0",
     "prismjs": "^1.30.0",

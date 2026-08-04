@@ -1,0 +1,266 @@
+import { Room, RoomEvent, Track } from "livekit-client"
+import apiClient from "../utils/api"
+
+/**
+ * Voice and screen share for a campus lobby.
+ *
+ * One LiveKit room per lobby. Remote voice is routed through a Web Audio
+ * PannerNode so it attenuates with distance and pans left/right, driven by the
+ * player positions the game already streams over its own WebSocket.
+ *
+ * Publishing rights are not decided here. The server mints a token listing the
+ * sources this participant may publish, so a modified client still cannot
+ * publish audio while muted or share a screen without being granted it.
+ */
+
+// World units. The campus map uses roughly 800x600, so voice carries about a
+// quarter of the map before fading out entirely.
+const HEARING_RADIUS = 220
+const FULL_VOLUME_RADIUS = 60
+
+export class CampusVoice {
+  constructor() {
+    this.room = null
+    this.audioContext = null
+    this.listener = null
+    this.remotes = new Map() // identity -> { element, source, panner, gain }
+    this.localPosition = { x: 0, y: 0 }
+    this.onParticipantsChanged = null
+    this.onScreenShare = null
+    this.canPublishSources = []
+    this.isHost = false
+  }
+
+  get connected() {
+    return this.room?.state === "connected"
+  }
+
+  async connect(lobbyId) {
+    const data = await apiClient.post(`/game/lobbies/${lobbyId}/livekit-token/`)
+    this.canPublishSources = data.can_publish_sources || []
+    this.isHost = Boolean(data.is_host)
+
+    this.room = new Room({ adaptiveStream: true, dynacast: true })
+
+    this.room
+      .on(RoomEvent.TrackSubscribed, (track, publication, participant) =>
+        this._onTrackSubscribed(track, publication, participant),
+      )
+      .on(RoomEvent.TrackUnsubscribed, (track, publication, participant) =>
+        this._onTrackUnsubscribed(track, publication, participant),
+      )
+      .on(RoomEvent.ParticipantConnected, () => this._notifyParticipants())
+      .on(RoomEvent.ParticipantDisconnected, (p) => {
+        this._teardownRemote(p.identity)
+        this._notifyParticipants()
+      })
+
+    await this.room.connect(data.url, data.token)
+
+    // Publishing a mic is best effort. If the user denies permission or has no
+    // input device, they should still be connected and able to hear everyone
+    // else rather than losing voice altogether.
+    if (this.canPublishSources.includes("microphone")) {
+      try {
+        await this.room.localParticipant.setMicrophoneEnabled(true)
+      } catch (err) {
+        this.microphoneError = err?.message || "Microphone unavailable"
+      }
+    }
+
+    this._notifyParticipants()
+    return data
+  }
+
+  async disconnect() {
+    for (const identity of [...this.remotes.keys()]) this._teardownRemote(identity)
+    await this.room?.disconnect()
+    this.room = null
+    if (this.audioContext) {
+      await this.audioContext.close().catch(() => {})
+      this.audioContext = null
+      this.listener = null
+    }
+  }
+
+  // -- spatial audio ------------------------------------------------------
+
+  _ensureAudioContext() {
+    if (!this.audioContext) {
+      const Ctx = window.AudioContext || window.webkitAudioContext
+      this.audioContext = new Ctx()
+      this.listener = this.audioContext.listener
+    }
+    // Browsers start the context suspended until a user gesture.
+    if (this.audioContext.state === "suspended") this.audioContext.resume().catch(() => {})
+    return this.audioContext
+  }
+
+  _onTrackSubscribed(track, publication, participant) {
+    if (track.kind === Track.Kind.Video) {
+      // Screen share: hand the element to the caller to mount on the board.
+      if (publication.source === Track.Source.ScreenShare) {
+        this.onScreenShare?.({
+          identity: participant.identity,
+          element: track.attach(),
+          active: true,
+        })
+      }
+      return
+    }
+
+    if (track.kind !== Track.Kind.Audio) return
+
+    const ctx = this._ensureAudioContext()
+    const element = track.attach()
+    // Route through Web Audio instead of letting the element play directly,
+    // otherwise the raw track would be audible at full volume regardless of
+    // where the speaker is standing.
+    element.muted = true
+    element.play?.().catch(() => {})
+
+    const source = ctx.createMediaStreamSource(new MediaStream([track.mediaStreamTrack]))
+    const panner = ctx.createPanner()
+    panner.panningModel = "HRTF"
+    panner.distanceModel = "inverse"
+    panner.refDistance = FULL_VOLUME_RADIUS
+    panner.maxDistance = HEARING_RADIUS
+    panner.rolloffFactor = 1.4
+
+    const gain = ctx.createGain()
+    source.connect(panner)
+    panner.connect(gain)
+    gain.connect(ctx.destination)
+
+    this.remotes.set(participant.identity, { element, source, panner, gain })
+    this._notifyParticipants()
+  }
+
+  _onTrackUnsubscribed(track, publication, participant) {
+    if (publication.source === Track.Source.ScreenShare) {
+      this.onScreenShare?.({ identity: participant.identity, element: null, active: false })
+      return
+    }
+    if (track.kind === Track.Kind.Audio) this._teardownRemote(participant.identity)
+  }
+
+  _teardownRemote(identity) {
+    const remote = this.remotes.get(identity)
+    if (!remote) return
+    try {
+      remote.source.disconnect()
+      remote.panner.disconnect()
+      remote.gain.disconnect()
+      remote.element.remove()
+    } catch {
+      // already torn down
+    }
+    this.remotes.delete(identity)
+  }
+
+  /** Where the local player is. Moves the Web Audio listener. */
+  setLocalPosition({ x, y }) {
+    this.localPosition = { x, y }
+    if (!this.listener) return
+    // The map is 2D; treat y as depth so left/right panning follows x.
+    if (this.listener.positionX) {
+      this.listener.positionX.value = x
+      this.listener.positionY.value = 0
+      this.listener.positionZ.value = y
+    } else {
+      this.listener.setPosition(x, 0, y)
+    }
+  }
+
+  /** Where a remote player is, keyed by their user id. */
+  setRemotePosition(userId, { x, y }) {
+    const remote = this.remotes.get(`user-${userId}`)
+    if (!remote) return
+    const { panner } = remote
+    if (panner.positionX) {
+      panner.positionX.value = x
+      panner.positionY.value = 0
+      panner.positionZ.value = y
+    } else {
+      panner.setPosition(x, 0, y)
+    }
+  }
+
+  /** Volume 0..1 for a remote, for UI such as a speaking indicator. */
+  distanceVolume(userId, position) {
+    const dx = position.x - this.localPosition.x
+    const dy = position.y - this.localPosition.y
+    const distance = Math.hypot(dx, dy)
+    if (distance <= FULL_VOLUME_RADIUS) return 1
+    if (distance >= HEARING_RADIUS) return 0
+    return 1 - (distance - FULL_VOLUME_RADIUS) / (HEARING_RADIUS - FULL_VOLUME_RADIUS)
+  }
+
+  // -- publishing ---------------------------------------------------------
+
+  async setMicrophoneEnabled(enabled) {
+    if (!this.room) return false
+    if (enabled && !this.canPublishSources.includes("microphone")) return false
+    await this.room.localParticipant.setMicrophoneEnabled(enabled)
+    return true
+  }
+
+  get microphoneEnabled() {
+    return Boolean(this.room?.localParticipant?.isMicrophoneEnabled)
+  }
+
+  get mayScreenShare() {
+    return this.canPublishSources.includes("screen_share")
+  }
+
+  async setScreenShareEnabled(enabled) {
+    if (!this.room) return false
+    if (enabled && !this.mayScreenShare) return false
+    await this.room.localParticipant.setScreenShareEnabled(enabled, { audio: true })
+    return true
+  }
+
+  get screenShareEnabled() {
+    return Boolean(this.room?.localParticipant?.isScreenShareEnabled)
+  }
+
+  _notifyParticipants() {
+    if (!this.onParticipantsChanged || !this.room) return
+    this.onParticipantsChanged(
+      [...this.room.remoteParticipants.values()].map((p) => ({
+        identity: p.identity,
+        name: p.name,
+        speaking: p.isSpeaking,
+      })),
+    )
+  }
+
+  /** Re-mint the token after the host changes this member's permissions. */
+  async refreshPermissions(lobbyId) {
+    const data = await apiClient.post(`/game/lobbies/${lobbyId}/livekit-token/`)
+    this.canPublishSources = data.can_publish_sources || []
+    this.isHost = Boolean(data.is_host)
+    if (!this.canPublishSources.includes("microphone") && this.microphoneEnabled) {
+      await this.room?.localParticipant.setMicrophoneEnabled(false)
+    }
+    if (!this.mayScreenShare && this.screenShareEnabled) {
+      await this.room?.localParticipant.setScreenShareEnabled(false)
+    }
+    return data
+  }
+}
+
+export const campusHostApi = {
+  permissions: (lobbyId) =>
+    apiClient.get(`/game/lobbies/${lobbyId}/permissions/`),
+  setMuted: (lobbyId, userId, muted) =>
+    apiClient
+      .post(`/game/lobbies/${lobbyId}/members/${userId}/mute/`, { muted })
+      ,
+  setScreenShare: (lobbyId, userId, allowed) =>
+    apiClient
+      .post(`/game/lobbies/${lobbyId}/members/${userId}/screen-share/`, { allowed })
+      ,
+}
+
+export default CampusVoice
