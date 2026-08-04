@@ -1,30 +1,64 @@
+# User website hosting: nginx serves *.ufazien.com from a shared webroot,
+# php-fpm executes any PHP inside it.
+#
+# Deployed as a Coolify "Docker Compose" resource (base directory /hosting).
+# Notes on the Coolify-specific bits:
+#   - no `ports:` — Traefik reaches nginx over the Docker network. Publishing a
+#     host port here would collide with the proxy on :80.
+#   - no `container_name:` — Coolify derives its own names; fixed ones break
+#     redeploys.
+#   - no custom network — Coolify attaches its proxy network so Traefik can see
+#     nginx. The compose default network still gives nginx -> php name
+#     resolution, which is what `fastcgi_pass php:9000` needs.
+#   - the webroot is a host bind mount, not a named volume, because the Django
+#     backend (a separate Coolify resource) also writes user sites into it.
+#     Sharing a named volume across resources is not workable; a host path is.
+
 services:
   hosting:
     image: nginx:alpine
-    container_name: ufazien-hosting
     restart: unless-stopped
-    ports:
-      - "8081:80"
     volumes:
-      - /etc/data/hosting:/var/www/html
+      - /data/ufazien/hosting:/var/www/html
       - ./nginx/hosting.conf:/etc/nginx/conf.d/default.conf:ro
+    expose:
+      - "80"
     depends_on:
       - php
-    networks:
-      - internal
+    labels:
+      - "traefik.enable=true"
+      # Wildcard catch-all. Traefik 3 rejects wildcards in Host(), so this must
+      # be HostRegexp — and it cannot come from Coolify's FQDN field, which
+      # generates a Host() rule. Hence custom labels + "Readonly labels" off.
+      - "traefik.http.routers.ufazien-hosting.rule=HostRegexp(`^.+\\.ufazien\\.com$`)"
+      - "traefik.http.routers.ufazien-hosting.entrypoints=http"
+      # Lower than the main app so ufazien.com / api.ufazien.com win over the
+      # wildcard. Those routers are priority 1 by default; anything >1 here
+      # would swallow them.
+      - "traefik.http.routers.ufazien-hosting.priority=2"
+      - "traefik.http.services.ufazien-hosting.loadbalancer.server.port=80"
+      #
+      # TLS is deliberately NOT enabled yet. A wildcard cert cannot be issued
+      # over HTTP-01; it needs the Cloudflare DNS-01 resolver configured in
+      # Coolify's Traefik static config. Enabling these before that exists
+      # would just burn Let's Encrypt failed-validation rate limits.
+      # Once the DNS-01 resolver is in place, add:
+      #
+      # - "traefik.http.routers.ufazien-hosting-tls.rule=HostRegexp(`^.+\\.ufazien\\.com$`)"
+      # - "traefik.http.routers.ufazien-hosting-tls.entrypoints=https"
+      # - "traefik.http.routers.ufazien-hosting-tls.priority=2"
+      # - "traefik.http.routers.ufazien-hosting-tls.tls=true"
+      # - "traefik.http.routers.ufazien-hosting-tls.tls.certresolver=letsencrypt"
+      # - "traefik.http.routers.ufazien-hosting-tls.tls.domains[0].main=ufazien.com"
+      # - "traefik.http.routers.ufazien-hosting-tls.tls.domains[0].sans=*.ufazien.com"
+      # - "traefik.http.services.ufazien-hosting-tls.loadbalancer.server.port=80"
 
   php:
     build: .
-    container_name: ufazien-php-fpm
     restart: unless-stopped
     volumes:
-      - /etc/data/hosting:/var/www/html
+      - /data/ufazien/hosting:/var/www/html
     environment:
       PHP_FPM_PM_MAX_CHILDREN: "5"
-    networks:
-      - internal
-
-
-networks:
-  internal:
-    driver: bridge
+    labels:
+      - "traefik.enable=false"
