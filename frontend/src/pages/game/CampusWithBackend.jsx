@@ -6,6 +6,8 @@ import { Vector3, MathUtils } from "three"
 import { useNavigate, useParams } from "react-router-dom"
 import { MessageCircle, Users, Settings, LogOut, Mic, MicOff, Video, VideoOff } from "lucide-react"
 import { useCampusSimulator } from '../../hooks/useCampusSimulator'
+import { useCampusVoice } from '../../hooks/useCampusVoice'
+import VoicePanel, { ScreenShareBoard } from '../../components/campus/VoicePanel'
 
 // User data will be fetched from backend
 const getCurrentUser = () => {
@@ -464,9 +466,18 @@ const CampusWithBackend = () => {
     currentLobby,
     lobbyMembers,
     playerPositions,
+    userPosition,
     disconnect,
     coordsTo3D
   } = campusHook
+
+  // Voice rides on the positions the game already streams.
+  const voice = useCampusVoice({
+    lobbyId,
+    userPosition,
+    playerPositions,
+    enabled: isConnected,
+  })
 
   // Fetch current user data
   useEffect(() => {
@@ -586,6 +597,29 @@ const CampusWithBackend = () => {
           {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
         </div>
       </div>
+
+      {/* Voice, screen share and host controls */}
+      <div className="absolute bottom-4 left-4 z-10 pointer-events-auto">
+        <VoicePanel
+          connected={voice.connected}
+          error={voice.error}
+          participants={voice.participants}
+          micEnabled={voice.micEnabled}
+          mayScreenShare={voice.mayScreenShare}
+          isHost={voice.isHost}
+          permissions={voice.permissions}
+          onToggleMic={voice.toggleMic}
+          onToggleScreenShare={voice.toggleScreenShare}
+          onSetMemberMuted={voice.setMemberMuted}
+          onSetMemberScreenShare={voice.setMemberScreenShare}
+        />
+      </div>
+
+      {voice.screenShare && (
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 w-[60vw] h-[60vh] pointer-events-auto">
+          <ScreenShareBoard screenShare={voice.screenShare} />
+        </div>
+      )}
 
       {/* Lobby Info */}
       <div className="absolute top-4 right-4 z-10 pointer-events-auto">

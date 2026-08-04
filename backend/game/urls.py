@@ -21,4 +21,10 @@ urlpatterns = [
     # Saved lobbies
     path('saved-lobbies/', views.saved_lobbies, name='saved_lobbies'),
     path('saved-lobbies/<str:lobby_id>/', views.remove_saved_lobby, name='remove_saved_lobby'),
+
+    # Realtime audio / screen share
+    path('lobbies/<str:lobby_id>/livekit-token/', views.livekit_token, name='livekit_token'),
+    path('lobbies/<str:lobby_id>/permissions/', views.lobby_permissions, name='lobby_permissions'),
+    path('lobbies/<str:lobby_id>/members/<int:user_id>/mute/', views.set_member_muted, name='set_member_muted'),
+    path('lobbies/<str:lobby_id>/members/<int:user_id>/screen-share/', views.set_member_screen_share, name='set_member_screen_share'),
 ]
