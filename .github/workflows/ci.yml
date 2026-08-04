@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend (Django)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Django system checks
+        working-directory: backend
+        env:
+          SECRET_KEY: ci-only-not-a-real-secret
+        run: python manage.py check
+
+      - name: Apply migrations
+        working-directory: backend
+        env:
+          SECRET_KEY: ci-only-not-a-real-secret
+        run: python manage.py migrate --noinput
+
+      - name: Run tests
+        working-directory: backend
+        env:
+          SECRET_KEY: ci-only-not-a-real-secret
+        run: python manage.py test --verbosity=2
+
+  frontend:
+    name: Frontend (Vite build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint
+        continue-on-error: true
+
+      - name: Build
+        working-directory: frontend
+        env:
+          VITE_API_URL: https://api.ufazien.com
+          NODE_OPTIONS: --max-old-space-size=4096
+        run: npm run build
+
+      - name: Verify build output
+        working-directory: frontend
+        run: |
+          test -f dist/index.html || { echo "dist/index.html missing"; exit 1; }
+          du -sh dist

@@ -3,10 +3,7 @@ docs
 hosting_folder
 cli/
 tui/
-
-# Secrets - never commit these.
-# An RSA private key was committed here once (file `key`); these patterns exist
-# so it cannot happen again by accident.
+_private/
 key
 *.pem
 *.key
