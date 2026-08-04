@@ -295,3 +295,175 @@ class LobbyConsumerTests(TestCase):
             ChatMessage.objects.filter(lobby=self.lobby, message="hello lobby").exists(),
             "chat message was broadcast but not persisted",
         )
+
+
+LIVEKIT_ENV = {
+    "LIVEKIT_API_KEY": "devkey",
+    "LIVEKIT_API_SECRET": "devsecret0123456789devsecret0123",
+    "LIVEKIT_URL": "wss://example.livekit.cloud",
+}
+
+
+class LiveKitTokenTests(TestCase):
+    """Publishing rights come from the token, so they are decided server-side."""
+
+    def setUp(self):
+        self.host = User.objects.create_user(
+            username="lkhost", email="lkhost@example.com", password="pw"
+        )
+        self.player = User.objects.create_user(
+            username="lkplayer", email="lkplayer@example.com", password="pw"
+        )
+        self.outsider = User.objects.create_user(
+            username="lkout", email="lkout@example.com", password="pw"
+        )
+        self.lobby = Lobby.objects.create(name="LK Lobby", host=self.host)
+        self.host_member = LobbyMember.objects.create(lobby=self.lobby, user=self.host)
+        self.player_member = LobbyMember.objects.create(
+            lobby=self.lobby, user=self.player
+        )
+
+    def _client(self, user):
+        api = APIClient()
+        api.force_authenticate(user=user)
+        return api
+
+    def _token(self, user):
+        import os
+        from unittest.mock import patch
+
+        with patch.dict(os.environ, LIVEKIT_ENV):
+            return self._client(user).post(
+                f"/api/game/lobbies/{self.lobby.id}/livekit-token/"
+            )
+
+    def test_non_member_cannot_get_a_token(self):
+        response = self._token(self.outsider)
+        self.assertEqual(response.status_code, 403, response.content[:300])
+
+    def test_member_gets_a_token_scoped_to_this_lobby_room(self):
+        response = self._token(self.player)
+        self.assertEqual(response.status_code, 200, response.content[:300])
+        body = response.json()
+        self.assertTrue(body["token"])
+        self.assertEqual(body["room"], f"lobby-{self.lobby.id}")
+        self.assertEqual(body["identity"], f"user-{self.player.id}")
+
+    def test_host_may_screen_share_without_being_granted(self):
+        body = self._token(self.host).json()
+        self.assertIn("screen_share", body["can_publish_sources"])
+        self.assertTrue(body["is_host"])
+
+    def test_member_may_not_screen_share_by_default(self):
+        body = self._token(self.player).json()
+        self.assertIn("microphone", body["can_publish_sources"])
+        self.assertNotIn("screen_share", body["can_publish_sources"])
+        self.assertFalse(body["is_host"])
+
+    def test_granting_screen_share_changes_the_token(self):
+        self.player_member.can_share_screen = True
+        self.player_member.save()
+        body = self._token(self.player).json()
+        self.assertIn("screen_share", body["can_publish_sources"])
+
+    def test_muted_member_cannot_publish_microphone(self):
+        self.player_member.is_muted = True
+        self.player_member.save()
+        body = self._token(self.player).json()
+        self.assertNotIn("microphone", body["can_publish_sources"])
+
+    def test_token_endpoint_reports_missing_configuration(self):
+        import os
+        from unittest.mock import patch
+
+        with patch.dict(os.environ, {"LIVEKIT_API_KEY": "", "LIVEKIT_API_SECRET": "", "LIVEKIT_URL": ""}):
+            response = self._client(self.player).post(
+                f"/api/game/lobbies/{self.lobby.id}/livekit-token/"
+            )
+        self.assertEqual(response.status_code, 503)
+
+
+class HostModerationTests(TestCase):
+    def setUp(self):
+        self.host = User.objects.create_user(
+            username="modhost", email="modhost@example.com", password="pw"
+        )
+        self.player = User.objects.create_user(
+            username="modplayer", email="modplayer@example.com", password="pw"
+        )
+        self.lobby = Lobby.objects.create(name="Mod Lobby", host=self.host)
+        LobbyMember.objects.create(lobby=self.lobby, user=self.host)
+        self.player_member = LobbyMember.objects.create(
+            lobby=self.lobby, user=self.player
+        )
+
+    def _client(self, user):
+        api = APIClient()
+        api.force_authenticate(user=user)
+        return api
+
+    def _post(self, user, path, payload=None):
+        from unittest.mock import patch
+
+        # Don't reach out to a real LiveKit server from a test.
+        with patch("game.livekit_service.sync_participant_permissions", return_value=True):
+            return self._client(user).post(path, payload or {}, format="json")
+
+    def test_host_can_mute_a_member(self):
+        response = self._post(
+            self.host,
+            f"/api/game/lobbies/{self.lobby.id}/members/{self.player.id}/mute/",
+            {"muted": True},
+        )
+        self.assertEqual(response.status_code, 200, response.content[:300])
+        self.player_member.refresh_from_db()
+        self.assertTrue(self.player_member.is_muted)
+
+    def test_member_cannot_mute_anyone(self):
+        response = self._post(
+            self.player,
+            f"/api/game/lobbies/{self.lobby.id}/members/{self.host.id}/mute/",
+            {"muted": True},
+        )
+        self.assertEqual(response.status_code, 403, response.content[:300])
+
+    def test_member_cannot_grant_themselves_screen_share(self):
+        response = self._post(
+            self.player,
+            f"/api/game/lobbies/{self.lobby.id}/members/{self.player.id}/screen-share/",
+            {"allowed": True},
+        )
+        self.assertEqual(response.status_code, 403)
+        self.player_member.refresh_from_db()
+        self.assertFalse(self.player_member.can_share_screen)
+
+    def test_host_can_grant_and_revoke_screen_share(self):
+        path = f"/api/game/lobbies/{self.lobby.id}/members/{self.player.id}/screen-share/"
+
+        self._post(self.host, path, {"allowed": True})
+        self.player_member.refresh_from_db()
+        self.assertTrue(self.player_member.can_share_screen)
+
+        self._post(self.host, path, {"allowed": False})
+        self.player_member.refresh_from_db()
+        self.assertFalse(self.player_member.can_share_screen)
+
+    def test_permissions_listing_requires_membership(self):
+        outsider = User.objects.create_user(
+            username="nope", email="nope@example.com", password="pw"
+        )
+        response = self._client(outsider).get(
+            f"/api/game/lobbies/{self.lobby.id}/permissions/"
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_permissions_listing_marks_the_host(self):
+        response = self._client(self.player).get(
+            f"/api/game/lobbies/{self.lobby.id}/permissions/"
+        )
+        self.assertEqual(response.status_code, 200, response.content[:300])
+        body = response.json()
+        self.assertEqual(body["host_id"], self.host.id)
+        host_row = next(m for m in body["members"] if m["user_id"] == self.host.id)
+        self.assertTrue(host_row["is_host"])
+        self.assertTrue(host_row["can_share_screen"])

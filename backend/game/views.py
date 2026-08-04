@@ -11,6 +11,7 @@ from django.utils import timezone
 from datetime import timedelta
 import random
 
+from . import livekit_service
 from .models import (
     Lobby, LobbyMember, PlayerPosition, StudyRoom, 
     ChatMessage, SavedLobby
@@ -366,3 +367,117 @@ def lobby_stats(request):
     }
     
     return Response(stats)
+
+
+# ---------------------------------------------------------------------------
+# Realtime audio / screen share (LiveKit)
+# ---------------------------------------------------------------------------
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def livekit_token(request, lobby_id):
+    """Mint a LiveKit join token for the caller's membership of this lobby."""
+    lobby = get_object_or_404(Lobby, id=lobby_id, is_active=True)
+
+    try:
+        member = LobbyMember.objects.get(lobby=lobby, user=request.user)
+    except LobbyMember.DoesNotExist:
+        return Response(
+            {'error': 'Join the lobby before connecting to voice.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    try:
+        payload = livekit_service.build_token(request.user, lobby, member)
+    except livekit_service.LiveKitNotConfigured as exc:
+        return Response(
+            {'error': str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE
+        )
+
+    return Response(payload)
+
+
+def _require_host(lobby, user):
+    """Only the lobby host moderates. Returns an error Response, or None."""
+    if lobby.host_id != user.id:
+        return Response(
+            {'error': 'Only the lobby host can do that.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    return None
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def set_member_muted(request, lobby_id, user_id):
+    """Host mutes or unmutes a member."""
+    lobby = get_object_or_404(Lobby, id=lobby_id, is_active=True)
+    denied = _require_host(lobby, request.user)
+    if denied:
+        return denied
+
+    member = get_object_or_404(LobbyMember, lobby=lobby, user_id=user_id)
+    if member.user_id == lobby.host_id:
+        return Response(
+            {'error': 'The host cannot mute themselves.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    member.is_muted = bool(request.data.get('muted', True))
+    member.save(update_fields=['is_muted'])
+    livekit_service.sync_participant_permissions(lobby, member.user, member)
+
+    return Response({
+        'user_id': member.user_id,
+        'is_muted': member.is_muted,
+        'can_share_screen': member.can_share_screen,
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def set_member_screen_share(request, lobby_id, user_id):
+    """Host grants or revokes screen share for a member."""
+    lobby = get_object_or_404(Lobby, id=lobby_id, is_active=True)
+    denied = _require_host(lobby, request.user)
+    if denied:
+        return denied
+
+    member = get_object_or_404(LobbyMember, lobby=lobby, user_id=user_id)
+    member.can_share_screen = bool(request.data.get('allowed', True))
+    member.save(update_fields=['can_share_screen'])
+    livekit_service.sync_participant_permissions(lobby, member.user, member)
+
+    return Response({
+        'user_id': member.user_id,
+        'is_muted': member.is_muted,
+        'can_share_screen': member.can_share_screen,
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def lobby_permissions(request, lobby_id):
+    """Current A/V permissions for everyone in the lobby."""
+    lobby = get_object_or_404(Lobby, id=lobby_id, is_active=True)
+    if not LobbyMember.objects.filter(lobby=lobby, user=request.user).exists():
+        return Response(
+            {'error': 'Not a member of this lobby.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    members = LobbyMember.objects.filter(lobby=lobby).select_related('user')
+    return Response({
+        'host_id': lobby.host_id,
+        'members': [
+            {
+                'user_id': m.user_id,
+                'username': m.user.username,
+                'full_name': m.user.get_full_name() or m.user.username,
+                'is_muted': m.is_muted,
+                'can_share_screen': m.can_share_screen or m.user_id == lobby.host_id,
+                'is_host': m.user_id == lobby.host_id,
+            }
+            for m in members
+        ],
+    })

@@ -6,6 +6,16 @@ import { Vector3, MathUtils } from "three"
 import { useNavigate, useParams } from "react-router-dom"
 import { MessageCircle, Users, Settings, LogOut, Mic, MicOff, Video, VideoOff } from "lucide-react"
 import { useCampusSimulator } from '../../hooks/useCampusSimulator'
+import { useCampusVoice } from '../../hooks/useCampusVoice'
+import VoicePanel, { ScreenShareBoard } from '../../components/campus/VoicePanel'
+import {
+  CampusEnvironment,
+  CampusGround,
+  Building,
+  CampusProps,
+  BuildingInterior,
+  CharacterModel,
+} from '../../components/campus/CampusScenery'
 
 // User data will be fetched from backend
 const getCurrentUser = () => {
@@ -260,17 +270,11 @@ function PlayerAvatar({ position, userData, isCurrentUser = false }) {
 
   return (
     <group ref={meshRef} position={isCurrentUser ? [0, 0, 0] : [position.x, 0.5, position.z]}>
-      {/* Player Body */}
-      <mesh position={[0, 0.5, 0]}>
-        <cylinderGeometry args={[0.3, 0.3, 1]} />
-        <meshStandardMaterial color={userData.color || "#4F46E5"} />
-      </mesh>
-      
-      {/* Player Head */}
-      <mesh position={[0, 1.2, 0]}>
-        <sphereGeometry args={[0.2]} />
-        <meshStandardMaterial color="#FDBCB4" />
-      </mesh>
+      <CharacterModel
+        color={userData.color || "#4F46E5"}
+        isMoving={Boolean(userData.is_moving)}
+        direction={userData.direction || "down"}
+      />
 
       {/* Full Name Label */}
       <Html position={[0, 2, 0]} center>
@@ -295,6 +299,14 @@ function Player({ campusHook }) {
   const [isOnGround, setIsOnGround] = useState(true)
   
   const { updatePosition, userPosition, worldTo2D } = campusHook
+
+  // r3f aims the default camera at the scene origin. This camera sits directly
+  // above the origin, so that meant starting the game looking straight at the
+  // floor. Level the pitch once so the player starts facing the horizon.
+  useEffect(() => {
+    camera.rotation.set(0, 0, 0)
+    camera.position.set(0, 1.7, 12)
+  }, [camera])
 
   useFrame((state, delta) => {
     const { forward, backward, leftward, rightward, jump, run } = get()
@@ -451,6 +463,7 @@ const CampusWithBackend = () => {
   // Sanitize route param: some callers may accidentally navigate to '/campus-simulator/null'
   const lobbyId = (rawLobbyId === 'null' || rawLobbyId === 'undefined') ? null : rawLobbyId;
   const [isChatOpen, setIsChatOpen] = useState(false)
+  const [insideBuilding, setInsideBuilding] = useState(null)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [currentUser, setCurrentUser] = useState(getCurrentUser())
 
@@ -464,9 +477,18 @@ const CampusWithBackend = () => {
     currentLobby,
     lobbyMembers,
     playerPositions,
+    userPosition,
     disconnect,
     coordsTo3D
   } = campusHook
+
+  // Voice rides on the positions the game already streams.
+  const voice = useCampusVoice({
+    lobbyId,
+    userPosition,
+    playerPositions,
+    enabled: isConnected,
+  })
 
   // Fetch current user data
   useEffect(() => {
@@ -474,7 +496,10 @@ const CampusWithBackend = () => {
       try {
         const token = localStorage.getItem('access')
         if (token) {
-          const response = await fetch('/api/auth/me/', {
+          // Was fetch('/api/auth/me/'): a relative path, so it hit the web
+          // server rather than the API and came back as index.html, and that
+          // endpoint does not exist either. The current user is /api/auth/user/.
+          const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/auth/user/`, {
             headers: {
               'Authorization': `Bearer ${token}`,
               'Content-Type': 'application/json'
@@ -587,6 +612,29 @@ const CampusWithBackend = () => {
         </div>
       </div>
 
+      {/* Voice, screen share and host controls */}
+      <div className="absolute bottom-4 left-4 z-10 pointer-events-auto">
+        <VoicePanel
+          connected={voice.connected}
+          error={voice.error}
+          participants={voice.participants}
+          micEnabled={voice.micEnabled}
+          mayScreenShare={voice.mayScreenShare}
+          isHost={voice.isHost}
+          permissions={voice.permissions}
+          onToggleMic={voice.toggleMic}
+          onToggleScreenShare={voice.toggleScreenShare}
+          onSetMemberMuted={voice.setMemberMuted}
+          onSetMemberScreenShare={voice.setMemberScreenShare}
+        />
+      </div>
+
+      {voice.screenShare && (
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 w-[60vw] h-[60vh] pointer-events-auto">
+          <ScreenShareBoard screenShare={voice.screenShare} />
+        </div>
+      )}
+
       {/* Lobby Info */}
       <div className="absolute top-4 right-4 z-10 pointer-events-auto">
         <div className="bg-black bg-opacity-80 backdrop-blur-sm text-white p-4 rounded-xl border border-blue-500/30">
@@ -637,31 +685,38 @@ const CampusWithBackend = () => {
       <KeyboardControls map={keyMap}>
         <Canvas shadows camera={{ position: [0, 1.5, 0], fov: 75 }}>
           <Suspense fallback={null}>
-            {/* Environment */}
-            <Sky sunPosition={[100, 20, 100]} />
-            <ambientLight intensity={0.3} />
-            <directionalLight position={[50, 50, 25]} intensity={1} castShadow />
+            {insideBuilding ? (
+              <BuildingInterior
+                name={insideBuilding.name}
+                onExit={() => setInsideBuilding(null)}
+              >
+                {voice.screenShare && (
+                  <Html position={[0, 5, -19.5]} center distanceFactor={14}>
+                    <div className="w-[640px] h-[360px]">
+                      <ScreenShareBoard screenShare={voice.screenShare} />
+                    </div>
+                  </Html>
+                )}
+              </BuildingInterior>
+            ) : (
+              <>
+                <CampusEnvironment />
+                <CampusGround />
+                <CampusProps />
 
-            {/* Campus Ground */}
-            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
-              <planeGeometry args={[100, 100]} />
-              <meshStandardMaterial color="#2A5D31" />
-            </mesh>
-
-            {/* Campus Buildings */}
-            {campusBuildings.map((building) => (
-              <group key={building.id} position={building.position}>
-                <mesh castShadow>
-                  <boxGeometry args={building.size} />
-                  <meshStandardMaterial color={building.color} />
-                </mesh>
-                <Html position={[0, building.size[1] + 1, 0]} center>
-                  <div className="bg-black bg-opacity-75 text-white px-3 py-1 rounded text-sm whitespace-nowrap pointer-events-none">
-                    {building.icon} {building.name}
-                  </div>
-                </Html>
-              </group>
-            ))}
+                {campusBuildings.map((building) => (
+                  <Building
+                    key={building.id}
+                    position={building.position}
+                    size={building.size}
+                    color={building.color}
+                    name={building.name}
+                    icon={building.icon}
+                    onEnter={() => setInsideBuilding(building)}
+                  />
+                ))}
+              </>
+            )}
 
             {/* Study Areas */}
             {studyAreas.map((area) => (

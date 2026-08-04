@@ -56,6 +56,12 @@ class LobbyMember(models.Model):
     is_online = models.BooleanField(default=True)
     last_seen = models.DateTimeField(auto_now=True)
 
+    # Realtime A/V permissions. These live here, not on the client, because the
+    # LiveKit token is minted from them: a participant cannot grant itself the
+    # right to publish.
+    can_share_screen = models.BooleanField(default=False)
+    is_muted = models.BooleanField(default=False)
+
     class Meta:
         unique_together = ['lobby', 'user']
         ordering = ['joined_at']
