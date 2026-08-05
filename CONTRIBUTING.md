@@ -33,8 +33,8 @@ The API is then on `http://localhost:8000`, with docs at `/api/docs/`.
 
 ```bash
 cd frontend
-npm ci
-VITE_API_URL=http://localhost:8000 npm run dev
+bun install
+VITE_API_URL=http://localhost:8000 bun run dev
 ```
 
 Open the URL Vite prints. Create an account through the UI, or use the Django admin after `python manage.py createsuperuser`.
@@ -61,7 +61,8 @@ python manage.py test community    # one app
 
 Please add tests for what you change. Several apps started life with an empty `tests.py`, and every bug those files now cover was one that reached production unnoticed.
 
-The frontend has no test suite yet. Verify your change in the browser, and say in the PR what you actually checked.
+The frontend runs Vitest: `bun run test`, plus `bun run typecheck`. Coverage is still thin, so verify
+visual changes in the browser too, and say in the PR what you actually checked.
 
 ## Making a change
 

@@ -31,8 +31,8 @@ SECRET_KEY=dev python manage.py migrate
 SECRET_KEY=dev python manage.py runserver
 
 # frontend
-cd frontend && npm ci
-VITE_API_URL=http://localhost:8000 npm run dev
+cd frontend && bun install
+VITE_API_URL=http://localhost:8000 bun run dev
 ```
 
 `SECRET_KEY` is required. The database is SQLite unless `ENVIRONMENT=production`, so no server is needed locally.
@@ -48,7 +48,8 @@ cd backend && SECRET_KEY=test python manage.py test community
 
 Add tests for what you change. Most apps' `tests.py` began as an empty stub, and everything they now cover was a bug that reached production unnoticed.
 
-The frontend has no test suite. Verify in a browser and state what you checked.
+The frontend runs Vitest: `bun run test`, with `bun run typecheck` for types. Coverage is thin and
+starts at the API client, so a browser check still matters for anything visual. Say what you checked.
 
 ## Rules that matter here
 
