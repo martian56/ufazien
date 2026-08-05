@@ -17,6 +17,7 @@ export interface Group {
   owner: User
   /** Whether the requesting user owns the group. Serializer sends snake_case. */
   is_owner?: boolean
+  avatar?: string | null
   last_activity?: string | null
   created_at: string
 }
@@ -76,6 +77,15 @@ export interface PostReply {
   like_count: number
   is_liked?: boolean
   created_at: string
+}
+
+export interface UserSearchResult {
+  id: number
+  /** Full name, already assembled by the server. */
+  name: string
+  avatar: string | null
+  year: string | number | null
+  major: string | null
 }
 
 export interface ChatMessage {
@@ -172,7 +182,17 @@ export const communityApi = {
    * so every request went to /api/api/auth/search/ and 404d. Starting a chat
    * could never find anyone.
    */
-  searchUsers: (query: string) => api.get<User[]>('/auth/search/', { params: { q: query } }),
+  /**
+   * Find people to start a chat with.
+   *
+   * Returns a deliberately narrow shape rather than a full user: a display
+   * name, an avatar, year and major, and no email or username. The endpoint
+   * wraps it in {results, count}, which is why this is not a plain array.
+   */
+  searchUsers: (query: string) =>
+    api.get<{ results: UserSearchResult[]; count: number }>('/auth/search/', {
+      params: { q: query },
+    }),
 }
 
 export default communityApi

@@ -1,16 +1,30 @@
 import { useState, useEffect } from "react"
+import type React from "react"
 import { X } from "lucide-react"
 import { communityApi as communityAPI } from "../../../lib/api/endpoints/community"
 import { getYearDisplay } from "../../../utils/majorUtils"
+import type { UserSearchResult } from "../../../lib/api/endpoints/community"
 
-export default function PrivateChatModal({ onClose, onCreateChat }) {
+interface NewChat {
+  participant_ids: number[]
+  name: string | null
+  is_group_chat: boolean
+}
+
+interface PrivateChatModalProps {
+  onClose: () => void
+  onCreateChat: (chat: NewChat) => void
+}
+
+
+export default function PrivateChatModal({ onClose, onCreateChat }: PrivateChatModalProps) {
   const [searchQuery, setSearchQuery] = useState("")
-  const [selectedUsers, setSelectedUsers] = useState([])
+  const [selectedUsers, setSelectedUsers] = useState<UserSearchResult[]>([])
   const [chatName, setChatName] = useState("")
   const [isGroupChat, setIsGroupChat] = useState(false)
-  const [searchResults, setSearchResults] = useState([])
+  const [searchResults, setSearchResults] = useState<UserSearchResult[]>([])
   const [isSearching, setIsSearching] = useState(false)
-  const [searchError, setSearchError] = useState(null)
+  const [searchError, setSearchError] = useState<string | null>(null)
 
   // Real user search using API
   useEffect(() => {
@@ -39,17 +53,17 @@ export default function PrivateChatModal({ onClose, onCreateChat }) {
     return () => clearTimeout(debounceTimer)
   }, [searchQuery])
 
-  const handleUserSelect = (user) => {
+  const handleUserSelect = (user: UserSearchResult) => {
     if (!selectedUsers.find(u => u.id === user.id)) {
       setSelectedUsers(prev => [...prev, user])
     }
   }
 
-  const handleUserRemove = (userId) => {
+  const handleUserRemove = (userId: number) => {
     setSelectedUsers(prev => prev.filter(u => u.id !== userId))
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (selectedUsers.length === 0) return
 
@@ -164,7 +178,7 @@ export default function PrivateChatModal({ onClose, onCreateChat }) {
                       key={user.id}
                       type="button"
                       onClick={() => handleUserSelect(user)}
-                      disabled={selectedUsers.find(u => u.id === user.id)}
+                      disabled={Boolean(selectedUsers.find((u) => u.id === user.id))}
                       className="w-full p-3 text-left hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-3"
                     >
                       <img

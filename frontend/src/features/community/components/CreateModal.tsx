@@ -1,7 +1,28 @@
 import { useState } from "react"
+import type React from "react"
 import { X } from "lucide-react"
+import type { Forum } from "../../../lib/api/endpoints/community"
 
-export default function CreateModal({ type, onClose, onCreateGroup, onCreateForum, onCreatePost, forums, categories }) {
+interface CreateModalProps {
+  type: "group" | "forum" | "post"
+  onClose: () => void
+  onCreateGroup: (data: Record<string, unknown>) => void
+  onCreateForum: (data: Record<string, unknown>) => void
+  onCreatePost: (data: Record<string, unknown>) => void
+  forums: Forum[]
+  categories: { id: string; name: string }[]
+}
+
+
+export default function CreateModal({
+  type,
+  onClose,
+  onCreateGroup,
+  onCreateForum,
+  onCreatePost,
+  forums,
+  categories,
+}: CreateModalProps) {
   const [formData, setFormData] = useState({
     name: "",
     title: "",
@@ -9,7 +30,7 @@ export default function CreateModal({ type, onClose, onCreateGroup, onCreateForu
     category: "general",
     type: "public",
     maxMembers: 30,
-    tags: [],
+    tags: [] as string[],
     courseCode: "",
     professor: "",
     content: "",
@@ -19,7 +40,7 @@ export default function CreateModal({ type, onClose, onCreateGroup, onCreateForu
   })
   const [tagInput, setTagInput] = useState("")
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
     try {
@@ -65,7 +86,7 @@ export default function CreateModal({ type, onClose, onCreateGroup, onCreateForu
     }
   }
 
-  const removeTag = (tagToRemove) => {
+  const removeTag = (tagToRemove: string) => {
     setFormData(prev => ({
       ...prev,
       tags: prev.tags.filter(tag => tag !== tagToRemove)
