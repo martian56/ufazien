@@ -11,6 +11,7 @@ import { PenTool, Search, Heart, MessageCircle,Share2,
 import SideBar from "../../../components/ui/SideBar"
 import { formatYearWithOrdinal } from "../../../utils/majorUtils"
 import DraftList from "../../../features/blog/DraftList"
+import { apiFetch } from "../../../lib/api/compat"
 
 const API_URL = import.meta.env.VITE_API_URL
 
@@ -84,10 +85,7 @@ export default function Blog() {
 
   // Fetch user profile add Authentication Header
   useEffect(() => {
-    const access = localStorage.getItem("access")
-    fetch(`${API_URL}/api/auth/user/`, {
-      headers: { Authorization: `Bearer ${access}` },
-    })
+    apiFetch(`/auth/user/`)
       .then((res) => {
         if (!res.ok) throw new Error("Failed to fetch user profile");
         return res.json();
@@ -105,10 +103,7 @@ export default function Blog() {
     const fetchCategories = async () => {
       try {
         setCategoriesLoading(true)
-        const access = localStorage.getItem("access")
-        const res = await fetch(`${API_URL}/api/blog/categories/`, {
-          headers: { Authorization: `Bearer ${access}` },
-        });
+        const res = await apiFetch(`/blog/categories/`);
         if (!res.ok) throw new Error("Failed to fetch categories");
         
         const data = await res.json();
@@ -129,9 +124,7 @@ export default function Blog() {
       try {
         setLoading(true)
         setError(null)
-        
-        const access = localStorage.getItem("access")
-        let url = `${API_URL}/api/blog/posts/?page=${currentPage}&page_size=${pageSize}`;
+        let url = `/blog/posts/?page=${currentPage}&page_size=${pageSize}`;
         let isBookmarksEndpoint = false;
         
         // Add filters based on active tab and selections
@@ -163,9 +156,7 @@ export default function Blog() {
         // console.log("Fetching from URL:", url);
         // console.log("Current pageSize state:", pageSize);
         
-        const res = await fetch(url, {
-          headers: { Authorization: `Bearer ${access}` },
-        });
+        const res = await apiFetch(url);
         if (!res.ok) throw new Error("Failed to fetch blog posts");
         
         const data = await res.json();
@@ -202,10 +193,7 @@ export default function Blog() {
     const fetchTrendingTags = async () => {
       try {
         setTagsLoading(true)
-        const access = localStorage.getItem("access")
-        const res = await fetch(`${API_URL}/api/blog/tags/trending/?limit=8`, {
-          headers: { Authorization: `Bearer ${access}` },
-        });
+        const res = await apiFetch(`/blog/tags/trending/?limit=8`);
         if (!res.ok) throw new Error("Failed to fetch trending tags");
         
         const data = await res.json();
@@ -235,10 +223,7 @@ export default function Blog() {
     const fetchPopularPosts = async () => {
       try {
         setPopularPostsLoading(true)
-        const access = localStorage.getItem("access")
-        const res = await fetch(`${API_URL}/api/blog/posts/popular/?limit=5`, {
-          headers: { Authorization: `Bearer ${access}` },
-        });
+        const res = await apiFetch(`/blog/posts/popular/?limit=5`);
         if (!res.ok) throw new Error("Failed to fetch popular posts");
         
         const data = await res.json();
@@ -260,10 +245,7 @@ export default function Blog() {
     const fetchCategoriesWithCounts = async () => {
       try {
         setCategoriesCountsLoading(true)
-        const access = localStorage.getItem("access")
-        const res = await fetch(`${API_URL}/api/blog/categories/with-counts/`, {
-          headers: { Authorization: `Bearer ${access}` },
-        });
+        const res = await apiFetch(`/blog/categories/with-counts/`);
         if (!res.ok) throw new Error("Failed to fetch categories with counts");
         
         const data = await res.json();
@@ -301,11 +283,7 @@ export default function Blog() {
 
   const handleLike = async (postId) => {
     try {
-      const access = localStorage.getItem("access")
-      const res = await fetch(`${API_URL}/api/blog/posts/${postId}/like/`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${access}` },
-      });
+      const res = await apiFetch(`/blog/posts/${postId}/like/`, { method: "POST" });
       
       if (res.ok) {
         // Update local state optimistically
@@ -328,11 +306,7 @@ export default function Blog() {
 
   const handleBookmark = async (postId) => {
     try {
-      const access = localStorage.getItem("access")
-      const res = await fetch(`${API_URL}/api/blog/posts/${postId}/bookmark/`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${access}` },
-      });
+      const res = await apiFetch(`/blog/posts/${postId}/bookmark/`, { method: "POST" });
       
       if (res.ok) {
         // Update local state optimistically
