@@ -30,21 +30,10 @@
   margin-bottom: 0;
 }
 
-/* Paragraphs */
-.blog-content p {
-  margin-bottom: 1.5rem;
-  line-height: 1.8;
-  color: #374151;
-  text-align: left;
-}
-
-.blog-content.dark p {
-  color: #d1d5db;
-}
-
-.blog-content p:last-child {
-  margin-bottom: 0;
-}
+/* Paragraph rules live further down, with the rest of the reading styles.
+   An earlier copy of them sat here and was overridden in full by that block:
+   its margin-bottom: 1.5rem never applied, because the later rule sets the
+   margin shorthand. */
 
 /* Handle empty paragraphs gracefully */
 .blog-content p:empty {
