@@ -1,22 +1,24 @@
 # Multi-stage build for React frontend
 
-# Build stage
-FROM node:24-alpine AS builder
+# Build stage. Bun installs and runs the scripts; Vite still does the bundling,
+# so the output is unchanged.
+FROM oven/bun:1-alpine AS builder
 
 # Set working directory
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Copy manifest and lockfile
+COPY package.json bun.lock ./
 
-# Install all dependencies (including dev dependencies for build)
-RUN npm i
+# Install all dependencies (including dev dependencies for build).
+# Frozen, so a deploy never silently resolves different versions than CI did.
+RUN bun install --frozen-lockfile
 
 # Copy source code
 COPY . .
 
 # Build the application
-RUN npm run build
+RUN bun run build
 
 # Production stage
 FROM nginx:alpine

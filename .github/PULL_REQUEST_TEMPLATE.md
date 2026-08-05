@@ -10,7 +10,7 @@ Closes #
      If you couldn't verify something, say so. That's more useful than silence. -->
 
 - [ ] `python manage.py test` passes
-- [ ] Frontend builds (`npm run build`)
+- [ ] Frontend builds (`bun run build`), types and tests pass (`bun run typecheck`, `bun run test`)
 - [ ] Checked in a browser
 
 ## Checklist
