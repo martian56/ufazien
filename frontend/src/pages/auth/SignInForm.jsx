@@ -8,8 +8,8 @@ import { Label } from "../../components/ui/label"
 import { Checkbox } from "../../components/ui/checkbox"
 import { useNavigate, useSearchParams } from "react-router-dom"
 
-const API_URL = import.meta.env.VITE_API_URL
-const API_LOGIN = `${API_URL}/api/auth/login/`
+import { api, ApiError } from "../../lib/api/client"
+import { setTokens } from "../../lib/api/tokens"
 
 export default function SignInForm() {
   const [formData, setFormData] = useState({
@@ -53,33 +53,18 @@ export default function SignInForm() {
     setIsLoading(true)
 
     try {
-      const response = await fetch(API_LOGIN, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          email: formData.email,
-          password: formData.password,
-        }),
-      })
-      const data = await response.json()
+      // anonymous: logging in must not send a stale token, and a 401 here is
+      // the answer rather than something to retry after a refresh.
+      const data = await api.post(
+        "/auth/login/",
+        { email: formData.email, password: formData.password },
+        { anonymous: true },
+      )
 
-      if (!response.ok) {
-        let errorMsg = "Login failed."
-        if (data && typeof data === "object") {
-          errorMsg = Object.values(data).flat().join(" ")
-        }
-        setApiError(errorMsg)
-        setIsLoading(false)
-        return
-      }
       setSuccess(true)
-      // Store tokens if present. dj-rest-auth returns "access" and "refresh" if JWT is enabled
       if (data.access && data.refresh) {
-        localStorage.setItem("access", data.access)
-        localStorage.setItem("refresh", data.refresh)
-        
+        setTokens(data.access, data.refresh)
+
         // Redirect to the original page or dashboard
         const redirectPath = searchParams.get("redirect") || "/dashboard"
         navigate(redirectPath)
@@ -94,7 +79,9 @@ export default function SignInForm() {
         rememberMe: false,
       })
     } catch (err) {
-      setApiError("An error occurred. Please try again.")
+      // ApiError.userMessage understands DRF's shapes, so the server's own
+      // reason still reaches the user instead of a generic failure.
+      setApiError(err instanceof ApiError ? err.userMessage : "An error occurred. Please try again.")
     } finally {
       setIsLoading(false)
     }

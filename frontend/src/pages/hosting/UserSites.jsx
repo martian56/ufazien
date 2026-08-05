@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Helmet } from 'react-helmet'
 import { ExternalLink, Globe, Search, X, Tag, Menu, ChevronDown } from 'lucide-react'
 import SideBar from '../../components/ui/SideBar'
-const API_URL = import.meta.env.VITE_API_URL || ''
+import { api } from '../../lib/api/client'
 
 export default function UserSites() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
@@ -33,25 +33,12 @@ export default function UserSites() {
     const q = buildQuery(search, page, page_size, ordering)
     setLastQuery(q || '/')
     try {
-      const url = `${API_URL}/api/hosting/public/websites/${q}`
-      console.debug('Fetching', url)
-      const res = await fetch(url)
-      const ct = res.headers.get('content-type') || ''
-      const text = await res.text()
-      if (!res.ok) {
-        throw new Error(`${res.status} ${res.statusText} - ${text.slice(0,300)}`)
-      }
-
-      if (!ct.includes('application/json')) {
-        // Probably an HTML error page or index.html served by proxy
-        throw new Error(`Expected JSON but server returned ${ct || 'text/html'}; first bytes: ${text.slice(0,300)}`)
-      }
-
-      let data
-      try {
-        data = JSON.parse(text)
-      } catch (e) {
-        throw new Error('Invalid JSON response from server')
+      // The hand-rolled content-type and JSON guards here were defending
+      // against index.html coming back from a proxy. The client returns the
+      // body as text in that case, so one check is enough.
+      const data = await api.get(`/hosting/public/websites/${q}`)
+      if (typeof data === 'string') {
+        throw new Error(`Expected JSON but the server returned: ${data.slice(0, 300)}`)
       }
 
       // Support paginated DRF responses { results: [...], count, next, previous }

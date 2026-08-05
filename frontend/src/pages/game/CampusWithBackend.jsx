@@ -9,6 +9,8 @@ import { useCampusSimulator } from '../../hooks/useCampusSimulator'
 import { useCampusVoice } from '../../hooks/useCampusVoice'
 import VoicePanel, { ScreenShareStage } from '../../components/campus/VoicePanel'
 import ProjectorScreen from '../../components/campus/ProjectorScreen'
+import { api } from '../../lib/api/client'
+import { isAuthenticated } from '../../lib/api/tokens'
 import TouchControls, { createTouchState, useIsTouchDevice } from '../../components/campus/TouchControls'
 import {
   CampusEnvironment,
@@ -635,30 +637,21 @@ const CampusWithBackend = () => {
   useEffect(() => {
     const fetchCurrentUser = async () => {
       try {
-        const token = localStorage.getItem('access')
-        if (token) {
-          // Was fetch('/api/auth/me/'): a relative path, so it hit the web
-          // server rather than the API and came back as index.html, and that
-          // endpoint does not exist either. The current user is /api/auth/user/.
-          const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/auth/user/`, {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            }
+        // Was fetch('/api/auth/me/'): a relative path, so it hit the web server
+        // rather than the API and came back as index.html, and that endpoint
+        // does not exist either. The current user is /auth/user/.
+        if (isAuthenticated()) {
+          const userData = await api.get('/auth/user/')
+          setCurrentUser({
+            id: userData.id,
+            name: userData.full_name || userData.username,
+            avatar: "👤",
+            year: userData.year || "Student",
+            major: userData.major || "UFAZ",
+            color: `hsl(${userData.id * 137.5 % 360}, 70%, 60%)`,
+            level: 1,
+            achievements: [],
           })
-          if (response.ok) {
-            const userData = await response.json()
-            setCurrentUser({
-              id: userData.id,
-              name: userData.full_name || userData.username,
-              avatar: "👤",
-              year: userData.year || "Student",
-              major: userData.major || "UFAZ",
-              color: `hsl(${userData.id * 137.5 % 360}, 70%, 60%)`,
-              level: 1,
-              achievements: [],
-            })
-          }
         }
       } catch (error) {
         console.error('Failed to fetch user data:', error)

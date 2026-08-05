@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Bell, X, Check, Settings, Trash2, ExternalLink } from 'lucide-react';
-import notificationsAPI from '../services/notificationsAPI';
+import notificationsAPI from '../lib/api/endpoints/notifications';
 import pushNotificationService from '../services/pushNotificationService';
 import { useToast, ToastContainer } from '../hooks/useToast';
 

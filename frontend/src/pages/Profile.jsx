@@ -26,6 +26,8 @@ import {
   Ban
 } from "lucide-react"
 import SideBar from "../components/ui/SideBar"
+import { api } from "../lib/api/client"
+import { getAccessToken } from "../lib/api/tokens"
 import { formatYearDisplay, getYearDisplay } from "../utils/majorUtils"
 
 const API_URL = import.meta.env.VITE_API_URL
@@ -57,25 +59,13 @@ export default function Profile() {
   useEffect(() => {
     const fetchCurrentUser = async () => {
       try {
-        const token = localStorage.getItem('access')
-        if (!token) {
+        if (!getAccessToken()) {
           navigate('/auth')
           return
         }
 
-        const response = await fetch(`${API_URL}/api/auth/user/`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        })
-
-        if (response.ok) {
-          const userData = await response.json()
-          setCurrentUser(userData)
-        } else {
-          console.error('Failed to fetch current user:', response.status, response.statusText)
-        }
+        const userData = await api.get('/auth/user/')
+        setCurrentUser(userData)
       } catch (error) {
         console.error('Error fetching current user:', error)
       }
@@ -88,33 +78,20 @@ export default function Profile() {
   useEffect(() => {
     const fetchUserProfile = async () => {
       try {
-        const token = localStorage.getItem('access')
-        if (!token) {
+        if (!getAccessToken()) {
           navigate('/auth')
           return
         }
 
         const targetUserId = userId || 'me'
-        const response = await fetch(`${API_URL}/api/auth/user/${targetUserId}/`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        })
-
-        if (response.ok) {
-          const userData = await response.json()
-          setUser(userData)
-          console.log("User data:", userData)
-          setFollowing(userData.is_following || false)
-          setStats(prev => ({
-            ...prev,
-            followers: userData.followers_count || 0,
-            following: userData.following_count || 0
-          }))
-        } else {
-          console.error('Failed to fetch user profile:', response.status, response.statusText)
-        }
+        const userData = await api.get(`/auth/user/${targetUserId}/`)
+        setUser(userData)
+        setFollowing(userData.is_following || false)
+        setStats(prev => ({
+          ...prev,
+          followers: userData.followers_count || 0,
+          following: userData.following_count || 0
+        }))
       } catch (error) {
         console.error('Error fetching user profile:', error)
       } finally {
@@ -131,17 +108,11 @@ export default function Profile() {
 
     setPostsLoading(true)
     try {
-      const token = localStorage.getItem('access')
       const offset = (page - 1) * postsPerPage
-      const response = await fetch(`${API_URL}/api/blog/posts/?by=${user.id}&limit=${postsPerPage}&offset=${offset}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      })
-
-      if (response.ok) {
-        const data = await response.json()
+      {
+        const data = await api.get('/blog/posts/', {
+          params: { by: user.id, limit: postsPerPage, offset },
+        })
         setUserPosts(data.results || [])
         setStats(prev => ({
           ...prev,
@@ -154,8 +125,6 @@ export default function Profile() {
         setTotalPages(calculatedTotalPages)
         setHasNext(data.next !== null)
         setHasPrevious(data.previous !== null)
-      } else {
-        console.error('Failed to fetch user posts:', response.status, response.statusText)
       }
     } catch (error) {
       console.error('Error fetching user posts:', error)
@@ -185,17 +154,8 @@ export default function Profile() {
     if (!user || !currentUser) return
 
     try {
-      const token = localStorage.getItem('access')
-      const response = await fetch(`${API_URL}/api/auth/user/${user.id}/follow/`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      })
-
-      if (response.ok) {
-        const responseData = await response.json()
+      {
+        const responseData = await api.post(`/auth/user/${user.id}/follow/`)
         const isOwnProfile = currentUser && user && currentUser.id === user.id
         setFollowing(!following)
         setStats(prev => ({
@@ -204,8 +164,6 @@ export default function Profile() {
           // Update following count if this is the current user's own profile
           ...(isOwnProfile && { following: responseData.following_count || prev.following })
         }))
-      } else {
-        console.error('Failed to toggle follow:', response.status, response.statusText)
       }
     } catch (error) {
       console.error('Error toggling follow:', error)

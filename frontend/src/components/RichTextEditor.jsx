@@ -10,6 +10,8 @@ import TextAlign from '@tiptap/extension-text-align'
 import Underline from '@tiptap/extension-underline'
 import './RichTextEditor.css'
 import { validateImageFile, uploadRateLimiter, isValidImageUrl } from '../utils/security'
+import { api, ApiError } from '../lib/api/client'
+import { isAuthenticated } from '../lib/api/tokens'
 
 // Custom Image Extension with Resize
 const ResizableImage = Image.extend({
@@ -258,8 +260,7 @@ const MenuBar = ({ editor, darkMode }) => {
           return
         }
 
-        const access = localStorage.getItem('access')
-        if (!access) {
+        if (!isAuthenticated()) {
           toast?.error('Authentication required for image upload.') || alert('Authentication required for image upload.')
           return
         }
@@ -267,26 +268,20 @@ const MenuBar = ({ editor, darkMode }) => {
         const formData = new FormData()
         formData.append('image', file)
 
-        const response = await fetch(`${import.meta.env.VITE_API_URL}/api/blog/upload/image/`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${access}`,
-          },
-          body: formData,
-        })
+        try {
+          // FormData goes through untouched, so the browser sets the multipart
+          // boundary itself.
+          const data = await api.post('/blog/upload/image/', formData)
 
-        if (response.ok) {
-          const data = await response.json()
-          
           // Validate the returned URL
           if (data.url && isValidImageUrl(data.url)) {
             editor.chain().focus().setImage({ src: data.url }).run()
           } else {
             toast?.error('Invalid image URL returned from server.') || alert('Invalid image URL returned from server.')
           }
-        } else {
-          const errorData = await response.json()
-          toast?.error(`Failed to upload image: ${errorData.error || 'Unknown error'}`) || alert(`Failed to upload image: ${errorData.error || 'Unknown error'}`)
+        } catch (uploadError) {
+          const reason = uploadError instanceof ApiError ? uploadError.userMessage : 'Unknown error'
+          toast?.error(`Failed to upload image: ${reason}`) || alert(`Failed to upload image: ${reason}`)
         }
       } catch (error) {
         console.error('Image upload error:', error)

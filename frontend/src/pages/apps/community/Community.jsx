@@ -44,7 +44,9 @@ import {
 } from "lucide-react"
 
 import { useCommunityData, useGroupChat } from "../../../hooks/useCommunity"
-import { communityAPI } from "../../../services/communityAPI"
+import { communityApi as communityAPI } from "../../../lib/api/endpoints/community"
+import { api } from "../../../lib/api/client"
+import { isAuthenticated } from "../../../lib/api/tokens"
 import { getYearDisplay } from "../../../utils/majorUtils"
 
 export default function Community() {
@@ -69,6 +71,7 @@ export default function Community() {
     forums,
     posts,
     chats,
+    stats,
     loading,
     error,
     loadAllData,
@@ -84,14 +87,6 @@ export default function Community() {
 
   // Debug logging for state changes
   useEffect(() => {
-    console.log('🎯 Community component state update:', {
-      loading,
-      error,
-      groupsCount: groups.length,
-      forumsCount: forums.length,
-      postsCount: posts.length,
-      timestamp: new Date().toISOString()
-    });
   }, [loading, error, groups.length, forums.length, posts.length]);
 
   // Chat functionality
@@ -109,25 +104,20 @@ export default function Community() {
   useEffect(() => {
     const loadCurrentUser = async () => {
       try {
-        const token = localStorage.getItem('access')
-        if (token) {
-          const response = await fetch('/api/auth/me/', {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            }
+        // Was fetch('/api/auth/me/'): a relative path, so it hit the web server
+        // rather than the API and came back as index.html, throwing
+        // "Unexpected token '<'" on every load. That endpoint does not exist
+        // either; the current user is /auth/user/me/.
+        if (isAuthenticated()) {
+          const userData = await api.get('/auth/user/me/')
+          setUser({
+            id: userData.id,
+            name: userData.get_full_name || userData.username,
+            avatar: userData.avatar || "/placeholder.svg?height=40&width=40",
+            year: userData.year || "Student",
+            major: userData.major || "UFAZ",
+            role: "student",
           })
-          if (response.ok) {
-            const userData = await response.json()
-            setUser({
-              id: userData.id,
-              name: userData.get_full_name || userData.username,
-              avatar: userData.avatar || "/placeholder.svg?height=40&width=40",
-              year: userData.year || "Student",
-              major: userData.major || "UFAZ",
-              role: "student",
-            })
-          }
         }
       } catch (error) {
         console.error('Error loading user data:', error)
@@ -148,7 +138,6 @@ export default function Community() {
 
   // Load data on component mount
   useEffect(() => {
-    console.log('🎬 Community component mounted, starting data load...');
     
     const timeoutId = setTimeout(() => {
       if (loading) {
@@ -165,18 +154,15 @@ export default function Community() {
 
     loadAllData()
       .then(() => {
-        console.log('🎉 loadAllData completed successfully');
       })
       .catch((err) => {
         console.error('💥 loadAllData failed:', err);
       })
       .finally(() => {
         clearTimeout(timeoutId);
-        console.log('🏁 loadAllData promise resolved');
       });
 
     return () => {
-      console.log('🧹 Community component cleanup');
       clearTimeout(timeoutId);
     };
   }, [])  // Remove dependencies to prevent re-runs
@@ -273,7 +259,6 @@ export default function Community() {
       
       // Optionally reload chat data to show the new message
       // In a real implementation, this would be handled by WebSocket
-      console.log(`Message sent to chat ${chatId}`)
       
     } catch (error) {
       console.error('Error sending message:', error)
@@ -335,7 +320,6 @@ export default function Community() {
   ]
 
   if (loading) {
-    console.log('🔄 Rendering loading screen, current state:', { loading, error, groupsCount: groups.length });
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -349,7 +333,6 @@ export default function Community() {
   }
 
   if (error) {
-    console.log('❌ Rendering error screen:', error);
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -365,13 +348,6 @@ export default function Community() {
     )
   }
 
-  console.log('🎨 Rendering Community component with data:', {
-    loading,
-    error,
-    groupsCount: groups.length,
-    forumsCount: forums.length,
-    postsCount: posts.length
-  });
 
   return (
     <>
@@ -422,15 +398,15 @@ export default function Community() {
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-gray-600">Groups Joined</span>
-                <span className="font-medium">{groups.filter((g) => g.is_joined).length}</span>
+                <span className="font-medium">{stats?.user_stats?.groups_joined ?? 0}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Posts Liked</span>
-                <span className="font-medium">{posts.filter((p) => p.is_liked).length}</span>
+                <span className="font-medium">{stats?.user_stats?.posts_liked ?? 0}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Bookmarked</span>
-                <span className="font-medium">{posts.filter((p) => p.is_bookmarked).length}</span>
+                <span className="font-medium">{stats?.user_stats?.posts_bookmarked ?? 0}</span>
               </div>
             </div>
           </div>

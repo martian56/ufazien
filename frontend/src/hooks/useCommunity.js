@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { communityAPI } from '../services/communityAPI';
+import { communityApi as communityAPI } from '../lib/api/endpoints/community';
 import { communityWS } from '../services/websocket';
 
 export const useCommunityData = () => {
@@ -7,18 +7,16 @@ export const useCommunityData = () => {
   const [forums, setForums] = useState([]);
   const [posts, setPosts] = useState([]);
   const [chats, setChats] = useState([]);
+  const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   // Load initial data
   const loadGroups = useCallback(async (params = {}) => {
     try {
-      console.log('🔄 Starting loadGroups with params:', params);
       setError(null);
       const response = await communityAPI.getGroups(params);
-      console.log('✅ Groups response:', response);
       setGroups(response.results || response);
-      console.log('✅ Groups state updated, count:', (response.results || response).length);
     } catch (err) {
       console.error('❌ Error loading groups:', err);
       console.error('❌ Error details:', {
@@ -33,12 +31,9 @@ export const useCommunityData = () => {
 
   const loadForums = useCallback(async (params = {}) => {
     try {
-      console.log('🔄 Starting loadForums with params:', params);
       setError(null);
       const response = await communityAPI.getForums(params);
-      console.log('✅ Forums response:', response);
       setForums(response.results || response);
-      console.log('✅ Forums state updated, count:', (response.results || response).length);
     } catch (err) {
       console.error('❌ Error loading forums:', err);
       console.error('❌ Error details:', {
@@ -53,12 +48,9 @@ export const useCommunityData = () => {
 
   const loadPosts = useCallback(async (params = {}) => {
     try {
-      console.log('🔄 Starting loadPosts with params:', params);
       setError(null);
       const response = await communityAPI.getPosts(params);
-      console.log('✅ Posts response:', response);
       setPosts(response.results || response);
-      console.log('✅ Posts state updated, count:', (response.results || response).length);
     } catch (err) {
       console.error('❌ Error loading posts:', err);
       console.error('❌ Error details:', {
@@ -73,21 +65,11 @@ export const useCommunityData = () => {
 
   // Load all data together
   const loadAllData = useCallback(async () => {
-    console.log('🚀 loadAllData started');
-    console.log('🔍 Current state:', { 
-      groupsCount: groups.length, 
-      forumsCount: forums.length, 
-      postsCount: posts.length,
-      loading,
-      error 
-    });
     
     try {
       setLoading(true);
-      console.log('⏳ Loading state set to true');
       setError(null);
       
-      console.log('📡 Starting parallel API calls...');
       
       // Load all data in parallel
       const startTime = Date.now();
@@ -95,12 +77,11 @@ export const useCommunityData = () => {
         loadGroups(),
         loadForums(), 
         loadPosts(),
-        loadChats()
+        loadChats(),
+        loadStats()
       ]);
       
       const endTime = Date.now();
-      console.log(`✅ All API calls completed in ${endTime - startTime}ms`);
-      console.log('🎉 Community data loaded successfully');
       
     } catch (err) {
       console.error('💥 Critical error in loadAllData:', err);
@@ -114,10 +95,19 @@ export const useCommunityData = () => {
       setPosts([]);
     } finally {
       setLoading(false);
-      console.log('✅ Loading state set to false');
-      console.log('🏁 loadAllData completed');
     }
   }, [loadGroups, loadForums, loadPosts, groups.length, forums.length, posts.length, loading, error]);
+
+  // The sidebar used to count the loaded page: "Posts Liked" meant liked posts
+  // visible right now, not the user's total. The API already computes these.
+  const loadStats = useCallback(async () => {
+    try {
+      const response = await communityAPI.getCommunityStats();
+      setStats(response);
+    } catch (err) {
+      console.error('Error loading community stats:', err);
+    }
+  }, []);
 
   const loadChats = useCallback(async () => {
     try {
@@ -248,6 +238,7 @@ export const useCommunityData = () => {
     forums,
     posts,
     chats,
+    stats,
     loading,
     error,
     
@@ -256,6 +247,7 @@ export const useCommunityData = () => {
     loadForums,
     loadPosts,
     loadChats,
+    loadStats,
     loadAllData,
     
     // Group operations

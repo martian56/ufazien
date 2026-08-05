@@ -1,10 +1,11 @@
+import notificationsApi from '../lib/api/endpoints/notifications';
+
 // Push notification service for handling browser push notifications
 class PushNotificationService {
   constructor() {
     this.registration = null;
     this.subscription = null;
     this.isSupported = 'serviceWorker' in navigator && 'PushManager' in window;
-    this.apiUrl = import.meta.env.VITE_API_URL;
   }
 
   /**
@@ -29,7 +30,6 @@ class PushNotificationService {
         scope: '/'
       });
       
-      console.log('Service Worker registered successfully:', this.registration.scope);
 
       // Wait for service worker to be ready
       await navigator.serviceWorker.ready;
@@ -54,7 +54,6 @@ class PushNotificationService {
     const { data } = event;
     
     if (data.type === 'SYNC_NOTIFICATIONS') {
-      console.log('Service worker requested notification sync');
       // Trigger notification sync in main app
       window.dispatchEvent(new CustomEvent('sync-notifications'));
     }
@@ -84,17 +83,7 @@ class PushNotificationService {
 
     try {
       // Get VAPID public key from backend
-      const response = await fetch(`${this.apiUrl}/api/notifications/vapid-key/`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access')}`
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to get VAPID key');
-      }
-
-      const { publicKey } = await response.json();
+      const { publicKey } = await notificationsApi.getVapidKey();
 
       // Subscribe to push notifications
       this.subscription = await this.registration.pushManager.subscribe({
@@ -105,7 +94,6 @@ class PushNotificationService {
       // Send subscription to backend
       await this.sendSubscriptionToBackend(this.subscription);
 
-      console.log('Successfully subscribed to push notifications');
       return this.subscription;
     } catch (error) {
       console.error('Failed to subscribe to push notifications:', error);
@@ -127,7 +115,6 @@ class PushNotificationService {
       await this.removeSubscriptionFromBackend(this.subscription);
       
       this.subscription = null;
-      console.log('Successfully unsubscribed from push notifications');
     } catch (error) {
       console.error('Failed to unsubscribe from push notifications:', error);
       throw error;
@@ -170,36 +157,14 @@ class PushNotificationService {
       p256dh: btoa(String.fromCharCode.apply(null, new Uint8Array(subscription.getKey('p256dh'))))
     };
 
-    const response = await fetch(`${this.apiUrl}/api/notifications/push/subscribe/`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('access')}`
-      },
-      body: JSON.stringify(subscriptionData)
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to save subscription to backend');
-    }
+    await notificationsApi.subscribePush(subscriptionData);
   }
 
   /**
    * Remove subscription from backend
    */
   async removeSubscriptionFromBackend(subscription) {
-    const response = await fetch(`${this.apiUrl}/api/notifications/push/unsubscribe/`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('access')}`
-      },
-      body: JSON.stringify({ endpoint: subscription.endpoint })
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to remove subscription from backend');
-    }
+    await notificationsApi.unsubscribePush(subscription.endpoint);
   }
 
   /**

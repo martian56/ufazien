@@ -8,8 +8,8 @@ import { Label } from "../../components/ui/label"
 import { useNavigate } from "react-router-dom"
 
 
-const API_URL = import.meta.env.VITE_API_URL
-const API_SIGNUP = `${API_URL}/api/auth/signup/`
+import { api, ApiError } from "../../lib/api/client"
+import { setTokens } from "../../lib/api/tokens"
 
 
 export default function SignUpForm() {
@@ -68,40 +68,21 @@ export default function SignUpForm() {
     setIsLoading(true)
 
     try {
-      const response = await fetch(API_SIGNUP, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
+      const data = await api.post(
+        "/auth/signup/",
+        {
           email: formData.email,
           first_name: formData.firstName,
           last_name: formData.lastName,
           password: formData.password,
-        }),
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        // dj-rest-auth sends errors as {field: [msg]} or {non_field_errors: [msg]}
-        let errorMsg = "Registration failed."
-        if (data) {
-          if (typeof data === "object") {
-            errorMsg = Object.values(data).flat().join(" ")
-          }
-        }
-        setApiError(errorMsg)
-        setIsLoading(false)
-        return
-      }
+        },
+        { anonymous: true },
+      )
 
       // Registration successful
       setSuccess(true)
-      // Store tokens if you want (optional)
       if (data.access && data.refresh) {
-        localStorage.setItem("access", data.access)
-        localStorage.setItem("refresh", data.refresh)
+        setTokens(data.access, data.refresh)
         navigate("/dashboard") // Redirect to dashboard
       }
       // You can also store user info if needed
@@ -116,7 +97,8 @@ export default function SignUpForm() {
         confirmPassword: "",
       })
     } catch (err) {
-      setApiError("An error occurred. Please try again.")
+      // Keeps dj-rest-auth's field errors, e.g. "A user with that email exists."
+      setApiError(err instanceof ApiError ? err.userMessage : "An error occurred. Please try again.")
     } finally {
       setIsLoading(false)
     }

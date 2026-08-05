@@ -3,79 +3,35 @@
  * Handles REST API communication with the Django backend
  */
 
-const API_URL = import.meta.env.VITE_API_URL
+import { api, ApiError } from '../lib/api/client';
+import { clearTokens, setTokens } from '../lib/api/tokens';
 
 
 class CampusApiService {
-    constructor() {
-        this.baseUrl = `${API_URL}/api/game`;
-    }
 
     /**
-     * Get authentication headers
-     * @returns {Object} Headers with authorization
-     */
-    getAuthHeaders() {
-        const token = localStorage.getItem('access');
-        return {
-            'Content-Type': 'application/json',
-            ...(token && { 'Authorization': `Bearer ${token}` })
-        };
-    }
-
-    /**
-     * Make authenticated API request
-     * @param {string} endpoint - API endpoint
-     * @param {Object} options - Fetch options
-     * @returns {Promise<Object>} Response data
+     * Make an authenticated API request.
+     *
+     * This used to be its own fetch wrapper with its own header building and
+     * error parsing. The shared client does all of that, including refreshing
+     * an expired token, so the endpoints below are unchanged.
+     *
+     * @param {string} endpoint - path under /game
+     * @param {Object} options - method, body, params
+     * @returns {Promise<Object>} parsed response
      */
     async apiRequest(endpoint, options = {}) {
-        const url = `${this.baseUrl}${endpoint}`;
-        
-        const config = {
-            headers: this.getAuthHeaders(),
-            ...options,
-            headers: {
-                ...this.getAuthHeaders(),
-                ...options.headers
-            }
-        };
-
-        console.log('API Request:', url, config);
-
+        const body = typeof options.body === 'string' ? JSON.parse(options.body) : options.body;
         try {
-            const response = await fetch(url, config);
-            
-            console.log('API Response Status:', response.status);
-            
-            if (!response.ok) {
-                let errorMessage = `HTTP ${response.status}`;
-                try {
-                    // Try to read as text first, then parse as JSON if possible
-                    const errorText = await response.text();
-                    console.log('API Error Text:', errorText);
-                    
-                    // Try to parse the text as JSON
-                    try {
-                        const errorData = JSON.parse(errorText);
-                        console.log('API Error Data:', errorData);
-                        errorMessage = errorData.detail || errorData.message || errorData.error || JSON.stringify(errorData);
-                    } catch (jsonParseError) {
-                        // If it's not JSON, use the text as is
-                        errorMessage = errorText || errorMessage;
-                    }
-                } catch (textError) {
-                    console.log('Failed to read error response:', textError);
-                    errorMessage = `HTTP ${response.status}`;
-                }
-                throw new Error(errorMessage);
-            }
-
-            const data = await response.json();
-            console.log('API Response Data:', data);
-            return data;
+            return await api[String(options.method || 'GET').toLowerCase()](
+                `/game${endpoint}`,
+                ...(options.method && options.method !== 'GET' && options.method !== 'DELETE'
+                    ? [body, { headers: options.headers }]
+                    : [{ headers: options.headers }]),
+            );
         } catch (error) {
-            console.error(`API request failed for ${endpoint}:`, error);
+            // Callers show error.message, so keep the server's own wording.
+            if (error instanceof ApiError) throw new Error(error.userMessage);
             throw error;
         }
     }
@@ -166,14 +122,12 @@ class CampusApiService {
      * @returns {Promise<Object>} Join response with lobby data
      */
     async joinLobby(lobbyId, password = '') {
-        console.log('joinLobby called with:', { lobbyId, password });
         
         // Check if we're already in the target lobby. If so, skip force-leave
         try {
             const myLobbies = await this.apiRequest('/my-lobbies/', { method: 'GET' });
             const alreadyInTarget = Array.isArray(myLobbies) && myLobbies.some(l => String(l.id) === String(lobbyId));
             if (alreadyInTarget) {
-                console.log('Already in target lobby; returning existing lobby details');
                 // Return the lobby object from myLobbies if available, else fetch it
                 const existing = myLobbies.find(l => String(l.id) === String(lobbyId));
                 if (existing) return existing;
@@ -185,14 +139,12 @@ class CampusApiService {
             try {
                 await this.forceLeaveCurrentLobby();
             } catch (error) {
-                console.log('No current lobby to leave or failed to leave:', error.message);
             }
         } catch (err) {
             console.warn('Failed to check current lobbies before join, proceeding:', err);
             try {
                 await this.forceLeaveCurrentLobby();
             } catch (error) {
-                console.log('No current lobby to leave or failed to leave:', error.message);
             }
         }
         
@@ -200,7 +152,6 @@ class CampusApiService {
             lobby_id: lobbyId,
             password: password
         };
-        console.log('Sending request body:', requestBody);
         
         return this.apiRequest('/join/', {
             method: 'POST',
@@ -219,7 +170,6 @@ class CampusApiService {
         try {
             await this.forceLeaveCurrentLobby();
         } catch (error) {
-            console.log('No current lobby to leave or failed to leave:', error.message);
         }
         
         return this.apiRequest('/quick-join/', {
@@ -257,26 +207,21 @@ class CampusApiService {
      * @returns {Promise<void>}
      */
     async forceLeaveCurrentLobby() {
-        console.log('Attempting to force leave current lobby');
         try {
             // First, get user's current lobbies
             const myLobbies = await this.apiRequest('/my-lobbies/', {
                 method: 'GET'
             });
             
-            console.log('User current lobbies:', myLobbies);
             
             // Leave each lobby the user is currently in
             for (const lobby of myLobbies) {
-                console.log('Leaving lobby:', lobby.id);
                 await this.apiRequest(`/lobbies/${lobby.id}/leave/`, {
                     method: 'POST'
                 });
-                console.log('Successfully left lobby:', lobby.id);
             }
         } catch (error) {
             // Ignore errors - user might not be in any lobby
-            console.log('Force leave result:', error.message);
         }
     }
 
@@ -389,44 +334,16 @@ class CampusApiService {
      * @param {string} token - JWT access token
      */
     setAuthToken(token) {
-        localStorage.setItem('access', token);
+        setTokens(token);
     }
 
     /**
      * Clear authentication token
      */
     clearAuthToken() {
-        localStorage.removeItem('access');
+        clearTokens();
     }
 
-    /**
-     * Refresh authentication token
-     * @returns {Promise<string>} New access token
-     */
-    async refreshToken() {
-        const refreshToken = localStorage.getItem('refresh');
-        if (!refreshToken) {
-            throw new Error('No refresh token available');
-        }
-
-        const response = await fetch(`${API_BASE_URL}/api/auth/token/refresh/`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                refresh: refreshToken
-            })
-        });
-
-        if (!response.ok) {
-            throw new Error('Failed to refresh token');
-        }
-
-        const data = await response.json();
-        this.setAuthToken(data.access);
-        return data.access;
-    }
 }
 
 // Create singleton instance
