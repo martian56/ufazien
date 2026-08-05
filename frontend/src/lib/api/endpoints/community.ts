@@ -15,6 +15,9 @@ export interface Group {
   professor?: string | null
   tags?: string[]
   owner: User
+  /** Whether the requesting user owns the group. Serializer sends snake_case. */
+  is_owner?: boolean
+  last_activity?: string | null
   created_at: string
 }
 
@@ -27,6 +30,13 @@ export interface Forum {
   color_class: string
   post_count?: number
   member_count?: number
+  last_post?: {
+    id: string
+    title: string
+    /** A username, not a user object. */
+    author: string
+    timestamp: string
+  } | null
   created_at: string
 }
 

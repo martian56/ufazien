@@ -1,8 +1,31 @@
 import { Plus } from "lucide-react"
 import PostCard from "./PostCard"
 import ForumCard from "./ForumCard"
+import type { Forum, ForumPost } from "../../../lib/api/endpoints/community"
+import type { User } from "../../../lib/api/types"
 
-export default function ForumsView({ forums, posts, onSelectForum, onLikePost, onBookmarkPost, onSharePost, onCreatePost, user }) {
+interface ForumsViewProps {
+  forums: Forum[]
+  posts: ForumPost[]
+  onSelectForum: (forum: Forum) => void
+  onLikePost: (postId: string) => void
+  onBookmarkPost: (postId: string) => void
+  onSharePost: (post: ForumPost) => void
+  onCreatePost: () => void
+  user: User | null
+}
+
+
+export default function ForumsView({
+  forums,
+  posts,
+  onSelectForum,
+  onLikePost,
+  onBookmarkPost,
+  onSharePost,
+  onCreatePost,
+  user,
+}: ForumsViewProps) {
   return (
     <div className="p-4 sm:p-6 lg:p-8">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
