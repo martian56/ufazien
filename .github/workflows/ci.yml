@@ -45,6 +45,12 @@ jobs:
           SECRET_KEY: ci-only-not-a-real-secret
         run: python manage.py migrate --noinput
 
+      - name: Check for missing migrations
+        working-directory: backend
+        env:
+          SECRET_KEY: ci-only-not-a-real-secret
+        run: python manage.py makemigrations --check --dry-run
+
       - name: Run tests
         working-directory: backend
         env:
