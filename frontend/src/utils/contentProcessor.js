@@ -15,24 +15,24 @@ export const fixMalformedHtml = (htmlContent) => {
 
   let content = htmlContent
 
-  // Step 1: Fix unclosed paragraph tags by adding closing tags
-  content = content.replace(/<p([^>]*)>(?![^<]*<\/p>)/g, (match, attributes) => {
-    // If the paragraph doesn't have a closing tag, add one
-    return match + '</p>'
-  })
+  // Step 1 used to "fix" an unclosed paragraph by appending </p> immediately
+  // after the opening tag. That produces an empty paragraph followed by loose
+  // text, and step 7 then deletes the empty paragraph, so <p>unclosed came out
+  // as bare "unclosed" with the wrapper gone. Removed: DOMPurify closes tags
+  // when it sanitises, and step 5 below wraps any bare run of text.
 
   // Step 2: Fix nested block elements inside paragraphs
   // Move headings out of paragraphs
-  content = content.replace(/<p([^>]*)>\s*(<h[1-6][^>]*>.*?<\/h[1-6]>)\s*<\/p>/g, '$2')
-  content = content.replace(/<p([^>]*)>\s*(<h[1-6][^>]*>.*?)\s*<p([^>]*)>/g, '$2</h$1>')
+  content = content.replace(/<p(\s[^>]*)?>\s*(<h[1-6][^>]*>.*?<\/h[1-6]>)\s*<\/p>/g, '$2')
+  content = content.replace(/<p(\s[^>]*)?>\s*(<h[1-6][^>]*>.*?)\s*<p(\s[^>]*)?>/g, '$2</h$1>')
 
   // Step 3: Fix multiple consecutive paragraph tags with same content
-  content = content.replace(/(<p[^>]*>)\s*(<p[^>]*>)/g, '$1')
+  content = content.replace(/(<p(?:\s[^>]*)?>)\s*(<p(?:\s[^>]*)?>)/g, '$1')
   content = content.replace(/(<\/p>)\s*(<\/p>)/g, '$1')
 
   // Step 4: Fix incomplete heading tags
-  content = content.replace(/<h([1-6])([^>]*)>\s*<p([^>]*)>/g, '<h$1$2>')
-  content = content.replace(/<p([^>]*)>\s*(<\/h[1-6]>)/g, '$2')
+  content = content.replace(/<h([1-6])([^>]*)>\s*<p(\s[^>]*)?>/g, '<h$1$2>')
+  content = content.replace(/<p(\s[^>]*)?>\s*(<\/h[1-6]>)/g, '$2')
 
   // Step 5: Ensure proper paragraph structure
   // Split content by double line breaks and wrap in paragraphs if needed
@@ -71,7 +71,7 @@ export const fixMalformedHtml = (htmlContent) => {
   })
 
   // Step 7: Clean up empty paragraphs and normalize spacing
-  content = content.replace(/<p[^>]*>\s*<\/p>/g, '') // Remove empty paragraphs
+  content = content.replace(/<p(\s[^>]*)?>\s*<\/p>/g, '') // Remove empty paragraphs
   content = content.replace(/\n{3,}/g, '\n\n') // Normalize line breaks
   content = content.replace(/\s+/g, ' ') // Normalize spaces
   content = content.trim()
@@ -101,11 +101,21 @@ export const processblogContent = (htmlContent) => {
     </div>`
   })
 
-  // Enhance inline code
+  // Enhance inline code.
+  // The comment here used to claim it skipped code inside a pre tag; it did
+  // not, so every block of code was given inline pill styling and a fenced
+  // block rendered as one long pink line. Park the pre blocks first.
+  const preBlocks = []
+  content = content.replace(/<pre[\s\S]*?<\/pre>/g, (block) => {
+    preBlocks.push(block)
+    return `[[ufz-pre-${preBlocks.length - 1}]]`
+  })
+
   content = content.replace(/<code([^>]*)>(.*?)<\/code>/g, (match, attributes, code) => {
-    // Skip if it's already inside a pre tag
     return `<code class="bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 px-2 py-1 rounded text-sm font-mono"${attributes}>${code}</code>`
   })
+
+  content = content.replace(/\[\[ufz-pre-(\d+)\]\]/g, (match, index) => preBlocks[Number(index)])
 
   // Enhance blockquotes
   content = content.replace(/<blockquote([^>]*)>(.*?)<\/blockquote>/gs, (match, attributes, quote) => {

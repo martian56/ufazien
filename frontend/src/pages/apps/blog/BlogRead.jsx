@@ -15,7 +15,7 @@ import { getMajorDisplayName, formatYearDisplay } from "../../../utils/majorUtil
 import SideBar from "../../../components/ui/SideBar"
 // import "../../../components/RichTextEditor.css"
 // import "../../../components/BlogContent.css"
-import { sanitizeHtml } from "../../../utils/security"
+import PostBody from "../../../features/blog/PostBody"
 import { processblogContent, extractPlainText, calculateReadTime } from "../../../utils/contentProcessor"
 import { useToast, ToastContainer } from "../../../hooks/useToast"
 
@@ -910,27 +910,15 @@ export default function BlogRead() {
               </div>
             </header>
 
-            {/* Article Content */}
-            <div
-              ref={contentRef}
-              className={`blog-content prose prose-lg max-w-none ${darkMode ? "dark prose-invert" : ""}`}
-              style={{
-                fontFamily,
-                fontSize: `${fontSize}px`,
-                lineHeight: lineHeight,
-              }}
-            >
-              <div
-                dangerouslySetInnerHTML={{
-                  __html: (() => {
-                    const processed = processblogContent(post.content);
-                    const sanitized = sanitizeHtml(processed);
-                    console.log('Original content:', post.content);
-                    console.log('Processed content:', processed);
-                    console.log('Sanitized content:', sanitized);
-                    return sanitized || "";
-                  })()
-                }}
+            {/* Article Content. Shared with the editor's preview so the two
+                cannot drift apart. */}
+            <div ref={contentRef}>
+              <PostBody
+                html={processblogContent(post.content)}
+                darkMode={darkMode}
+                fontFamily={fontFamily}
+                fontSize={fontSize}
+                lineHeight={lineHeight}
               />
             </div>
           </article>
