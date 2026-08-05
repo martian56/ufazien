@@ -17,6 +17,7 @@ import SideBar from "../../../components/ui/SideBar"
 // import "../../../components/BlogContent.css"
 import PostBody from "../../../features/blog/PostBody"
 import BlogComments from "../../../features/blog/BlogComments"
+import ReadingSettingsPanel from "../../../features/blog/ReadingSettingsPanel"
 import { countComments } from "../../../features/blog/countComments"
 import { errorMessage } from "../../../lib/api/errors"
 import RelatedReading from "../../../features/blog/RelatedReading"
@@ -81,8 +82,6 @@ export default function BlogRead() {
   // Social features
   const [showShareModal, setShowShareModal] = useState(false)
   const [showReportModal, setShowReportModal] = useState(false)
-  const [rating, setRating] = useState(0)
-  const [hasRated, setHasRated] = useState(false)
 
   // Related content
   const [relatedPosts, setRelatedPosts] = useState([])
@@ -503,12 +502,6 @@ export default function BlogRead() {
     }
   }
 
-  const handleRating = (newRating) => {
-    if (hasRated) return
-    setRating(newRating)
-    setHasRated(true)
-  }
-
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -688,85 +681,19 @@ export default function BlogRead() {
 
           {/* Reading Settings Panel */}
           {showSettings && (
-            <div className={`border-t p-4 ${darkMode ? "border-gray-700 bg-gray-800" : "border-gray-200 bg-white"}`}>
-              <div className="flex items-center justify-between max-w-4xl mx-auto">
-                <div className="flex items-center space-x-6">
-                  {/* Font Size */}
-                  <div className="flex items-center space-x-2">
-                    <Type className="w-4 h-4 text-gray-500" />
-                    <button
-                      onClick={() => setFontSize(Math.max(14, fontSize - 2))}
-                      className={`p-1 rounded ${darkMode ? "hover:bg-gray-700" : "hover:bg-gray-100"}`}
-                    >
-                      <Minus className="w-3 h-3" />
-                    </button>
-                    <span className="text-sm font-medium w-8 text-center">{fontSize}</span>
-                    <button
-                      onClick={() => setFontSize(Math.min(24, fontSize + 2))}
-                      className={`p-1 rounded ${darkMode ? "hover:bg-gray-700" : "hover:bg-gray-100"}`}
-                    >
-                      <Plus className="w-3 h-3" />
-                    </button>
-                  </div>
-
-                  {/* Font Family */}
-                  <select
-                    value={fontFamily}
-                    onChange={(e) => setFontFamily(e.target.value)}
-                    className={`px-3 py-1 rounded border text-sm ${
-                      darkMode
-                        ? "bg-gray-700 border-gray-600 text-white placeholder-gray-400"
-                        : "bg-white border-gray-300"
-                    }`}
-                  >
-                    <option value="Inter">Inter</option>
-                    <option value="Georgia">Georgia</option>
-                    <option value="Times New Roman">Times</option>
-                    <option value="Arial">Arial</option>
-                    <option value="Helvetica">Helvetica</option>
-                  </select>
-
-                  {/* Line Height */}
-                  <div className="flex items-center space-x-2">
-                    <span className="text-sm text-gray-500">Line Height:</span>
-                    <select
-                      value={lineHeight}
-                      onChange={(e) => setLineHeight(Number.parseFloat(e.target.value))}
-                      className={`px-2 py-1 rounded border text-sm ${
-                        darkMode ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300"
-                      }`}
-                    >
-                      <option value={1.4}>Tight</option>
-                      <option value={1.6}>Normal</option>
-                      <option value={1.8}>Relaxed</option>
-                      <option value={2.0}>Loose</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Speech Rate */}
-                {speechSupported && (
-                  <div className="flex items-center space-x-2">
-                    <Volume2 className="w-4 h-4 text-gray-500" />
-                    <span className="text-sm text-gray-500">Speed:</span>
-                    <select
-                      value={speechRate}
-                      onChange={(e) => setSpeechRate(Number.parseFloat(e.target.value))}
-                      className={`px-2 py-1 rounded border text-sm ${
-                        darkMode ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300"
-                      }`}
-                    >
-                      <option value={0.5}>0.5x</option>
-                      <option value={0.75}>0.75x</option>
-                      <option value={1}>1x</option>
-                      <option value={1.25}>1.25x</option>
-                      <option value={1.5}>1.5x</option>
-                      <option value={2}>2x</option>
-                    </select>
-                  </div>
-                )}
-              </div>
-            </div>
+            <ReadingSettingsPanel
+              darkMode={darkMode}
+              fontSize={fontSize}
+              setFontSize={setFontSize}
+              fontFamily={fontFamily}
+              setFontFamily={setFontFamily}
+              lineHeight={lineHeight}
+              setLineHeight={setLineHeight}
+              speechRate={speechRate}
+              setSpeechRate={setSpeechRate}
+              isPlaying={isPlaying}
+              speechSupported={speechSupported}
+            />
           )}
         </header>
 
@@ -841,28 +768,6 @@ export default function BlogRead() {
                   </span>
                 </div>
 
-                {/* Rating */}
-                <div className="flex items-center space-x-2">
-                  <div className="flex items-center space-x-1">
-                    {[1, 2, 3, 4, 5].map((star) => (
-                      <button
-                        key={star}
-                        onClick={() => handleRating(star)}
-                        disabled={hasRated}
-                        className={`w-5 h-5 ${
-                          star <= (rating || Math.floor(post.likes / 10) || 4)
-                            ? "text-yellow-400 fill-current"
-                            : "text-gray-300"
-                        } ${!hasRated ? "hover:text-yellow-400 cursor-pointer" : "cursor-default"}`}
-                      >
-                        <Star className="w-full h-full" />
-                      </button>
-                    ))}
-                  </div>
-                  <span className="text-sm text-gray-600">
-                    {Math.floor(post.likes / 10) || 4}.{post.likes % 10 || 5} ({post.likes || 0} ratings)
-                  </span>
-                </div>
               </div>
             </header>
 
