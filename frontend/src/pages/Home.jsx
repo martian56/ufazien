@@ -1,6 +1,10 @@
 "use client"
 
 import { useEffect, useState, useRef } from "react"
+import { formatCount, usePlatformStats } from "../features/home/usePlatformStats"
+import AchievementsSection from "../features/home/AchievementsSection"
+import FeaturesSection from "../features/home/FeaturesSection"
+import TestimonialsSection from "../features/home/TestimonialsSection"
 import { useNavigate } from "react-router-dom"
 import { gsap } from "gsap"
 import { ScrollTrigger } from "gsap/ScrollTrigger"
@@ -252,7 +256,7 @@ export default function Home() {
       description: "Comprehensive grade analysis with weighted averages, public and private schemas, and performance insights.",
       link: "/average-calculator",
       color: "from-green-500 to-emerald-500",
-      stats: "500+ users",
+      stats: "Weighted averages",
       badge: "Trending",
     },
     {
@@ -261,7 +265,7 @@ export default function Home() {
       description: "Advanced GPA tracking with UFAZ's 20-point system, predictive analytics, and semester planning.",
       link: "/gpa-calculator",
       color: "from-blue-500 to-cyan-500",
-      stats: "4,000+ calculations",
+      stats: "UFAZ 20-point scale",
       badge: "Most Popular",
     },
     {
@@ -270,7 +274,7 @@ export default function Home() {
       description: "Deploy and manage your personal academic website with custom domains, SSL, and one-click setup.",
       link: "/hosting",
       color: "from-green-500 to-emerald-500",
-      stats: "50+ websites",
+      stats: "Free tier, SSL included",
       badge: "Free Tier",
     },
     {
@@ -279,7 +283,7 @@ export default function Home() {
       description: "Showcase your projects, blogs, and portfolios with our easy-to-use hosting platform.",
       link: "/user-sites",
       color: "from-teal-500 to-blue-500",
-      stats: "50+ sites",
+      stats: "Public showcase",
       badge: "Public",
     },
     {
@@ -297,7 +301,7 @@ export default function Home() {
       description: "AI-powered writing tools, rich editor, collaborative features, and community engagement.",
       link: "/blog",
       color: "from-purple-500 to-pink-500",
-      stats: "50+ posts",
+      stats: "Drafts and scheduling",
       badge: "New Features",
     },
     {
@@ -315,7 +319,7 @@ export default function Home() {
       description: "Real-time collaboration, course-specific groups, video calls, and peer-to-peer learning.",
       link: "/community",
       color: "from-orange-500 to-red-500",
-      stats: "20+ active groups",
+      stats: "Real-time chat",
       badge: "Community",
     },
     {
@@ -324,21 +328,26 @@ export default function Home() {
       description: "AI-powered scheduling, deadline tracking, and integration with UFAZ academic calendar.",
       link: "/calendar",
       color: "from-indigo-500 to-purple-500",
-      stats: "1,000+ events",
+      stats: "Import and export",
       badge: "Essential",
     }
   ]
 
-  const stats = [
-    { number: "200+", label: "Active Students", icon: Users, color: "text-blue-600", growth: "+23%" },
-    { number: "4,000+", label: "GPA Calculations", icon: Calculator, color: "text-green-600", growth: "+156%" },
-    { number: "5,000+", label: "Average Calculations", icon: Calculator, color: "text-red-600", growth: "+197%" },
-    { number: "300+", label: "Average Schemas", icon: SwatchBook, color: "text-purple-600", growth: "+89%" },
-    { number: "100+", label: "Hosted Websites", icon: House, color: "text-cyan-600", growth: "+45%" },
-    { number: "10+", label: "AI Tools", icon: Brain, color: "text-blue-600", growth: "+10%" },
-    { number: "50+", label: "Blog Posts", icon: PenTool, color: "text-purple-600", growth: "+89%" },
-    { number: "20+", label: "Study Groups", icon: MessageCircle, color: "text-orange-600", growth: "+67%" },
-  ]
+  // Was a list of literals with invented growth percentages ("+156%"), never
+  // updated after it was written. Counted from the database now, and simply
+  // absent when the request fails rather than showing a number nobody checked.
+  const platformStats = usePlatformStats()
+  const stats = platformStats
+    ? [
+        { number: formatCount(platformStats.students), label: "Students", icon: Users, color: "text-blue-600" },
+        { number: formatCount(platformStats.gpa_calculations), label: "GPA Calculations", icon: Calculator, color: "text-green-600" },
+        { number: formatCount(platformStats.average_calculations), label: "Average Calculations", icon: Calculator, color: "text-red-600" },
+        { number: formatCount(platformStats.average_schemas), label: "Average Schemas", icon: SwatchBook, color: "text-purple-600" },
+        { number: formatCount(platformStats.hosted_websites), label: "Hosted Websites", icon: House, color: "text-cyan-600" },
+        { number: formatCount(platformStats.blog_posts), label: "Blog Posts", icon: PenTool, color: "text-purple-600" },
+        { number: formatCount(platformStats.study_groups), label: "Study Groups", icon: MessageCircle, color: "text-orange-600" },
+      ]
+    : []
 
   const testimonials = [
     {
@@ -392,11 +401,19 @@ export default function Home() {
   ];
 
 
+  // "4.9/5 Student Rating, based on 200+ reviews" used to sit here. Nothing
+  // collects ratings or reviews anywhere in the platform, so the figure had no
+  // source at all. The student count comes from the same endpoint as the band
+  // above rather than being typed in.
   const achievements = [
-    { icon: Users, title: "200+ Active Students", org: "Growing UFAZ Community" },
-    { icon: Star, title: "4.9/5 Student Rating", org: "Based on 200+ reviews" },
+    {
+      icon: Users,
+      title: platformStats ? `${formatCount(platformStats.students)} Students` : "Built for UFAZ",
+      org: "Growing UFAZ Community",
+    },
+    { icon: Star, title: "Free for Students", org: "Every tool, no charge" },
     { icon: Shield, title: "Secure & Private", org: "Student Data Protection" },
-    { icon: Rocket, title: "99.9% Uptime", org: "Reliable & Always Available" },
+    { icon: Rocket, title: "Open Source", org: "Built and maintained by students" },
   ]
 
   return (
@@ -614,222 +631,27 @@ export default function Home() {
                   {stat.number}
                 </div>
                 <div className="text-gray-600 font-bold mb-1 sm:mb-2 text-sm sm:text-base">{stat.label}</div>
-                <div className="text-xs sm:text-sm text-green-600 font-bold flex items-center justify-center gap-1">
-                  <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4" />
-                  {stat.growth}
-                </div>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Features Section */}
-      <section id="features" className="py-16 sm:py-24 lg:py-32 relative">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          {/* Section Header */}
-          <div className="text-center mb-12 sm:mb-16 lg:mb-20">
-            <div className="inline-flex items-center gap-3 bg-gradient-to-r from-purple-500/10 to-pink-500/10 text-purple-700 px-4 sm:px-6 py-2 sm:py-3 rounded-full text-sm font-bold mb-6 sm:mb-8">
-              <Zap className="w-4 h-4 sm:w-5 sm:h-5" />
-              Powerful Features
-            </div>
-            <h2 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black text-gray-900 mb-6 sm:mb-8">
-              Everything You Need to
-              <span className="block bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-                Excel at UFAZ
-              </span>
-            </h2>
-            <p className="text-lg sm:text-xl text-gray-600 max-w-4xl mx-auto leading-relaxed">
-              Cutting-edge tools and features designed to transform your academic journey with AI-powered insights,
-              seamless collaboration, and intelligent automation.
-            </p>
-          </div>
+      <FeaturesSection
+        features={features}
+        technologies={technologies}
+        featuresRef={featuresRef}
+        navigate={navigate}
+      />
 
-          {/* Features Grid */}
-          <div ref={featuresRef} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
-            {features.map((feature, index) => (
-              <div
-                key={index}
-                className="feature-card group cursor-pointer bg-white/60 backdrop-blur-sm rounded-2xl sm:rounded-3xl p-6 sm:p-8 border border-white/30 hover:bg-white hover:shadow-2xl hover:scale-105 transition-all duration-500"
-                onClick={() => navigate(feature.link)}
-              >
-                <div className="flex items-start gap-4 sm:gap-6">
-                  <div
-                    className={`w-12 h-12 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl flex items-center justify-center bg-gradient-to-r ${feature.color} shadow-xl group-hover:scale-110 transition-transform duration-300`}
-                  >
-                    <feature.icon className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2 sm:mb-3">
-                      <h3 className="text-lg sm:text-xl lg:text-2xl font-black text-gray-900">{feature.title}</h3>
-                      {feature.badge && (
-                        <span className="px-2 py-1 bg-gradient-to-r from-blue-500 to-purple-500 text-white text-xs font-bold rounded-full">
-                          {feature.badge}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-gray-600 mb-3 sm:mb-4 text-sm sm:text-base leading-relaxed">
-                      {feature.description}
-                    </p>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs sm:text-sm font-bold text-gray-500">{feature.stats}</span>
-                      <div className="flex items-center gap-2 text-blue-600 font-bold group-hover:gap-3 transition-all duration-300">
-                        <span className="text-sm">Explore</span>
-                        <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform duration-300" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+      <TestimonialsSection
+        testimonials={testimonials}
+        currentTestimonial={currentTestimonial}
+        setCurrentTestimonial={setCurrentTestimonial}
+        testimonialsRef={testimonialsRef}
+      />
 
-          {/* Technology Stack */}
-          <div className="text-center mt-16 sm:mt-20 lg:mt-24">
-            <h3 className="text-2xl sm:text-3xl font-black text-gray-900 mb-8 sm:mb-12">
-              Built with Cutting-Edge Technology
-            </h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 sm:gap-6">
-              {technologies.map((tech, index) => (
-                <div
-                  key={index}
-                  className="group bg-white/60 backdrop-blur-sm p-4 sm:p-6 rounded-xl sm:rounded-2xl border border-white/30 hover:bg-white hover:shadow-xl hover:scale-105 transition-all duration-300 cursor-pointer"
-                >
-                  <div className="flex flex-col items-center gap-2 sm:gap-3">
-                    <div
-                      className={`p-2 sm:p-3 rounded-lg sm:rounded-xl bg-gradient-to-r ${
-                        tech.color === "text-blue-500"
-                          ? "from-blue-500 to-cyan-500"
-                          : tech.color === "text-green-500"
-                            ? "from-green-500 to-emerald-500"
-                            : tech.color === "text-purple-500"
-                              ? "from-purple-500 to-pink-500"
-                              : tech.color === "text-cyan-500"
-                                ? "from-cyan-500 to-blue-500"
-                                : tech.color === "text-pink-500"
-                                  ? "from-pink-500 to-red-500"
-                                  : "from-indigo-500 to-purple-500"
-                      }`}
-                    >
-                      <tech.icon className="w-4 h-4 sm:w-6 sm:h-6 text-white" />
-                    </div>
-                    <div className="text-center">
-                      <div className="font-bold text-gray-900 text-sm sm:text-base">{tech.name}</div>
-                      <div className="text-xs text-gray-500">{tech.description}</div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Testimonials Section */}
-      <section
-        ref={testimonialsRef}
-        className="py-16 sm:py-24 lg:py-32 bg-gradient-to-r from-blue-50 to-purple-50 relative overflow-hidden"
-      >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12 sm:mb-16 lg:mb-20">
-            <div className="inline-flex items-center gap-3 bg-gradient-to-r from-green-500/10 to-blue-500/10 text-green-700 px-4 sm:px-6 py-2 sm:py-3 rounded-full text-sm font-bold mb-6 sm:mb-8">
-              <Heart className="w-4 h-4 sm:w-5 sm:h-5" />
-              Student Success Stories
-            </div>
-            <h2 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black text-gray-900 mb-6 sm:mb-8">
-              What UFAZ Students
-              <span className="block bg-gradient-to-r from-green-600 to-blue-600 bg-clip-text text-transparent">
-                Are Saying
-              </span>
-            </h2>
-            <p className="text-lg sm:text-xl text-gray-600 max-w-3xl mx-auto">
-              Join hundreds of UFAZ students who have transformed their academic journey with Ufazien
-            </p>
-          </div>
-
-          {/* Testimonial Carousel */}
-          <div className="relative max-w-4xl mx-auto">
-            <div className="testimonial-card bg-white/80 backdrop-blur-sm rounded-2xl sm:rounded-3xl p-8 sm:p-12 shadow-2xl border border-white/30">
-              <div className="text-center">
-                {/* Stars */}
-                <div className="flex justify-center gap-1 mb-6 sm:mb-8">
-                  {[...Array(testimonials[currentTestimonial].rating)].map((_, i) => (
-                    <Star key={i} className="w-6 h-6 sm:w-8 sm:h-8 text-yellow-400 fill-current" />
-                  ))}
-                </div>
-
-                {/* Quote */}
-                <blockquote className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 mb-6 sm:mb-8 leading-relaxed">
-                  "{testimonials[currentTestimonial].content}"
-                </blockquote>
-
-                {/* Author */}
-                <div className="flex items-center justify-center gap-4">
-                  <img
-                    src={testimonials[currentTestimonial].avatar || "/placeholder.svg"}
-                    alt={testimonials[currentTestimonial].name}
-                    className="w-12 h-12 sm:w-16 sm:h-16 rounded-full border-4 border-white shadow-lg"
-                  />
-                  <div className="text-left">
-                    <div className="flex items-center gap-2">
-                      <h4 className="font-black text-gray-900 text-sm sm:text-base">
-                        {testimonials[currentTestimonial].name}
-                      </h4>
-                      {testimonials[currentTestimonial].verified && (
-                        <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500" />
-                      )}
-                    </div>
-                    <p className="text-gray-600 text-sm sm:text-base">{testimonials[currentTestimonial].role}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Navigation Dots */}
-            <div className="flex justify-center gap-3 mt-6 sm:mt-8">
-              {testimonials.map((_, index) => (
-                <button
-                  key={index}
-                  onClick={() => setCurrentTestimonial(index)}
-                  className={`w-2 h-2 sm:w-3 sm:h-3 rounded-full transition-all duration-300 ${
-                    currentTestimonial === index ? "bg-blue-600 scale-125" : "bg-gray-300 hover:bg-gray-400"
-                  }`}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Achievements Section */}
-      <section className="py-16 sm:py-24 lg:py-32 relative">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12 sm:mb-16 lg:mb-20">
-            <h2 className="text-3xl sm:text-4xl md:text-5xl font-black text-gray-900 mb-6 sm:mb-8">
-              Recognized Excellence
-            </h2>
-            <p className="text-lg sm:text-xl text-gray-600 max-w-3xl mx-auto">
-              Our commitment to student success has been recognized by leading educational institutions and technology
-              organizations
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8">
-            {achievements.map((achievement, index) => (
-              <div
-                key={index}
-                className="group bg-white/60 backdrop-blur-sm rounded-xl sm:rounded-2xl p-6 sm:p-8 border border-white/30 hover:bg-white hover:shadow-xl hover:scale-105 transition-all duration-300 text-center"
-              >
-                <div className="w-12 h-12 sm:w-16 sm:h-16 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-xl sm:rounded-2xl flex items-center justify-center mx-auto mb-4 sm:mb-6 group-hover:scale-110 transition-transform duration-300">
-                  <achievement.icon className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
-                </div>
-                <h3 className="font-black text-gray-900 mb-2 text-sm sm:text-base">{achievement.title}</h3>
-                <p className="text-gray-600 text-xs sm:text-sm">{achievement.org}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+      <AchievementsSection achievements={achievements} />
 
       {/* Community CTA Section */}
       <section ref={ctaRef} id="community" className="py-16 sm:py-24 lg:py-32 relative overflow-hidden">
@@ -916,7 +738,7 @@ export default function Home() {
               </p>
               <div className="flex items-center gap-4 sm:gap-6">
                 <div className="w-2 h-2 sm:w-3 sm:h-3 bg-green-500 rounded-full animate-pulse" />
-                <span className="text-gray-400 text-sm sm:text-base">All systems operational • 99.9% uptime</span>
+                <span className="text-gray-400 text-sm sm:text-base">Built and maintained by UFAZ students</span>
               </div>
             </div>
 
@@ -1003,7 +825,7 @@ export default function Home() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Activity className="w-3 h-3 sm:w-4 sm:h-4" />
-                  <span>99.9% Uptime</span>
+                  <span>Open Source</span>
                 </div>
               </div>
             </div>

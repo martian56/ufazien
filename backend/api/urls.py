@@ -3,6 +3,7 @@ from . import views
 
 urlpatterns = [
     path('', views.ApiStatus.as_view(), name='api_status'),
+    path('stats/', views.PlatformStatsView.as_view(), name='platform-stats'),
     
     # Notification endpoints
     path('notifications/', views.NotificationListView.as_view(), name='notification-list'),
