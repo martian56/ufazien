@@ -10,6 +10,7 @@ import { PenTool, Search, Heart, MessageCircle,Share2,
 
 import SideBar from "../../../components/ui/SideBar"
 import { formatYearWithOrdinal } from "../../../utils/majorUtils"
+import DraftList from "../../../features/blog/DraftList"
 
 const API_URL = import.meta.env.VITE_API_URL
 
@@ -502,6 +503,21 @@ export default function Blog() {
                 >
                   My Posts
                 </button>
+
+                <button
+                  onClick={() => {
+                    setActiveTab("drafts");
+                    setSelectedTag("");
+                    setCurrentPage(1);
+                  }}
+                  className={`px-4 py-2 font-medium transition-colors ${
+                    activeTab === "drafts"
+                      ? "text-blue-600 border-b-2 border-blue-600"
+                      : "text-gray-600 hover:text-gray-900"
+                  }`}
+                >
+                  Drafts
+                </button>
               </div>
 
               {/* Search and Filters */}
@@ -587,7 +603,17 @@ export default function Blog() {
 
               {/* Main Content */}
               <div className="lg:col-span-3">
-                {loading ? (
+                {activeTab === "drafts" ? (
+                  <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-6">
+                    <h2 className="text-lg font-semibold text-gray-900">Your drafts</h2>
+                    <p className="mt-1 text-sm text-gray-500">
+                      Unfinished posts, visible only to you. Pick one up where you left off.
+                    </p>
+                    <div className="mt-4">
+                      <DraftList />
+                    </div>
+                  </div>
+                ) : loading ? (
                   <div className="text-center py-12">
                     <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
                     <p className="text-gray-600">Loading posts...</p>
