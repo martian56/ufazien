@@ -7,6 +7,7 @@ import CommentTree from '../../features/community/components/CommentTree'
 import ReplyComposer from '../../features/community/components/ReplyComposer'
 import { communityApi } from '../../lib/api/endpoints/community'
 import { useCurrentUser } from '../../lib/useCurrentUser'
+import { copyText } from '../../lib/clipboard'
 import EditableText from '../../features/community/components/EditableText'
 
 export default function PostDetail() {
@@ -30,10 +31,11 @@ export default function PostDetail() {
   const [bookmarked, setBookmarked] = useState<boolean | null>(null)
 
   const share = async () => {
-    // The Share button used to have no onClick at all.
-    await navigator.clipboard?.writeText(window.location.href).catch(() => {})
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    // The Share button used to have no onClick at all. Say what actually
+    // happened rather than claiming success when the clipboard refused.
+    const ok = await copyText(window.location.href)
+    setCopied(ok)
+    if (ok) setTimeout(() => setCopied(false), 2000)
   }
 
   const toggleBookmark = async () => {
