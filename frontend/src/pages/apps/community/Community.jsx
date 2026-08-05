@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { Helmet } from "react-helmet"
-import { useNavigate } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
 import {
   MessageCircle,
   Search,
@@ -62,6 +62,7 @@ export default function Community() {
   const [searchQuery, setSearchQuery] = useState("")
   const [filterCategory, setFilterCategory] = useState("all")
   const [showFilters, setShowFilters] = useState(false)
+  const [shareNotice, setShareNotice] = useState(null)
   const [newMessage, setNewMessage] = useState("")
   const [newPost, setNewPost] = useState({ title: "", content: "", category: "general" })
 
@@ -267,6 +268,18 @@ export default function Community() {
   }
 
   // Handle post interactions
+  const handleSharePost = async (post) => {
+    // Copy a permalink. The button used to do nothing at all.
+    const url = `${window.location.origin}/community/posts/${post.id}`
+    try {
+      await navigator.clipboard.writeText(url)
+      setShareNotice(post.id)
+      setTimeout(() => setShareNotice(null), 2000)
+    } catch {
+      setShareNotice(null)
+    }
+  }
+
   const handleLikePost = async (postId) => {
     try {
       await likePost(postId)
@@ -557,6 +570,7 @@ export default function Community() {
               onSelectForum={setSelectedForum}
               onLikePost={handleLikePost}
               onBookmarkPost={handleBookmarkPost}
+              onSharePost={handleSharePost}
               onCreatePost={() => {
                 setCreateModalType("post")
                 setShowCreateModal(true)
@@ -649,7 +663,7 @@ function GroupsView({ groups, onJoinGroup, onLeaveGroup, onSelectGroup, user }) 
 }
 
 // Forums View Component
-function ForumsView({ forums, posts, onSelectForum, onLikePost, onBookmarkPost, onCreatePost, user }) {
+function ForumsView({ forums, posts, onSelectForum, onLikePost, onBookmarkPost, onSharePost, onCreatePost, user }) {
   return (
     <div className="p-4 sm:p-6 lg:p-8">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -682,6 +696,7 @@ function ForumsView({ forums, posts, onSelectForum, onLikePost, onBookmarkPost, 
                 post={post}
                 onLike={() => onLikePost(post.id)}
                 onBookmark={() => onBookmarkPost(post.id)}
+                onShare={onSharePost}
                 user={user}
               />
             ))}
@@ -1213,7 +1228,7 @@ function ForumCard({ forum, onSelect }) {
 }
 
 // Post Card Component
-function PostCard({ post, onLike, onBookmark, user }) {
+function PostCard({ post, onLike, onBookmark, onShare, user }) {
   return (
     <article className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
       {/* Header */}
@@ -1239,7 +1254,12 @@ function PostCard({ post, onLike, onBookmark, user }) {
 
       {/* Content */}
       <div className="mb-4">
-        <h2 className="text-lg font-semibold text-gray-900 mb-2">{post.title}</h2>
+        <Link
+          to={`/community/posts/${post.id}`}
+          className="block text-lg font-semibold text-gray-900 mb-2 hover:text-blue-600"
+        >
+          {post.title}
+        </Link>
         <p className="text-gray-600 line-clamp-3">{post.content}</p>
       </div>
 
@@ -1283,12 +1303,19 @@ function PostCard({ post, onLike, onBookmark, user }) {
             <span>{post.like_count}</span>
           </button>
 
-          <button className="flex items-center gap-2 px-3 py-1 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+          {/* Both of these were decoration: no onClick at all. */}
+          <Link
+            to={`/community/posts/${post.id}`}
+            className="flex items-center gap-2 px-3 py-1 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+          >
             <Reply className="w-4 h-4" />
             <span>Reply</span>
-          </button>
+          </Link>
 
-          <button className="flex items-center gap-2 px-3 py-1 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors">
+          <button
+            onClick={() => onShare(post)}
+            className="flex items-center gap-2 px-3 py-1 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+          >
             <Share2 className="w-4 h-4" />
             <span>Share</span>
           </button>

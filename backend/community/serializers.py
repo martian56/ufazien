@@ -189,15 +189,14 @@ class PostReplySerializer(serializers.ModelSerializer):
     author = UserBasicSerializer(read_only=True)
     like_count = serializers.ReadOnlyField()
     is_liked = serializers.SerializerMethodField()
-    # Temporarily removed nested_replies to prevent React error
-    # nested_replies = serializers.SerializerMethodField()
-    
+    # The thread is sent flat and assembled client side from parent_reply, so
+    # there is nothing to nest here and no recursion to guard against.
+
     class Meta:
         model = PostReply
         fields = [
-            'id', 'content', 'author', 'parent_reply', 'like_count',
+            'id', 'post', 'content', 'author', 'parent_reply', 'like_count',
             'is_liked', 'created_at', 'updated_at'
-            # Temporarily removed 'nested_replies' from fields
         ]
         read_only_fields = ['id', 'author', 'created_at', 'updated_at']
     
@@ -207,27 +206,7 @@ class PostReplySerializer(serializers.ModelSerializer):
             return obj.likes.filter(id=request.user.id).exists()
         return False
     
-    # Temporarily commented out to prevent recursive serialization issues
-    # def get_nested_replies(self, obj):
-    #     """Get nested replies (limit to 2 levels deep)"""
-    #     if hasattr(obj, '_nested_replies_fetched'):
-    #         return obj._nested_replies_fetched
-    #     
-    #     # Check if we're already in a nested context to prevent infinite recursion
-    #     context = self.context or {}
-    #     depth = context.get('reply_depth', 0)
-    #     
-    #     if depth >= 2:  # Limit to 2 levels of nesting
-    #         return []
-    #     
-    #     nested = obj.nested_replies.select_related('author').order_by('created_at')[:5]
-    #     
-    #     # Create new context with increased depth
-    #     nested_context = dict(context)
-    #     nested_context['reply_depth'] = depth + 1
-    #     
-    #     return PostReplySerializer(nested, many=True, context=nested_context).data
-    
+
     def create(self, validated_data):
         request = self.context.get('request')
         validated_data['author'] = request.user
