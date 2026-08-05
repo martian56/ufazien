@@ -2,12 +2,16 @@
 
 import { useState, useEffect, useRef } from "react"
 import { Helmet } from "react-helmet"
-import { useNavigate } from "react-router-dom"
-import axios from "axios"
+import { useNavigate, useSearchParams } from "react-router-dom"
 import RichTextEditor from "../../../components/RichTextEditor"
 import "../../../components/RichTextEditor.css"
 import "../../../components/BlogContent.css"
 import { sanitizeText, sanitizeHtml, apiRateLimiter } from "../../../utils/security"
+import { useDraft } from "../../../features/blog/useDraft"
+import { blogApi } from "../../../lib/api/endpoints/blog"
+import { api } from "../../../lib/api/client"
+import { toList } from "../../../lib/api/types"
+import { logger } from "../../../lib/logger"
 import { enhanceBlogContent } from "../../../utils/blogContentEnhancer"
 import { useToast, ToastContainer } from "../../../hooks/useToast"
 import {
@@ -54,7 +58,6 @@ import {
   ChevronLeft
 } from "lucide-react"
 
-const API_URL = import.meta.env.VITE_API_URL
 
 const BlogCreate = () => {
   const { notifications: toastNotifications, toast, removeNotification } = useToast();
@@ -289,13 +292,9 @@ const BlogCreate = () => {
   const fetchCategories = async () => {
     setIsLoadingCategories(true);
     try {
-      const access = localStorage.getItem('access');
-      const response = await axios.get(`${API_URL}/api/blog/categories/`, {
-        headers: { Authorization: `Bearer ${access}` }
-      });
-      setCategories(response.data.results || response.data);
+      setCategories(toList(await blogApi.categories()));
     } catch (error) {
-      console.error('Error fetching categories:', error);
+      logger.error('Error fetching categories:', error);
     } finally {
       setIsLoadingCategories(false);
     }
@@ -304,13 +303,9 @@ const BlogCreate = () => {
   const fetchTags = async () => {
     setIsLoadingTags(true);
     try {
-      const access = localStorage.getItem('access');
-      const response = await axios.get(`${API_URL}/api/blog/tags/`, {
-        headers: { Authorization: `Bearer ${access}` }
-      });
-      setAvailableTags(response.data.results || response.data);
+      setAvailableTags(toList(await blogApi.tags()));
     } catch (error) {
-      console.error('Error fetching tags:', error);
+      logger.error('Error fetching tags:', error);
     } finally {
       setIsLoadingTags(false);
     }
@@ -323,27 +318,18 @@ const BlogCreate = () => {
     }
 
     try {
-      const access = localStorage.getItem('access');
-      const response = await axios.get(`${API_URL}/api/blog/tags/?search=${encodeURIComponent(query)}`, {
-        headers: { Authorization: `Bearer ${access}` }
-      });
-      setTagSuggestions(response.data.results || response.data);
+      setTagSuggestions(toList(await api.get('/blog/tags/', { params: { search: query } })));
     } catch (error) {
-      console.error('Error searching tags:', error);
+      logger.error('Error searching tags:', error);
       setTagSuggestions([]);
     }
   };
 
   const createTag = async (tagName) => {
     try {
-      const access = localStorage.getItem('access');
-      const response = await axios.post(`${API_URL}/api/blog/tags/`, 
-        { name: tagName },
-        { headers: { Authorization: `Bearer ${access}` } }
-      );
-      return response.data;
+      return await api.post('/blog/tags/', { name: tagName });
     } catch (error) {
-      console.error('Error creating tag:', error);
+      logger.error('Error creating tag:', error);
       return null;
     }
   };
@@ -402,26 +388,62 @@ const BlogCreate = () => {
     }
   }, [content]);
 
-  const handleAutoSave = () => {
-    const blogData = {
-      title,
-      content,
-      excerpt,
-      tags,
-      category,
-      visibility,
-      publishDate,
-      featuredImage,
-      isDraft,
-      lastModified: new Date().toISOString()
+  // The draft as the API wants it. Sanitised here so a draft is stored the
+  // same way a published post is.
+  const draftPayload = () => ({
+    title: sanitizeText(title, 200) || 'Untitled draft',
+    content: sanitizeHtml(content),
+    excerpt: sanitizeText(excerpt, 300),
+    category: category ? parseInt(category, 10) : null,
+    tag_names: tags.map((tag) => sanitizeText(tag, 50)).filter(Boolean),
+    read_time: String(calculateReadTime(content) || 1),
+  });
+
+  // Was localStorage under the single key "blog-draft": one draft for the
+  // whole account, never sent anywhere, gone on another device or a cleared
+  // browser. Drafts are real posts now, saved unpublished.
+  const [searchParams] = useSearchParams();
+  const resumingDraftId = searchParams.get('draft');
+  const {
+    postId: draftPostId,
+    lastSaved: draftLastSaved,
+    save: saveDraft,
+    scheduleSave: scheduleDraftSave,
+    publish: publishDraft,
+  } = useDraft(resumingDraftId);
+
+  // Resuming: load what was written last time.
+  useEffect(() => {
+    if (!resumingDraftId) return;
+    let active = true;
+    blogApi
+      .get(resumingDraftId)
+      .then((post) => {
+        if (!active) return;
+        setTitle(post.title === 'Untitled draft' ? '' : post.title);
+        setContent(post.content || '');
+        setExcerpt(post.excerpt || '');
+        if (post.category?.id) setCategory(String(post.category.id));
+        if (Array.isArray(post.tags)) setTags(post.tags.map((t) => (typeof t === 'string' ? t : t.name)));
+      })
+      .catch(() => toast.error('Could not open that draft.'));
+    return () => {
+      active = false;
     };
-    
-    localStorage.setItem('blog-draft', JSON.stringify(blogData));
-    setLastSaved(new Date());
+  }, [resumingDraftId]);
+
+  const handleAutoSave = () => {
+    if (!title.trim() && !content.trim()) return;
+    scheduleDraftSave(draftPayload());
   };
 
-  const handleSave = () => {
-    handleAutoSave();
+  const handleSave = async () => {
+    if (!title.trim() && !content.trim()) {
+      toast.error('Write something before saving a draft.');
+      return;
+    }
+    const saved = await saveDraft(draftPayload());
+    if (saved) toast.success('Draft saved. You can finish it later.');
   };
 
   const handlePublish = async () => {
@@ -489,26 +511,22 @@ const BlogCreate = () => {
         excerpt: sanitizedExcerpt || sanitizedContent.replace(/<[^>]*>/g, '').trim().substring(0, 150) + '...',
         category: parseInt(category),
         tag_names: tagNames,
-        read_time: calculateReadTime(sanitizedContent),
-        is_published: !isDraft,
+        read_time: String(calculateReadTime(sanitizedContent)),
         is_featured: false, // Can be set later through admin or separate feature
       };
 
-      console.log('🔍 Complete blog data to send:', blogData);
-      console.log('🔍 Content in blogData:', blogData.content);
+      // This used to POST a new post every time, so publishing a draft you had
+      // already saved left two copies. publishDraft patches the existing one
+      // when there is one, and creates it otherwise.
+      const published = await publishDraft(blogData);
+      if (!published) {
+        toast.error('Could not publish. Your draft is still saved.');
+        return;
+      }
 
-      const response = await axios.post(`${API_URL}/api/blog/posts/`, blogData, {
-        headers: {
-          Authorization: `Bearer ${access}`,
-          'Content-Type': 'application/json'
-        },
-        timeout: 30000 // 30 second timeout
-      });
-
-      console.log('Post created successfully:', response.data);
       setIsDraft(false);
-      toast.success('Blog post published successfully!');
-      navigate('/blog');
+      toast.success('Blog post published.');
+      navigate(`/blog/${published.id}`);
     } catch (error) {
       console.error('Error publishing post:', error);
       toast.error('Error publishing post. Please try again.');

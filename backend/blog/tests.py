@@ -569,3 +569,69 @@ class PublishDateTests(TestCase):
 
         self.assertIsNotNone(post.published_at)
         self.assertGreaterEqual(post.published_at, first)
+
+
+class DraftSavingTests(APITestCase):
+    """A draft is saved before the writing is finished.
+
+    The serializer required a category and a read time, neither of which a
+    writer has settled on at the first keystroke, so the very first save of an
+    unfinished post was rejected.
+    """
+
+    def setUp(self):
+        self.author = User.objects.create_user(
+            username="drafter", email="drafter@example.com", password="pw"
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.author)
+
+    def test_a_draft_saves_without_a_category(self):
+        response = self.client.post(
+            "/api/blog/posts/",
+            {"title": "Untitled draft", "content": "<p>Just started</p>", "is_published": False},
+            format="json",
+        )
+        self.assertIn(response.status_code, (200, 201), response.content[:400])
+        self.assertFalse(response.json()["is_published"])
+
+    def test_a_draft_saves_without_a_read_time(self):
+        response = self.client.post(
+            "/api/blog/posts/",
+            {"title": "No read time", "content": "<p>x</p>", "is_published": False},
+            format="json",
+        )
+        self.assertIn(response.status_code, (200, 201), response.content[:400])
+
+    def test_a_draft_can_be_updated_then_published(self):
+        created = self.client.post(
+            "/api/blog/posts/",
+            {"title": "Work in progress", "content": "<p>a</p>", "is_published": False},
+            format="json",
+        )
+        post_id = created.json()["id"]
+
+        category = Category.objects.create(name="Tech")
+        published = self.client.patch(
+            f"/api/blog/posts/{post_id}/",
+            {"content": "<p>finished</p>", "category": category.id, "is_published": True},
+            format="json",
+        )
+        self.assertEqual(published.status_code, 200, published.content[:400])
+
+        body = published.json()
+        self.assertTrue(body["is_published"])
+        self.assertIsNotNone(body["published_at"])
+
+    def test_updating_a_draft_does_not_create_a_second_post(self):
+        created = self.client.post(
+            "/api/blog/posts/",
+            {"title": "One post", "content": "<p>a</p>", "is_published": False},
+            format="json",
+        )
+        post_id = created.json()["id"]
+
+        self.client.patch(
+            f"/api/blog/posts/{post_id}/", {"content": "<p>b</p>"}, format="json"
+        )
+        self.assertEqual(BlogPost.objects.filter(author=self.author).count(), 1)

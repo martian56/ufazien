@@ -55,7 +55,12 @@ class CommentSerializer(serializers.ModelSerializer):
 
 class BlogPostSerializer(serializers.ModelSerializer):
     author = PublicUserSerializer(read_only=True)
-    category = serializers.PrimaryKeyRelatedField(queryset=Category.objects.all())
+    # The model allows a null category; the serializer did not. A draft is
+    # saved before the writer has chosen one, so requiring it here made saving
+    # an unfinished post impossible.
+    category = serializers.PrimaryKeyRelatedField(
+        queryset=Category.objects.all(), required=False, allow_null=True
+    )
     category_name = serializers.CharField(source='category.name', read_only=True)
     tag_names = serializers.ListField(
         child=serializers.CharField(), write_only=True, required=False
@@ -93,8 +98,14 @@ class BlogPostSerializer(serializers.ModelSerializer):
             'is_liked',
             'is_bookmarked',
             'is_published',
-            'is_featured'
+            'is_featured',
+            'created_at',
         ]
+        extra_kwargs = {
+            # Derived from the content, and a draft is saved before there is
+            # much content to derive it from.
+            'read_time': {'required': False, 'allow_blank': True},
+        }
 
     def get_featured_image_url(self, obj):
         if obj.featured_image:
