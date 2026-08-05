@@ -133,6 +133,9 @@ export const communityApi = {
   createReply: (data: { post: string; content: string; parent_reply?: string | null }) =>
     api.post<PostReply>('/community/replies/', data),
   likeReply: (id: string) => api.post<{ liked: boolean; like_count: number }>(`/community/replies/${id}/like/`),
+  updateReply: (id: string, data: { content: string }) =>
+    api.patch<PostReply>(`/community/replies/${id}/`, data),
+  deleteReply: (id: string) => api.delete(`/community/replies/${id}/`),
 
   // Private chats
   getChats: () => api.get<Paginated<PrivateChat> | PrivateChat[]>('/community/chats/'),

@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight, Heart, MessageSquare } from 'lucide-react'
 import type { CommentNode } from '../commentTree'
 import { countThread } from '../commentTree'
 import ReplyComposer from './ReplyComposer'
+import EditableText from './EditableText'
 
 /**
  * Past this depth the indent eats the text on a phone, so deeper replies keep
@@ -14,9 +15,12 @@ interface CommentProps {
   node: CommentNode
   onReply: (content: string, parentId: string) => Promise<unknown>
   onToggleLike: (replyId: string) => void
+  onEdit: (replyId: string, content: string) => Promise<unknown>
+  onDelete: (replyId: string) => Promise<unknown>
+  currentUserId?: number | null
 }
 
-function Comment({ node, onReply, onToggleLike }: CommentProps) {
+function Comment({ node, onReply, onToggleLike, onEdit, onDelete, currentUserId }: CommentProps) {
   const [collapsed, setCollapsed] = useState(false)
   const [replying, setReplying] = useState(false)
 
@@ -52,9 +56,18 @@ function Comment({ node, onReply, onToggleLike }: CommentProps) {
 
         {!collapsed && (
           <>
-            <p className="mt-1 text-sm text-gray-800 whitespace-pre-wrap break-words">
-              {reply.content}
-            </p>
+            <EditableText
+              value={reply.content}
+              canEdit={Boolean(currentUserId) && reply.author?.id === currentUserId}
+              onSave={(content) => onEdit(String(reply.id), content)}
+              onDelete={() => onDelete(String(reply.id))}
+              deleteLabel="Delete this reply and its replies?"
+              maxLength={2000}
+            >
+              <p className="mt-1 text-sm text-gray-800 whitespace-pre-wrap break-words">
+                {reply.content}
+              </p>
+            </EditableText>
 
             <div className="mt-1.5 flex items-center gap-3">
               <button
@@ -94,7 +107,15 @@ function Comment({ node, onReply, onToggleLike }: CommentProps) {
 
       {!collapsed &&
         children.map((child) => (
-          <Comment key={child.reply.id} node={child} onReply={onReply} onToggleLike={onToggleLike} />
+          <Comment
+            key={child.reply.id}
+            node={child}
+            onReply={onReply}
+            onToggleLike={onToggleLike}
+            onEdit={onEdit}
+            onDelete={onDelete}
+            currentUserId={currentUserId}
+          />
         ))}
     </div>
   )
@@ -104,9 +125,19 @@ interface CommentTreeProps {
   thread: CommentNode[]
   onReply: (content: string, parentId: string) => Promise<unknown>
   onToggleLike: (replyId: string) => void
+  onEdit: (replyId: string, content: string) => Promise<unknown>
+  onDelete: (replyId: string) => Promise<unknown>
+  currentUserId?: number | null
 }
 
-export default function CommentTree({ thread, onReply, onToggleLike }: CommentTreeProps) {
+export default function CommentTree({
+  thread,
+  onReply,
+  onToggleLike,
+  onEdit,
+  onDelete,
+  currentUserId,
+}: CommentTreeProps) {
   if (thread.length === 0) {
     return <p className="py-6 text-sm text-gray-500 text-center">No replies yet. Start the conversation.</p>
   }
@@ -114,7 +145,15 @@ export default function CommentTree({ thread, onReply, onToggleLike }: CommentTr
   return (
     <div className="divide-y divide-gray-100">
       {thread.map((node) => (
-        <Comment key={node.reply.id} node={node} onReply={onReply} onToggleLike={onToggleLike} />
+        <Comment
+          key={node.reply.id}
+          node={node}
+          onReply={onReply}
+          onToggleLike={onToggleLike}
+          onEdit={onEdit}
+          onDelete={onDelete}
+          currentUserId={currentUserId}
+        />
       ))}
     </div>
   )
