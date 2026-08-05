@@ -6,11 +6,26 @@ import { usePost } from '../../features/community/usePost'
 import CommentTree from '../../features/community/components/CommentTree'
 import ReplyComposer from '../../features/community/components/ReplyComposer'
 import { communityApi } from '../../lib/api/endpoints/community'
+import { useCurrentUser } from '../../lib/useCurrentUser'
+import EditableText from '../../features/community/components/EditableText'
 
 export default function PostDetail() {
   const { postId } = useParams<{ postId: string }>()
   const navigate = useNavigate()
-  const { post, thread, loading, error, addReply, toggleLike, toggleReplyLike } = usePost(postId)
+  const {
+    post,
+    thread,
+    loading,
+    error,
+    addReply,
+    toggleLike,
+    toggleReplyLike,
+    editPost,
+    removePost,
+    editReply,
+    removeReply,
+  } = usePost(postId)
+  const { user } = useCurrentUser()
   const [copied, setCopied] = useState(false)
   const [bookmarked, setBookmarked] = useState<boolean | null>(null)
 
@@ -92,7 +107,20 @@ export default function PostDetail() {
               </span>
             </div>
 
-            <p className="mt-4 text-gray-800 whitespace-pre-wrap break-words">{post.content}</p>
+            <div className="mt-4">
+              <EditableText
+                value={post.content}
+                canEdit={Boolean(user) && post.author?.id === user?.id}
+                onSave={editPost}
+                onDelete={async () => {
+                  await removePost()
+                  navigate('/community')
+                }}
+                deleteLabel="Delete this post and all its replies?"
+              >
+                <p className="text-gray-800 whitespace-pre-wrap break-words">{post.content}</p>
+              </EditableText>
+            </div>
 
             {post.attachments?.length > 0 && (
               <div className="mt-4 space-y-3">
@@ -178,7 +206,14 @@ export default function PostDetail() {
             )}
 
             <div className="mt-4">
-              <CommentTree thread={thread} onReply={addReply} onToggleLike={toggleReplyLike} />
+              <CommentTree
+                thread={thread}
+                onReply={addReply}
+                onToggleLike={toggleReplyLike}
+                onEdit={editReply}
+                onDelete={removeReply}
+                currentUserId={user?.id ?? null}
+              />
             </div>
           </section>
         </div>

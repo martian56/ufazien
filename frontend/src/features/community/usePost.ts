@@ -95,5 +95,48 @@ export function usePost(postId: string | undefined) {
     }
   }, [replies])
 
-  return { post, replies, thread, loading, error, reload: load, addReply, toggleLike, toggleReplyLike }
+  const editPost = useCallback(
+    async (content: string) => {
+      if (!post) return
+      const updated = await communityApi.updatePost(String(post.id), { content })
+      setPost((prev) => (prev ? { ...prev, ...updated } : prev))
+    },
+    [post],
+  )
+
+  const removePost = useCallback(async () => {
+    if (!post) return
+    await communityApi.deletePost(String(post.id))
+  }, [post])
+
+  const editReply = useCallback(async (replyId: string, content: string) => {
+    const updated = await communityApi.updateReply(replyId, { content })
+    setReplies((prev) =>
+      prev.map((r) => (String(r.id) === String(replyId) ? { ...r, ...updated } : r)),
+    )
+  }, [])
+
+  const removeReply = useCallback(async (replyId: string) => {
+    await communityApi.deleteReply(replyId)
+    // Drop the reply and everything beneath it, matching the cascade the
+    // server applies through parent_reply.
+    setReplies((prev) => {
+      const doomed = new Set([String(replyId)])
+      let grew = true
+      while (grew) {
+        grew = false
+        for (const r of prev) {
+          const parent = r.parent_reply ? String(r.parent_reply) : null
+          if (parent && doomed.has(parent) && !doomed.has(String(r.id))) {
+            doomed.add(String(r.id))
+            grew = true
+          }
+        }
+      }
+      return prev.filter((r) => !doomed.has(String(r.id)))
+    })
+    setPost((prev) => (prev ? { ...prev, reply_count: Math.max(0, prev.reply_count - 1) } : prev))
+  }, [])
+
+  return { post, replies, thread, loading, error, reload: load, addReply, toggleLike, toggleReplyLike, editPost, removePost, editReply, removeReply }
 }
