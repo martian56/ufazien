@@ -41,7 +41,6 @@ export default function AiToolsMenu() {
       color: "from-purple-500 to-pink-500",
       category: "Writing",
       featured: false,
-      coming_soon: true,
     },
     {
       id: "summarizer",
@@ -51,7 +50,6 @@ export default function AiToolsMenu() {
       color: "from-green-500 to-emerald-500",
       category: "Productivity",
       featured: false,
-      coming_soon: true,
     },
     {
       id: "grammar-checker",
@@ -61,7 +59,6 @@ export default function AiToolsMenu() {
       color: "from-orange-500 to-red-500",
       category: "Writing",
       featured: false,
-      coming_soon: true,
     },
   ]
 
@@ -183,7 +180,13 @@ export default function AiToolsMenu() {
                   return (
                     <div
                       key={tool.id}
-                      className="bg-gray-800 bg-opacity-50 backdrop-blur-sm border border-gray-700 rounded-xl p-6 hover:bg-opacity-70 transition-all duration-300 group relative overflow-hidden"
+                      onClick={() => navigate(`/ai-tools/${tool.id}`)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") navigate(`/ai-tools/${tool.id}`)
+                      }}
+                      className="bg-gray-800 bg-opacity-50 backdrop-blur-sm border border-gray-700 rounded-xl p-6 hover:bg-opacity-70 transition-all duration-300 group relative overflow-hidden cursor-pointer"
                     >
                       {/* Coming Soon Badge */}
                       {tool.coming_soon && (
