@@ -8,6 +8,7 @@ import { MessageCircle, Users, Settings, LogOut, Mic, MicOff, Video, VideoOff } 
 import { useCampusSimulator } from '../../hooks/useCampusSimulator'
 import { useCampusVoice } from '../../hooks/useCampusVoice'
 import VoicePanel, { ScreenShareBoard } from '../../components/campus/VoicePanel'
+import TouchControls, { createTouchState, useIsTouchDevice } from '../../components/campus/TouchControls'
 import {
   CampusEnvironment,
   CampusGround,
@@ -104,13 +105,39 @@ const studyAreas = [
   },
 ]
 
+// drei's KeyboardControls listens on the window and does not exclude text
+// fields, so typing in chat also drove the player: "we need" walked forward and
+// e opened a building mid-sentence.
+function isTypingInField() {
+  const el = typeof document !== 'undefined' ? document.activeElement : null
+  if (!el) return false
+  const tag = el.tagName
+  return tag === 'INPUT' || tag === 'TEXTAREA' || el.isContentEditable
+}
+
 // Enhanced chat system with backend integration
 function ChatSystem({ isOpen, onToggle, campusHook }) {
   const [newMessage, setNewMessage] = useState("")
   const [activeTab, setActiveTab] = useState("global")
   const [isTyping, setIsTyping] = useState(false)
-  
+  const scrollRef = useRef(null)
+  const seenCountRef = useRef(0)
+
   const { chatMessages, sendChatMessage, getNearbyPlayers } = campusHook
+
+  // New messages were appended below the fold with nothing scrolling the list,
+  // so a conversation silently disappeared downwards.
+  useEffect(() => {
+    if (!isOpen) return
+    const node = scrollRef.current
+    if (node) node.scrollTop = node.scrollHeight
+  }, [chatMessages.length, isOpen, activeTab])
+
+  // The badge counted every message ever received, so it sat on "9+" forever.
+  useEffect(() => {
+    if (isOpen) seenCountRef.current = chatMessages.length
+  }, [isOpen, chatMessages.length])
+  const unread = Math.max(0, chatMessages.length - seenCountRef.current)
 
   const nearbyUsers = getNearbyPlayers(50) // Get users within 50 units
 
@@ -136,15 +163,15 @@ function ChatSystem({ isOpen, onToggle, campusHook }) {
 
   if (!isOpen) {
     return (
-      <div className="absolute bottom-24 right-4 pointer-events-auto">
+      <div className="absolute bottom-48 right-4 sm:bottom-24 z-30 pointer-events-auto">
         <button
           onClick={onToggle}
           className="bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-full shadow-lg transition-all transform hover:scale-105"
         >
           <MessageCircle className="w-6 h-6" />
-          {chatMessages.length > 0 && (
+          {unread > 0 && (
             <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-6 h-6 flex items-center justify-center">
-              {chatMessages.length > 9 ? "9+" : chatMessages.length}
+              {unread > 9 ? "9+" : unread}
             </span>
           )}
         </button>
@@ -153,7 +180,7 @@ function ChatSystem({ isOpen, onToggle, campusHook }) {
   }
 
   return (
-    <div className="absolute bottom-4 right-4 w-96 h-[500px] bg-black bg-opacity-95 backdrop-blur-sm border border-blue-500/30 rounded-xl pointer-events-auto shadow-2xl">
+    <div className="absolute inset-x-2 bottom-2 h-[70vh] sm:inset-x-auto sm:right-4 sm:bottom-4 sm:w-96 sm:h-[500px] bg-black bg-opacity-95 backdrop-blur-sm border border-blue-500/30 rounded-xl pointer-events-auto shadow-2xl">
       {/* Chat Header */}
       <div className="flex items-center justify-between p-4 border-b border-gray-700 bg-gradient-to-r from-blue-600/20 to-purple-600/20">
         <div className="flex space-x-2">
@@ -198,7 +225,7 @@ function ChatSystem({ isOpen, onToggle, campusHook }) {
       </div>
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 h-[350px]">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3 h-[calc(70vh-9.5rem)] sm:h-[350px]">
         {filteredMessages.length === 0 ? (
           <div className="text-center text-gray-500 py-8">
             <MessageCircle className="w-8 h-8 mx-auto mb-2 opacity-50" />
@@ -236,7 +263,7 @@ function ChatSystem({ isOpen, onToggle, campusHook }) {
             type="text"
             value={newMessage}
             onChange={handleTyping}
-            onKeyPress={(e) => e.key === "Enter" && handleSend()}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleSend() } }}
             placeholder={`Message ${activeTab === "global" ? "everyone" : activeTab}...`}
             className="flex-1 bg-gray-800 text-white px-4 py-3 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
           />
@@ -315,13 +342,14 @@ function InteriorCameraPlacement({ insideBuilding }) {
 // Entering by clicking a DOM button does not work while the pointer is locked
 // for mouse-look, which is the normal way to play. E does the same thing from
 // wherever the player is standing.
-function ProximityInteraction({ buildings, insideBuilding, onEnter, onExit }) {
+function ProximityInteraction({ buildings, insideBuilding, onEnter, onExit, touch }) {
   const { camera } = useThree()
   const [, get] = useKeyboardControls()
   const wasPressed = useRef(false)
 
   useFrame(() => {
-    const pressed = Boolean(get().interact)
+    const pressed = (Boolean(get().interact) && !isTypingInField()) || Boolean(touch?.current?.interact)
+    if (touch?.current?.interact) touch.current.interact = false
     // Edge trigger: holding E must not toggle every frame.
     if (pressed && !wasPressed.current) {
       if (insideBuilding) {
@@ -348,7 +376,7 @@ function ProximityInteraction({ buildings, insideBuilding, onEnter, onExit }) {
 }
 
 // First person player controller with backend position sync
-function Player({ campusHook, insideBuilding }) {
+function Player({ campusHook, insideBuilding, touch }) {
   const { camera } = useThree()
   const [, get] = useKeyboardControls()
   const playerRef = useRef()
@@ -367,7 +395,11 @@ function Player({ campusHook, insideBuilding }) {
   }, [camera])
 
   useFrame((state, delta) => {
-    const { forward, backward, leftward, rightward, jump, run } = get()
+    const typing = isTypingInField()
+    const raw = get()
+    const { forward, backward, leftward, rightward, jump, run } = typing
+      ? { forward: false, backward: false, leftward: false, rightward: false, jump: false, run: false }
+      : raw
 
     // Movement calculations
     const speed = run ? 8 : 4
@@ -381,6 +413,22 @@ function Player({ campusHook, insideBuilding }) {
     if (leftward) direction.current.x -= 1
     if (rightward) direction.current.x += 1
 
+    // Touch joystick contributes to the same vector as the keys.
+    if (touch?.current) {
+      direction.current.x += touch.current.move.x
+      direction.current.z -= touch.current.move.y
+
+      // Drag-to-look, consumed each frame so it does not accumulate.
+      const { dx, dy } = touch.current.look
+      if (dx || dy) {
+        camera.rotation.order = 'YXZ'
+        camera.rotation.y -= dx * 0.004
+        camera.rotation.x = MathUtils.clamp(camera.rotation.x - dy * 0.004, -1.2, 1.2)
+        touch.current.look.dx = 0
+        touch.current.look.dy = 0
+      }
+    }
+
     // Normalize and apply speed
     if (direction.current.length() > 0) {
       direction.current.normalize()
@@ -392,7 +440,7 @@ function Player({ campusHook, insideBuilding }) {
     }
 
     // Jump logic
-    if (jump && isOnGround) {
+    if ((jump || touch?.current?.jump) && isOnGround) {
       velocity.current.y = jumpForce
       setIsOnGround(false)
     }
@@ -525,6 +573,8 @@ const CampusWithBackend = () => {
   const lobbyId = (rawLobbyId === 'null' || rawLobbyId === 'undefined') ? null : rawLobbyId;
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [insideBuilding, setInsideBuilding] = useState(null)
+  const isTouchDevice = useIsTouchDevice()
+  const touchState = useRef(createTouchState())
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [currentUser, setCurrentUser] = useState(getCurrentUser())
 
@@ -685,8 +735,16 @@ const CampusWithBackend = () => {
         </div>
       )}
 
+      {isTouchDevice && (
+        <TouchControls
+          stateRef={touchState}
+          insideBuilding={insideBuilding}
+          canInteract
+        />
+      )}
+
       {/* Voice, screen share and host controls */}
-      <div className="absolute bottom-4 left-4 z-10 pointer-events-auto">
+      <div className="absolute top-28 left-4 sm:top-auto sm:bottom-4 sm:left-4 z-20 pointer-events-auto">
         <VoicePanel
           connected={voice.connected}
           error={voice.error}
@@ -720,35 +778,29 @@ const CampusWithBackend = () => {
       </div>
 
       {/* Game Menu */}
-      <div className="absolute bottom-4 left-4 z-10 pointer-events-auto">
-        <div className="flex flex-col gap-2">
+      {/* Top-left, under the connection pill: bottom-left belongs to the voice
+          panel, and the two overlapped each other. The Toggle Mic and Toggle
+          Video entries had no handlers and duplicated the voice panel, so they
+          are gone; Leave Campus is the only thing this menu actually did. */}
+      <div className="absolute top-16 left-4 z-20 pointer-events-auto">
+        <div className="flex flex-col gap-2 items-start">
           <button
             onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className="bg-gray-800 hover:bg-gray-700 text-white p-3 rounded-full shadow-lg transition-all"
+            aria-label="Campus menu"
+            className="bg-gray-800 hover:bg-gray-700 text-white p-2.5 rounded-full shadow-lg transition-all"
           >
-            <Settings className="w-6 h-6" />
+            <Settings className="w-5 h-5" />
           </button>
-          
+
           {isMenuOpen && (
-            <div className="bg-black bg-opacity-90 backdrop-blur-sm border border-gray-600 rounded-lg p-4 min-w-[200px]">
-              <div className="space-y-2">
-                <button className="w-full text-left px-3 py-2 text-white hover:bg-gray-700 rounded flex items-center gap-2">
-                  <Mic className="w-4 h-4" />
-                  Toggle Mic
-                </button>
-                <button className="w-full text-left px-3 py-2 text-white hover:bg-gray-700 rounded flex items-center gap-2">
-                  <Video className="w-4 h-4" />
-                  Toggle Video
-                </button>
-                <hr className="border-gray-600" />
-                <button
-                  onClick={handleDisconnect}
-                  className="w-full text-left px-3 py-2 text-red-400 hover:bg-red-900/30 rounded flex items-center gap-2"
-                >
-                  <LogOut className="w-4 h-4" />
-                  Leave Campus
-                </button>
-              </div>
+            <div className="bg-black bg-opacity-90 backdrop-blur-sm border border-gray-600 rounded-lg p-3 min-w-[190px]">
+              <button
+                onClick={handleDisconnect}
+                className="w-full text-left px-3 py-2 text-red-400 hover:bg-red-900/30 rounded flex items-center gap-2 text-sm"
+              >
+                <LogOut className="w-4 h-4" />
+                Leave Campus
+              </button>
             </div>
           )}
         </div>
@@ -822,11 +874,12 @@ const CampusWithBackend = () => {
               insideBuilding={insideBuilding}
               onEnter={setInsideBuilding}
               onExit={() => setInsideBuilding(null)}
+              touch={touchState}
             />
-            <Player campusHook={campusHook} insideBuilding={insideBuilding} />
+            <Player campusHook={campusHook} insideBuilding={insideBuilding} touch={touchState} />
             
             {/* Camera Controls */}
-            <PointerLockControls />
+            {!isTouchDevice && <PointerLockControls />}
           </Suspense>
         </Canvas>
       </KeyboardControls>
@@ -839,9 +892,10 @@ const CampusWithBackend = () => {
       />
 
       {/* Instructions */}
-      <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 pointer-events-none">
+      <div className="absolute bottom-44 sm:bottom-4 left-1/2 transform -translate-x-1/2 pointer-events-none z-10 max-w-[90vw]">
         <div className="bg-black bg-opacity-75 text-white px-4 py-2 rounded-lg text-sm">
-          WASD to move • Space to jump • Shift to run • Click to look around • E to enter or leave a building
+          <span className="hidden sm:inline">WASD to move • Space to jump • Shift to run • Click to look around • E to enter or leave a building</span>
+          <span className="sm:hidden">Drag to look • Joystick to move</span>
         </div>
       </div>
     </div>

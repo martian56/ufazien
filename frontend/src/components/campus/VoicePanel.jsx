@@ -44,7 +44,7 @@ export default function VoicePanel({
   const members = permissions?.members || []
 
   return (
-    <div className="bg-gray-900/90 text-white rounded-lg p-3 w-72 space-y-3 backdrop-blur">
+    <div className="bg-gray-900/90 text-white rounded-lg p-3 w-56 sm:w-72 space-y-3 backdrop-blur">
       <div className="flex items-center justify-between">
         <span className="text-sm font-semibold flex items-center gap-2">
           <Volume2 className="w-4 h-4" />
