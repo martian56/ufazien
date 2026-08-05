@@ -4,10 +4,11 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber"
 import { Text, Html, Sky, KeyboardControls, useKeyboardControls, PointerLockControls } from "@react-three/drei"
 import { Vector3, MathUtils } from "three"
 import { useNavigate, useParams } from "react-router-dom"
-import { MessageCircle, Users, Settings, LogOut, Mic, MicOff, Video, VideoOff } from "lucide-react"
+import { MessageCircle, Users, Settings, LogOut, Mic, MicOff, Video, VideoOff, MonitorUp } from "lucide-react"
 import { useCampusSimulator } from '../../hooks/useCampusSimulator'
 import { useCampusVoice } from '../../hooks/useCampusVoice'
-import VoicePanel, { ScreenShareBoard } from '../../components/campus/VoicePanel'
+import VoicePanel, { ScreenShareStage } from '../../components/campus/VoicePanel'
+import ProjectorScreen from '../../components/campus/ProjectorScreen'
 import TouchControls, { createTouchState, useIsTouchDevice } from '../../components/campus/TouchControls'
 import {
   CampusEnvironment,
@@ -576,6 +577,7 @@ const CampusWithBackend = () => {
   const isTouchDevice = useIsTouchDevice()
   const touchState = useRef(createTouchState())
   const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [shareExpanded, setShareExpanded] = useState(false)
   const [currentUser, setCurrentUser] = useState(getCurrentUser())
 
   // Initialize campus simulation hook
@@ -608,6 +610,23 @@ const CampusWithBackend = () => {
     playerPositions,
     enabled: isConnected,
   })
+
+  // LiveKit identities are "user-<id>", which is not a name to put on screen.
+  const sharerName = useMemo(() => {
+    const identity = voice.screenShare?.identity
+    if (!identity) return 'Someone'
+    const userId = identity.replace(/^user-/, '')
+    const member = (voice.permissions?.members || []).find(
+      (m) => String(m.user_id) === userId,
+    )
+    return member?.full_name || 'Someone'
+  }, [voice.screenShare?.identity, voice.permissions])
+
+  // Nothing to zoom into once the share stops.
+  useEffect(() => {
+    if (!voice.screenShare) setShareExpanded(false)
+  }, [voice.screenShare])
+
 
   // Fetch current user data
   useEffect(() => {
@@ -780,11 +799,34 @@ const CampusWithBackend = () => {
       </div>
       )}
 
+      {/* A share belongs on the projector screen inside a building, not pasted
+          over the player's view. Out on the campus there is no screen to put it
+          on, so all they get is a nudge to go and watch it. */}
       {voice.screenShare && (
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 w-[60vw] h-[60vh] pointer-events-auto">
-          <ScreenShareBoard screenShare={voice.screenShare} />
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20 pointer-events-auto">
+          <div className="bg-black/75 backdrop-blur-sm border border-blue-500/30 text-white rounded-full pl-3 pr-1.5 py-1 flex items-center gap-2 text-xs">
+            <MonitorUp className="w-3.5 h-3.5 text-blue-300 shrink-0" />
+            <span className="truncate max-w-[38vw]">
+              {voice.screenShare.isLocal
+                ? 'You are sharing your screen'
+                : `${sharerName} is sharing a screen`}
+            </span>
+            <button
+              onClick={() => setShareExpanded(true)}
+              className="px-2 py-0.5 rounded-full bg-blue-600 hover:bg-blue-700 shrink-0"
+            >
+              {insideBuilding ? 'Zoom in' : 'View'}
+            </button>
+          </div>
         </div>
       )}
+
+      <ScreenShareStage
+        screenShare={voice.screenShare}
+        expanded={shareExpanded}
+        onClose={() => setShareExpanded(false)}
+      />
+
 
       {/* Lobby info. One compact line on touch; the full card wastes the width. */}
       <div className="absolute top-4 right-4 z-10 pointer-events-auto max-w-[45vw]">
@@ -863,13 +905,7 @@ const CampusWithBackend = () => {
                 name={insideBuilding.name}
                 onExit={() => setInsideBuilding(null)}
               >
-                {voice.screenShare && (
-                  <Html position={[0, 5, -19.5]} center distanceFactor={14}>
-                    <div className="w-[640px] h-[360px]">
-                      <ScreenShareBoard screenShare={voice.screenShare} />
-                    </div>
-                  </Html>
-                )}
+                <ProjectorScreen video={voice.screenShare?.element || null} />
               </BuildingInterior>
             ) : (
               <>

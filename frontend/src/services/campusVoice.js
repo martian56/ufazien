@@ -23,7 +23,10 @@ export class CampusVoice {
     this.room = null
     this.audioContext = null
     this.listener = null
-    this.remotes = new Map() // identity -> { element, source, panner, gain }
+    // Keyed by track sid, not identity: a participant sharing a screen with
+    // audio publishes two audio tracks, and keying by identity meant the second
+    // overwrote the first, leaking the mic's nodes and leaving them playing.
+    this.remotes = new Map() // sid -> { identity, element, source, panner, gain }
     this.localPosition = { x: 0, y: 0 }
     this.onParticipantsChanged = null
     this.onScreenShare = null
@@ -40,7 +43,11 @@ export class CampusVoice {
     this.canPublishSources = data.can_publish_sources || []
     this.isHost = Boolean(data.is_host)
 
-    this.room = new Room({ adaptiveStream: true, dynacast: true })
+    // Adaptive stream sizes video to the element it is attached to. The shared
+    // screen is a texture on a mesh, so the element is parked at 2px and
+    // LiveKit would either drop to its lowest layer or pause the track
+    // outright, leaving the projector blank.
+    this.room = new Room({ adaptiveStream: false, dynacast: true })
 
     this.room
       .on(RoomEvent.TrackSubscribed, (track, publication, participant) =>
@@ -49,6 +56,29 @@ export class CampusVoice {
       .on(RoomEvent.TrackUnsubscribed, (track, publication, participant) =>
         this._onTrackUnsubscribed(track, publication, participant),
       )
+      // Your own tracks are never subscribed back to you, so without these the
+      // presenter is the one person who cannot see what they are presenting.
+      .on(RoomEvent.LocalTrackPublished, (publication) => {
+        if (publication.source !== Track.Source.ScreenShare) return
+        const element = publication.track?.attach()
+        if (element) {
+          this.onScreenShare?.({
+            identity: this.room?.localParticipant?.identity,
+            element,
+            active: true,
+            isLocal: true,
+          })
+        }
+      })
+      .on(RoomEvent.LocalTrackUnpublished, (publication) => {
+        if (publication.source !== Track.Source.ScreenShare) return
+        this.onScreenShare?.({
+          identity: this.room?.localParticipant?.identity,
+          element: null,
+          active: false,
+          isLocal: true,
+        })
+      })
       .on(RoomEvent.ParticipantConnected, () => this._notifyParticipants())
       .on(RoomEvent.ParticipantDisconnected, (p) => {
         this._teardownRemote(p.identity)
@@ -132,7 +162,13 @@ export class CampusVoice {
     panner.connect(gain)
     gain.connect(ctx.destination)
 
-    this.remotes.set(participant.identity, { element, source, panner, gain })
+    this.remotes.set(track.sid, {
+      identity: participant.identity,
+      element,
+      source,
+      panner,
+      gain,
+    })
     this._notifyParticipants()
   }
 
@@ -141,11 +177,11 @@ export class CampusVoice {
       this.onScreenShare?.({ identity: participant.identity, element: null, active: false })
       return
     }
-    if (track.kind === Track.Kind.Audio) this._teardownRemote(participant.identity)
+    if (track.kind === Track.Kind.Audio) this._teardownTrack(track.sid)
   }
 
-  _teardownRemote(identity) {
-    const remote = this.remotes.get(identity)
+  _teardownTrack(sid) {
+    const remote = this.remotes.get(sid)
     if (!remote) return
     try {
       remote.source.disconnect()
@@ -155,7 +191,14 @@ export class CampusVoice {
     } catch {
       // already torn down
     }
-    this.remotes.delete(identity)
+    this.remotes.delete(sid)
+  }
+
+  /** Every track belonging to one participant, for disconnect. */
+  _teardownRemote(identity) {
+    for (const [sid, remote] of this.remotes) {
+      if (remote.identity === identity) this._teardownTrack(sid)
+    }
   }
 
   /** Where the local player is. Moves the Web Audio listener. */
@@ -172,17 +215,19 @@ export class CampusVoice {
     }
   }
 
-  /** Where a remote player is, keyed by their user id. */
+  /** Where a remote player is, keyed by their user id. Moves all their tracks. */
   setRemotePosition(userId, { x, y }) {
-    const remote = this.remotes.get(`user-${userId}`)
-    if (!remote) return
-    const { panner } = remote
-    if (panner.positionX) {
-      panner.positionX.value = x
-      panner.positionY.value = 0
-      panner.positionZ.value = y
-    } else {
-      panner.setPosition(x, 0, y)
+    const identity = `user-${userId}`
+    for (const remote of this.remotes.values()) {
+      if (remote.identity !== identity) continue
+      const { panner } = remote
+      if (panner.positionX) {
+        panner.positionX.value = x
+        panner.positionY.value = 0
+        panner.positionZ.value = y
+      } else {
+        panner.setPosition(x, 0, y)
+      }
     }
   }
 

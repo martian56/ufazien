@@ -366,15 +366,12 @@ export function BuildingInterior({ name, onExit, children }) {
 
       {children}
 
-      <Html position={[0, 8, -19]} center distanceFactor={22}>
-        <div className="bg-black/70 text-white px-3 py-1 rounded text-sm whitespace-nowrap pointer-events-none">
-          {name}
-        </div>
-      </Html>
+      {/* No name plate in the scene. It landed on the projector screen, and the
+          page already shows which building you are inside.
 
-      {/* The way out is a fixed overlay in the page, not an Html marker in the
-          scene: the player spawns facing the board, so anything placed behind
-          them is off screen and they cannot find it. */}
+          The way out is a fixed overlay in the page too, not an Html marker:
+          the player spawns facing the board, so anything placed behind them is
+          off screen and they cannot find it. */}
     </group>
   )
 }
