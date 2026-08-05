@@ -30,11 +30,14 @@ function useBeamGeometry(width, height, apex) {
   return useMemo(() => {
     const halfWidth = width / 2
     const halfHeight = height / 2
+    // Lands just short of the screen. Ending exactly on it puts the base edges
+    // at the same depth as the picture, which shimmers along the border.
+    const z = 0.03
     const corners = [
-      [-halfWidth, -halfHeight, 0],
-      [halfWidth, -halfHeight, 0],
-      [halfWidth, halfHeight, 0],
-      [-halfWidth, halfHeight, 0],
+      [-halfWidth, -halfHeight, z],
+      [halfWidth, -halfHeight, z],
+      [halfWidth, halfHeight, z],
+      [-halfWidth, halfHeight, z],
     ]
 
     const positions = []
@@ -87,7 +90,10 @@ function useVideoTexture(video) {
   return texture
 }
 
-export default function ProjectorScreen({ video, position = [0, 5.2, -19.4] }) {
+// Hangs clear of the lecture board rather than right against it. The board's
+// face is at z -19.45, and sitting on top of it left no depth to separate the
+// screen from its own frame, which is what made the picture flicker.
+export default function ProjectorScreen({ video, position = [0, 5.2, -19.15] }) {
   const aspect = useVideoAspect(video)
   const texture = useVideoTexture(video)
   const [width, height] = fitScreen(aspect)
@@ -107,9 +113,12 @@ export default function ProjectorScreen({ video, position = [0, 5.2, -19.4] }) {
         <meshStandardMaterial color="#20262f" roughness={0.7} metalness={0.2} />
       </mesh>
 
-      {/* Border, slightly proud of the screen */}
-      <mesh position={[0, 0, -0.04]}>
-        <boxGeometry args={[width + 0.36, height + 0.36, 0.08]} />
+      {/* Border. Its front face must stay behind the picture, not level with
+          it: coplanar surfaces tie in the depth buffer, and because this one is
+          larger than the screen it won the tie often enough to blink the whole
+          image out. */}
+      <mesh position={[0, 0, -0.14]}>
+        <boxGeometry args={[width + 0.36, height + 0.36, 0.18]} />
         <meshStandardMaterial color="#12161c" roughness={0.85} />
       </mesh>
 
