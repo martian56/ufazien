@@ -112,13 +112,11 @@ export const useCampusSimulator = (lobbyId = null) => {
     const connectToLobby = useCallback(async (targetLobbyId: string) => {
         if (!targetLobbyId) return;
         
-        console.log('Attempting to connect to lobby:', targetLobbyId);
         setIsLoading(true);
         setError(null);
 
         try {
             // First, join the lobby via REST API
-            console.log('Calling joinLobby API with ID:', targetLobbyId);
             let lobbyData;
             try {
                 lobbyData = await campusApi.joinLobby(targetLobbyId);
@@ -133,7 +131,6 @@ export const useCampusSimulator = (lobbyId = null) => {
                 }
             }
 
-            console.log('Successfully joined or retrieved lobby:', lobbyData);
             // Accept both shapes: { lobby: ... } or raw lobby object
             const lobbyObj = lobbyData && lobbyData.lobby ? lobbyData.lobby : lobbyData;
             setCurrentLobby(lobbyObj);
@@ -160,21 +157,18 @@ export const useCampusSimulator = (lobbyId = null) => {
     const setupWebSocketListeners = useCallback(() => {
         // Connection status events
         campusWebSocket.on('connected', () => {
-            console.log('WebSocket connected');
             setIsConnected(true);
             setError(null);
             wsEverConnectedRef.current = true;
         });
 
         campusWebSocket.on('disconnected', () => {
-            console.log('WebSocket disconnected');
             setIsConnected(false);
                 // Do not immediately force-leave the lobby here; only mark disconnected
         });
 
         // Lobby state received
         campusWebSocket.on('lobbyState', (data: any) => {
-            console.log('Received lobby state:', data);
             setCurrentLobby(data.lobby);
             setLobbyMembers(data.members || []);
             setChatMessages(data.messages || []);
@@ -201,7 +195,6 @@ export const useCampusSimulator = (lobbyId = null) => {
 
         // User joined lobby
         campusWebSocket.on('userJoined', (data: any) => {
-            console.log('User joined:', data);
             setLobbyMembers(prev => {
                 const exists = prev.some(member => member.user_id === data.user_id);
                 if (!exists) {
@@ -218,7 +211,6 @@ export const useCampusSimulator = (lobbyId = null) => {
 
         // User left lobby
         campusWebSocket.on('userLeft', (data: any) => {
-            console.log('User left:', data);
             setLobbyMembers(prev => prev.filter(member => member.user_id !== data.user_id));
             setPlayerPositions(prev => {
                 const newPositions = new Map(prev);
@@ -252,7 +244,6 @@ export const useCampusSimulator = (lobbyId = null) => {
 
         // Chat message received
         campusWebSocket.on('chatMessage', (data: any) => {
-            console.log('Chat message received:', data);
             setChatMessages(prev => [...prev, {
                 id: data.message_id,
                 user_id: data.user_id,
@@ -265,12 +256,10 @@ export const useCampusSimulator = (lobbyId = null) => {
 
         // Study room events
         campusWebSocket.on('studyRoomJoin', (data: any) => {
-            console.log('User joined study room:', data);
             // Handle study room join logic
         });
 
         campusWebSocket.on('studyRoomLeave', (data: any) => {
-            console.log('User left study room:', data);
             // Handle study room leave logic
         });
 
@@ -391,12 +380,10 @@ export const useCampusSimulator = (lobbyId = null) => {
         try {
             const lobbyIdToLeave = currentLobbyIdRef.current;
             if (lobbyIdToLeave) {
-                console.log('Leaving lobby:', lobbyIdToLeave);
                 // Only call API leave if the WebSocket had previously connected (to avoid leaving on handshake failures)
                 if (wsEverConnectedRef.current) {
                     await campusApi.leaveLobby(lobbyIdToLeave);
                 } else {
-                    console.log('Skipping API leave because WebSocket never connected');
                 }
                 
                 // Clean up lobby-specific state
@@ -426,10 +413,8 @@ export const useCampusSimulator = (lobbyId = null) => {
             // Only leave if WebSocket was successfully connected (to avoid leaving on handshake failures)
             const lobbyIdToLeave = currentLobbyIdRef.current;
             if (lobbyIdToLeave && wsEverConnectedRef.current) {
-                console.log('Leaving lobby via API:', lobbyIdToLeave);
                 await campusApi.leaveLobby(lobbyIdToLeave);
             } else if (lobbyIdToLeave) {
-                console.log('Skipping API leave - WebSocket never successfully connected');
             }
         } catch (error) {
             console.warn('Failed to leave lobby via API:', error);
@@ -540,7 +525,6 @@ export const useCampusSimulator = (lobbyId = null) => {
             // Only leave lobby on actual unmount if WebSocket was connected
             const lobbyIdToLeave = currentLobbyIdRef.current;
             if (lobbyIdToLeave && wsEverConnectedRef.current) {
-                console.log('Component unmounting - leaving lobby:', lobbyIdToLeave);
                 campusApi.leaveLobby(lobbyIdToLeave).catch(error => {
                     console.warn('Failed to leave lobby on unmount:', error);
                 });

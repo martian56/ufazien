@@ -117,7 +117,6 @@ export default function Upgrade() {
   const handleUpgrade = (planId) => {
     if (planId === "free") return
     // Handle upgrade logic here
-    console.log(`Upgrading to ${planId} plan`)
   }
 
   return (

@@ -70,7 +70,6 @@ class CampusWebSocketService {
         const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
         
         const wsUrl = `${protocol}//${host}/ws/game/lobby/${lobbyId}/${tokenParam}`;
-        console.log('Opening WebSocket URL:', wsUrl);
 
         try {
             this.ws = new WebSocket(wsUrl);
@@ -88,7 +87,6 @@ class CampusWebSocketService {
         if (!this.ws) return;
 
         this.ws.onopen = () => {
-            console.log(`Connected to lobby ${this.lobbyId}`);
             this.isConnected = true;
             this.reconnectAttempts = 0;
             this.emit('connected', { lobbyId: this.lobbyId });
@@ -104,7 +102,6 @@ class CampusWebSocketService {
         };
 
         this.ws.onclose = (event) => {
-            console.log('WebSocket connection closed:', event.code, event.reason);
             this.isConnected = false;
             this.emit('disconnected', { code: event.code, reason: event.reason });
             
@@ -124,7 +121,6 @@ class CampusWebSocketService {
             if (event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts) {
                 const idToReconnect = this.lobbyId;
                 if (!idToReconnect) {
-                    console.log('No lobbyId available for reconnect; aborting reconnect');
                     return;
                 }
 
@@ -136,7 +132,6 @@ class CampusWebSocketService {
 
                 this.reconnectTimer = setTimeout(() => {
                     this.reconnectAttempts++;
-                    console.log(`Reconnection attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts}`);
                     this.reconnectTimer = null;
                     this.connect(idToReconnect);
                 }, 2000 * Math.max(1, this.reconnectAttempts));
