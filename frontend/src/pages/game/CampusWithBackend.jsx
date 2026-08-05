@@ -163,7 +163,7 @@ function ChatSystem({ isOpen, onToggle, campusHook, isTouchDevice = false }) {
 
   if (!isOpen) {
     return (
-      <div className={`absolute z-30 pointer-events-auto ${isTouchDevice ? "bottom-8 right-24" : "bottom-24 right-4"}`}>
+      <div className={`absolute z-30 pointer-events-auto ${isTouchDevice ? "bottom-5 right-24" : "bottom-24 right-4"}`}>
         <button
           onClick={onToggle}
           className="bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-full shadow-lg transition-all transform hover:scale-105"
@@ -720,15 +720,24 @@ const CampusWithBackend = () => {
         <meta name="description" content="Build and explore virtual campuses with friends in real-time 3D environments." />
       </Helmet>
       <div className="h-screen w-screen relative overflow-hidden">
-        {/* Connection Status */}
+        {/* Connection status. A dot on touch, where the label wastes scarce width. */}
         <div className="absolute top-4 left-4 z-10 pointer-events-auto">
-          <div className={`px-4 py-2 rounded-lg text-sm font-medium ${
-            isConnected 
-            ? 'bg-green-900/80 text-green-200 border border-green-500/50' 
-            : 'bg-red-900/80 text-red-200 border border-red-500/50'
-        }`}>
-          {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
-        </div>
+          {isTouchDevice ? (
+            <span
+              title={isConnected ? 'Connected' : 'Disconnected'}
+              className={`block w-3 h-3 rounded-full ring-2 ring-black/40 ${
+                isConnected ? 'bg-green-400' : 'bg-red-400'
+              }`}
+            />
+          ) : (
+            <div className={`px-4 py-2 rounded-lg text-sm font-medium ${
+              isConnected
+                ? 'bg-green-900/80 text-green-200 border border-green-500/50'
+                : 'bg-red-900/80 text-red-200 border border-red-500/50'
+            }`}>
+              {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
+            </div>
+          )}
       </div>
 
       {insideBuilding && (
@@ -751,8 +760,10 @@ const CampusWithBackend = () => {
         />
       )}
 
-      {/* Voice, screen share and host controls */}
-      <div className={`absolute z-20 pointer-events-auto ${isTouchDevice ? "top-28 left-1/2 -translate-x-1/2" : "bottom-4 left-4"}`}>
+      {/* Voice, screen share and host controls. On touch these live inside the
+          settings menu instead, so the playfield stays clear. */}
+      {!isTouchDevice && (
+      <div className="absolute z-20 pointer-events-auto bottom-4 left-4">
         <VoicePanel
           connected={voice.connected}
           error={voice.error}
@@ -767,6 +778,7 @@ const CampusWithBackend = () => {
           onSetMemberScreenShare={voice.setMemberScreenShare}
         />
       </div>
+      )}
 
       {voice.screenShare && (
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 w-[60vw] h-[60vh] pointer-events-auto">
@@ -774,15 +786,27 @@ const CampusWithBackend = () => {
         </div>
       )}
 
-      {/* Lobby Info */}
-      <div className="absolute top-4 right-4 z-10 pointer-events-auto">
-        <div className="bg-black bg-opacity-80 backdrop-blur-sm text-white p-4 rounded-xl border border-blue-500/30">
-          <h3 className="font-bold text-lg text-blue-400">{currentLobby?.name || 'Campus Lobby'}</h3>
-          <p className="text-sm text-gray-300 flex items-center gap-2">
-            <Users className="w-4 h-4" />
-            {lobbyMembers.length} students online
-          </p>
-        </div>
+      {/* Lobby info. One compact line on touch; the full card wastes the width. */}
+      <div className="absolute top-4 right-4 z-10 pointer-events-auto max-w-[45vw]">
+        {isTouchDevice ? (
+          <div className="bg-black/70 backdrop-blur-sm text-white px-2.5 py-1 rounded-lg border border-blue-500/30 flex items-center gap-1.5 text-xs">
+            <span className="truncate max-w-[26vw] text-blue-300 font-medium">
+              {currentLobby?.name || 'Campus'}
+            </span>
+            <span className="flex items-center gap-1 text-gray-300 shrink-0">
+              <Users className="w-3 h-3" />
+              {lobbyMembers.length}
+            </span>
+          </div>
+        ) : (
+          <div className="bg-black bg-opacity-80 backdrop-blur-sm text-white p-4 rounded-xl border border-blue-500/30">
+            <h3 className="font-bold text-lg text-blue-400">{currentLobby?.name || 'Campus Lobby'}</h3>
+            <p className="text-sm text-gray-300 flex items-center gap-2">
+              <Users className="w-4 h-4" />
+              {lobbyMembers.length} students online
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Game Menu */}
@@ -801,7 +825,23 @@ const CampusWithBackend = () => {
           </button>
 
           {isMenuOpen && (
-            <div className="bg-black bg-opacity-90 backdrop-blur-sm border border-gray-600 rounded-lg p-3 min-w-[190px]">
+            <div className="bg-black bg-opacity-90 backdrop-blur-sm border border-gray-600 rounded-lg p-3 w-[min(17rem,80vw)] max-h-[70vh] overflow-y-auto space-y-3">
+              {isTouchDevice && (
+                <VoicePanel
+                  connected={voice.connected}
+                  error={voice.error}
+                  participants={voice.participants}
+                  micEnabled={voice.micEnabled}
+                  mayScreenShare={voice.mayScreenShare}
+                  isHost={voice.isHost}
+                  permissions={voice.permissions}
+                  onToggleMic={voice.toggleMic}
+                  onToggleScreenShare={voice.toggleScreenShare}
+                  onSetMemberMuted={voice.setMemberMuted}
+                  onSetMemberScreenShare={voice.setMemberScreenShare}
+                  embedded
+                />
+              )}
               <button
                 onClick={handleDisconnect}
                 className="w-full text-left px-3 py-2 text-red-400 hover:bg-red-900/30 rounded flex items-center gap-2 text-sm"
@@ -899,6 +939,7 @@ const CampusWithBackend = () => {
         isOpen={isChatOpen}
         onToggle={() => setIsChatOpen(!isChatOpen)}
         campusHook={campusHook}
+        isTouchDevice={isTouchDevice}
       />
 
       {/* Instructions */}
