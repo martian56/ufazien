@@ -1,7 +1,18 @@
 import notificationsApi from '../lib/api/endpoints/notifications';
 
 // Push notification service for handling browser push notifications
+
+/** ArrayBuffer to base64, for the push subscription keys. */
+function encodeKey(key: ArrayBuffer | null): string {
+  if (!key) return ''
+  return btoa(String.fromCharCode(...new Uint8Array(key)))
+}
+
 class PushNotificationService {
+  registration: ServiceWorkerRegistration | null = null;
+  subscription: PushSubscription | null = null;
+  isSupported: boolean;
+
   constructor() {
     this.registration = null;
     this.subscription = null;
@@ -9,9 +20,11 @@ class PushNotificationService {
   }
 
   /**
-   * Check if push notifications are supported
+   * Check if push notifications are supported.
+   * Renamed from isSupported: a method and a field cannot share a name, and
+   * the field shadowed the method anyway.
    */
-  isSupported() {
+  checkSupported() {
     return this.isSupported;
   }
 
@@ -38,7 +51,7 @@ class PushNotificationService {
       navigator.serviceWorker.addEventListener('message', this.handleServiceWorkerMessage.bind(this));
 
       // Check if already subscribed
-      this.subscription = await this.registration.pushManager.getSubscription();
+      this.subscription = (await this.registration?.pushManager.getSubscription()) ?? null;
       
       return true;
     } catch (error) {
@@ -50,7 +63,7 @@ class PushNotificationService {
   /**
    * Handle messages from service worker
    */
-  handleServiceWorkerMessage(event) {
+  handleServiceWorkerMessage(event: MessageEvent) {
     const { data } = event;
     
     if (data.type === 'SYNC_NOTIFICATIONS') {
@@ -137,7 +150,7 @@ class PushNotificationService {
     }
 
     if (this.registration) {
-      this.subscription = await this.registration.pushManager.getSubscription();
+      this.subscription = (await this.registration?.pushManager.getSubscription()) ?? null;
     }
 
     return {
@@ -150,11 +163,11 @@ class PushNotificationService {
   /**
    * Send subscription details to backend
    */
-  async sendSubscriptionToBackend(subscription) {
+  async sendSubscriptionToBackend(subscription: any) {
     const subscriptionData = {
       endpoint: subscription.endpoint,
-      auth: btoa(String.fromCharCode.apply(null, new Uint8Array(subscription.getKey('auth')))),
-      p256dh: btoa(String.fromCharCode.apply(null, new Uint8Array(subscription.getKey('p256dh'))))
+      auth: encodeKey(subscription.getKey('auth')),
+      p256dh: encodeKey(subscription.getKey('p256dh'))
     };
 
     await notificationsApi.subscribePush(subscriptionData);
@@ -163,14 +176,14 @@ class PushNotificationService {
   /**
    * Remove subscription from backend
    */
-  async removeSubscriptionFromBackend(subscription) {
+  async removeSubscriptionFromBackend(subscription: any) {
     await notificationsApi.unsubscribePush(subscription.endpoint);
   }
 
   /**
    * Convert VAPID key to Uint8Array
    */
-  urlBase64ToUint8Array(base64String) {
+  urlBase64ToUint8Array(base64String: string) {
     const padding = '='.repeat((4 - base64String.length % 4) % 4);
     const base64 = (base64String + padding)
       .replace(/-/g, '+')

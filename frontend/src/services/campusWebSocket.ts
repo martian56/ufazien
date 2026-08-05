@@ -4,6 +4,14 @@
  */
 
 class CampusWebSocketService {
+    ws: WebSocket | null = null;
+    lobbyId: string | null = null;
+    isConnected = false;
+    listeners: Record<string, ((payload: any) => void)[]> = {};
+    reconnectAttempts = 0;
+    maxReconnectAttempts = 5;
+    reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
     constructor() {
         this.ws = null;
         this.lobbyId = null;
@@ -29,7 +37,7 @@ class CampusWebSocketService {
      * Connect to a lobby WebSocket
      * @param {string} lobbyId - The 8-digit lobby ID
      */
-    connect(lobbyId) {
+    connect(lobbyId: string) {
         if (!lobbyId) {
             console.warn('campusWebSocket.connect called without lobbyId, skipping');
             return;
@@ -50,11 +58,11 @@ class CampusWebSocketService {
                 host = parsed.host;
                 protocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
             } else {
-                host = process.env.NODE_ENV === 'production' ? window.location.host : 'localhost:8000';
+                host = import.meta.env.PROD ? window.location.host : 'localhost:8000';
             }
         } catch (e) {
             // Fallback
-            host = process.env.NODE_ENV === 'production' ? window.location.host : 'localhost:8000';
+            host = import.meta.env.PROD ? window.location.host : 'localhost:8000';
         }
         
         // Get JWT token from localStorage
@@ -77,6 +85,8 @@ class CampusWebSocketService {
      * Set up WebSocket event handlers
      */
     setupEventHandlers() {
+        if (!this.ws) return;
+
         this.ws.onopen = () => {
             console.log(`Connected to lobby ${this.lobbyId}`);
             this.isConnected = true;
@@ -145,7 +155,7 @@ class CampusWebSocketService {
      * Handle incoming WebSocket messages
      * @param {Object} data - Parsed message data
      */
-    handleMessage(data) {
+    handleMessage(data: any) {
         switch (data.type) {
             case 'lobby_state':
                 this.emit('lobbyState', data);
@@ -184,7 +194,7 @@ class CampusWebSocketService {
      * @param {string} position.direction - Player direction (up, down, left, right)
      * @param {boolean} position.is_moving - Whether player is currently moving
      */
-    sendPositionUpdate(position) {
+    sendPositionUpdate(position: any) {
         if (!this.isConnected) return;
 
         this.send({
@@ -202,7 +212,7 @@ class CampusWebSocketService {
      * @param {string} message - The chat message
      * @param {string} room - Optional room identifier for room-specific chat
      */
-    sendChatMessage(message, room = null) {
+    sendChatMessage(message: string, room: string | null = null) {
         if (!this.isConnected || !message.trim()) return;
 
         this.send({
@@ -216,7 +226,7 @@ class CampusWebSocketService {
      * Send study room join event
      * @param {string} roomId - The study room identifier
      */
-    joinStudyRoom(roomId) {
+    joinStudyRoom(roomId: string) {
         if (!this.isConnected) return;
 
         this.send({
@@ -229,7 +239,7 @@ class CampusWebSocketService {
      * Send study room leave event
      * @param {string} roomId - The study room identifier
      */
-    leaveStudyRoom(roomId) {
+    leaveStudyRoom(roomId: string) {
         if (!this.isConnected) return;
 
         this.send({
@@ -242,7 +252,7 @@ class CampusWebSocketService {
      * Send raw message to WebSocket
      * @param {Object} data - Data to send
      */
-    send(data) {
+    send(data: any) {
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             this.ws.send(JSON.stringify(data));
         } else {
@@ -255,7 +265,7 @@ class CampusWebSocketService {
      * @param {string} event - Event type
      * @param {Function} callback - Callback function
      */
-    on(event, callback) {
+    on(event: string, callback: (...args: any[]) => void) {
         if (this.listeners[event]) {
             this.listeners[event].push(callback);
         }
@@ -266,7 +276,7 @@ class CampusWebSocketService {
      * @param {string} event - Event type
      * @param {Function} callback - Callback function to remove
      */
-    off(event, callback) {
+    off(event: string, callback: (...args: any[]) => void) {
         if (this.listeners[event]) {
             this.listeners[event] = this.listeners[event].filter(cb => cb !== callback);
         }
@@ -277,7 +287,7 @@ class CampusWebSocketService {
      * @param {string} event - Event type
      * @param {Object} data - Event data
      */
-    emit(event, data) {
+    emit(event: string, data: any) {
         if (this.listeners[event]) {
             this.listeners[event].forEach(callback => {
                 try {

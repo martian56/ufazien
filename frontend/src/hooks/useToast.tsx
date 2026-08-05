@@ -5,12 +5,21 @@ import { CheckCircle, AlertCircle, Info, AlertTriangle, X } from 'lucide-react';
  * Custom hook for toast notifications
  * Provides a clean API for showing success, error, info, and warning toasts
  */
-export const useToast = () => {
-  const [notifications, setNotifications] = useState([]);
+export type ToastType = 'success' | 'error' | 'info' | 'warning';
 
-  const addNotification = useCallback((message, type = 'success', duration = 4000) => {
+export interface Toast {
+  id: number;
+  message: string;
+  type: ToastType;
+  duration: number;
+}
+
+export const useToast = () => {
+  const [notifications, setNotifications] = useState<Toast[]>([]);
+
+  const addNotification = useCallback((message: string, type: ToastType = 'success', duration = 4000) => {
     const id = Date.now() + Math.random();
-    const notification = { id, message, type, duration };
+    const notification: Toast = { id, message, type, duration };
     
     setNotifications(prev => [...prev, notification]);
     
@@ -22,15 +31,15 @@ export const useToast = () => {
     return id;
   }, []);
 
-  const removeNotification = useCallback((id) => {
+  const removeNotification = useCallback((id: number) => {
     setNotifications(prev => prev.filter(notif => notif.id !== id));
   }, []);
 
   const toast = {
-    success: (message, duration) => addNotification(message, 'success', duration),
-    error: (message, duration) => addNotification(message, 'error', duration),
-    info: (message, duration) => addNotification(message, 'info', duration),
-    warning: (message, duration) => addNotification(message, 'warning', duration),
+    success: (message: string, duration: number) => addNotification(message, 'success', duration),
+    error: (message: string, duration: number) => addNotification(message, 'error', duration),
+    info: (message: string, duration: number) => addNotification(message, 'info', duration),
+    warning: (message: string, duration: number) => addNotification(message, 'warning', duration),
   };
 
   return {
@@ -44,8 +53,13 @@ export const useToast = () => {
  * Toast Container Component
  * Renders all active toast notifications with animations
  */
-export const ToastContainer = ({ notifications, removeNotification }) => {
-  const getToastIcon = (type) => {
+export interface ToastContainerProps {
+  notifications: Toast[];
+  removeNotification: (id: number) => void;
+}
+
+export const ToastContainer = ({ notifications, removeNotification }: ToastContainerProps) => {
+  const getToastIcon = (type: string) => {
     switch (type) {
       case 'success':
         return <CheckCircle className="w-5 h-5 text-green-600" />;
@@ -60,7 +74,7 @@ export const ToastContainer = ({ notifications, removeNotification }) => {
     }
   };
 
-  const getToastStyles = (type) => {
+  const getToastStyles = (type: string) => {
     switch (type) {
       case 'success':
         return 'bg-green-50 border-green-400 text-green-800';
@@ -114,7 +128,7 @@ export const ToastContainer = ({ notifications, removeNotification }) => {
 
       {/* Toast Container */}
       <div className="fixed top-4 right-4 z-50 space-y-2 max-w-sm w-full">
-        {notifications.map((notification) => (
+        {notifications.map((notification: any) => (
           <div
             key={notification.id}
             className={`toast-enter flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg border-l-4 transition-all duration-300 transform ${getToastStyles(notification.type)}`}

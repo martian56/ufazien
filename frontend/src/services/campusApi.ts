@@ -20,10 +20,18 @@ class CampusApiService {
      * @param {Object} options - method, body, params
      * @returns {Promise<Object>} parsed response
      */
-    async apiRequest(endpoint, options = {}) {
+    async apiRequest(
+        endpoint: string,
+        options: {
+            method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+            body?: unknown;
+            headers?: Record<string, string>;
+        } = {},
+    ): Promise<any> {
         const body = typeof options.body === 'string' ? JSON.parse(options.body) : options.body;
         try {
-            return await api[String(options.method || 'GET').toLowerCase()](
+            const method = String(options.method || 'GET').toLowerCase() as 'get' | 'post' | 'put' | 'patch' | 'delete';
+            return await (api[method] as (...args: any[]) => Promise<any>)(
                 `/game${endpoint}`,
                 ...(options.method && options.method !== 'GET' && options.method !== 'DELETE'
                     ? [body, { headers: options.headers }]
@@ -58,7 +66,7 @@ class CampusApiService {
 
         Object.entries(defaultParams).forEach(([key, value]) => {
             if (value !== undefined && value !== null && value !== '') {
-                queryParams.append(key, value);
+                queryParams.append(key, String(value));
             }
         });
 
@@ -70,7 +78,7 @@ class CampusApiService {
      * @param {string} lobbyId - 8-digit lobby ID
      * @returns {Promise<Object>} Lobby details
      */
-    async getLobby(lobbyId) {
+    async getLobby(lobbyId: string) {
         return this.apiRequest(`/lobbies/${lobbyId}/`);
     }
 
@@ -84,7 +92,7 @@ class CampusApiService {
      * @param {string} lobbyData.password - Optional password for private lobbies
      * @returns {Promise<Object>} Created lobby data
      */
-    async createLobby(lobbyData) {
+    async createLobby(lobbyData: any) {
         return this.apiRequest('/lobbies/', {
             method: 'POST',
             body: JSON.stringify(lobbyData)
@@ -97,7 +105,7 @@ class CampusApiService {
      * @param {Object} updateData - Data to update
      * @returns {Promise<Object>} Updated lobby data
      */
-    async updateLobby(lobbyId, updateData) {
+    async updateLobby(lobbyId: string, updateData: any) {
         return this.apiRequest(`/lobbies/${lobbyId}/`, {
             method: 'PUT',
             body: JSON.stringify(updateData)
@@ -109,7 +117,7 @@ class CampusApiService {
      * @param {string} lobbyId - 8-digit lobby ID
      * @returns {Promise<void>}
      */
-    async deleteLobby(lobbyId) {
+    async deleteLobby(lobbyId: string) {
         return this.apiRequest(`/lobbies/${lobbyId}/`, {
             method: 'DELETE'
         });
@@ -121,7 +129,7 @@ class CampusApiService {
      * @param {string} password - Password if required
      * @returns {Promise<Object>} Join response with lobby data
      */
-    async joinLobby(lobbyId, password = '') {
+    async joinLobby(lobbyId: string, password = '') {
         
         // Check if we're already in the target lobby. If so, skip force-leave
         try {
@@ -186,7 +194,7 @@ class CampusApiService {
      * @param {string} lobbyId - 8-digit lobby ID
      * @returns {Promise<void>}
      */
-    async leaveLobby(lobbyId) {
+    async leaveLobby(lobbyId: string) {
         return this.apiRequest(`/lobbies/${lobbyId}/leave/`, {
             method: 'POST'
         });
@@ -230,7 +238,7 @@ class CampusApiService {
      * @param {string} lobbyId - 8-digit lobby ID
      * @returns {Promise<Array>} List of lobby members
      */
-    async getLobbyMembers(lobbyId) {
+    async getLobbyMembers(lobbyId: string) {
         const lobby = await this.apiRequest(`/lobbies/${lobbyId}/`);
         return lobby.members || [];
     }
@@ -240,7 +248,7 @@ class CampusApiService {
      * @param {string} lobbyId - 8-digit lobby ID
      * @returns {Promise<Array>} Empty array (positions come via WebSocket)
      */
-    async getPlayerPositions(lobbyId) {
+    async getPlayerPositions(lobbyId: string) {
         // Positions are handled in real-time via WebSocket
         // This method exists for compatibility but returns empty array
         return [];
@@ -252,7 +260,7 @@ class CampusApiService {
      * @param {number} limit - Number of messages to retrieve (default: 50)
      * @returns {Promise<Array>} Empty array (messages come via WebSocket)
      */
-    async getChatMessages(lobbyId, limit = 50) {
+    async getChatMessages(lobbyId: string, limit = 50) {
         // Chat messages are handled in real-time via WebSocket
         // This method exists for compatibility but returns empty array
         return [];
@@ -263,7 +271,7 @@ class CampusApiService {
      * @param {string} lobbyId - 8-digit lobby ID
      * @returns {Promise<Array>} List of study rooms
      */
-    async getStudyRooms(lobbyId) {
+    async getStudyRooms(lobbyId: string) {
         const lobby = await this.apiRequest(`/lobbies/${lobbyId}/`);
         return lobby.study_rooms || [];
     }
@@ -273,7 +281,7 @@ class CampusApiService {
      * @param {string} lobbyId - 8-digit lobby ID
      * @returns {Promise<Object>} Save response
      */
-    async saveLobby(lobbyId) {
+    async saveLobby(lobbyId: string) {
         return this.apiRequest('/saved-lobbies/', {
             method: 'POST',
             body: JSON.stringify({ lobby_id: lobbyId })
@@ -285,7 +293,7 @@ class CampusApiService {
      * @param {string} lobbyId - 8-digit lobby ID
      * @returns {Promise<void>}
      */
-    async unsaveLobby(lobbyId) {
+    async unsaveLobby(lobbyId: string) {
         return this.apiRequest(`/saved-lobbies/${lobbyId}/`, {
             method: 'DELETE'
         });
@@ -305,7 +313,7 @@ class CampusApiService {
      * @param {Object} filters - Additional filters
      * @returns {Promise<Object>} Search results
      */
-    async searchLobbies(query, filters = {}) {
+    async searchLobbies(query: string, filters = {}) {
         const params = {
             search: query,
             ...filters
@@ -333,7 +341,7 @@ class CampusApiService {
      * Set authentication token
      * @param {string} token - JWT access token
      */
-    setAuthToken(token) {
+    setAuthToken(token: string) {
         setTokens(token);
     }
 

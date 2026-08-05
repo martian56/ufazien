@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { CampusVoice, campusHostApi } from "../services/campusVoice"
+import { CampusVoice, campusHostApi, type Participant } from "../services/campusVoice"
 
 /**
  * Binds LiveKit voice to the campus lobby.
@@ -8,14 +8,27 @@ import { CampusVoice, campusHostApi } from "../services/campusVoice"
  * transport: it just re-points the Web Audio listener and each remote panner
  * whenever the game says someone moved.
  */
-export function useCampusVoice({ lobbyId, userPosition, playerPositions, enabled = true }) {
-  const voiceRef = useRef(null)
+export interface CampusVoiceOptions {
+  lobbyId?: string | null
+  userPosition?: { x?: number; y?: number } | null
+  playerPositions?: Map<string | number, { x?: number; y?: number }> | Record<string, { x?: number; y?: number }> | null
+  enabled?: boolean
+}
+
+export interface ActiveScreenShare {
+  identity?: string
+  element: HTMLVideoElement
+  isLocal: boolean
+}
+
+export function useCampusVoice({ lobbyId, userPosition, playerPositions, enabled = true }: CampusVoiceOptions) {
+  const voiceRef = useRef<CampusVoice | null>(null)
   const [connected, setConnected] = useState(false)
-  const [error, setError] = useState(null)
-  const [participants, setParticipants] = useState([])
+  const [error, setError] = useState<string | null>(null)
+  const [participants, setParticipants] = useState<Participant[]>([])
   const [micEnabled, setMicEnabled] = useState(false)
-  const [screenShare, setScreenShare] = useState(null)
-  const [permissions, setPermissions] = useState(null)
+  const [screenShare, setScreenShare] = useState<ActiveScreenShare | null>(null)
+  const [permissions, setPermissions] = useState<any>(null)
 
   // Connect once per lobby.
   useEffect(() => {
@@ -111,7 +124,8 @@ export function useCampusVoice({ lobbyId, userPosition, playerPositions, enabled
   }, [])
 
   const setMemberMuted = useCallback(
-    async (userId, muted) => {
+    async (userId: string | number, muted: boolean) => {
+      if (!lobbyId) return
       await campusHostApi.setMuted(lobbyId, userId, muted)
       await loadPermissions()
     },
@@ -119,7 +133,8 @@ export function useCampusVoice({ lobbyId, userPosition, playerPositions, enabled
   )
 
   const setMemberScreenShare = useCallback(
-    async (userId, allowed) => {
+    async (userId: string | number, allowed: boolean) => {
+      if (!lobbyId) return
       await campusHostApi.setScreenShare(lobbyId, userId, allowed)
       await loadPermissions()
     },
