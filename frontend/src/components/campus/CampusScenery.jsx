@@ -19,10 +19,22 @@ export function CampusEnvironment({ timeOfDay = "day" }) {
   const light = useRef()
 
   const config = useMemo(() => {
+    // `bounce` is the ground half of the hemisphere light. It was a dark
+    // olive at low intensity, so anything facing away from the sun received
+    // almost nothing and read as black rather than as its own colour: a brick
+    // building in shadow was a silhouette.
     if (timeOfDay === "dusk") {
-      return { sun: [30, 8, -60], intensity: 1.1, ambient: 0.35, tint: "#ffb37a", fog: "#c98a6b" }
+      return {
+        sun: [30, 8, -60], intensity: 1.1, ambient: 0.85,
+        sky: "#9fb6d4", bounce: "#5d5647", tint: "#ffb37a", fog: "#c98a6b",
+        fill: 0.25,
+      }
     }
-    return { sun: [80, 40, 40], intensity: 1.6, ambient: 0.5, tint: "#fff6e5", fog: "#cfe3f0" }
+    return {
+      sun: [80, 40, 40], intensity: 1.6, ambient: 1.15,
+      sky: "#cfe4f7", bounce: "#8a9179", tint: "#fff6e5", fog: "#cfe3f0",
+      fill: 0.35,
+    }
   }, [timeOfDay])
 
   return (
@@ -32,7 +44,15 @@ export function CampusEnvironment({ timeOfDay = "day" }) {
       <fog attach="fog" args={[config.fog, 60, 260]} />
 
       {/* Sky/ground bounce, which a single ambient term cannot express. */}
-      <hemisphereLight args={["#bcd7f0", "#3f5233", config.ambient]} />
+      <hemisphereLight args={[config.sky, config.bounce, config.ambient]} />
+
+      {/* Fill from the opposite side, so shadowed faces keep their colour.
+          It casts nothing: shadows stay the sun's to draw. */}
+      <directionalLight
+        position={[-config.sun[0], config.sun[1] * 0.6, -config.sun[2]]}
+        intensity={config.fill}
+        color="#cfe0f2"
+      />
 
       <directionalLight
         ref={light}
