@@ -383,7 +383,7 @@ export default function Hosting() {
             {/* Tab Navigation */}
             <div className="mb-6">
               <div className="border-b border-gray-200">
-                <nav className="-mb-px flex space-x-8">
+                <nav className="-mb-px flex gap-6 sm:gap-8 overflow-x-auto whitespace-nowrap">
                   {[
                     { id: 'overview', name: 'Overview', icon: BarChart3 },
                     { id: 'websites', name: 'Websites', icon: Globe },

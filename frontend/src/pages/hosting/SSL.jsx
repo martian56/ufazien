@@ -249,19 +249,19 @@ export default function SSL() {
           <div className="p-4 lg:p-6 pt-16 lg:pt-6">
             {/* Header */}
             <div className="mb-8">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center space-x-3">
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                <div className="flex items-center space-x-3 min-w-0">
                   <div className="bg-blue-100 rounded-lg p-2">
                     <Shield className="h-6 w-6 text-blue-600" />
                   </div>
                   <div>
-                    <h1 className="text-3xl font-bold text-gray-900">SSL Certificates</h1>
+                    <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">SSL Certificates</h1>
                     <p className="mt-2 text-gray-600">Manage SSL certificates for your websites</p>
                   </div>
                 </div>
                 <button
                   onClick={() => setShowCreateModal(true)}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                  className="shrink-0 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
                 >
                   <Plus className="w-4 h-4 mr-2 inline" />
                   Add Certificate
