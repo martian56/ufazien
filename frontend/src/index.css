@@ -1,10 +1,37 @@
 @import "tailwindcss";
 
-/* Blog content list styling */
-.blog-content li {
-  @apply text-gray-700;
+/* The blog renders post bodies with Tailwind Typography's `prose` classes.
+   The plugin was never installed, so every one of them did nothing while
+   preflight stripped heading sizes, paragraph spacing and list markers. Rich
+   posts came out as one undifferentiated wall of text. */
+@plugin "@tailwindcss/typography";
+
+/* Post bodies. Tuned for reading rather than for scanning a UI. */
+.blog-content :where(h2) {
+  @apply mt-10 mb-3 scroll-mt-24;
 }
 
-.blog-content.dark li {
-  @apply text-gray-300;
+.blog-content :where(h3) {
+  @apply mt-8 mb-2 scroll-mt-24;
+}
+
+.blog-content :where(img) {
+  @apply rounded-lg border border-gray-200 mx-auto;
+}
+
+.blog-content :where(pre) {
+  @apply rounded-lg overflow-x-auto text-sm;
+}
+
+/* Long URLs and code identifiers must not push the page sideways on a phone. */
+.blog-content :where(p, li, h1, h2, h3, h4) {
+  overflow-wrap: break-word;
+}
+
+.blog-content :where(table) {
+  @apply block overflow-x-auto;
+}
+
+.blog-content.dark :where(img) {
+  @apply border-gray-700;
 }

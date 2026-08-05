@@ -147,8 +147,10 @@
 .blog-content p {
   margin: 1.75rem 0;
   line-height: 1.8;
-  text-align: justify;
-  hyphens: auto;
+  /* Was justify with hyphens: auto. In a reading-width column that opens
+     rivers of white space between words, and an unbreakable identifier
+     stretches a line right across the page. Ragged right reads better. */
+  text-align: left;
   color: #374151;
   font-size: 1.125rem;
   font-weight: 400;
