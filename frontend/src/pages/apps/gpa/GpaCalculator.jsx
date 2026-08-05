@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { tabFor, toAverageRows } from "../../../features/gpa/loadCalculation"
 import { useNavigate } from "react-router-dom"
 import { Helmet } from "react-helmet"
 import {
@@ -134,6 +135,24 @@ export default function GpaCalculator() {
     if (userData) setUserProfile(userData)
   }
 
+  /**
+   * Reopen a saved calculation in the calculator.
+   *
+   * The rows called a loadCalculation that was never written, so clicking one
+   * threw a ReferenceError; they were then made non-clickable on the belief
+   * that only a summary was stored. update_user_gpa in fact writes one
+   * CourseGrade per period with its name and average, and the list endpoint
+   * serializes them, so the inputs were there the whole time.
+   */
+  const loadCalculation = (calc) => {
+    const rows = toAverageRows(calc)
+    const tab = tabFor(calc)
+    if (tab === "yearly") setYearlyAverages(rows)
+    else setSemesterAverages(rows)
+    setActiveTab(tab)
+    addNotification(`Loaded "${calc.name}".`, "success")
+  }
+
   // Load saved calculations
   const loadSavedCalculations = async () => {
     const data = await apiRequest("GET", "/gpa/calculations/")
@@ -216,9 +235,12 @@ export default function GpaCalculator() {
       if (saveData && saveData.success) {
         setUserProfile(prev => ({ ...prev, gpa: saveData.overall_gpa }))
         addNotification(`GPA updated to ${saveData.overall_gpa}!`, "success")
-        
-        // Refresh statistics
+
+        // Refresh statistics, and the saved list: only statistics was
+        // reloaded, so a calculation you had just saved was missing from
+        // Saved Calculations until the page was reloaded.
         loadStatistics()
+        loadSavedCalculations()
       }
     } catch (error) {
       console.error("Auto-save error:", error)
@@ -804,17 +826,11 @@ export default function GpaCalculator() {
                   <p className="text-gray-500 text-center py-8">No saved calculations yet</p>
                 ) : (
                   <div className="space-y-3">
-                    {/* These rows are not clickable. They called
-                        loadCalculation, which was never defined, so opening a
-                        saved calculation threw a ReferenceError. It cannot be
-                        implemented as written either: UserGPA stores a summary
-                        (name, type, overall GPA, credits), not the per-period
-                        inputs this calculator works from. Restoring one needs a
-                        product decision about what "load" should mean. */}
                     {savedCalculations.map((calc) => (
-                      <div
+                      <button
                         key={calc.id}
-                        className="flex items-center justify-between p-4 border border-gray-200 rounded-lg"
+                        onClick={() => loadCalculation(calc)}
+                        className="w-full text-left flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-colors"
                       >
                         <div>
                           <h4 className="font-medium text-gray-900">{calc.name}</h4>
@@ -826,7 +842,7 @@ export default function GpaCalculator() {
                           <div className="text-2xl font-bold text-blue-600">{calc.overall_gpa}</div>
                           <div className="text-xs text-gray-500">GPA</div>
                         </div>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 )}
