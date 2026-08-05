@@ -267,6 +267,66 @@ export function CampusProps({ count = 26, radius = 120, timeOfDay = "day" }) {
   )
 }
 
+/** Desks, chairs, a podium and a board frame, so the room is not a bare box. */
+function LectureRoomFurniture() {
+  const rows = [-6, -1, 4, 9]
+  const columns = [-10, -5, 5, 10]
+
+  return (
+    <group>
+      {/* Board frame on the far wall, behind whatever screen share is mounted */}
+      <mesh position={[0, 5, -19.6]} receiveShadow>
+        <boxGeometry args={[24, 10, 0.3]} />
+        <meshStandardMaterial color="#1f2733" roughness={0.6} />
+      </mesh>
+
+      {/* Podium */}
+      <group position={[-9, 0, -15]}>
+        <mesh castShadow position={[0, 0.55, 0]}>
+          <boxGeometry args={[1.6, 1.1, 0.9]} />
+          <meshStandardMaterial color="#6b4f34" roughness={0.8} />
+        </mesh>
+        <mesh castShadow position={[0, 1.15, 0]} rotation={[-0.3, 0, 0]}>
+          <boxGeometry args={[1.7, 0.08, 0.9]} />
+          <meshStandardMaterial color="#7d5c3d" roughness={0.75} />
+        </mesh>
+      </group>
+
+      {rows.map((z) =>
+        columns.map((x) => (
+          <group key={`${x}-${z}`} position={[x, 0, z]}>
+            {/* Desk top */}
+            <mesh castShadow receiveShadow position={[0, 0.75, 0]}>
+              <boxGeometry args={[3.4, 0.12, 1.2]} />
+              <meshStandardMaterial color="#8a6742" roughness={0.8} />
+            </mesh>
+            {/* Legs */}
+            {[[-1.5, -0.45], [1.5, -0.45], [-1.5, 0.45], [1.5, 0.45]].map(([lx, lz], i) => (
+              <mesh key={i} castShadow position={[lx, 0.38, lz]}>
+                <cylinderGeometry args={[0.06, 0.06, 0.75, 6]} />
+                <meshStandardMaterial color="#4a4f57" roughness={0.7} metalness={0.3} />
+              </mesh>
+            ))}
+            {/* Two chairs per desk */}
+            {[-0.85, 0.85].map((cx) => (
+              <group key={cx} position={[cx, 0, 1.1]}>
+                <mesh castShadow position={[0, 0.45, 0]}>
+                  <boxGeometry args={[0.7, 0.08, 0.7]} />
+                  <meshStandardMaterial color="#3f5b7a" roughness={0.85} />
+                </mesh>
+                <mesh castShadow position={[0, 0.8, 0.31]}>
+                  <boxGeometry args={[0.7, 0.7, 0.08]} />
+                  <meshStandardMaterial color="#3f5b7a" roughness={0.85} />
+                </mesh>
+              </group>
+            ))}
+          </group>
+        )),
+      )}
+    </group>
+  )
+}
+
 /**
  * Interior shown when a player enters a building. A simple lit room with a
  * lecture board, so entering leads somewhere rather than being a no-op.
@@ -302,6 +362,8 @@ export function BuildingInterior({ name, onExit, children }) {
       <pointLight position={[-12, 7, -12]} intensity={30} distance={30} />
       <pointLight position={[12, 7, 12]} intensity={30} distance={30} />
 
+      <LectureRoomFurniture />
+
       {children}
 
       <Html position={[0, 8, -19]} center distanceFactor={22}>
@@ -310,14 +372,9 @@ export function BuildingInterior({ name, onExit, children }) {
         </div>
       </Html>
 
-      <Html position={[0, 2, 18]} center distanceFactor={18}>
-        <button
-          onClick={onExit}
-          className="px-3 py-1.5 rounded bg-gray-800/90 hover:bg-gray-700 text-white text-xs"
-        >
-          Leave building
-        </button>
-      </Html>
+      {/* The way out is a fixed overlay in the page, not an Html marker in the
+          scene: the player spawns facing the board, so anything placed behind
+          them is off screen and they cannot find it. */}
     </group>
   )
 }

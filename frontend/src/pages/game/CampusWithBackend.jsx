@@ -289,8 +289,30 @@ function PlayerAvatar({ position, userData, isCurrentUser = false }) {
   )
 }
 
+// Entering a building swaps in a room built at the world origin. Without moving
+// the camera the player keeps their outdoor position, which is usually outside
+// that room, so they end up looking at the back of the walls.
+function InteriorCameraPlacement({ insideBuilding }) {
+  const { camera } = useThree()
+  const outsidePosition = useRef(null)
+
+  useEffect(() => {
+    if (insideBuilding) {
+      outsidePosition.current = camera.position.clone()
+      // Just inside the entrance, facing the board on the far wall.
+      camera.position.set(0, 1.7, 14)
+      camera.rotation.set(0, 0, 0)
+    } else if (outsidePosition.current) {
+      camera.position.copy(outsidePosition.current)
+      outsidePosition.current = null
+    }
+  }, [insideBuilding, camera])
+
+  return null
+}
+
 // First person player controller with backend position sync
-function Player({ campusHook }) {
+function Player({ campusHook, insideBuilding }) {
   const { camera } = useThree()
   const [, get] = useKeyboardControls()
   const playerRef = useRef()
@@ -351,9 +373,12 @@ function Player({ campusHook }) {
     camera.position.add(direction.current)
     camera.position.y += velocity.current.y * delta
 
-    // Boundary constraints
-    camera.position.x = MathUtils.clamp(camera.position.x, -50, 50)
-    camera.position.z = MathUtils.clamp(camera.position.z, -50, 50)
+    // Boundary constraints. Indoors the room is 40x40 with walls at +-20, so
+    // keep the player just inside them; there is no collision mesh to stop
+    // them walking out otherwise.
+    const limit = insideBuilding ? 18.5 : 50
+    camera.position.x = MathUtils.clamp(camera.position.x, -limit, limit)
+    camera.position.z = MathUtils.clamp(camera.position.z, -limit, limit)
     camera.position.y = Math.max(camera.position.y, 1.5)
 
     // Always update backend position (even when not moving, to send final position on stop)
@@ -612,6 +637,18 @@ const CampusWithBackend = () => {
         </div>
       </div>
 
+      {insideBuilding && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 pointer-events-auto flex items-center gap-3 bg-black/80 text-white px-4 py-2 rounded-xl border border-blue-500/30">
+          <span className="text-sm">Inside {insideBuilding.icon} {insideBuilding.name}</span>
+          <button
+            onClick={() => setInsideBuilding(null)}
+            className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-500 text-xs"
+          >
+            Leave building
+          </button>
+        </div>
+      )}
+
       {/* Voice, screen share and host controls */}
       <div className="absolute bottom-4 left-4 z-10 pointer-events-auto">
         <VoicePanel
@@ -743,7 +780,8 @@ const CampusWithBackend = () => {
             ))}
 
             {/* First Person Player Controller */}
-            <Player campusHook={campusHook} />
+            <InteriorCameraPlacement insideBuilding={insideBuilding} />
+            <Player campusHook={campusHook} insideBuilding={insideBuilding} />
             
             {/* Camera Controls */}
             <PointerLockControls />
