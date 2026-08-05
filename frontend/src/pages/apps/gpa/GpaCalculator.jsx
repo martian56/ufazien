@@ -804,11 +804,17 @@ export default function GpaCalculator() {
                   <p className="text-gray-500 text-center py-8">No saved calculations yet</p>
                 ) : (
                   <div className="space-y-3">
+                    {/* These rows are not clickable. They called
+                        loadCalculation, which was never defined, so opening a
+                        saved calculation threw a ReferenceError. It cannot be
+                        implemented as written either: UserGPA stores a summary
+                        (name, type, overall GPA, credits), not the per-period
+                        inputs this calculator works from. Restoring one needs a
+                        product decision about what "load" should mean. */}
                     {savedCalculations.map((calc) => (
                       <div
                         key={calc.id}
-                        className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer"
-                        onClick={() => loadCalculation(calc)}
+                        className="flex items-center justify-between p-4 border border-gray-200 rounded-lg"
                       >
                         <div>
                           <h4 className="font-medium text-gray-900">{calc.name}</h4>

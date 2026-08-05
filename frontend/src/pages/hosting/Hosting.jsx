@@ -214,29 +214,6 @@ export default function Hosting() {
     }
   }
 
-  const handleCreateWebsite = (websiteData) => {
-    // Handle website creation
-    // TODO: Make API call to create website
-    // For now, just add to local state
-    const newWebsite = {
-      id: websites.length + 1,
-      name: websiteData.name,
-      domain: `${websiteData.subdomain}.ufazien.com`,
-      status: "building",
-      type: websiteData.type,
-      lastDeployed: new Date().toISOString(),
-      visits: 0,
-      storage: 0,
-      ssl: true,
-      customDomain: websiteData.customDomain || null
-    }
-    setWebsites(prev => [...prev, newWebsite])
-    setStats(prev => ({
-      ...prev,
-      totalWebsites: prev.totalWebsites + 1
-    }))
-  }
-
   if (loading) {
     return (
       <>

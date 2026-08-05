@@ -16,6 +16,9 @@ import SideBar from "../../../components/ui/SideBar"
 // import "../../../components/RichTextEditor.css"
 // import "../../../components/BlogContent.css"
 import PostBody from "../../../features/blog/PostBody"
+import ShareModal from "../../../features/blog/ShareModal"
+import ReportModal from "../../../features/blog/ReportModal"
+import { copyText } from "../../../lib/clipboard"
 import { apiFetch } from "../../../lib/api/compat"
 import { isAuthenticated } from "../../../lib/api/tokens"
 import { processblogContent, extractPlainText, calculateReadTime } from "../../../utils/contentProcessor"
@@ -241,7 +244,7 @@ export default function BlogRead() {
     if (!post?.author?.id) return
 
     try {
-      if (!access) {
+      if (!isAuthenticated()) {
         navigate("/auth")
         return
       }
@@ -439,9 +442,12 @@ export default function BlogRead() {
     }
   }
 
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(window.location.href)
-    toast.success("Link copied to clipboard!")
+  const copyToClipboard = async () => {
+    // Was fire-and-forget: it never awaited or caught the write and always
+    // claimed success, so the message lied whenever the clipboard rejected.
+    const copied = await copyText(window.location.href)
+    if (copied) toast.success("Link copied to clipboard!")
+    else toast.error("Could not copy the link.")
   }
 
   const handleComment = async () => {
@@ -1280,127 +1286,27 @@ export default function BlogRead() {
         </main>
       </div>
 
-      {/* Share Modal */}
       {showShareModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className={`rounded-xl w-full max-w-md ${darkMode ? "bg-gray-800" : "bg-white"}`}>
-            <div className="p-6 border-b border-gray-200">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold">Share Article</h3>
-                <button
-                  onClick={() => setShowShareModal(false)}
-                  className={`p-2 rounded-lg transition-colors ${darkMode ? "hover:bg-gray-700" : "hover:bg-gray-100"}`}
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-
-            <div className="p-6 space-y-4">
-              <button
-                onClick={() => handleShare("twitter")}
-                className="w-full flex items-center space-x-3 p-3 rounded-lg hover:bg-blue-50 hover:text-blue-600 transition-colors"
-              >
-                <Twitter className="w-5 h-5" />
-                <span>Share on Twitter</span>
-              </button>
-
-              <button
-                onClick={() => handleShare("facebook")}
-                className="w-full flex items-center space-x-3 p-3 rounded-lg hover:bg-blue-50 hover:text-blue-600 transition-colors"
-              >
-                <Facebook className="w-5 h-5" />
-                <span>Share on Facebook</span>
-              </button>
-
-              <button
-                onClick={() => handleShare("linkedin")}
-                className="w-full flex items-center space-x-3 p-3 rounded-lg hover:bg-blue-50 hover:text-blue-600 transition-colors"
-              >
-                <Linkedin className="w-5 h-5" />
-                <span>Share on LinkedIn</span>
-              </button>
-
-              <button
-                onClick={copyToClipboard}
-                className="w-full flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-50 hover:text-gray-600 transition-colors"
-              >
-                <Copy className="w-5 h-5" />
-                <span>Copy Link</span>
-              </button>
-            </div>
-          </div>
-        </div>
+        <ShareModal
+          darkMode={darkMode}
+          onClose={() => setShowShareModal(false)}
+          onShare={handleShare}
+          onCopyLink={copyToClipboard}
+        />
       )}
 
-      {/* Report Modal */}
       {showReportModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className={`rounded-xl w-full max-w-md ${darkMode ? "bg-gray-800" : "bg-white"}`}>
-            <div className="p-6 border-b border-gray-200">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold">Report Article</h3>
-                <button
-                  onClick={() => setShowReportModal(false)}
-                  className={`p-2 rounded-lg transition-colors ${darkMode ? "hover:bg-gray-700" : "hover:bg-gray-100"}`}
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-
-            <div className="p-6 space-y-4">
-              <p className="text-gray-600">Why are you reporting this article?</p>
-
-              <div className="space-y-2">
-                {[
-                  "Spam or misleading content",
-                  "Inappropriate content",
-                  "Copyright violation",
-                  "Harassment or bullying",
-                  "Other",
-                ].map((reason) => (
-                  <label key={reason} className="flex items-center space-x-3 cursor-pointer">
-                    <input type="radio" name="report-reason" className="text-blue-600" />
-                    <span>{reason}</span>
-                  </label>
-                ))}
-              </div>
-
-              <textarea
-                placeholder="Additional details (optional)"
-                rows={3}
-                className={`w-full p-3 border rounded-lg resize-none ${
-                  darkMode
-                    ? "bg-gray-700 border-gray-600 text-white placeholder-gray-400"
-                    : "bg-white border-gray-300 placeholder-gray-500"
-                }`}
-              />
-
-              <div className="flex space-x-3">
-                <button
-                  onClick={() => setShowReportModal(false)}
-                  className={`flex-1 px-4 py-2 border rounded-lg transition-colors ${
-                    darkMode ? "border-gray-600 hover:bg-gray-700" : "border-gray-300 hover:bg-gray-50"
-                  }`}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => {
-                    setShowReportModal(false)
-                    toast.success("Report submitted. Thank you for helping keep our community safe.")
-                  }}
-                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-                >
-                  Submit Report
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <ReportModal
+          darkMode={darkMode}
+          post={post}
+          onClose={() => setShowReportModal(false)}
+          onDone={() =>
+            toast.success("Report submitted. Thank you for helping keep our community safe.")
+          }
+        />
       )}
-      
+
+
       {/* Toast Notifications */}
       <ToastContainer 
         notifications={toastNotifications} 
