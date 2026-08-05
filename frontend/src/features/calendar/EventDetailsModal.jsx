@@ -1,4 +1,4 @@
-import { Calendar as CalendarIcon, Clock, MapPin, Trash2, X } from "lucide-react"
+import { AlertCircle, BookOpen, Calendar as CalendarIcon, Clock, Edit, MapPin, Trash2, User, X } from "lucide-react"
 
 export default function EventDetailsModal({ event, onClose, onDelete, categories }) {
   const category = categories.find((cat) => cat.id === event.category)
