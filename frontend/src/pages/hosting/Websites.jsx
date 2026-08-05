@@ -22,7 +22,7 @@ import {
 } from "lucide-react"
 import HostingSidebar from "../../components/hosting/HostingSidebar"
 import UpgradePrompt from "../../components/hosting/UpgradePrompt"
-import { useSubscription } from "../../hooks/useSubscription.jsx"
+import { useSubscription } from "../../hooks/useSubscription"
 import { useWebsites } from "../../hooks/useWebsites"
 
 export default function Websites() {

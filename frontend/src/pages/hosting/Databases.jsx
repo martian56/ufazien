@@ -23,7 +23,7 @@ import {
 import HostingSidebar from "../../components/hosting/HostingSidebar"
 import UpgradePrompt from "../../components/hosting/UpgradePrompt"
 import ConfirmationModal from "../../components/ui/ConfirmationModal"
-import { useSubscription } from "../../hooks/useSubscription.jsx"
+import { useSubscription } from "../../hooks/useSubscription"
 import { useDatabases } from "../../hooks/useDatabases.js"
 
 export default function Databases() {

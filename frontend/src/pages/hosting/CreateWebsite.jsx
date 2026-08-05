@@ -16,8 +16,8 @@ import {
   RefreshCw
 } from "lucide-react"
 import HostingSidebar from "../../components/hosting/HostingSidebar"
-import { hostingApi } from "../../utils/hostingApi.js"
-import { useSubscription } from "../../hooks/useSubscription.jsx"
+import { hostingApi } from "../../utils/hostingApi"
+import { useSubscription } from "../../hooks/useSubscription"
 import { useWebsites } from "../../hooks/useWebsites.js"
 import { useDomains } from "../../hooks/useDomains.js"
 

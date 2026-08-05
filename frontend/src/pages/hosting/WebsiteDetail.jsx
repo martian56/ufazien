@@ -47,7 +47,7 @@ import {
 } from 'recharts'
 import HostingSidebar from "../../components/hosting/HostingSidebar"
 import ConfirmationModal from "../../components/ui/ConfirmationModal"
-import { hostingApi } from "../../utils/hostingApi.js"
+import { hostingApi } from "../../utils/hostingApi"
 import { useWebsites } from "../../hooks/useWebsites.js"
 
 export default function WebsiteDetail() {
