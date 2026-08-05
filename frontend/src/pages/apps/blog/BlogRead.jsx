@@ -17,6 +17,8 @@ import SideBar from "../../../components/ui/SideBar"
 // import "../../../components/BlogContent.css"
 import PostBody from "../../../features/blog/PostBody"
 import BlogComments from "../../../features/blog/BlogComments"
+import { countComments } from "../../../features/blog/countComments"
+import { errorMessage } from "../../../lib/api/errors"
 import RelatedReading from "../../../features/blog/RelatedReading"
 import ShareModal from "../../../features/blog/ShareModal"
 import ReportModal from "../../../features/blog/ReportModal"
@@ -462,19 +464,23 @@ export default function BlogRead() {
           parent: replyTo,
         } })
 
-      if (response.ok) {
-        // Refresh comments by fetching the post again
-        const postResponse = await apiFetch(`/blog/posts/${id}/`)
-        if (postResponse.ok) {
-          const postData = await postResponse.json()
-          setComments(postData.comments || [])
-        }
-
-        setNewComment("")
-        setReplyTo(null)
+      if (!response.ok) {
+        // A failed post used to fall straight through: the box kept its text,
+        // nothing appeared, and nothing said why.
+        toast.error("Your comment could not be posted.")
+        return
       }
+
+      const postResponse = await apiFetch(`/blog/posts/${id}/`)
+      if (postResponse.ok) {
+        const postData = await postResponse.json()
+        setComments(postData.comments || [])
+      }
+
+      setNewComment("")
+      setReplyTo(null)
     } catch (error) {
-      console.error("Error posting comment:", error)
+      toast.error(errorMessage(error, "Your comment could not be posted."))
     } finally {
       setCommentsLoading(false)
     }
@@ -831,7 +837,7 @@ export default function BlogRead() {
                   </span>
                   <span className="flex items-center space-x-2 text-gray-600">
                     <MessageCircle className="w-4 h-4" />
-                    <span>{comments.length} comments</span>
+                    <span>{countComments(comments)} comments</span>
                   </span>
                 </div>
 
@@ -902,7 +908,7 @@ export default function BlogRead() {
                   }`}
                 >
                   <MessageCircle className="w-5 h-5" />
-                  <span>{comments.length}</span>
+                  <span>{countComments(comments)}</span>
                 </button>
 
                 <button
