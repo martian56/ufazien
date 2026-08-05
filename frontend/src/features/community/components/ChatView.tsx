@@ -1,11 +1,46 @@
 import { useState, useEffect, useMemo } from "react"
 import { MessageCircle, MoreHorizontal, Send, Users } from "lucide-react"
 import { communityApi as communityAPI } from "../../../lib/api/endpoints/community"
+import type { ChatMessage, Group, PrivateChat } from "../../../lib/api/endpoints/community"
+import type { Paginated } from "../../../lib/api/types"
 
-export default function ChatView({ groups, chats, selectedGroup, liveMessages, onSelectGroup, newMessage, onMessageChange, onSendMessage }) {
-  const [selectedChat, setSelectedChat] = useState(null)
+interface ChatViewProps {
+  groups: Group[]
+  chats: PrivateChat[]
+  selectedGroup: Group | null
+  liveMessages: ChatMessage[]
+  onSelectGroup: (group: Group | null) => void
+  newMessage: string
+  onMessageChange: (value: string) => void
+  onSendMessage: (chatId: string) => void
+}
+
+
+/**
+ * A participant's display name.
+ *
+ * UserBasicSerializer sends username, first_name and last_name, and no
+ * `name`. The chat list mapped over `p.name`, so an unnamed private chat
+ * showed a list of undefineds instead of who was in it.
+ */
+function displayName(user: { first_name?: string; last_name?: string; username?: string }): string {
+  const full = `${user.first_name ?? ""} ${user.last_name ?? ""}`.trim()
+  return full || user.username || "Someone"
+}
+
+export default function ChatView({
+  groups,
+  chats,
+  selectedGroup,
+  liveMessages,
+  onSelectGroup,
+  newMessage,
+  onMessageChange,
+  onSendMessage,
+}: ChatViewProps) {
+  const [selectedChat, setSelectedChat] = useState<PrivateChat | null>(null)
   const [chatType, setChatType] = useState("groups") // "groups" or "private"
-  const [messages, setMessages] = useState([])
+  const [messages, setMessages] = useState<ChatMessage[]>([])
   const [loadingMessages, setLoadingMessages] = useState(false)
 
   // Load messages when a chat or group is selected
@@ -19,7 +54,7 @@ export default function ChatView({ groups, chats, selectedGroup, liveMessages, o
 
       setLoadingMessages(true)
       try {
-        let messagesData = []
+        let messagesData: ChatMessage[] | Paginated<ChatMessage> = []
         if (selectedGroup) {
           // Load group messages
           messagesData = await communityAPI.getGroupMessages(selectedGroup.id)
@@ -28,7 +63,9 @@ export default function ChatView({ groups, chats, selectedGroup, liveMessages, o
           messagesData = await communityAPI.getChatMessages(selectedChat.id)
         }
         
-        setMessages(messagesData.results || messagesData || [])
+        // The endpoint may or may not paginate depending on the route, so
+        // both shapes are handled rather than assumed.
+        setMessages(Array.isArray(messagesData) ? messagesData : messagesData?.results || [])
       } catch (error) {
         console.error('Error loading messages:', error)
         setMessages([])
@@ -126,8 +163,8 @@ export default function ChatView({ groups, chats, selectedGroup, liveMessages, o
                     </div>
                     <div className="flex-1 min-w-0">
                       <h3 className="font-medium text-gray-900 truncate">
-                        {chat.name || (chat.participants && chat.participants.length > 0 
-                          ? chat.participants.map(p => p.name).join(", ")
+                        {chat.name || (chat.participants?.length
+                          ? chat.participants.map(displayName).join(", ")
                           : "Chat"
                         )}
                       </h3>
@@ -135,7 +172,7 @@ export default function ChatView({ groups, chats, selectedGroup, liveMessages, o
                         {chat.last_message ? chat.last_message.content : "No messages yet"}
                       </p>
                     </div>
-                    {chat.unread_count > 0 && (
+                    {(chat.unread_count ?? 0) > 0 && (
                       <span className="bg-blue-600 text-white text-xs px-2 py-1 rounded-full">
                         {chat.unread_count}
                       </span>
@@ -249,8 +286,8 @@ export default function ChatView({ groups, chats, selectedGroup, liveMessages, o
                   </div>
                   <div className="flex-1 min-w-0">
                     <h3 className="font-medium text-gray-900 truncate">
-                      {chat.name || (chat.participants && chat.participants.length > 0 
-                        ? chat.participants.map(p => p.name).join(", ")
+                      {chat.name || (chat.participants?.length
+                        ? chat.participants.map(displayName).join(", ")
                         : "Chat"
                       )}
                     </h3>
@@ -258,7 +295,7 @@ export default function ChatView({ groups, chats, selectedGroup, liveMessages, o
                       {chat.last_message ? chat.last_message.content : "No messages yet"}
                     </p>
                   </div>
-                  {chat.unread_count > 0 && (
+                  {(chat.unread_count ?? 0) > 0 && (
                     <span className="bg-blue-600 text-white text-xs px-2 py-1 rounded-full">
                       {chat.unread_count}
                     </span>
@@ -278,13 +315,13 @@ export default function ChatView({ groups, chats, selectedGroup, liveMessages, o
             <div className="flex items-center gap-3">
               {isGroupChat ? (
                 <img
-                  src={currentChat.avatar || "/placeholder.svg"}
-                  alt={currentChat.name}
+                  src={(currentChat as Group).avatar || "/placeholder.svg"}
+                  alt={currentChat?.name ?? "Chat"}
                   className="w-10 h-10 rounded-full border-2 border-gray-200"
                 />
               ) : (
                 <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center">
-                  {currentChat.is_group_chat ? (
+                  {(currentChat as PrivateChat)?.is_group_chat ? (
                     <Users className="w-5 h-5 text-gray-600" />
                   ) : (
                     <MessageCircle className="w-5 h-5 text-gray-600" />
@@ -293,15 +330,15 @@ export default function ChatView({ groups, chats, selectedGroup, liveMessages, o
               )}
               <div>
                 <h3 className="font-medium text-gray-900">
-                  {currentChat.name || (currentChat.participants 
-                    ? currentChat.participants.map(p => p.name).join(", ")
+                  {currentChat?.name || ((currentChat as PrivateChat)?.participants?.length
+                    ? (currentChat as PrivateChat).participants.map(displayName).join(", ")
                     : "Chat"
                   )}
                 </h3>
                 <p className="text-sm text-gray-500">
-                  {isGroupChat 
-                    ? `${currentChat.member_count} members` 
-                    : (currentChat.is_group_chat ? "Group Chat" : "Private Chat")
+                  {isGroupChat
+                    ? `${(currentChat as Group)?.member_count ?? 0} members`
+                    : ((currentChat as PrivateChat)?.is_group_chat ? "Group Chat" : "Private Chat")
                   }
                 </p>
               </div>
@@ -323,8 +360,8 @@ export default function ChatView({ groups, chats, selectedGroup, liveMessages, o
             visibleMessages.map((message) => (
               <div key={message.id} className="flex items-start gap-3">
                 <img
-                  src={message.sender_avatar || "/placeholder.svg"}
-                  alt={message.sender_name || "User"}
+                  src={message.sender?.avatar || "/placeholder.svg"}
+                  alt={displayName(message.sender ?? {})}
                   className="w-8 h-8 rounded-full border-2 border-gray-200"
                 />
                 <div className="flex-1">
@@ -357,11 +394,11 @@ export default function ChatView({ groups, chats, selectedGroup, liveMessages, o
               placeholder="Type a message..."
               value={newMessage}
               onChange={(e) => onMessageChange(e.target.value)}
-              onKeyPress={(e) => e.key === "Enter" && onSendMessage(currentChat.id)}
+              onKeyPress={(e) => e.key === "Enter" && currentChat && onSendMessage(currentChat.id)}
               className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
             <button
-              onClick={() => onSendMessage(currentChat.id)}
+              onClick={() => currentChat && onSendMessage(currentChat.id)}
               disabled={!newMessage.trim()}
               className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
