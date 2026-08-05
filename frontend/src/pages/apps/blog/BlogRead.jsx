@@ -16,6 +16,8 @@ import SideBar from "../../../components/ui/SideBar"
 // import "../../../components/RichTextEditor.css"
 // import "../../../components/BlogContent.css"
 import PostBody from "../../../features/blog/PostBody"
+import { apiFetch } from "../../../lib/api/compat"
+import { isAuthenticated } from "../../../lib/api/tokens"
 import { processblogContent, extractPlainText, calculateReadTime } from "../../../utils/contentProcessor"
 import { useToast, ToastContainer } from "../../../hooks/useToast"
 
@@ -127,12 +129,9 @@ export default function BlogRead() {
   useEffect(() => {
     const fetchCurrentUser = async () => {
       try {
-        const access = localStorage.getItem("access")
-        if (!access) return
+        if (!isAuthenticated()) return
 
-        const res = await fetch(`${API_URL}/api/auth/user/me/`, {
-          headers: { Authorization: `Bearer ${access}` },
-        })
+        const res = await apiFetch(`/auth/user/me/`)
         if (res.ok) {
           const userData = await res.json()
           setCurrentUser({
@@ -157,11 +156,7 @@ export default function BlogRead() {
       try {
         setLoading(true)
         setError(null)
-
-        const access = localStorage.getItem("access")
-        const response = await fetch(`${API_URL}/api/blog/posts/${id}/`, {
-          headers: { Authorization: `Bearer ${access}` },
-        })
+        const response = await apiFetch(`/blog/posts/${id}/`)
 
         if (!response.ok) {
           throw new Error("Failed to fetch blog post")
@@ -217,16 +212,9 @@ export default function BlogRead() {
       if (!post || !post.id) return
 
       try {
-        const access = localStorage.getItem("access")
-        if (!access) return
+        if (!isAuthenticated()) return
 
-        const response = await fetch(`${API_URL}/api/blog/posts/${post.id}/view/`, {
-          method: "POST",
-          headers: { 
-            Authorization: `Bearer ${access}`,
-            "Content-Type": "application/json"
-          },
-        })
+        const response = await apiFetch(`/blog/posts/${post.id}/view/`, { method: "POST" })
 
         if (response.ok) {
           const data = await response.json()
@@ -255,19 +243,12 @@ export default function BlogRead() {
     if (!post?.author?.id) return
 
     try {
-      const access = localStorage.getItem("access")
       if (!access) {
         navigate("/auth")
         return
       }
 
-      const response = await fetch(`${API_URL}/api/auth/user/${post.author.id}/follow/`, {
-        method: "POST",
-        headers: { 
-          Authorization: `Bearer ${access}`,
-          "Content-Type": "application/json"
-        },
-      })
+      const response = await apiFetch(`/auth/user/${post.author.id}/follow/`, { method: "POST" })
 
       if (response.ok) {
         const data = await response.json()
@@ -292,12 +273,9 @@ export default function BlogRead() {
   // Load related posts by tags
   const loadRelatedPosts = async (tags, currentPostId) => {
     try {
-      const access = localStorage.getItem("access")
       // Get posts with similar tags
       const tagQuery = tags[0] // Use first tag for simplicity
-      const response = await fetch(`${API_URL}/api/blog/posts/?tag=${tagQuery}`, {
-        headers: { Authorization: `Bearer ${access}` },
-      })
+      const response = await apiFetch(`/blog/posts/?tag=${tagQuery}`)
 
       if (response.ok) {
         const data = await response.json()
@@ -322,10 +300,7 @@ export default function BlogRead() {
   // Load author's other posts
   const loadAuthorPosts = async (authorId, currentPostId) => {
     try {
-      const access = localStorage.getItem("access")
-      const response = await fetch(`${API_URL}/api/blog/posts/?by=${authorId}`, {
-        headers: { Authorization: `Bearer ${access}` },
-      })
+      const response = await apiFetch(`/blog/posts/?by=${authorId}`)
 
       if (response.ok) {
         const data = await response.json()
@@ -353,10 +328,7 @@ export default function BlogRead() {
   // Load trending tags
   const loadSimilarTags = async () => {
     try {
-      const access = localStorage.getItem("access")
-      const response = await fetch(`${API_URL}/api/blog/tags/`, {
-        headers: { Authorization: `Bearer ${access}` },
-      })
+      const response = await apiFetch(`/blog/tags/`)
 
       if (response.ok) {
         const data = await response.json()
@@ -432,11 +404,7 @@ export default function BlogRead() {
   // Social actions
   const handleLike = async () => {
     try {
-      const access = localStorage.getItem("access")
-      const response = await fetch(`${API_URL}/api/blog/posts/${id}/like/`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${access}` },
-      })
+      const response = await apiFetch(`/blog/posts/${id}/like/`, { method: "POST" })
 
       if (response.ok) {
         setIsLiked(!isLiked)
@@ -449,11 +417,7 @@ export default function BlogRead() {
 
   const handleBookmark = async () => {
     try {
-      const access = localStorage.getItem("access")
-      const response = await fetch(`${API_URL}/api/blog/posts/${id}/bookmark/`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${access}` },
-      })
+      const response = await apiFetch(`/blog/posts/${id}/bookmark/`, { method: "POST" })
 
       if (response.ok) {
         setIsBookmarked(!isBookmarked)
@@ -488,24 +452,14 @@ export default function BlogRead() {
 
     try {
       setCommentsLoading(true)
-      const access = localStorage.getItem("access")
-      const response = await fetch(`${API_URL}/api/blog/posts/${id}/comments/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${access}`,
-        },
-        body: JSON.stringify({
+      const response = await apiFetch(`/blog/posts/${id}/comments/`, { method: "POST", body: {
           content: newComment,
           parent: replyTo,
-        }),
-      })
+        } })
 
       if (response.ok) {
         // Refresh comments by fetching the post again
-        const postResponse = await fetch(`${API_URL}/api/blog/posts/${id}/`, {
-          headers: { Authorization: `Bearer ${access}` },
-        })
+        const postResponse = await apiFetch(`/blog/posts/${id}/`)
         if (postResponse.ok) {
           const postData = await postResponse.json()
           setComments(postData.comments || [])
@@ -523,20 +477,11 @@ export default function BlogRead() {
 
   const handleCommentLike = async (commentId) => {
     try {
-      const access = localStorage.getItem("access")
-      const response = await fetch(`${API_URL}/api/blog/comments/${commentId}/like/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${access}`,
-        },
-      })
+      const response = await apiFetch(`/blog/comments/${commentId}/like/`, { method: "POST" })
 
       if (response.ok) {
         // Refresh comments by fetching the post again
-        const postResponse = await fetch(`${API_URL}/api/blog/posts/${id}/`, {
-          headers: { Authorization: `Bearer ${access}` },
-        })
+        const postResponse = await apiFetch(`/blog/posts/${id}/`)
         if (postResponse.ok) {
           const postData = await postResponse.json()
           setComments(postData.comments || [])
