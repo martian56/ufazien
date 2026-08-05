@@ -241,6 +241,26 @@ class PostLike(TimeStampedModel):
         unique_together = ('user', 'post')
 
 
+class PostAttachment(TimeStampedModel):
+    """An image on a forum post.
+
+    GroupMessage could already carry images and files; ForumPost had no way to
+    show anything but text.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    post = models.ForeignKey(ForumPost, on_delete=models.CASCADE, related_name='attachments')
+    image = models.ImageField(upload_to='forum/posts/')
+    caption = models.CharField(max_length=200, blank=True)
+    position = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ['position', 'created_at']
+
+    def __str__(self):
+        return f"Attachment on {self.post_id}"
+
+
 class PostReply(TimeStampedModel):
     """Replies to forum posts"""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
