@@ -90,9 +90,7 @@ class BlogPostApiView(generics.ListCreateAPIView):
             
             # Sanitize content
             if 'content' in data:
-                # print(f"🔍 Backend received content: {data['content'][:200]}...")
                 data['content'] = SecurityUtils.sanitize_html_content(data['content'])
-                # print(f"🔍 Backend sanitized content: {data['content'][:200]}...")
                 if not data['content']:
                     return Response({"error": "Content is required and cannot be empty"}, status=status.HTTP_400_BAD_REQUEST)
             
