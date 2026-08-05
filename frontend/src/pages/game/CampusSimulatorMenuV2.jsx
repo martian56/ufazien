@@ -361,42 +361,43 @@ const CampusSimulatorMenu = () => {
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-indigo-900 p-4">
         <div className="max-w-7xl mx-auto">
           {/* Header */}
-          <div className="flex items-center justify-between mb-8">
-            <div className="flex items-center gap-4">
-            <button
-              onClick={() => navigate('/dashboard')}
-              className="text-gray-400 hover:text-white transition-colors p-2"
-            >
-              <ArrowLeft className="w-6 h-6" />
-            </button>
-            <div>
-              <h1 className="text-4xl font-bold text-white flex items-center gap-3">
-                <Building2 className="w-10 h-10 text-blue-500" />
-                Campus Simulator
-              </h1>
-              <p className="text-gray-400 mt-2">
-                Build and explore virtual campuses with friends in real-time 3D environments
-              </p>
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6 lg:mb-8">
+            <div className="flex items-start gap-3 min-w-0">
+              <button
+                onClick={() => navigate('/dashboard')}
+                className="text-gray-400 hover:text-white transition-colors p-2 shrink-0"
+                aria-label="Back to dashboard"
+              >
+                <ArrowLeft className="w-6 h-6" />
+              </button>
+              <div className="min-w-0">
+                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white flex items-center gap-2 sm:gap-3">
+                  <Building2 className="w-7 h-7 sm:w-9 sm:h-9 lg:w-10 lg:h-10 text-blue-500 shrink-0" />
+                  <span className="truncate">Campus Simulator</span>
+                </h1>
+                <p className="hidden sm:block text-gray-400 mt-2">
+                  Build and explore virtual campuses with friends in real-time 3D environments
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-2 sm:gap-3 shrink-0">
+              <button
+                onClick={() => setShowQuickJoin(true)}
+                className="flex-1 lg:flex-none justify-center bg-green-600 hover:bg-green-700 text-white px-4 sm:px-6 py-3 rounded-lg font-medium flex items-center gap-2 transition-all hover:shadow-lg hover:shadow-green-500/30"
+              >
+                <Zap className="w-5 h-5 shrink-0" />
+                Quick Join
+              </button>
+              <button
+                onClick={() => setShowCreateLobby(true)}
+                className="flex-1 lg:flex-none justify-center bg-blue-600 hover:bg-blue-700 text-white px-4 sm:px-6 py-3 rounded-lg font-medium flex items-center gap-2 transition-all hover:shadow-lg hover:shadow-blue-500/30"
+              >
+                <Plus className="w-5 h-5 shrink-0" />
+                Create Lobby
+              </button>
             </div>
           </div>
-          
-          <div className="flex gap-3">
-            <button
-              onClick={() => setShowQuickJoin(true)}
-              className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium flex items-center gap-2 transition-all hover:shadow-lg hover:shadow-green-500/30"
-            >
-              <Zap className="w-5 h-5" />
-              Quick Join
-            </button>
-            <button
-              onClick={() => setShowCreateLobby(true)}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium flex items-center gap-2 transition-all hover:shadow-lg hover:shadow-blue-500/30"
-            >
-              <Plus className="w-5 h-5" />
-              Create Lobby
-            </button>
-          </div>
-        </div>
 
         {/* Error Display */}
         {error && (
