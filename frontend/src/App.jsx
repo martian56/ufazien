@@ -1,5 +1,5 @@
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom"
-import { SubscriptionProvider } from "./hooks/useSubscription.jsx"
+import { SubscriptionProvider } from "./hooks/useSubscription"
 import Home from "./pages/Home"
 import Profile from "./pages/Profile"
 import AuthPage from "./pages/auth/AuthPage"

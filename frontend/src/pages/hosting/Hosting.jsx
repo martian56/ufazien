@@ -38,7 +38,7 @@ import {
   Crown
 } from "lucide-react"
 import HostingSidebar from "../../components/hosting/HostingSidebar"
-import { useSubscription } from "../../hooks/useSubscription.jsx"
+import { useSubscription } from "../../hooks/useSubscription"
 import { useWebsites } from "../../hooks/useWebsites"
 import { useDatabases } from "../../hooks/useDatabases"
 import { useDashboard } from "../../hooks/useDashboard"

@@ -60,3 +60,16 @@ export class ApiError extends Error {
     return this.message
   }
 }
+
+/**
+ * The message to show for anything thrown.
+ *
+ * Under `strict`, a caught value is `unknown`, so every `catch (err)` block
+ * would otherwise need the same three checks before reaching `err.message`.
+ */
+export function errorMessage(error: unknown, fallback = 'Something went wrong'): string {
+  if (error instanceof ApiError) return error.userMessage
+  if (error instanceof Error) return error.message
+  if (typeof error === 'string' && error.trim()) return error
+  return fallback
+}

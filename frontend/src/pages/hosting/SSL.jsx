@@ -21,7 +21,7 @@ import {
 } from "lucide-react"
 import { Helmet } from "react-helmet"
 import HostingSidebar from "../../components/hosting/HostingSidebar"
-import { hostingApi } from "../../utils/hostingApi.js"
+import { hostingApi } from "../../utils/hostingApi"
 import { useWebsites } from "../../hooks/useWebsites.js"
 import ConfirmationModal from "../../components/ui/ConfirmationModal"
 

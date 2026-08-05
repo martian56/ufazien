@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { useSubscription } from '../../hooks/useSubscription.jsx';
+import { useSubscription } from '../../hooks/useSubscription';
 import { 
   LayoutDashboard, 
   Globe, 

@@ -16,7 +16,7 @@ import {
 } from "lucide-react"
 import HostingSidebar from "../../components/hosting/HostingSidebar"
 import { useDatabases } from "../../hooks/useDatabases.js"
-import { useSubscription } from "../../hooks/useSubscription.jsx"
+import { useSubscription } from "../../hooks/useSubscription"
 
 export default function CreateDatabase() {
   const navigate = useNavigate()

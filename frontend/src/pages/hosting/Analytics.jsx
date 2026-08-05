@@ -30,7 +30,7 @@ import { Helmet } from "react-helmet"
 import HostingSidebar from "../../components/hosting/HostingSidebar"
 import { useWebsites } from "../../hooks/useWebsites"
 import { useDashboard } from "../../hooks/useDashboard"
-import { useSubscription } from "../../hooks/useSubscription.jsx"
+import { useSubscription } from "../../hooks/useSubscription"
 
 export default function Analytics() {
   const navigate = useNavigate()

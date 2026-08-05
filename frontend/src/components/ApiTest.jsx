@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { hostingApi } from '../utils/hostingApi.js'
+import { hostingApi } from '../utils/hostingApi'
 
 const ApiTest = () => {
   const [status, setStatus] = useState('Testing API connection...')

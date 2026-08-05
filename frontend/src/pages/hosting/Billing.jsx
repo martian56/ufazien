@@ -18,10 +18,10 @@ import {
   ArrowUpRight
 } from "lucide-react"
 import HostingSidebar from "../../components/hosting/HostingSidebar"
-import { useSubscription } from "../../hooks/useSubscription.jsx"
+import { useSubscription } from "../../hooks/useSubscription"
 import { useWebsites } from "../../hooks/useWebsites.js"
 import { useDatabases } from "../../hooks/useDatabases.js"
-import { hostingApi } from "../../utils/hostingApi.js"
+import { hostingApi } from "../../utils/hostingApi"
 
 export default function Billing() {
   const navigate = useNavigate()
