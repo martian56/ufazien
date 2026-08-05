@@ -225,3 +225,40 @@ def feedback_types(request):
     ]
     
     return Response({'feedback_types': types})
+
+
+class PlatformStatsView(APIView):
+    """Counts for the landing page, from the database rather than the JSX.
+
+    The numbers on the home page were literals: "200+ Active Students",
+    "4,000+ GPA Calculations", "100+ Hosted Websites". They were written once
+    and never moved again, so they drifted from the truth in whichever
+    direction the platform happened to grow.
+
+    Aggregate counts only. Nothing here identifies anyone, which is why it can
+    be served to a signed-out visitor.
+    """
+
+    permission_classes = []
+
+    def get(self, request):
+        from django.contrib.auth import get_user_model
+        from blog.models import BlogPost
+        from average.models import AverageSchema, UserSchemaGrades
+        from gpa.models import UserGPA
+        from hosting.models import Website
+        from community.models import Group
+
+        User = get_user_model()
+
+        return Response({
+            "students": User.objects.filter(is_active=True).count(),
+            "gpa_calculations": UserGPA.objects.count(),
+            "average_calculations": UserSchemaGrades.objects.count(),
+            "average_schemas": AverageSchema.objects.count(),
+            "hosted_websites": Website.objects.count(),
+            "blog_posts": BlogPost.objects.filter(
+                is_published=True, visibility=BlogPost.Visibility.PUBLIC
+            ).count(),
+            "study_groups": Group.objects.count(),
+        })
