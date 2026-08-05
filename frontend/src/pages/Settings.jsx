@@ -9,10 +9,14 @@ import { Checkbox } from "../components/ui/checkbox"
 import SideBar from "../components/ui/SideBar"
 import { majorOptions, getMajorDisplayName } from "../utils/majorUtils"
 import { useToast, ToastContainer } from "../hooks/useToast"
-import axios from "axios"
+import { settingsApi } from "../lib/api/endpoints/settings"
+import { DEFAULT_SETTINGS, fromApi, toApi } from "../features/settings/settingsMapping"
+import PrivacyTab from "../features/settings/PrivacyTab"
+import AppearanceTab from "../features/settings/AppearanceTab"
+import { api } from "../lib/api/client"
+import { errorMessage } from "../lib/api/errors"
 import { Helmet } from "react-helmet"
 
-const API_URL = import.meta.env.VITE_API_URL
 
 const Settings = () => {
   const navigate = useNavigate()
@@ -38,58 +42,10 @@ const Settings = () => {
     followers_count: 0,
   })
 
-  // Academic Settings State
-  const [academicSettings, setAcademicSettings] = useState({
-    gradeSystem: "ufaz",
-    defaultCredits: 3,
-    semesterGoal: 85,
-    showGPA: true,
-    trackAttendance: true,
-    reminderTime: "30",
-    studyGoalHours: 25,
-  })
-
-  // Notification Settings State
-  const [notificationSettings, setNotificationSettings] = useState({
-    emailNotifications: true,
-    pushNotifications: true,
-    assignmentReminders: true,
-    gradeUpdates: true,
-    communityMessages: true,
-    eventReminders: true,
-    weeklyReports: false,
-    marketingEmails: false,
-  })
-
-  // Privacy Settings State
-  const [privacySettings, setPrivacySettings] = useState({
-    profileVisibility: "friends",
-    showGrades: false,
-    showSchedule: true,
-    allowMessages: true,
-    showOnlineStatus: true,
-    dataSharing: false,
-  })
-
-  // App Settings State
-  const [appSettings, setAppSettings] = useState({
-    theme: "light",
-    language: "en",
-    timezone: "Asia/Baku",
-    dateFormat: "DD/MM/YYYY",
-    timeFormat: "24h",
-    autoSave: true,
-    offlineMode: false,
-  })
-
-  // Security Settings State
-  const [securitySettings, setSecuritySettings] = useState({
-    twoFactorAuth: false,
-    loginAlerts: true,
-    sessionTimeout: "30",
-    passwordLastChanged: "2024-01-15",
-    activeDevices: 3,
-  })
+  // Preferences, loaded from and saved to the server. These used to live in
+  // localStorage, so they were per-browser: a phone, or a cleared cache, meant
+  // starting over.
+  const [settings, setSettings] = useState(DEFAULT_SETTINGS)
 
   // Password Setup State (for Google OAuth users)
   const [hasPassword, setHasPassword] = useState(true)
@@ -111,11 +67,7 @@ const Settings = () => {
         return;
       }
 
-      const response = await axios.get(`${API_URL}/api/auth/user/`, {
-        headers: { Authorization: `Bearer ${access}` }
-      });
-
-      const data = response.data;
+      const data = await api.get("/auth/user/");
       setProfileData({
         firstName: data.first_name || "",
         lastName: data.last_name || "",
@@ -135,13 +87,15 @@ const Settings = () => {
       // Check if user has a password set
       setHasPassword(data.has_password !== false);
     } catch (error) {
-      console.error("Error fetching user profile:", error);
-      if (error.response?.status === 401) {
+      // ApiError carries the status directly; there is no axios envelope. The
+      // client has already tried to refresh by the time a 401 reaches here.
+      if (error?.status === 401) {
         localStorage.removeItem("access");
         localStorage.removeItem("refresh");
         navigate("/auth");
+        return;
       }
-      toast.error("Error loading profile data.");
+      toast.error(errorMessage(error, "Error loading profile data."));
     }
   };
 
@@ -153,45 +107,14 @@ const Settings = () => {
     }))
   }
 
-  // Handle Academic Settings Change
-  const handleAcademicChange = (field, value) => {
-    setAcademicSettings((prev) => ({
-      ...prev,
-      [field]: value,
-    }))
+  const changeSetting = (group) => (field, value) => {
+    setSettings((prev) => ({ ...prev, [group]: { ...prev[group], [field]: value } }))
   }
 
-  // Handle Notification Settings Change
-  const handleNotificationChange = (field, value) => {
-    setNotificationSettings((prev) => ({
-      ...prev,
-      [field]: value,
-    }))
-  }
-
-  // Handle Privacy Settings Change
-  const handlePrivacyChange = (field, value) => {
-    setPrivacySettings((prev) => ({
-      ...prev,
-      [field]: value,
-    }))
-  }
-
-  // Handle App Settings Change
-  const handleAppChange = (field, value) => {
-    setAppSettings((prev) => ({
-      ...prev,
-      [field]: value,
-    }))
-  }
-
-  // Handle Security Settings Change
-  const handleSecurityChange = (field, value) => {
-    setSecuritySettings((prev) => ({
-      ...prev,
-      [field]: value,
-    }))
-  }
+  const handleAcademicChange = changeSetting("academic")
+  const handleNotificationChange = changeSetting("notifications")
+  const handlePrivacyChange = changeSetting("privacy")
+  const handleAppearanceChange = changeSetting("appearance")
 
   // Handle Password Setup (for Google OAuth users)
   const handlePasswordChange = (field, value) => {
@@ -226,26 +149,20 @@ const Settings = () => {
         return;
       }
 
-      const response = await axios.post(
-        `${API_URL}/api/auth/set-password/`,
+      const response = await api.post(
+        "/auth/set-password/",
         {
           password: passwordData.password,
           password_confirm: passwordData.password_confirm,
         },
-        {
-          headers: { Authorization: `Bearer ${access}` }
-        }
       );
 
-      toast.success(response.data.message || "Password set successfully!");
+      toast.success(response?.message || "Password set successfully!");
       setHasPassword(true);
       setPasswordData({ password: "", password_confirm: "" });
     } catch (error) {
       console.error("Error setting password:", error);
-      toast.error(
-        error.response?.data?.detail || 
-        "Error setting password. Please try again."
-      );
+      toast.error(errorMessage(error, "Error setting password. Please try again."));
     } finally {
       setSettingPassword(false);
     }
@@ -272,18 +189,11 @@ const Settings = () => {
         bio: profileData.bio,
       };
 
-      const response = await axios.patch(`${API_URL}/api/auth/user/`, updateData, {
-        headers: { Authorization: `Bearer ${access}` }
-      });
+      await api.patch("/auth/user/", updateData);
 
-      // Save other settings to localStorage (until backend endpoints are available)
-      localStorage.setItem("ufaz_academic_settings", JSON.stringify(academicSettings));
-      localStorage.setItem("ufaz_notification_settings", JSON.stringify(notificationSettings));
-      localStorage.setItem("ufaz_privacy_settings", JSON.stringify(privacySettings));
-      localStorage.setItem("ufaz_app_settings", JSON.stringify(appSettings));
-      localStorage.setItem("ufaz_security_settings", JSON.stringify(securitySettings));
+      await settingsApi.update(toApi(settings));
 
-      toast.success("Settings saved successfully!");
+      toast.success("Settings saved.");
     } catch (error) {
       console.error("Error saving settings:", error);
       toast.error("Error saving settings. Please try again.");
@@ -300,18 +210,7 @@ const Settings = () => {
         // Fetch user profile from API
         await fetchUserProfile();
 
-        // Load other settings from localStorage
-        const savedAcademic = localStorage.getItem("ufaz_academic_settings");
-        const savedNotifications = localStorage.getItem("ufaz_notification_settings");
-        const savedPrivacy = localStorage.getItem("ufaz_privacy_settings");
-        const savedApp = localStorage.getItem("ufaz_app_settings");
-        const savedSecurity = localStorage.getItem("ufaz_security_settings");
-
-        if (savedAcademic) setAcademicSettings(JSON.parse(savedAcademic));
-        if (savedNotifications) setNotificationSettings(JSON.parse(savedNotifications));
-        if (savedPrivacy) setPrivacySettings(JSON.parse(savedPrivacy));
-        if (savedApp) setAppSettings(JSON.parse(savedApp));
-        if (savedSecurity) setSecuritySettings(JSON.parse(savedSecurity));
+        setSettings(fromApi(await settingsApi.get()));
       } catch (error) {
         console.error("Error loading settings:", error);
       } finally {
@@ -354,30 +253,21 @@ const Settings = () => {
         formData.append("avatar", file);
 
 
-        const response = await axios.patch(`${API_URL}/api/auth/user/`, formData, {
-          headers: {
-            Authorization: `Bearer ${access}`,
-            // Don't set Content-Type manually - let browser set it with boundary
-          },
-        });
+        // The client leaves FormData alone so the browser can set the
+        // multipart boundary itself.
+        const updated = await api.patch("/auth/user/", formData);
 
 
         // Update profile data with new avatar
         setProfileData(prev => ({
           ...prev,
-          avatar: response.data.avatar,
-          avatar_url: response.data.avatar_url,
+          avatar: updated.avatar,
+          avatar_url: updated.avatar_url,
         }));
 
         toast.success("Avatar uploaded successfully!");
       } catch (error) {
-        console.error("Error uploading avatar:", error);
-        if (error.response?.data) {
-          console.error("Error details:", error.response.data);
-          toast.error(`Error: ${error.response.data.detail || error.response.data.avatar?.[0] || "Failed to upload avatar"}`);
-        } else {
-          toast.error("Error uploading avatar. Please try again.");
-        }
+        toast.error(errorMessage(error, "Could not upload that avatar."));
       }
     }
   };
@@ -660,7 +550,7 @@ const Settings = () => {
                             type="radio"
                             name="gradeSystem"
                             value="ufaz"
-                            checked={academicSettings.gradeSystem === "ufaz"}
+                            checked={settings.academic.gradeSystem === "ufaz"}
                             onChange={(e) => handleAcademicChange("gradeSystem", e.target.value)}
                             className="mr-3 text-blue-600"
                           />
@@ -671,7 +561,7 @@ const Settings = () => {
                             type="radio"
                             name="gradeSystem"
                             value="standard"
-                            checked={academicSettings.gradeSystem === "standard"}
+                            checked={settings.academic.gradeSystem === "standard"}
                             onChange={(e) => handleAcademicChange("gradeSystem", e.target.value)}
                             className="mr-3 text-blue-600"
                           />
@@ -690,7 +580,7 @@ const Settings = () => {
                           type="number"
                           min="1"
                           max="6"
-                          value={academicSettings.defaultCredits}
+                          value={settings.academic.defaultCredits}
                           onChange={(e) => handleAcademicChange("defaultCredits", parseInt(e.target.value))}
                           className="border-gray-300 focus:border-blue-500 focus:ring-blue-500 rounded-xl"
                         />
@@ -705,7 +595,7 @@ const Settings = () => {
                           type="number"
                           min="0"
                           max="100"
-                          value={academicSettings.semesterGoal}
+                          value={settings.academic.semesterGoal}
                           onChange={(e) => handleAcademicChange("semesterGoal", parseInt(e.target.value))}
                           className="border-gray-300 focus:border-blue-500 focus:ring-blue-500 rounded-xl"
                         />
@@ -720,7 +610,7 @@ const Settings = () => {
                           type="number"
                           min="1"
                           max="100"
-                          value={academicSettings.studyGoalHours}
+                          value={settings.academic.studyGoalHours}
                           onChange={(e) => handleAcademicChange("studyGoalHours", parseInt(e.target.value))}
                           className="border-gray-300 focus:border-blue-500 focus:ring-blue-500 rounded-xl"
                         />
@@ -732,7 +622,7 @@ const Settings = () => {
                         </Label>
                         <select
                           id="reminderTime"
-                          value={academicSettings.reminderTime}
+                          value={settings.academic.reminderTime}
                           onChange={(e) => handleAcademicChange("reminderTime", e.target.value)}
                           className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         >
@@ -752,7 +642,7 @@ const Settings = () => {
                           <p className="text-sm text-gray-500">Display your current GPA prominently</p>
                         </div>
                         <Checkbox
-                          checked={academicSettings.showGPA}
+                          checked={settings.academic.showGPA}
                           onCheckedChange={(checked) => handleAcademicChange("showGPA", checked)}
                           className="data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
                         />
@@ -763,7 +653,7 @@ const Settings = () => {
                           <p className="text-sm text-gray-500">Monitor class attendance automatically</p>
                         </div>
                         <Checkbox
-                          checked={academicSettings.trackAttendance}
+                          checked={settings.academic.trackAttendance}
                           onCheckedChange={(checked) => handleAcademicChange("trackAttendance", checked)}
                           className="data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
                         />
@@ -797,7 +687,7 @@ const Settings = () => {
                             <p className="text-sm text-gray-500">Receive notifications via email</p>
                           </div>
                           <Checkbox
-                            checked={notificationSettings.emailNotifications}
+                            checked={settings.notifications.emailNotifications}
                             onCheckedChange={(checked) => handleNotificationChange("emailNotifications", checked)}
                             className="data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
                           />
@@ -808,7 +698,7 @@ const Settings = () => {
                             <p className="text-sm text-gray-500">Browser and mobile push notifications</p>
                           </div>
                           <Checkbox
-                            checked={notificationSettings.pushNotifications}
+                            checked={settings.notifications.pushNotifications}
                             onCheckedChange={(checked) => handleNotificationChange("pushNotifications", checked)}
                             className="data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
                           />
@@ -826,7 +716,7 @@ const Settings = () => {
                             <p className="text-sm text-gray-500">Get reminded about upcoming assignments</p>
                           </div>
                           <Checkbox
-                            checked={notificationSettings.assignmentReminders}
+                            checked={settings.notifications.assignmentReminders}
                             onCheckedChange={(checked) => handleNotificationChange("assignmentReminders", checked)}
                             className="data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
                           />
@@ -837,7 +727,7 @@ const Settings = () => {
                             <p className="text-sm text-gray-500">Notifications when grades are posted</p>
                           </div>
                           <Checkbox
-                            checked={notificationSettings.gradeUpdates}
+                            checked={settings.notifications.gradeUpdates}
                             onCheckedChange={(checked) => handleNotificationChange("gradeUpdates", checked)}
                             className="data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
                           />
@@ -848,7 +738,7 @@ const Settings = () => {
                             <p className="text-sm text-gray-500">Calendar events and class schedules</p>
                           </div>
                           <Checkbox
-                            checked={notificationSettings.eventReminders}
+                            checked={settings.notifications.eventReminders}
                             onCheckedChange={(checked) => handleNotificationChange("eventReminders", checked)}
                             className="data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
                           />
@@ -866,7 +756,7 @@ const Settings = () => {
                             <p className="text-sm text-gray-500">New messages in study groups and forums</p>
                           </div>
                           <Checkbox
-                            checked={notificationSettings.communityMessages}
+                            checked={settings.notifications.communityMessages}
                             onCheckedChange={(checked) => handleNotificationChange("communityMessages", checked)}
                             className="data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
                           />
@@ -877,7 +767,7 @@ const Settings = () => {
                             <p className="text-sm text-gray-500">Weekly summary of your activity</p>
                           </div>
                           <Checkbox
-                            checked={notificationSettings.weeklyReports}
+                            checked={settings.notifications.weeklyReports}
                             onCheckedChange={(checked) => handleNotificationChange("weeklyReports", checked)}
                             className="data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
                           />
@@ -977,72 +867,22 @@ const Settings = () => {
                       </div>
                     )}
 
-                    {/* Other Security Settings */}
-                    <div>
-                      <h3 className="font-semibold text-gray-900 mb-4 text-lg">Security Preferences</h3>
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between p-4 bg-white rounded-xl border border-gray-200">
-                          <div>
-                            <Label className="font-semibold text-gray-900">Login Alerts</Label>
-                            <p className="text-sm text-gray-500">Get notified when someone logs into your account</p>
-                          </div>
-                          <Checkbox
-                            checked={securitySettings.loginAlerts}
-                            onCheckedChange={(checked) => handleSecurityChange("loginAlerts", checked)}
-                            className="data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
-                          />
-                        </div>
-                        <div className="flex items-center justify-between p-4 bg-white rounded-xl border border-gray-200">
-                          <div>
-                            <Label className="font-semibold text-gray-900">Two-Factor Authentication</Label>
-                            <p className="text-sm text-gray-500">Add an extra layer of security to your account</p>
-                          </div>
-                          <Checkbox
-                            checked={securitySettings.twoFactorAuth}
-                            onCheckedChange={(checked) => handleSecurityChange("twoFactorAuth", checked)}
-                            className="data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
-                            disabled
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Session Management */}
-                    <div>
-                      <h3 className="font-semibold text-gray-900 mb-4 text-lg">Session Management</h3>
-                      <div className="space-y-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="sessionTimeout" className="text-sm font-semibold text-gray-700">
-                            Session Timeout (minutes)
-                          </Label>
-                          <select
-                            id="sessionTimeout"
-                            value={securitySettings.sessionTimeout}
-                            onChange={(e) => handleSecurityChange("sessionTimeout", e.target.value)}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          >
-                            <option value="15">15 minutes</option>
-                            <option value="30">30 minutes</option>
-                            <option value="60">1 hour</option>
-                            <option value="120">2 hours</option>
-                            <option value="240">4 hours</option>
-                          </select>
-                        </div>
-                      </div>
-                    </div>
+                    {/* Login alerts, two-factor and session timeout used to sit
+                        here as controls over state that reached nothing: there
+                        is no two-factor flow to switch on, no alert to send,
+                        and the token lifetime is set by the server. Offering
+                        the switches implied protection that was not there.
+                        Password setup above is the part that is real. */}
                   </div>
                 </div>
               )}
 
-              {/* Other tab contents */}
-              {!["profile", "academic", "notifications", "security"].includes(activeTab) && (
-                <div className="p-8">
-                  <div className="text-center py-12">
-                    <div className="text-6xl mb-4">🚧</div>
-                    <h2 className="text-2xl font-bold text-gray-900 mb-2">{tabs.find(t => t.id === activeTab)?.name} Settings</h2>
-                    <p className="text-gray-600">This section is under development.</p>
-                  </div>
-                </div>
+              {activeTab === "privacy" && (
+                <PrivacyTab settings={settings.privacy} onChange={handlePrivacyChange} />
+              )}
+
+              {activeTab === "appearance" && (
+                <AppearanceTab settings={settings.appearance} onChange={handleAppearanceChange} />
               )}
 
               {/* Save Button */}

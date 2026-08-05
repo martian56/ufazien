@@ -9,7 +9,13 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from django.db.models import Q
 from dotenv import load_dotenv
-from .serializers import SignupSerializer, LoginSerializer, UserSerializer
+from .serializers import (
+    SignupSerializer,
+    LoginSerializer,
+    UserSerializer,
+    UserSettingsSerializer,
+)
+from .models import UserSettings
 from api.services.notification_service import NotificationService
 import os
 
@@ -285,6 +291,27 @@ class GoogleAuthCodeExchangeView(APIView):
             
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         
+def can_view_profile(viewer, target):
+    """Whether `viewer` may see `target`'s full profile.
+
+    The Privacy tab has offered this setting for as long as it has existed and
+    nothing ever read it, so every profile was public regardless. Your own
+    profile is always visible to you.
+    """
+    if viewer == target:
+        return True
+
+    settings_row = getattr(target, "settings", None)
+    if settings_row is None:
+        return True
+
+    if settings_row.profile_visibility == UserSettings.ProfileVisibility.NOBODY:
+        return False
+    if settings_row.profile_visibility == UserSettings.ProfileVisibility.FOLLOWERS:
+        return target.followers.filter(id=viewer.id).exists()
+    return True
+
+
 class UserProfileView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -297,6 +324,23 @@ class UserProfileView(APIView):
                     user = User.objects.get(id=int(user_id))
                 except (ValueError, TypeError, User.DoesNotExist):
                     return Response({"detail": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+            if not can_view_profile(request.user, user):
+                # A restricted profile is not a missing one: you can still see
+                # who it is well enough to ask to follow them. Everything else,
+                # including the counts and the bio, is withheld.
+                return Response(
+                    {
+                        "id": user.id,
+                        "username": user.username,
+                        "avatar_url": (
+                            request.build_absolute_uri(user.avatar.url) if user.avatar else None
+                        ),
+                        "profile_restricted": True,
+                        "is_following": request.user.following.filter(id=user.id).exists(),
+                    },
+                    status=status.HTTP_200_OK,
+                )
+
             serializer = UserSerializer(user, context={'request': request})
             return Response(serializer.data, status=status.HTTP_200_OK)
         except User.DoesNotExist:
@@ -474,3 +518,28 @@ class SetPasswordView(APIView):
             "message": "Password set successfully. You can now use email and password to authenticate.",
             "has_password": True
         }, status=status.HTTP_200_OK)
+
+class UserSettingsView(APIView):
+    """Read and update the requesting user's own preferences.
+
+    Always scoped to request.user: there is no path here that reads or writes
+    anyone else's settings. Some of these describe who may see what about a
+    user, so serving them to another account would defeat their purpose.
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def _settings_for(self, user):
+        settings_row, _ = UserSettings.objects.get_or_create(user=user)
+        return settings_row
+
+    def get(self, request):
+        return Response(UserSettingsSerializer(self._settings_for(request.user)).data)
+
+    def patch(self, request):
+        serializer = UserSettingsSerializer(
+            self._settings_for(request.user), data=request.data, partial=True
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)

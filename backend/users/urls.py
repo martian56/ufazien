@@ -7,7 +7,8 @@ from .views import(
     UserProfileView,
     FollowUserView,
     UserSearchView,
-    SetPasswordView
+    SetPasswordView,
+    UserSettingsView,
 )
 from rest_framework_simplejwt.views import TokenRefreshView
 
@@ -21,5 +22,6 @@ urlpatterns = [
     path("user/<user_id>/", UserProfileView.as_view(), name="user_profile"),  # /user/me/ or /user/123/
     path("user/<user_id>/follow/", FollowUserView.as_view(), name="follow_user"),  # /user/123/follow/
     path("search/", UserSearchView.as_view(), name="user_search"),       # /search/?q=name
-    path("set-password/", SetPasswordView.as_view(), name="set_password"),  # Set password for OAuth users
+    path("set-password/", SetPasswordView.as_view(), name="set_password"),
+    path("settings/", UserSettingsView.as_view(), name="user_settings"),
 ]

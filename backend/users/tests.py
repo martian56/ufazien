@@ -127,3 +127,105 @@ class AuthTests(TestCase):
     #     self.assertIn('username', response.data)
     #     self.assertIn('This field must be unique.', response.data['username'])
 
+
+
+class UserSettingsTests(APITestCase):
+    """Settings lived in localStorage, so they were per-browser and per-device."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="settingsuser", email="settings@example.com", password="pw"
+        )
+        self.other = User.objects.create_user(
+            username="settingsother", email="other@example.com", password="pw"
+        )
+        self.client.force_authenticate(user=self.user)
+
+    def test_settings_are_created_on_first_read_with_sane_defaults(self):
+        response = self.client.get("/api/auth/settings/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["profile_visibility"], "everyone")
+        self.assertTrue(response.json()["email_notifications"])
+
+    def test_a_saved_setting_survives_a_new_session(self):
+        self.client.patch("/api/auth/settings/", {"theme": "dark"}, format="json")
+
+        fresh = APIClient()
+        fresh.force_authenticate(user=self.user)
+        self.assertEqual(fresh.get("/api/auth/settings/").json()["theme"], "dark")
+
+    def test_settings_are_the_users_own_and_not_shared(self):
+        self.client.patch("/api/auth/settings/", {"theme": "dark"}, format="json")
+
+        self.client.force_authenticate(user=self.other)
+        self.assertEqual(self.client.get("/api/auth/settings/").json()["theme"], "light")
+
+    def test_settings_require_authentication(self):
+        self.client.force_authenticate(user=None)
+        self.assertEqual(self.client.get("/api/auth/settings/").status_code, 401)
+
+    def test_a_partial_update_leaves_the_rest_alone(self):
+        self.client.patch("/api/auth/settings/", {"theme": "dark"}, format="json")
+        self.client.patch("/api/auth/settings/", {"language": "az"}, format="json")
+
+        body = self.client.get("/api/auth/settings/").json()
+        self.assertEqual(body["theme"], "dark")
+        self.assertEqual(body["language"], "az")
+
+
+class ProfileVisibilityTests(APITestCase):
+    """The Privacy tab offered this setting and nothing ever read it."""
+
+    def setUp(self):
+        self.owner = User.objects.create_user(
+            username="pvowner", email="pvowner@example.com", password="pw"
+        )
+        self.follower = User.objects.create_user(
+            username="pvfollower", email="pvfollower@example.com", password="pw"
+        )
+        self.stranger = User.objects.create_user(
+            username="pvstranger", email="pvstranger@example.com", password="pw"
+        )
+        self.owner.followers.add(self.follower)
+
+    def _set_visibility(self, value):
+        self.client.force_authenticate(user=self.owner)
+        self.client.patch("/api/auth/settings/", {"profile_visibility": value}, format="json")
+
+    def _fetch_as(self, user):
+        self.client.force_authenticate(user=user)
+        return self.client.get(f"/api/auth/user/{self.owner.id}/").json()
+
+    def test_everyone_sees_a_public_profile(self):
+        self._set_visibility("everyone")
+        body = self._fetch_as(self.stranger)
+        self.assertNotIn("profile_restricted", body)
+        self.assertIn("followers_count", body)
+
+    def test_a_nobody_profile_is_withheld_from_everyone_else(self):
+        self._set_visibility("nobody")
+        body = self._fetch_as(self.stranger)
+        self.assertTrue(body["profile_restricted"])
+        self.assertNotIn("bio", body)
+        self.assertNotIn("followers_count", body)
+
+    def test_a_followers_profile_opens_for_followers_only(self):
+        self._set_visibility("followers")
+        self.assertNotIn("profile_restricted", self._fetch_as(self.follower))
+        self.assertTrue(self._fetch_as(self.stranger)["profile_restricted"])
+
+    def test_your_own_profile_is_always_visible_to_you(self):
+        self._set_visibility("nobody")
+        self.client.force_authenticate(user=self.owner)
+        body = self.client.get("/api/auth/user/me/").json()
+        self.assertNotIn("profile_restricted", body)
+        self.assertEqual(body["email"], "pvowner@example.com")
+
+    def test_a_restricted_profile_still_does_not_leak_the_email(self):
+        """The standing rule: an address reaches nobody but its owner."""
+        self._set_visibility("nobody")
+        self.assertNotIn("email", self._fetch_as(self.stranger))
+
+    def test_an_unrestricted_profile_still_does_not_leak_the_email(self):
+        self._set_visibility("everyone")
+        self.assertNotIn("email", self._fetch_as(self.stranger))
