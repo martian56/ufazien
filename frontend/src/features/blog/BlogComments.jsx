@@ -1,4 +1,5 @@
 import { ThumbsUp } from "lucide-react"
+import { countComments } from "./countComments"
 
 /**
  * Comments on an article, including replies.
@@ -24,7 +25,7 @@ export default function BlogComments({
             darkMode ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"
           }`}
         >
-          <h3 className="text-xl font-semibold mb-6">Comments ({comments.length})</h3>
+          <h3 className="text-xl font-semibold mb-6">Comments ({countComments(comments)})</h3>
 
           {/* Add Comment */}
           <div className="mb-8">
@@ -73,90 +74,108 @@ export default function BlogComments({
           {/* Comments List */}
           <div className="space-y-6">
             {comments.map((comment) => (
-              <div key={comment.id} className="space-y-4">
-                <div className={`flex space-x-3 ${replyTo === comment.id ? 'bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800' : ''}`}>
-                  <img
-                    src={comment.author?.avatar_url || "/placeholder.svg"}
-                    alt={`${comment.author?.first_name} ${comment.author?.last_name}`}
-                    className="w-10 h-10 rounded-full border-2 border-gray-200"
-                  />
-                  <div className="flex-1">
-                    <div className={`p-4 rounded-lg ${darkMode ? "bg-gray-700" : "bg-gray-50"}`}>
-                      <div className="flex items-center justify-between mb-2">
-                        <h4 className="font-medium">{`${comment.author?.first_name || ""} ${comment.author?.last_name || ""}`.trim() || "Anonymous"}</h4>
-                        <span className="text-sm text-gray-500">
-                          {new Date(comment.published_at).toLocaleDateString()}
-                        </span>
-                      </div>
-                      <p className={`${darkMode ? "text-gray-200" : "text-gray-900"}`}>{comment.content}</p>
-                    </div>
-                    <div className="flex items-center space-x-4 mt-2">
-                      <button 
-                        onClick={() => onLikeComment(comment.id)}
-                        className={`flex items-center space-x-1 text-sm transition-colors ${
-                          comment.is_liked 
-                            ? "text-blue-600 hover:text-blue-700" 
-                            : "text-gray-500 hover:text-blue-600"
-                        }`}
-                      >
-                        <ThumbsUp className={`w-4 h-4 ${comment.is_liked ? 'fill-current' : ''}`} />
-                        <span>{comment.likes_count || 0}</span>
-                      </button>
-                      <button
-                        onClick={() => setReplyTo(replyTo === comment.id ? null : comment.id)}
-                        className={`text-sm transition-colors ${
-                          replyTo === comment.id 
-                            ? "text-blue-600 font-medium" 
-                            : "text-gray-500 hover:text-blue-600"
-                        }`}
-                      >
-                        {replyTo === comment.id ? "Cancel Reply" : "Reply"}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Replies */}
-                {comment.replies && comment.replies.length > 0 && (
-                  <div className="ml-12 space-y-4">
-                    {comment.replies.map((reply) => (
-                      <div key={reply.id} className="flex space-x-3">
-                        <img
-                          src={reply.author?.avatar_url || "/placeholder.svg"}
-                          alt={`${reply.author?.first_name} ${reply.author?.last_name}`}
-                          className="w-8 h-8 rounded-full border-2 border-gray-200"
-                        />
-                        <div className="flex-1">
-                          <div className={`p-3 rounded-lg ${darkMode ? "bg-gray-700" : "bg-gray-50"}`}>
-                            <div className="flex items-center justify-between mb-1">
-                              <h5 className="font-medium text-sm">{`${reply.author?.first_name || ""} ${reply.author?.last_name || ""}`.trim() || "Anonymous"}</h5>
-                              <span className="text-xs text-gray-500">
-                                {new Date(reply.published_at).toLocaleDateString()}
-                              </span>
-                            </div>
-                            <p className={`text-sm ${darkMode ? "text-gray-200" : "text-gray-900"}`}>{reply.content}</p>
-                          </div>
-                          <div className="flex items-center space-x-4 mt-1">
-                            <button 
-                              onClick={() => onLikeComment(reply.id)}
-                              className={`flex items-center space-x-1 text-xs transition-colors ${
-                                reply.is_liked 
-                                  ? "text-blue-600 hover:text-blue-700" 
-                                  : "text-gray-500 hover:text-blue-600"
-                              }`}
-                            >
-                              <ThumbsUp className={`w-3 h-3 ${reply.is_liked ? 'fill-current' : ''}`} />
-                              <span>{reply.likes_count || 0}</span>
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <CommentThread
+                key={comment.id}
+                comment={comment}
+                depth={0}
+                darkMode={darkMode}
+                replyTo={replyTo}
+                setReplyTo={setReplyTo}
+                onLikeComment={onLikeComment}
+              />
             ))}
+            {comments.length === 0 && (
+              <p className="text-gray-500 text-sm">No comments yet. Be the first.</p>
+            )}
           </div>
         </div>
+  )
+}
+
+/** How far replies keep indenting before they stack vertically instead. */
+const MAX_INDENT_DEPTH = 4
+
+/**
+ * One comment and everything under it.
+ *
+ * The API nests replies to any depth, and this used to render exactly one
+ * level: a reply to a reply was stored, returned, and then not drawn. It also
+ * had no Reply button of its own, so there was no way to start one from the
+ * interface.
+ */
+function CommentThread({ comment, depth, darkMode, replyTo, setReplyTo, onLikeComment }) {
+  const isReply = depth > 0
+  const author = `${comment.author?.first_name || ""} ${comment.author?.last_name || ""}`.trim() || "Anonymous"
+  const replies = comment.replies || []
+
+  return (
+    <div className={isReply ? "" : "space-y-3"}>
+      <div
+        className={`flex space-x-3 ${
+          replyTo === comment.id
+            ? "bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800"
+            : ""
+        }`}
+      >
+        <img
+          src={comment.author?.avatar_url || "/placeholder.svg"}
+          alt={author}
+          className={`${isReply ? "w-8 h-8" : "w-10 h-10"} rounded-full border-2 border-gray-200`}
+        />
+        <div className="flex-1">
+          <div className={`p-3 rounded-lg ${darkMode ? "bg-gray-700" : "bg-gray-50"}`}>
+            <div className="flex items-center justify-between mb-1">
+              <h5 className={`font-medium ${isReply ? "text-sm" : ""}`}>{author}</h5>
+              <span className="text-xs text-gray-500">
+                {new Date(comment.published_at).toLocaleDateString()}
+              </span>
+            </div>
+            <p className={`${isReply ? "text-sm" : ""} ${darkMode ? "text-gray-200" : "text-gray-900"}`}>
+              {comment.content}
+            </p>
+          </div>
+
+          <div className="flex items-center space-x-4 mt-1">
+            <button
+              onClick={() => onLikeComment(comment.id)}
+              className={`flex items-center space-x-1 text-xs transition-colors ${
+                comment.is_liked ? "text-blue-600 hover:text-blue-700" : "text-gray-500 hover:text-blue-600"
+              }`}
+            >
+              <ThumbsUp className={`w-3 h-3 ${comment.is_liked ? "fill-current" : ""}`} />
+              <span>{comment.likes_count || 0}</span>
+            </button>
+            <button
+              onClick={() => setReplyTo(replyTo === comment.id ? null : comment.id)}
+              className={`text-xs transition-colors ${
+                replyTo === comment.id ? "text-blue-600 font-medium" : "text-gray-500 hover:text-blue-600"
+              }`}
+            >
+              {replyTo === comment.id ? "Cancel Reply" : "Reply"}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {replies.length > 0 && (
+        <div
+          className={`mt-4 space-y-4 ${
+            depth < MAX_INDENT_DEPTH ? "ml-12 border-l border-gray-200 pl-4" : ""
+          }`}
+        >
+          {replies.map((reply) => (
+            <CommentThread
+              key={reply.id}
+              comment={reply}
+              depth={depth + 1}
+              darkMode={darkMode}
+              replyTo={replyTo}
+              setReplyTo={setReplyTo}
+              onLikeComment={onLikeComment}
+            />
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
