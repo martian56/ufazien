@@ -150,7 +150,6 @@ export default function WebsiteDetail() {
       selectedFiles.forEach(f => {
         // Use relativePath if available (folder upload), otherwise use regular name
         const fileName = f.relativePath || f.name
-        console.log(`Uploading file: ${f.name} as ${fileName}`)
         
         // Create a new File object with the correct name
         const fileToUpload = new File([f], fileName, { type: f.type })
@@ -725,25 +724,15 @@ export default function WebsiteDetail() {
                               <Folder className="w-4 h-4 mr-2 inline" />
                               <input type="file" multiple webkitdirectory="" className="hidden" onChange={(e) => {
                                 const files = Array.from(e.target.files);
-                                console.log('Folder upload debug - Original files:', files.map(f => ({
-                                  name: f.name,
-                                  webkitRelativePath: f.webkitRelativePath
-                                })));
                                 
                                 // Store the webkitRelativePath in a custom property
                                 const filesWithFolderStructure = files.map(file => {
                                   // Create a new File object and add the relative path as a custom property
                                   const fileWithPath = new File([file], file.name, { type: file.type });
                                   fileWithPath.relativePath = file.webkitRelativePath;
-                                  console.log(`Processing file: ${file.name} -> ${file.webkitRelativePath}`);
                                   return fileWithPath;
                                 });
                                 
-                                console.log('Folder upload debug - Processed files:', filesWithFolderStructure.map(f => ({
-                                  name: f.name,
-                                  relativePath: f.relativePath,
-                                  size: f.size
-                                })));
                                 
                                 setSelectedFiles(filesWithFolderStructure);
                               }} />

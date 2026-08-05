@@ -451,9 +451,7 @@ const BlogCreate = () => {
     const sanitizedTitle = sanitizeText(title, 200)
     
     // Debug: Log the content before and after sanitization
-    console.log('🔍 Original content:', content)
     const sanitizedContent = sanitizeHtml(content)
-    console.log('🔍 Sanitized content:', sanitizedContent)
     
     const sanitizedExcerpt = sanitizeText(excerpt, 300)
 

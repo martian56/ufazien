@@ -57,7 +57,6 @@ class WebSocketService {
     const ws = new WebSocket(wsUrl);
     
     ws.onopen = () => {
-      console.log(`WebSocket connected: ${connectionId}`);
       this.reconnectAttempts.set(connectionId, 0);
       this.emit(connectionId, 'connected', { connectionId });
     };
@@ -77,7 +76,6 @@ class WebSocketService {
     };
 
     ws.onclose = (event) => {
-      console.log(`WebSocket disconnected: ${connectionId}`, event.code, event.reason);
       this.connections.delete(connectionId);
       this.emit(connectionId, 'disconnected', { connectionId, code: event.code, reason: event.reason });
       
@@ -107,7 +105,6 @@ class WebSocketService {
     }
 
     const delay = this.reconnectDelay * Math.pow(2, attempts);
-    console.log(`Reconnecting ${connectionId} in ${delay}ms (attempt ${attempts + 1})`);
     
     setTimeout(() => {
       this.reconnectAttempts.set(connectionId, attempts + 1);

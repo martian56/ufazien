@@ -126,7 +126,6 @@ export default function Billing() {
   const downloadInvoice = async (invoiceId) => {
     try {
       // This would call the API to download the invoice
-      console.log('Downloading invoice:', invoiceId)
       // await hostingApi.downloadInvoice(invoiceId)
       alert('Invoice download feature coming soon!')
     } catch (err) {

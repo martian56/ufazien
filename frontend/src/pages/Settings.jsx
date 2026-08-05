@@ -325,7 +325,6 @@ const Settings = () => {
   // Handle Avatar Upload
   const handleAvatarUpload = async (event) => {
     const file = event.target.files[0];
-    console.log("File selected:", file);
     
     if (file) {
       try {
@@ -335,7 +334,6 @@ const Settings = () => {
           return;
         }
 
-        console.log("Starting avatar upload...");
 
         // Validate file size (max 5MB)
         if (file.size > 5 * 1024 * 1024) {
@@ -350,13 +348,11 @@ const Settings = () => {
           return;
         }
 
-        console.log("File validation passed, uploading...");
 
         // Create FormData for file upload
         const formData = new FormData();
         formData.append("avatar", file);
 
-        console.log("FormData created:", formData.get("avatar"));
 
         const response = await axios.patch(`${API_URL}/api/auth/user/`, formData, {
           headers: {
@@ -365,7 +361,6 @@ const Settings = () => {
           },
         });
 
-        console.log("Upload response:", response.data);
 
         // Update profile data with new avatar
         setProfileData(prev => ({

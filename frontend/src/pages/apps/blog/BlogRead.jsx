@@ -163,7 +163,6 @@ export default function BlogRead() {
         }
 
         const data = await response.json()
-        console.log("Fetched blog post:", data)
 
         setPost(data)
         setLikes(data.likes_count || 0)
@@ -218,7 +217,6 @@ export default function BlogRead() {
 
         if (response.ok) {
           const data = await response.json()
-          console.log("View tracking response:", data)
           
           // Update the views count in the UI
           setViews(data.views)
@@ -252,7 +250,6 @@ export default function BlogRead() {
 
       if (response.ok) {
         const data = await response.json()
-        console.log("Follow response:", data)
         
         setIsFollowing(data.following)
         

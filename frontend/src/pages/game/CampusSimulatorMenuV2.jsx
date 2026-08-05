@@ -88,8 +88,6 @@ const CampusSimulatorMenu = () => {
 
       const response = await campusApi.getLobbies(params);
       
-      console.log('Lobbies loaded:', response);
-      console.log('Lobby IDs:', response.results?.map(lobby => lobby.id));
       
       setLobbies(response.results || []);
       setPagination({

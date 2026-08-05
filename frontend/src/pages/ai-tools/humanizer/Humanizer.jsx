@@ -72,7 +72,6 @@ export default function Humanizer() {
     setOutputText("")
     
     try {
-      console.log("Starting humanization process...");
       
       // Prepare options
       const options = {
@@ -87,7 +86,6 @@ export default function Humanizer() {
         options,
         (status) => {
           // Progress callback
-          console.log("Task status update:", status);
           
           if (status.status === 'processing') {
             // Estimate progress based on time
@@ -107,7 +105,6 @@ export default function Humanizer() {
       setIsComplete(true);
       setCurrentTaskId(result.taskId);
       
-      console.log("Humanization completed successfully!");
 
     } catch (error) {
       console.error("Humanization failed:", error);

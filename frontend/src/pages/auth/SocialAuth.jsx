@@ -18,14 +18,12 @@ function GoogleLoginButton({ loadingProvider, setLoadingProvider }) {
     ux_mode: "popup",
     redirect_uri: "postmessage",
     onSuccess: async (codeResponse) => {
-      console.log("Google login successful:", codeResponse)
       setLoadingProvider("Google")  
       try {
         const res = await axios.post(`${API_URL}/api/auth/google/login/`, {
           code: codeResponse.code,
         })
 
-        console.log("Google login successful:", res.data)
         localStorage.setItem("access", res.data.access)
         localStorage.setItem("refresh", res.data.refresh)
         
@@ -112,7 +110,6 @@ function FacebookLoginButton({ loadingProvider, setLoadingProvider }) {
               access_token: response.authResponse.accessToken,
             })
             .then((res) => {
-              console.log("Facebook login success:", res.data)
               localStorage.setItem("access", res.data.access)
               localStorage.setItem("refresh", res.data.refresh)
             })

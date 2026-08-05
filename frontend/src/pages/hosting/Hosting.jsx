@@ -216,7 +216,6 @@ export default function Hosting() {
 
   const handleCreateWebsite = (websiteData) => {
     // Handle website creation
-    console.log('Creating website:', websiteData)
     // TODO: Make API call to create website
     // For now, just add to local state
     const newWebsite = {
