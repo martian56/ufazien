@@ -6,6 +6,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import campusWebSocket from '../services/campusWebSocket';
 import campusApi from '../services/campusApi';
+import { errorMessage } from '../lib/api/errors';
 
 /**
  * Decode JWT token to get user ID
@@ -29,6 +30,38 @@ function getCurrentUserId() {
     }
 }
 
+
+/**
+ * Wire shapes from the lobby WebSocket. These are loose on purpose: the
+ * consumer sends several message types down one socket and the fields vary.
+ */
+export interface LobbyMember {
+  user_id: string | number
+  username: string
+  joined_at: string
+  is_online: boolean
+}
+
+export interface ChatMessage {
+  id: string | number
+  user_id: string | number
+  username: string
+  message: string
+  timestamp: string
+  channel: string
+}
+
+export interface PlayerPosition {
+  x: number
+  y: number
+  direction?: string
+  is_moving?: boolean
+  current_room?: string | null
+  username?: string
+  full_name?: string
+  last_updated?: string
+}
+
 export const useCampusSimulator = (lobbyId = null) => {
     // Defensive: ignore string values that may come from route params like 'null' or 'undefined'
     if (typeof lobbyId === 'string' && (lobbyId === 'null' || lobbyId === 'undefined')) {
@@ -37,31 +70,31 @@ export const useCampusSimulator = (lobbyId = null) => {
     // Connection state
     const [isConnected, setIsConnected] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState(null);
+    const [error, setError] = useState<string | null>(null);
 
     // Lobby state
-    const [currentLobby, setCurrentLobby] = useState(null);
-    const [lobbyMembers, setLobbyMembers] = useState([]);
-    const [playerPositions, setPlayerPositions] = useState(new Map());
-    const [studyRooms, setStudyRooms] = useState([]);
+    const [currentLobby, setCurrentLobby] = useState<any>(null);
+    const [lobbyMembers, setLobbyMembers] = useState<LobbyMember[]>([]);
+    const [playerPositions, setPlayerPositions] = useState<Map<string | number, PlayerPosition>>(new Map());
+    const [studyRooms, setStudyRooms] = useState<any[]>([]);
 
     // Chat state
-    const [chatMessages, setChatMessages] = useState([]);
+    const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
     const [isTyping, setIsTyping] = useState(false);
 
     // User state
-    const [currentUser, setCurrentUser] = useState(null);
+    const [currentUser, setCurrentUser] = useState<any>(null);
     const [userPosition, setUserPosition] = useState({ x: 0, y: 0, direction: 'down', is_moving: false });
 
     // Refs for preventing stale closures
     const positionRef = useRef(userPosition);
     const lastSentPositionRef = useRef({ x: 0, y: 0, direction: 'down' });
-    const positionThrottleRef = useRef(null);
-    const positionIntervalRef = useRef(null);
+    const positionThrottleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const positionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const isMovingRef = useRef(false);
     const wsEverConnectedRef = useRef(false);
-    const currentLobbyIdRef = useRef(null);
-    const currentUserIdRef = useRef(null);
+    const currentLobbyIdRef = useRef<string | null>(null);
+    const currentUserIdRef = useRef<string | number | null>(null);
 
     // Get current user ID on mount
     useEffect(() => {
@@ -76,7 +109,7 @@ export const useCampusSimulator = (lobbyId = null) => {
     /**
      * Initialize lobby connection
      */
-    const connectToLobby = useCallback(async (targetLobbyId) => {
+    const connectToLobby = useCallback(async (targetLobbyId: string) => {
         if (!targetLobbyId) return;
         
         console.log('Attempting to connect to lobby:', targetLobbyId);
@@ -90,7 +123,7 @@ export const useCampusSimulator = (lobbyId = null) => {
             try {
                 lobbyData = await campusApi.joinLobby(targetLobbyId);
             } catch (err) {
-                const msg = String(err.message || '').toLowerCase();
+                const msg = String(errorMessage(err) || '').toLowerCase();
                 if (msg.includes('already in this lobby') || msg.includes('you are already in this lobby')) {
                     console.warn('Backend says user already in lobby; fetching lobby details instead');
                     const lobbyObj = await campusApi.getLobby(targetLobbyId);
@@ -115,7 +148,7 @@ export const useCampusSimulator = (lobbyId = null) => {
 
         } catch (err) {
             console.error('Failed to connect to lobby:', err);
-            setError(err.message || 'Failed to connect to lobby');
+            setError(errorMessage(err) || 'Failed to connect to lobby');
         } finally {
             setIsLoading(false);
         }
@@ -140,7 +173,7 @@ export const useCampusSimulator = (lobbyId = null) => {
         });
 
         // Lobby state received
-        campusWebSocket.on('lobbyState', (data) => {
+        campusWebSocket.on('lobbyState', (data: any) => {
             console.log('Received lobby state:', data);
             setCurrentLobby(data.lobby);
             setLobbyMembers(data.members || []);
@@ -149,7 +182,7 @@ export const useCampusSimulator = (lobbyId = null) => {
             // Update player positions (exclude current user's position - we control our own camera)
             const currentUserId = currentUserIdRef.current;
             const positionsMap = new Map();
-            (data.positions || []).forEach(pos => {
+            (data.positions || []).forEach((pos: any) => {
                 // Filter out current user's position - they control their own camera in first-person view
                 if (pos.user_id !== currentUserId) {
                     positionsMap.set(pos.user_id, {
@@ -167,7 +200,7 @@ export const useCampusSimulator = (lobbyId = null) => {
         });
 
         // User joined lobby
-        campusWebSocket.on('userJoined', (data) => {
+        campusWebSocket.on('userJoined', (data: any) => {
             console.log('User joined:', data);
             setLobbyMembers(prev => {
                 const exists = prev.some(member => member.user_id === data.user_id);
@@ -184,7 +217,7 @@ export const useCampusSimulator = (lobbyId = null) => {
         });
 
         // User left lobby
-        campusWebSocket.on('userLeft', (data) => {
+        campusWebSocket.on('userLeft', (data: any) => {
             console.log('User left:', data);
             setLobbyMembers(prev => prev.filter(member => member.user_id !== data.user_id));
             setPlayerPositions(prev => {
@@ -195,7 +228,7 @@ export const useCampusSimulator = (lobbyId = null) => {
         });
 
         // Position update received
-        campusWebSocket.on('positionUpdate', (data) => {
+        campusWebSocket.on('positionUpdate', (data: any) => {
             // Filter out current user's position updates - we control our own camera
             const currentUserId = currentUserIdRef.current;
             if (data.user_id === currentUserId) {
@@ -218,7 +251,7 @@ export const useCampusSimulator = (lobbyId = null) => {
         });
 
         // Chat message received
-        campusWebSocket.on('chatMessage', (data) => {
+        campusWebSocket.on('chatMessage', (data: any) => {
             console.log('Chat message received:', data);
             setChatMessages(prev => [...prev, {
                 id: data.message_id,
@@ -231,18 +264,18 @@ export const useCampusSimulator = (lobbyId = null) => {
         });
 
         // Study room events
-        campusWebSocket.on('studyRoomJoin', (data) => {
+        campusWebSocket.on('studyRoomJoin', (data: any) => {
             console.log('User joined study room:', data);
             // Handle study room join logic
         });
 
-        campusWebSocket.on('studyRoomLeave', (data) => {
+        campusWebSocket.on('studyRoomLeave', (data: any) => {
             console.log('User left study room:', data);
             // Handle study room leave logic
         });
 
         // Error handling
-        campusWebSocket.on('error', (data) => {
+        campusWebSocket.on('error', (data: any) => {
             console.error('WebSocket error:', data);
             setError(data.message || 'Connection error');
         });
@@ -252,7 +285,7 @@ export const useCampusSimulator = (lobbyId = null) => {
      * Update user position (throttled)
      * Uses setInterval for continuous updates while moving, instead of debouncing
      */
-    const updatePosition = useCallback((newPosition) => {
+    const updatePosition = useCallback((newPosition: any) => {
         setUserPosition(newPosition);
         // Update positionRef immediately for interval to use
         positionRef.current = newPosition;
@@ -271,7 +304,7 @@ export const useCampusSimulator = (lobbyId = null) => {
             // Set up interval to send position updates every 100ms while moving
             positionIntervalRef.current = setInterval(() => {
                 if (!campusWebSocket.getConnectionStatus()) {
-                    clearInterval(positionIntervalRef.current);
+                    if (positionIntervalRef.current) clearInterval(positionIntervalRef.current);
                     positionIntervalRef.current = null;
                     isMovingRef.current = false;
                     return;
@@ -282,7 +315,7 @@ export const useCampusSimulator = (lobbyId = null) => {
 
                 // Check if still moving - if not, clear interval and send final position
                 if (!currentPos.is_moving) {
-                    clearInterval(positionIntervalRef.current);
+                    if (positionIntervalRef.current) clearInterval(positionIntervalRef.current);
                     positionIntervalRef.current = null;
                     isMovingRef.current = false;
                     // Send final position when movement stops
@@ -309,7 +342,7 @@ export const useCampusSimulator = (lobbyId = null) => {
         else if (!isMoving && wasMoving) {
             // Clear the interval if it exists
             if (positionIntervalRef.current) {
-                clearInterval(positionIntervalRef.current);
+                if (positionIntervalRef.current) clearInterval(positionIntervalRef.current);
                 positionIntervalRef.current = null;
             }
             // Send final position when movement stops
@@ -327,7 +360,7 @@ export const useCampusSimulator = (lobbyId = null) => {
     /**
      * Send chat message
      */
-    const sendChatMessage = useCallback((message, channel = 'global') => {
+    const sendChatMessage = useCallback((message: string, channel = 'global') => {
         if (!message.trim() || !campusWebSocket.getConnectionStatus()) return;
 
         campusWebSocket.sendChatMessage(message, channel === 'global' ? null : channel);
@@ -336,7 +369,7 @@ export const useCampusSimulator = (lobbyId = null) => {
     /**
      * Join study room
      */
-    const joinStudyRoom = useCallback((roomId) => {
+    const joinStudyRoom = useCallback((roomId: string) => {
         if (campusWebSocket.getConnectionStatus()) {
             campusWebSocket.joinStudyRoom(roomId);
         }
@@ -345,7 +378,7 @@ export const useCampusSimulator = (lobbyId = null) => {
     /**
      * Leave study room
      */
-    const leaveStudyRoom = useCallback((roomId) => {
+    const leaveStudyRoom = useCallback((roomId: string) => {
         if (campusWebSocket.getConnectionStatus()) {
             campusWebSocket.leaveStudyRoom(roomId);
         }
@@ -380,7 +413,7 @@ export const useCampusSimulator = (lobbyId = null) => {
             }
         } catch (error) {
             console.error('Failed to leave lobby:', error);
-            setError(`Failed to leave lobby: ${error.message}`);
+            setError(`Failed to leave lobby: ${errorMessage(error)}`);
         }
     }, []);
 
@@ -419,7 +452,12 @@ export const useCampusSimulator = (lobbyId = null) => {
      * Get nearby players based on distance
      */
     const getNearbyPlayers = useCallback((maxDistance = 50) => {
-        const nearby = [];
+        const nearby: Array<{
+            userId: string | number
+            username?: string
+            position: PlayerPosition
+            distance: number
+        }> = [];
         const userPos = positionRef.current;
 
         playerPositions.forEach((position, userId) => {
@@ -444,7 +482,7 @@ export const useCampusSimulator = (lobbyId = null) => {
     /**
      * Convert 3D world coordinates to 2D backend coordinates
      */
-    const worldTo2D = useCallback((worldX, worldZ) => {
+    const worldTo2D = useCallback((worldX: number, worldZ: number) => {
         // Convert Three.js world coordinates to 2D coordinates
         // Adjust these scaling factors based on your campus layout
         const scale = 10; // 1 world unit = 10 backend units
@@ -460,7 +498,7 @@ export const useCampusSimulator = (lobbyId = null) => {
     /**
      * Convert 2D backend coordinates to 3D world coordinates
      */
-    const coordsTo3D = useCallback((backendX, backendY) => {
+    const coordsTo3D = useCallback((backendX: number, backendY: number) => {
         const scale = 10;
         const offsetX = 400;
         const offsetY = 300;
@@ -479,7 +517,7 @@ export const useCampusSimulator = (lobbyId = null) => {
 
         return () => {
             if (positionThrottleRef.current) {
-                clearTimeout(positionThrottleRef.current);
+                if (positionThrottleRef.current) clearTimeout(positionThrottleRef.current);
             }
         };
     }, [lobbyId, connectToLobby]);
@@ -489,13 +527,13 @@ export const useCampusSimulator = (lobbyId = null) => {
         return () => {
             // Clear position update interval
             if (positionIntervalRef.current) {
-                clearInterval(positionIntervalRef.current);
+                if (positionIntervalRef.current) clearInterval(positionIntervalRef.current);
                 positionIntervalRef.current = null;
             }
             
             // Clear position throttle timeout if any
             if (positionThrottleRef.current) {
-                clearTimeout(positionThrottleRef.current);
+                if (positionThrottleRef.current) clearTimeout(positionThrottleRef.current);
                 positionThrottleRef.current = null;
             }
             

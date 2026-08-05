@@ -1,4 +1,12 @@
+import { logger } from '../lib/logger';
+
 class WebSocketService {
+  connections = new Map<string, WebSocket>();
+  eventHandlers = new Map<string, Map<string, ((payload: any) => void)[]>>();
+  reconnectAttempts = new Map<string, number>();
+  maxReconnectAttempts = 5;
+  reconnectDelay = 1000;
+
   constructor() {
     this.connections = new Map();
     this.eventHandlers = new Map();
@@ -7,15 +15,34 @@ class WebSocketService {
     this.reconnectDelay = 1000;
   }
 
-  // Get WebSocket URL
-  getWebSocketUrl(path) {
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsHost = process.env.REACT_APP_WS_HOST || window.location.host;
-    return `${wsProtocol}//${wsHost}/ws/${path}`;
+  /**
+   * Build the WebSocket URL from the API origin.
+   *
+   * This read process.env.REACT_APP_WS_HOST, which is Create React App's
+   * convention. Vite does not define `process`, so evaluating it threw
+   * "process is not defined" and every community chat connection died here
+   * before it opened a socket.
+   */
+  getWebSocketUrl(path: string) {
+    const apiUrl = import.meta.env.VITE_API_URL;
+    let host = window.location.host;
+    let protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+
+    if (apiUrl) {
+      try {
+        const parsed = new URL(apiUrl, window.location.origin);
+        host = parsed.host;
+        protocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
+      } catch {
+        // Fall back to the page's own origin.
+      }
+    }
+
+    return `${protocol}//${host}/ws/${path}`;
   }
 
   // Connect to WebSocket
-  connect(connectionId, path, options = {}) {
+  connect(connectionId: string, path: string, options: { autoReconnect?: boolean } = {}) {
     if (this.connections.has(connectionId)) {
       console.warn(`WebSocket connection ${connectionId} already exists`);
       return this.connections.get(connectionId);
@@ -70,7 +97,7 @@ class WebSocketService {
   }
 
   // Reconnect with exponential backoff
-  reconnect(connectionId, path, options) {
+  reconnect(connectionId: string, path: string, options: { autoReconnect?: boolean }) {
     const attempts = this.reconnectAttempts.get(connectionId) || 0;
     
     if (attempts >= this.maxReconnectAttempts) {
@@ -89,7 +116,7 @@ class WebSocketService {
   }
 
   // Send message
-  send(connectionId, data) {
+  send(connectionId: string, data: any) {
     const ws = this.connections.get(connectionId);
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify(data));
@@ -100,7 +127,7 @@ class WebSocketService {
   }
 
   // Disconnect
-  disconnect(connectionId) {
+  disconnect(connectionId: string) {
     const ws = this.connections.get(connectionId);
     if (ws) {
       ws.close(1000, 'Intentional disconnect');
@@ -111,45 +138,41 @@ class WebSocketService {
   }
 
   // Event handling
-  on(connectionId, event, handler) {
-    if (!this.eventHandlers.has(connectionId)) {
-      this.eventHandlers.set(connectionId, new Map());
+  on(connectionId: string, event: string, handler: (...args: any[]) => void) {
+    let handlers = this.eventHandlers.get(connectionId);
+    if (!handlers) {
+      handlers = new Map();
+      this.eventHandlers.set(connectionId, handlers);
     }
-    
-    const handlers = this.eventHandlers.get(connectionId);
-    if (!handlers.has(event)) {
-      handlers.set(event, []);
-    }
-    
-    handlers.get(event).push(handler);
+
+    const forEvent = handlers.get(event) ?? [];
+    forEvent.push(handler);
+    handlers.set(event, forEvent);
   }
 
-  off(connectionId, event, handler) {
-    const handlers = this.eventHandlers.get(connectionId);
-    if (handlers && handlers.has(event)) {
-      const eventHandlers = handlers.get(event);
-      const index = eventHandlers.indexOf(handler);
-      if (index > -1) {
-        eventHandlers.splice(index, 1);
+  off(connectionId: string, event: string, handler: (...args: any[]) => void) {
+    const forEvent = this.eventHandlers.get(connectionId)?.get(event);
+    if (!forEvent) return;
+
+    const index = forEvent.indexOf(handler);
+    if (index > -1) forEvent.splice(index, 1);
+  }
+
+  emit(connectionId: string, event: string, data: any) {
+    const forEvent = this.eventHandlers.get(connectionId)?.get(event);
+    if (!forEvent) return;
+
+    forEvent.forEach((handler) => {
+      try {
+        handler(data);
+      } catch (error) {
+        logger.error(`Error in event handler for ${event}:`, error);
       }
-    }
-  }
-
-  emit(connectionId, event, data) {
-    const handlers = this.eventHandlers.get(connectionId);
-    if (handlers && handlers.has(event)) {
-      handlers.get(event).forEach(handler => {
-        try {
-          handler(data);
-        } catch (error) {
-          console.error(`Error in event handler for ${event}:`, error);
-        }
-      });
-    }
+    });
   }
 
   // Connection status
-  isConnected(connectionId) {
+  isConnected(connectionId: string) {
     const ws = this.connections.get(connectionId);
     return ws && ws.readyState === WebSocket.OPEN;
   }
@@ -168,7 +191,7 @@ const wsService = new WebSocketService();
 // Community-specific WebSocket methods
 export const communityWS = {
   // Group chat
-  connectToGroupChat(groupId, handlers = {}) {
+  connectToGroupChat(groupId: string, handlers: Record<string, (...args: any[]) => void> = {}) {
     const connectionId = `group_${groupId}`;
     const path = `community/groups/${groupId}/chat/`;
     
@@ -180,7 +203,7 @@ export const communityWS = {
     });
     
     return {
-      send: (message) => wsService.send(connectionId, { type: 'message', content: message }),
+      send: (message: string) => wsService.send(connectionId, { type: 'message', content: message }),
       sendTyping: () => wsService.send(connectionId, { type: 'typing' }),
       sendStopTyping: () => wsService.send(connectionId, { type: 'stop_typing' }),
       disconnect: () => wsService.disconnect(connectionId),
@@ -189,7 +212,7 @@ export const communityWS = {
   },
 
   // Private chat
-  connectToPrivateChat(chatId, handlers = {}) {
+  connectToPrivateChat(chatId: string, handlers: Record<string, (...args: any[]) => void> = {}) {
     const connectionId = `chat_${chatId}`;
     const path = `community/chats/${chatId}/`;
     
@@ -201,7 +224,7 @@ export const communityWS = {
     });
     
     return {
-      send: (message) => wsService.send(connectionId, { type: 'message', content: message }),
+      send: (message: string) => wsService.send(connectionId, { type: 'message', content: message }),
       sendTyping: () => wsService.send(connectionId, { type: 'typing' }),
       sendStopTyping: () => wsService.send(connectionId, { type: 'stop_typing' }),
       markRead: () => wsService.send(connectionId, { type: 'mark_read' }),
@@ -211,7 +234,7 @@ export const communityWS = {
   },
 
   // Community notifications
-  connectToNotifications(handlers = {}) {
+  connectToNotifications(handlers: Record<string, (...args: any[]) => void> = {}) {
     const connectionId = 'notifications';
     const path = 'community/notifications/';
     

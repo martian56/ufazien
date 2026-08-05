@@ -37,7 +37,8 @@ export const notificationsApi = {
   updatePreferences: (preferences: NotificationPreferences) =>
     api.put<NotificationPreferences>(`${BASE}/preferences/`, preferences),
 
-  getVapidKey: () => api.get<{ public_key: string }>(`${BASE}/vapid-key/`),
+  /** The endpoint returns camelCase, unlike the rest of the API. */
+  getVapidKey: () => api.get<{ publicKey: string }>(`${BASE}/vapid-key/`),
 
   subscribePush: (subscription: PushSubscriptionJSON | PushSubscription) =>
     api.post(`${BASE}/push/subscribe/`, subscription),

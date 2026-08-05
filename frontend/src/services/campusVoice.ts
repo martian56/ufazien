@@ -1,5 +1,6 @@
 import { Room, RoomEvent, Track } from "livekit-client"
 import { api as apiClient } from "../lib/api/client"
+import { errorMessage } from "../lib/api/errors"
 
 /**
  * Voice and screen share for a campus lobby.
@@ -18,7 +19,53 @@ import { api as apiClient } from "../lib/api/client"
 const HEARING_RADIUS = 220
 const FULL_VOLUME_RADIUS = 60
 
+
+export interface Position {
+  x: number
+  y: number
+}
+
+interface RemoteAudio {
+  identity: string
+  element: HTMLMediaElement
+  source: MediaStreamAudioSourceNode
+  panner: PannerNode
+  gain: GainNode
+}
+
+export interface LiveKitToken {
+  url: string
+  token: string
+  can_publish_sources?: string[]
+  is_host?: boolean
+}
+
+export interface Participant {
+  identity: string
+  name?: string
+  speaking: boolean
+}
+
+export interface ScreenShareEvent {
+  identity?: string
+  element: HTMLVideoElement | null
+  active: boolean
+  isLocal?: boolean
+}
+
 export class CampusVoice {
+  room: Room | null = null
+  audioContext: AudioContext | null = null
+  listener: AudioListener | null = null
+  remotes = new Map<string, RemoteAudio>()
+  localPosition: Position = { x: 0, y: 0 }
+  onParticipantsChanged: ((participants: Participant[]) => void) | null = null
+  onScreenShare: ((share: ScreenShareEvent) => void) | null = null
+  canPublishSources: string[] = []
+  isHost = false
+  mayScreenShareFlag = false
+  microphoneError: string | null = null
+
   constructor() {
     this.room = null
     this.audioContext = null
@@ -38,8 +85,8 @@ export class CampusVoice {
     return this.room?.state === "connected"
   }
 
-  async connect(lobbyId) {
-    const data = await apiClient.post(`/game/lobbies/${lobbyId}/livekit-token/`)
+  async connect(lobbyId: string) {
+    const data = await apiClient.post<LiveKitToken>(`/game/lobbies/${lobbyId}/livekit-token/`)
     this.canPublishSources = data.can_publish_sources || []
     this.isHost = Boolean(data.is_host)
 
@@ -60,7 +107,7 @@ export class CampusVoice {
       // presenter is the one person who cannot see what they are presenting.
       .on(RoomEvent.LocalTrackPublished, (publication) => {
         if (publication.source !== Track.Source.ScreenShare) return
-        const element = publication.track?.attach()
+        const element = publication.track?.attach() as HTMLVideoElement | undefined
         if (element) {
           this.onScreenShare?.({
             identity: this.room?.localParticipant?.identity,
@@ -94,7 +141,7 @@ export class CampusVoice {
       try {
         await this.room.localParticipant.setMicrophoneEnabled(true)
       } catch (err) {
-        this.microphoneError = err?.message || "Microphone unavailable"
+        this.microphoneError = errorMessage(err, "Microphone unavailable")
       }
     }
 
@@ -117,7 +164,10 @@ export class CampusVoice {
 
   _ensureAudioContext() {
     if (!this.audioContext) {
-      const Ctx = window.AudioContext || window.webkitAudioContext
+      // Safari still exposes only the prefixed constructor.
+      const Ctx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
       this.audioContext = new Ctx()
       this.listener = this.audioContext.listener
     }
@@ -126,7 +176,7 @@ export class CampusVoice {
     return this.audioContext
   }
 
-  _onTrackSubscribed(track, publication, participant) {
+  _onTrackSubscribed(track: any, publication: any, participant: any) {
     if (track.kind === Track.Kind.Video) {
       // Screen share: hand the element to the caller to mount on the board.
       if (publication.source === Track.Source.ScreenShare) {
@@ -172,7 +222,7 @@ export class CampusVoice {
     this._notifyParticipants()
   }
 
-  _onTrackUnsubscribed(track, publication, participant) {
+  _onTrackUnsubscribed(track: any, publication: any, participant: any) {
     if (publication.source === Track.Source.ScreenShare) {
       this.onScreenShare?.({ identity: participant.identity, element: null, active: false })
       return
@@ -180,7 +230,7 @@ export class CampusVoice {
     if (track.kind === Track.Kind.Audio) this._teardownTrack(track.sid)
   }
 
-  _teardownTrack(sid) {
+  _teardownTrack(sid: string) {
     const remote = this.remotes.get(sid)
     if (!remote) return
     try {
@@ -195,14 +245,14 @@ export class CampusVoice {
   }
 
   /** Every track belonging to one participant, for disconnect. */
-  _teardownRemote(identity) {
+  _teardownRemote(identity: string) {
     for (const [sid, remote] of this.remotes) {
       if (remote.identity === identity) this._teardownTrack(sid)
     }
   }
 
   /** Where the local player is. Moves the Web Audio listener. */
-  setLocalPosition({ x, y }) {
+  setLocalPosition({ x, y }: Position) {
     this.localPosition = { x, y }
     if (!this.listener) return
     // The map is 2D; treat y as depth so left/right panning follows x.
@@ -216,7 +266,7 @@ export class CampusVoice {
   }
 
   /** Where a remote player is, keyed by their user id. Moves all their tracks. */
-  setRemotePosition(userId, { x, y }) {
+  setRemotePosition(userId: string | number, { x, y }: Position) {
     const identity = `user-${userId}`
     for (const remote of this.remotes.values()) {
       if (remote.identity !== identity) continue
@@ -232,7 +282,7 @@ export class CampusVoice {
   }
 
   /** Volume 0..1 for a remote, for UI such as a speaking indicator. */
-  distanceVolume(userId, position) {
+  distanceVolume(userId: string | number, position: any) {
     const dx = position.x - this.localPosition.x
     const dy = position.y - this.localPosition.y
     const distance = Math.hypot(dx, dy)
@@ -243,7 +293,7 @@ export class CampusVoice {
 
   // -- publishing ---------------------------------------------------------
 
-  async setMicrophoneEnabled(enabled) {
+  async setMicrophoneEnabled(enabled: boolean) {
     if (!this.room) return false
     if (enabled && !this.canPublishSources.includes("microphone")) return false
     await this.room.localParticipant.setMicrophoneEnabled(enabled)
@@ -258,7 +308,7 @@ export class CampusVoice {
     return this.canPublishSources.includes("screen_share")
   }
 
-  async setScreenShareEnabled(enabled) {
+  async setScreenShareEnabled(enabled: boolean) {
     if (!this.room) return false
     if (enabled && !this.mayScreenShare) return false
     await this.room.localParticipant.setScreenShareEnabled(enabled, { audio: true })
@@ -281,8 +331,8 @@ export class CampusVoice {
   }
 
   /** Re-mint the token after the host changes this member's permissions. */
-  async refreshPermissions(lobbyId) {
-    const data = await apiClient.post(`/game/lobbies/${lobbyId}/livekit-token/`)
+  async refreshPermissions(lobbyId: string) {
+    const data = await apiClient.post<LiveKitToken>(`/game/lobbies/${lobbyId}/livekit-token/`)
     this.canPublishSources = data.can_publish_sources || []
     this.isHost = Boolean(data.is_host)
     if (!this.canPublishSources.includes("microphone") && this.microphoneEnabled) {
@@ -296,13 +346,13 @@ export class CampusVoice {
 }
 
 export const campusHostApi = {
-  permissions: (lobbyId) =>
+  permissions: (lobbyId: string) =>
     apiClient.get(`/game/lobbies/${lobbyId}/permissions/`),
-  setMuted: (lobbyId, userId, muted) =>
+  setMuted: (lobbyId: string, userId: string | number, muted: boolean) =>
     apiClient
       .post(`/game/lobbies/${lobbyId}/members/${userId}/mute/`, { muted })
       ,
-  setScreenShare: (lobbyId, userId, allowed) =>
+  setScreenShare: (lobbyId: string, userId: string | number, allowed: boolean) =>
     apiClient
       .post(`/game/lobbies/${lobbyId}/members/${userId}/screen-share/`, { allowed })
       ,
