@@ -184,6 +184,10 @@ export const useCampusSimulator = (lobbyId = null) => {
                         y: pos.y,
                         direction: pos.direction || 'down',
                         is_moving: pos.is_moving || false,
+                        // The backend has always sent this and it was dropped
+                        // here, so nothing downstream could tell which
+                        // building anyone was standing in.
+                        current_room: pos.current_room ?? null,
                         last_updated: pos.last_updated,
                         username: pos.username,
                         full_name: pos.full_name || pos.username  // Use full_name, fallback to username

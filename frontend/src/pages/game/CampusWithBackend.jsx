@@ -491,7 +491,9 @@ function Player({ campusHook, insideBuilding, touch }) {
       y: backendCoords.y,
       direction: playerDirection,
       is_moving: isMoving,
-      current_room: null // TODO: Detect current room
+      // Was hardcoded null, so the server never knew which building anyone
+      // was standing in, and neither did anyone else's client.
+      current_room: insideBuilding?.name ?? null,
     })
   })
 
@@ -627,10 +629,38 @@ const CampusWithBackend = () => {
     return member?.full_name || 'Someone'
   }, [voice.screenShare?.identity, voice.permissions])
 
-  // Nothing to zoom into once the share stops.
+  /**
+   * A share belongs to the room it is being given in.
+   *
+   * The projector used to draw whatever was being shared in the lobby onto
+   * whichever building the viewer happened to walk into, so a presentation in
+   * the library appeared on the lecture hall wall to someone who was never in
+   * the room. Now the presenter's own building has to match yours.
+   *
+   * Your own share always shows: you are, by definition, in your own room.
+   */
+  const shareIsInThisRoom = useMemo(() => {
+    if (!voice.screenShare || !insideBuilding) return false
+    if (voice.screenShare.isLocal) return true
+
+    const userId = String(voice.screenShare.identity || '').replace(/^user-/, '')
+    const presenter = playerPositions?.get?.(userId) ?? playerPositions?.get?.(Number(userId))
+    // Without a position for the presenter their room is unknown, and showing
+    // the share everywhere is the behaviour being fixed.
+    return Boolean(presenter && presenter.current_room === insideBuilding.name)
+  }, [voice.screenShare, insideBuilding, playerPositions])
+
+  const sharerRoom = useMemo(() => {
+    if (!voice.screenShare || voice.screenShare.isLocal) return null
+    const userId = String(voice.screenShare.identity || '').replace(/^user-/, '')
+    const presenter = playerPositions?.get?.(userId) ?? playerPositions?.get?.(Number(userId))
+    return presenter?.current_room || null
+  }, [voice.screenShare, playerPositions])
+
+  // Nothing to zoom into once the share stops, or once it is out of the room.
   useEffect(() => {
-    if (!voice.screenShare) setShareExpanded(false)
-  }, [voice.screenShare])
+    if (!voice.screenShare || !shareIsInThisRoom) setShareExpanded(false)
+  }, [voice.screenShare, shareIsInThisRoom])
 
 
   // Fetch current user data
@@ -807,21 +837,30 @@ const CampusWithBackend = () => {
             <span className="truncate max-w-[38vw]">
               {voice.screenShare.isLocal
                 ? 'You are sharing your screen'
-                : `${sharerName} is sharing a screen`}
+                : shareIsInThisRoom
+                  ? `${sharerName} is sharing a screen`
+                  : sharerRoom
+                    ? `${sharerName} is presenting in ${sharerRoom}`
+                    : `${sharerName} is sharing a screen elsewhere`}
             </span>
-            <button
-              onClick={() => setShareExpanded(true)}
-              className="px-2 py-0.5 rounded-full bg-blue-600 hover:bg-blue-700 shrink-0"
-            >
-              {insideBuilding ? 'Zoom in' : 'View'}
-            </button>
+            {/* Only offered where the share is actually happening. A button
+                that opened it from across the campus would put the projector
+                back to being lobby-wide. */}
+            {shareIsInThisRoom && (
+              <button
+                onClick={() => setShareExpanded(true)}
+                className="px-2 py-0.5 rounded-full bg-blue-600 hover:bg-blue-700 shrink-0"
+              >
+                Zoom in
+              </button>
+            )}
           </div>
         </div>
       )}
 
       <ScreenShareStage
-        screenShare={voice.screenShare}
-        expanded={shareExpanded}
+        screenShare={shareIsInThisRoom ? voice.screenShare : null}
+        expanded={shareExpanded && shareIsInThisRoom}
         onClose={() => setShareExpanded(false)}
       />
 
@@ -903,7 +942,7 @@ const CampusWithBackend = () => {
                 name={insideBuilding.name}
                 onExit={() => setInsideBuilding(null)}
               >
-                <ProjectorScreen video={voice.screenShare?.element || null} />
+                <ProjectorScreen video={shareIsInThisRoom ? voice.screenShare?.element || null : null} />
               </BuildingInterior>
             ) : (
               <>
