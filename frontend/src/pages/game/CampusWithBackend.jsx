@@ -40,6 +40,7 @@ const keyMap = [
   { name: "rightward", keys: ["ArrowRight", "KeyD"] },
   { name: "jump", keys: ["Space"] },
   { name: "run", keys: ["ShiftLeft"] },
+  { name: "interact", keys: ["KeyE"] },
 ]
 
 // Campus buildings and areas
@@ -307,6 +308,41 @@ function InteriorCameraPlacement({ insideBuilding }) {
       outsidePosition.current = null
     }
   }, [insideBuilding, camera])
+
+  return null
+}
+
+// Entering by clicking a DOM button does not work while the pointer is locked
+// for mouse-look, which is the normal way to play. E does the same thing from
+// wherever the player is standing.
+function ProximityInteraction({ buildings, insideBuilding, onEnter, onExit }) {
+  const { camera } = useThree()
+  const [, get] = useKeyboardControls()
+  const wasPressed = useRef(false)
+
+  useFrame(() => {
+    const pressed = Boolean(get().interact)
+    // Edge trigger: holding E must not toggle every frame.
+    if (pressed && !wasPressed.current) {
+      if (insideBuilding) {
+        onExit()
+      } else {
+        let nearest = null
+        let nearestDistance = Infinity
+        for (const building of buildings) {
+          const [bx, , bz] = building.position
+          const distance = Math.hypot(camera.position.x - bx, camera.position.z - bz)
+          const reach = Math.max(building.size[0], building.size[2]) / 2 + 6
+          if (distance < reach && distance < nearestDistance) {
+            nearest = building
+            nearestDistance = distance
+          }
+        }
+        if (nearest) onEnter(nearest)
+      }
+    }
+    wasPressed.current = pressed
+  })
 
   return null
 }
@@ -781,6 +817,12 @@ const CampusWithBackend = () => {
 
             {/* First Person Player Controller */}
             <InteriorCameraPlacement insideBuilding={insideBuilding} />
+            <ProximityInteraction
+              buildings={campusBuildings}
+              insideBuilding={insideBuilding}
+              onEnter={setInsideBuilding}
+              onExit={() => setInsideBuilding(null)}
+            />
             <Player campusHook={campusHook} insideBuilding={insideBuilding} />
             
             {/* Camera Controls */}
@@ -799,7 +841,7 @@ const CampusWithBackend = () => {
       {/* Instructions */}
       <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 pointer-events-none">
         <div className="bg-black bg-opacity-75 text-white px-4 py-2 rounded-lg text-sm">
-          Use WASD to move • Space to jump • Shift to run • Click to look around
+          WASD to move • Space to jump • Shift to run • Click to look around • E to enter or leave a building
         </div>
       </div>
     </div>

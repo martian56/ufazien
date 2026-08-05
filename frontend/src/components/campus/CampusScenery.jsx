@@ -195,7 +195,7 @@ export function Building({
               }}
               className="px-2 py-1 rounded bg-blue-600/90 hover:bg-blue-500 text-white text-xs whitespace-nowrap"
             >
-              Enter {name}
+              Enter {name} (E)
             </button>
           </Html>
         )}
