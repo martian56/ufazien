@@ -23,6 +23,12 @@ class Tag(models.Model):
         return self.name
 
 class BlogPost(models.Model):
+    class Visibility(models.TextChoices):
+        PUBLIC = "public", "Public"
+        UNLISTED = "unlisted", "Unlisted"
+        FOLLOWERS = "followers", "Followers only"
+        PRIVATE = "private", "Private"
+
     title = models.CharField(max_length=255)
     content = models.TextField()  # Now stores HTML content
     excerpt = models.CharField(max_length=300, blank=True)
@@ -40,19 +46,52 @@ class BlogPost(models.Model):
     views = models.PositiveIntegerField(default=0)
     is_published = models.BooleanField(default=True)
     is_featured = models.BooleanField(default=False)
+    # The editor has offered this choice since it was written, but never sent
+    # it: picking "Private" published the post to everyone. Enforced in
+    # BlogPost.visible_to now, not in the browser.
+    visibility = models.CharField(
+        max_length=20, choices=Visibility.choices, default=Visibility.PUBLIC
+    )
 
     class Meta:
         # Drafts have no published_at, so fall back to when they were created.
         ordering = ['-published_at', '-created_at']
 
+    @property
+    def is_scheduled(self):
+        """Published, but dated forward, so not live yet."""
+        return bool(self.is_published and self.published_at and self.published_at > timezone.now())
+
     def save(self, *args, **kwargs):
         # Stamp the moment it actually goes live, and clear it if unpublished
         # so a repost is dated correctly rather than keeping the old date.
+        # A date the author picked is kept as-is, including a future one: that
+        # is how scheduling works here, with visible_to filtering on the clock
+        # rather than a worker flipping a flag.
         if self.is_published and self.published_at is None:
             self.published_at = timezone.now()
         elif not self.is_published:
             self.published_at = None
         super().save(*args, **kwargs)
+
+    @classmethod
+    def visible_to(cls, user):
+        """Posts `user` is allowed to see, by visibility and publish time.
+
+        Authors always see their own, whatever the setting and whenever it is
+        scheduled for. Everyone else sees public posts that are live, plus
+        followers-only posts by authors they follow. Unlisted posts stay out of
+        listings but remain reachable by direct link, so the detail view widens
+        this rather than reusing it unchanged.
+        """
+        own = models.Q(author=user)
+        live = models.Q(is_published=True) & (
+            models.Q(published_at__isnull=True) | models.Q(published_at__lte=timezone.now())
+        )
+        allowed = models.Q(visibility=cls.Visibility.PUBLIC) | models.Q(
+            visibility=cls.Visibility.FOLLOWERS, author__followers=user
+        )
+        return cls.objects.filter(own | (live & allowed))
 
     def __str__(self):
         return self.title

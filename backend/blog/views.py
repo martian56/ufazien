@@ -6,6 +6,10 @@ from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
+from django.utils import timezone
+
+from collections import Counter
+from datetime import timedelta
 
 from .models import (
     BlogPost, BlogPostLike, BlogPostBookmark, BlogPostView, Tag, Category, Comment, CommentLike
@@ -56,7 +60,14 @@ class BlogPostApiView(generics.ListCreateAPIView):
         if status_filter == "draft":
             queryset = queryset.filter(is_published=False, author=user)
         else:
-            queryset = queryset.filter(Q(is_published=True) | Q(author=user))
+            # visible_to also enforces the visibility setting and holds back
+            # posts dated into the future. Unlisted posts are deliberately
+            # absent from listings; they open fine by direct link.
+            queryset = queryset.filter(
+                pk__in=BlogPost.visible_to(user)
+                .exclude(visibility=BlogPost.Visibility.UNLISTED)
+                .values("pk")
+            )
 
         category = self.request.query_params.get("category")
         tag = self.request.query_params.get("tag")
@@ -123,10 +134,23 @@ class BlogPostDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        """Someone else's draft should 404, not merely be absent from lists."""
-        return super().get_queryset().filter(
-            Q(is_published=True) | Q(author=self.request.user)
+        """Someone else's draft should 404, not merely be absent from lists.
+
+        Unlisted posts are included here and excluded from listings: that is
+        precisely what unlisted means. Private posts, followers-only posts from
+        someone you do not follow, and posts scheduled for later are reachable
+        only by their author, and 404 for everyone else.
+        """
+        user = self.request.user
+        live = Q(is_published=True) & (
+            Q(published_at__isnull=True) | Q(published_at__lte=timezone.now())
         )
+        reachable = (
+            Q(visibility=BlogPost.Visibility.PUBLIC)
+            | Q(visibility=BlogPost.Visibility.UNLISTED)
+            | Q(visibility=BlogPost.Visibility.FOLLOWERS, author__followers=user)
+        )
+        return super().get_queryset().filter(Q(author=user) | (live & reachable)).distinct()
 
     def get_serializer_context(self):
         return {'request': self.request}
@@ -199,7 +223,7 @@ class ToggleBookmarkView(APIView):
         user = request.user if user_id in [None, "me"] else get_object_or_404(User, pk=user_id)
         
         # Get queryset of bookmarked posts (use QuerySet for better performance)
-        bookmarked_posts = BlogPost.objects.filter(
+        bookmarked_posts = BlogPost.visible_to(user).filter(
             id__in=BlogPostBookmark.objects.filter(user=user).values_list('post_id', flat=True)
         ).select_related('author', 'category').prefetch_related('tags', 'comments')
         
@@ -333,7 +357,9 @@ class PopularPostsView(APIView):
         limit = int(request.query_params.get('limit', 5))
         
         # Get posts ordered by likes count
-        popular_posts = BlogPost.objects.select_related('author', 'category').prefetch_related('tags').annotate(
+        popular_posts = BlogPost.visible_to(request.user).exclude(
+            visibility=BlogPost.Visibility.UNLISTED
+        ).select_related('author', 'category').prefetch_related('tags').annotate(
             likes_count=Count('likes')
         ).order_by('-likes_count', '-published_at')[:limit]
         
@@ -380,3 +406,57 @@ class CommentLikeView(APIView):
             return Response({'liked': False}, status=status.HTTP_200_OK)
         
         return Response({'liked': True}, status=status.HTTP_201_CREATED)
+
+
+class MyWritingStatsView(APIView):
+    """Writing statistics for the requesting user, from their own posts.
+
+    The editor's stats panel used to be entirely fabricated: the streak was a
+    useState(0) nothing ever set, and "Best Time: Morning" and "Avg. Speed:
+    45 WPM" were literals in the JSX. Everything here is counted from the
+    author's rows, and anything that cannot be counted is not shown.
+
+    Scoped to request.user throughout. Another author's writing habits are
+    not something to hand out.
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        posts = BlogPost.objects.filter(author=request.user)
+
+        today = timezone.localdate()
+        # Distinct calendar days this author created something.
+        active_days = {
+            created.astimezone(timezone.get_current_timezone()).date()
+            for created in posts.values_list("created_at", flat=True)
+        }
+
+        # A streak still counts if today has no post yet but yesterday does,
+        # otherwise the number would drop to zero every morning and only
+        # reappear once you had written.
+        streak = 0
+        cursor = today if today in active_days else today - timedelta(days=1)
+        while cursor in active_days:
+            streak += 1
+            cursor -= timedelta(days=1)
+
+        week_start = today - timedelta(days=6)
+        posts_this_week = sum(1 for day in active_days if day >= week_start)
+
+        # The hour this author writes in most often, if there is enough to
+        # tell. Below the threshold a single post would declare a habit.
+        hour_counts = Counter(
+            created.astimezone(timezone.get_current_timezone()).hour
+            for created in posts.values_list("created_at", flat=True)
+        )
+        best_hour = hour_counts.most_common(1)[0][0] if sum(hour_counts.values()) >= 3 else None
+
+        return Response({
+            "streak_days": streak,
+            "posts_this_week": posts_this_week,
+            "published": posts.filter(is_published=True).count(),
+            "drafts": posts.filter(is_published=False).count(),
+            "best_hour": best_hour,
+            "active_days": len(active_days),
+        })

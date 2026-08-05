@@ -66,8 +66,12 @@ class BlogPostSerializer(serializers.ModelSerializer):
         child=serializers.CharField(), write_only=True, required=False
     )
     tags = serializers.SerializerMethodField()
-    published_at = serializers.DateTimeField(read_only=True)
+    # Writable so an author can schedule: a future published_at keeps the post
+    # out of listings until it arrives. It stays optional, and save() still
+    # stamps "now" when a post goes live without one.
+    published_at = serializers.DateTimeField(required=False, allow_null=True)
     updated_at = serializers.DateTimeField(read_only=True)
+    is_scheduled = serializers.BooleanField(read_only=True)
     comments = serializers.SerializerMethodField()
     views = serializers.IntegerField(read_only=True)
     is_liked = serializers.SerializerMethodField()
@@ -99,6 +103,8 @@ class BlogPostSerializer(serializers.ModelSerializer):
             'is_bookmarked',
             'is_published',
             'is_featured',
+            'visibility',
+            'is_scheduled',
             'created_at',
         ]
         extra_kwargs = {

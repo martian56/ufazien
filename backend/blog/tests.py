@@ -6,9 +6,12 @@ from django.core.exceptions import ValidationError
 from rest_framework.test import APITestCase, APIClient
 from rest_framework import status
 from decimal import Decimal
+from datetime import timedelta
+from django.utils import timezone
 import tempfile
 import os
 
+from .security import rate_limiter
 from .models import (
     Category, Tag, BlogPost, Comment, BlogPostBookmark, 
     BlogPostLike, BlogPostView, CommentLike
@@ -635,3 +638,226 @@ class DraftSavingTests(APITestCase):
             f"/api/blog/posts/{post_id}/", {"content": "<p>b</p>"}, format="json"
         )
         self.assertEqual(BlogPost.objects.filter(author=self.author).count(), 1)
+
+
+class WritingStatsTests(APITestCase):
+    """The editor's stats panel was fabricated; these guard the real numbers."""
+
+    def setUp(self):
+        self.author = User.objects.create_user(username="statsauthor", password="pw")
+        self.other = User.objects.create_user(username="otherauthor", password="pw")
+        self.client.force_authenticate(user=self.author)
+
+    def _post_on(self, day, author=None, published=True):
+        post = BlogPost.objects.create(
+            title="p",
+            content="<p>x</p>",
+            author=author or self.author,
+            read_time="1",
+            is_published=published,
+        )
+        # created_at is auto_now_add, so it has to be set after the fact.
+        BlogPost.objects.filter(pk=post.pk).update(created_at=day)
+        return post
+
+    def test_streak_counts_back_from_today(self):
+        now = timezone.now()
+        for days_ago in (0, 1, 2):
+            self._post_on(now - timedelta(days=days_ago))
+        # A gap, then an older run that must not be counted.
+        self._post_on(now - timedelta(days=5))
+
+        body = self.client.get("/api/blog/my-stats/").json()
+        self.assertEqual(body["streak_days"], 3)
+
+    def test_streak_survives_a_day_with_no_post_yet(self):
+        """Yesterday and before still counts until today has passed."""
+        now = timezone.now()
+        self._post_on(now - timedelta(days=1))
+        self._post_on(now - timedelta(days=2))
+
+        body = self.client.get("/api/blog/my-stats/").json()
+        self.assertEqual(body["streak_days"], 2)
+
+    def test_streak_is_zero_when_the_last_post_is_old(self):
+        self._post_on(timezone.now() - timedelta(days=3))
+        body = self.client.get("/api/blog/my-stats/").json()
+        self.assertEqual(body["streak_days"], 0)
+
+    def test_two_posts_on_one_day_count_as_one_day(self):
+        now = timezone.now()
+        self._post_on(now)
+        self._post_on(now)
+        body = self.client.get("/api/blog/my-stats/").json()
+        self.assertEqual(body["streak_days"], 1)
+        self.assertEqual(body["posts_this_week"], 1)
+
+    def test_another_author_posts_are_not_counted(self):
+        self._post_on(timezone.now(), author=self.other)
+        body = self.client.get("/api/blog/my-stats/").json()
+        self.assertEqual(body["streak_days"], 0)
+        self.assertEqual(body["published"], 0)
+
+    def test_published_and_drafts_are_counted_separately(self):
+        now = timezone.now()
+        self._post_on(now, published=True)
+        self._post_on(now, published=False)
+        body = self.client.get("/api/blog/my-stats/").json()
+        self.assertEqual(body["published"], 1)
+        self.assertEqual(body["drafts"], 1)
+
+    def test_best_hour_needs_enough_posts_to_mean_anything(self):
+        now = timezone.now()
+        self._post_on(now)
+        self.assertIsNone(self.client.get("/api/blog/my-stats/").json()["best_hour"])
+
+        self._post_on(now - timedelta(days=1))
+        self._post_on(now - timedelta(days=2))
+        self.assertIsNotNone(self.client.get("/api/blog/my-stats/").json()["best_hour"])
+
+    def test_stats_require_authentication(self):
+        self.client.force_authenticate(user=None)
+        self.assertEqual(self.client.get("/api/blog/my-stats/").status_code, 401)
+
+
+class PostVisibilityTests(APITestCase):
+    """The editor offered Public/Unlisted/Private/Friends and sent none of it.
+
+    Choosing "Private" published to everyone. These pin down who can actually
+    reach a post now that the choice is enforced server-side.
+    """
+
+    def setUp(self):
+        # The post rate limiter is a module-level dict, so its counts survive
+        # from one test to the next and the sixth post in a class 429s.
+        rate_limiter.requests.clear()
+        self.author = User.objects.create_user(username="vauthor", password="pw")
+        self.stranger = User.objects.create_user(username="vstranger", password="pw")
+        self.follower = User.objects.create_user(username="vfollower", password="pw")
+        self.author.followers.add(self.follower)
+
+    def _post(self, visibility, published_at=None):
+        post = BlogPost.objects.create(
+            title="t",
+            content="<p>c</p>",
+            author=self.author,
+            read_time="1",
+            is_published=True,
+            visibility=visibility,
+        )
+        if published_at:
+            BlogPost.objects.filter(pk=post.pk).update(published_at=published_at)
+        return post
+
+    def _list_ids(self, user):
+        self.client.force_authenticate(user=user)
+        body = self.client.get("/api/blog/posts/").json()
+        return {p["id"] for p in body["results"]}
+
+    def _detail_status(self, user, post):
+        self.client.force_authenticate(user=user)
+        return self.client.get(f"/api/blog/posts/{post.id}/").status_code
+
+    def test_private_post_is_invisible_to_everyone_but_its_author(self):
+        post = self._post(BlogPost.Visibility.PRIVATE)
+        self.assertNotIn(post.id, self._list_ids(self.stranger))
+        self.assertEqual(self._detail_status(self.stranger, post), 404)
+        self.assertIn(post.id, self._list_ids(self.author))
+        self.assertEqual(self._detail_status(self.author, post), 200)
+
+    def test_unlisted_post_is_hidden_from_listings_but_opens_by_link(self):
+        post = self._post(BlogPost.Visibility.UNLISTED)
+        self.assertNotIn(post.id, self._list_ids(self.stranger))
+        self.assertEqual(self._detail_status(self.stranger, post), 200)
+
+    def test_followers_only_post_reaches_followers_and_no_one_else(self):
+        post = self._post(BlogPost.Visibility.FOLLOWERS)
+        self.assertIn(post.id, self._list_ids(self.follower))
+        self.assertEqual(self._detail_status(self.follower, post), 200)
+        self.assertNotIn(post.id, self._list_ids(self.stranger))
+        self.assertEqual(self._detail_status(self.stranger, post), 404)
+
+    def test_public_post_reaches_everyone(self):
+        post = self._post(BlogPost.Visibility.PUBLIC)
+        self.assertIn(post.id, self._list_ids(self.stranger))
+        self.assertEqual(self._detail_status(self.stranger, post), 200)
+
+    def test_a_post_dated_in_the_future_is_not_live_yet(self):
+        post = self._post(
+            BlogPost.Visibility.PUBLIC, published_at=timezone.now() + timedelta(days=2)
+        )
+        self.assertNotIn(post.id, self._list_ids(self.stranger))
+        self.assertEqual(self._detail_status(self.stranger, post), 404)
+        # Its author can still see and finish it.
+        self.assertIn(post.id, self._list_ids(self.author))
+        self.assertEqual(self._detail_status(self.author, post), 200)
+
+    def test_a_scheduled_post_becomes_visible_once_its_time_passes(self):
+        post = self._post(
+            BlogPost.Visibility.PUBLIC, published_at=timezone.now() + timedelta(minutes=5)
+        )
+        self.assertEqual(self._detail_status(self.stranger, post), 404)
+
+        BlogPost.objects.filter(pk=post.pk).update(published_at=timezone.now() - timedelta(minutes=1))
+        self.assertEqual(self._detail_status(self.stranger, post), 200)
+        self.assertIn(post.id, self._list_ids(self.stranger))
+
+    def test_visibility_defaults_to_public_so_existing_posts_are_unaffected(self):
+        post = BlogPost.objects.create(
+            title="t", content="<p>c</p>", author=self.author, read_time="1"
+        )
+        self.assertEqual(post.visibility, BlogPost.Visibility.PUBLIC)
+        self.assertIn(post.id, self._list_ids(self.stranger))
+
+    def test_author_can_set_visibility_when_publishing(self):
+        self.client.force_authenticate(user=self.author)
+        category = Category.objects.create(name="Cat")
+        created = self.client.post(
+            "/api/blog/posts/",
+            {
+                "title": "Secret",
+                "content": "<p>hidden</p>",
+                "category": category.id,
+                "visibility": "private",
+            },
+            format="json",
+        )
+        self.assertEqual(created.status_code, 201, created.content[:400])
+        self.assertEqual(created.json()["visibility"], "private")
+        self.assertNotIn(created.json()["id"], self._list_ids(self.stranger))
+
+    def test_author_can_schedule_by_sending_a_future_published_at(self):
+        self.client.force_authenticate(user=self.author)
+        category = Category.objects.create(name="Cat2")
+        when = timezone.now() + timedelta(days=1)
+        created = self.client.post(
+            "/api/blog/posts/",
+            {
+                "title": "Later",
+                "content": "<p>soon</p>",
+                "category": category.id,
+                "published_at": when.isoformat(),
+            },
+            format="json",
+        )
+        self.assertEqual(created.status_code, 201, created.content[:400])
+        self.assertTrue(created.json()["is_scheduled"])
+        self.assertNotIn(created.json()["id"], self._list_ids(self.stranger))
+
+    def test_private_posts_stay_out_of_popular(self):
+        post = self._post(BlogPost.Visibility.PRIVATE)
+        self.client.force_authenticate(user=self.stranger)
+        popular = self.client.get("/api/blog/posts/popular/").json()
+        self.assertNotIn(post.id, {p["id"] for p in popular})
+
+    def test_a_bookmarked_post_turned_private_stops_being_served(self):
+        post = self._post(BlogPost.Visibility.PUBLIC)
+        BlogPostBookmark.objects.create(user=self.stranger, post=post)
+        self.client.force_authenticate(user=self.stranger)
+
+        before = self.client.get("/api/blog/bookmarks/me/").json()
+        self.assertIn(post.id, {p["id"] for p in before["results"]})
+
+        BlogPost.objects.filter(pk=post.pk).update(visibility=BlogPost.Visibility.PRIVATE)
+        after = self.client.get("/api/blog/bookmarks/me/").json()
+        self.assertNotIn(post.id, {p["id"] for p in after["results"]})
