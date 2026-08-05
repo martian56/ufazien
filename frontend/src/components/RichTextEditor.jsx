@@ -249,19 +249,19 @@ const MenuBar = ({ editor, darkMode }) => {
         // Validate file before upload
         const validation = validateImageFile(file)
         if (!validation.valid) {
-          toast?.error(`Upload failed: ${validation.error}`) || alert(`Upload failed: ${validation.error}`)
+          reportUploadProblem(`Upload failed: ${validation.error}`)
           return
         }
 
         // Check rate limiting
         const userIdentifier = localStorage.getItem('user_id') || 'anonymous'
         if (!uploadRateLimiter.isAllowed(userIdentifier)) {
-          toast?.error('Upload rate limit exceeded. Please wait before uploading again.') || alert('Upload rate limit exceeded. Please wait before uploading again.')
+          reportUploadProblem('Upload rate limit exceeded. Please wait before uploading again.')
           return
         }
 
         if (!isAuthenticated()) {
-          toast?.error('Authentication required for image upload.') || alert('Authentication required for image upload.')
+          reportUploadProblem('Authentication required for image upload.')
           return
         }
 
@@ -277,15 +277,15 @@ const MenuBar = ({ editor, darkMode }) => {
           if (data.url && isValidImageUrl(data.url)) {
             editor.chain().focus().setImage({ src: data.url }).run()
           } else {
-            toast?.error('Invalid image URL returned from server.') || alert('Invalid image URL returned from server.')
+            reportUploadProblem('Invalid image URL returned from server.')
           }
         } catch (uploadError) {
           const reason = uploadError instanceof ApiError ? uploadError.userMessage : 'Unknown error'
-          toast?.error(`Failed to upload image: ${reason}`) || alert(`Failed to upload image: ${reason}`)
+          reportUploadProblem(`Failed to upload image: ${reason}`)
         }
       } catch (error) {
         console.error('Image upload error:', error)
-        toast?.error('Failed to upload image. Please try again.') || alert('Failed to upload image. Please try again.')
+        reportUploadProblem('Failed to upload image. Please try again.')
       }
     }
     
@@ -318,7 +318,7 @@ const MenuBar = ({ editor, darkMode }) => {
       // Only allow safe protocols
       const allowedProtocols = ['http:', 'https:', 'mailto:', 'tel:']
       if (!allowedProtocols.includes(urlObj.protocol)) {
-        toast?.error('Invalid URL protocol. Only HTTP, HTTPS, mailto, and tel are allowed.') || alert('Invalid URL protocol. Only HTTP, HTTPS, mailto, and tel are allowed.')
+        reportUploadProblem('Invalid URL protocol. Only HTTP, HTTPS, mailto, and tel are allowed.')
         return
       }
 
@@ -329,7 +329,7 @@ const MenuBar = ({ editor, darkMode }) => {
         target: '_blank'
       }).run()
     } catch (error) {
-      toast?.error('Invalid URL format. Please enter a valid URL.') || alert('Invalid URL format. Please enter a valid URL.')
+      reportUploadProblem('Invalid URL format. Please enter a valid URL.')
     }
   }, [editor])
 
@@ -646,6 +646,18 @@ const MenuBar = ({ editor, darkMode }) => {
       </div>
     </div>
   )
+}
+
+
+/**
+ * Surface an upload problem.
+ *
+ * These call sites read `toast?.error(...) || alert(...)`, but `toast` was
+ * never defined in this file, so the optional chaining did not save them: the
+ * bare identifier threw ReferenceError and the user saw nothing at all.
+ */
+function reportUploadProblem(message) {
+  alert(message)
 }
 
 const RichTextEditor = ({ content, onChange, darkMode = false, placeholder = "Start writing...", toast }) => {
