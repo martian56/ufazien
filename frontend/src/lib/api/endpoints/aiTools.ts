@@ -89,6 +89,13 @@ export const aiToolsApi = {
     }
   },
 
+  /**
+   * Run any tool and wait for the result.
+   *
+   * /process/ has always accepted every tool type and services.py implements
+   * all four, but only the humanizer had a page: paraphrase, summarize and
+   * grammar were reachable by API and nowhere else.
+   */
   async processTextAndWait(
     toolType: string,
     inputText: string,

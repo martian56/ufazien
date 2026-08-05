@@ -20,6 +20,9 @@ import CampusSimulatorMenuV2 from "./pages/game/CampusSimulatorMenuV2"
 import CampusWithBackend from "./pages/game/CampusWithBackend"
 import AiToolsMenu from "./pages/ai-tools/AiToolsMenu"
 import Humanizer from "./pages/ai-tools/humanizer/Humanizer"
+import Paraphraser from "./pages/ai-tools/paraphraser/Paraphraser"
+import Summarizer from "./pages/ai-tools/summarizer/Summarizer"
+import GrammarAssistant from "./pages/ai-tools/grammar/GrammarAssistant"
 import Hosting from "./pages/hosting/Hosting"
 import WebsiteDetail from "./pages/hosting/WebsiteDetail"
 import Websites from "./pages/hosting/Websites"
@@ -84,6 +87,9 @@ function App() {
         <Route path="/campus-simulator" element={<ProtectedRoute><CampusSimulatorMenuV2 /></ProtectedRoute>} />
         <Route path="/ai-tools" element={<ProtectedRoute><AiToolsMenu /></ProtectedRoute>} />
         <Route path="/ai-tools/humanizer" element={<ProtectedRoute><Humanizer /></ProtectedRoute>} />
+        <Route path="/ai-tools/paraphraser" element={<ProtectedRoute><Paraphraser /></ProtectedRoute>} />
+        <Route path="/ai-tools/summarizer" element={<ProtectedRoute><Summarizer /></ProtectedRoute>} />
+        <Route path="/ai-tools/grammar-checker" element={<ProtectedRoute><GrammarAssistant /></ProtectedRoute>} />
         <Route path="/user-sites" element={<ProtectedRoute><UserSites /></ProtectedRoute>} />
         <Route path="/api-test" element={<ApiTest />} />
         {/* Hosting routes with subscription context */}
