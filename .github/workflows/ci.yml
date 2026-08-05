@@ -76,6 +76,13 @@ jobs:
         run: bun run lint
         continue-on-error: true
 
+      - name: Check for undefined references
+        working-directory: frontend
+        # A reference to something that does not exist throws at runtime and the
+        # bundler does not catch it. The main lint step is advisory because of
+        # pre-existing style problems, so this class of bug gets its own gate.
+        run: bun run lint:undef
+
       - name: Typecheck
         working-directory: frontend
         run: bun run typecheck

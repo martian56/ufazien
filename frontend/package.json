@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint:undef": "eslint src --config eslint.undef.config.js --no-inline-config"
   },
   "dependencies": {
     "@react-oauth/google": "^0.12.2",
