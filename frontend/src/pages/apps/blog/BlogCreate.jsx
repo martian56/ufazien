@@ -8,6 +8,12 @@ import "../../../components/RichTextEditor.css"
 import "../../../components/BlogContent.css"
 import { sanitizeText, sanitizeHtml, apiRateLimiter } from "../../../utils/security"
 import { useDraft } from "../../../features/blog/useDraft"
+import FocusTimer from "../../../features/blog/editor/FocusTimer"
+import PostSettingsPanel from "../../../features/blog/editor/PostSettingsPanel"
+import SeoScorePanel from "../../../features/blog/editor/SeoScorePanel"
+import TemplatePicker from "../../../features/blog/editor/TemplatePicker"
+import WritingAssistant from "../../../features/blog/editor/WritingAssistant"
+import WritingStatsPanel from "../../../features/blog/editor/WritingStatsPanel"
 import { blogApi } from "../../../lib/api/endpoints/blog"
 import { api } from "../../../lib/api/client"
 import { toList } from "../../../lib/api/types"
@@ -18,44 +24,13 @@ import {
   Save,
   Eye,
   Send,
-  ImageIcon,
   Link,
-  Bold,
-  Italic,
-  Underline,
-  List,
-  ListOrdered,
-  Quote,
-  Code,
-  Heading1,
-  Heading2,
-  Heading3,
-  FileText,
-  Users,
-  Sparkles,
-  Zap,
-  BookOpen,
-  Target,
-  TrendingUp,
-  Search,
-  X,
-  Plus,
-  Clock,
-  Settings,
   Moon,
   Sun,
-  Volume2,
-  VolumeX,
   Play,
-  Pause,
-  RotateCcw,
   Maximize,
   Minimize,
-  Award,
-  Trophy,
-  Lightbulb,
-  Rocket,
-  ChevronLeft
+  ChevronLeft,
 } from "lucide-react"
 
 
@@ -70,8 +45,6 @@ const BlogCreate = () => {
   const [category, setCategory] = useState('');
   const [visibility, setVisibility] = useState('public');
   const [publishDate, setPublishDate] = useState('');
-  const [featuredImage, setFeaturedImage] = useState('');
-  const [isDraft, setIsDraft] = useState(true);
   const [isPreview, setIsPreview] = useState(false);
 
   // API state
@@ -93,15 +66,11 @@ const BlogCreate = () => {
   const [focusMode, setFocusMode] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const [autoSave, setAutoSave] = useState(true);
-  const [lastSaved, setLastSaved] = useState(null);
   const [isTyping, setIsTyping] = useState(false);
   const [typingTimer, setTypingTimer] = useState(null);
 
   // Editor state
   const [selectedText, setSelectedText] = useState('');
-  const [cursorPosition, setCursorPosition] = useState(0);
-  const [undoStack, setUndoStack] = useState([]);
-  const [redoStack, setRedoStack] = useState([]);
   const [fontSize, setFontSize] = useState(16);
   const [fontFamily, setFontFamily] = useState('Inter');
   const [lineHeight, setLineHeight] = useState(1.6);
@@ -113,26 +82,15 @@ const BlogCreate = () => {
   const [currentTimer, setCurrentTimer] = useState(pomodoroTime);
   const [isBreak, setIsBreak] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
-  const [backgroundMusic, setBackgroundMusic] = useState(false);
-  const [distractionBlocker, setDistractionBlocker] = useState(false);
 
   // Analytics and insights
-  const [writingStreak, setWritingStreak] = useState(0);
-  const [dailyGoal, setDailyGoal] = useState(1000);
-  const [weeklyStats, setWeeklyStats] = useState({});
-  const [writingHabits, setWritingHabits] = useState({});
-  const [bestWritingTime, setBestWritingTime] = useState('');
 
   // Collaboration features
-  const [collaborators, setCollaborators] = useState([]);
-  const [comments, setComments] = useState([]);
   const [suggestions, setSuggestions] = useState([]);
-  const [reviewMode, setReviewMode] = useState(false);
 
   // Templates and snippets
   const [templates, setTemplates] = useState([]);
   const [snippets, setSnippets] = useState([]);
-  const [customSnippets, setCustomSnippets] = useState([]);
 
   // References
   const editorRef = useRef(null);
@@ -511,6 +469,11 @@ const BlogCreate = () => {
         tag_names: tagNames,
         read_time: String(calculateReadTime(sanitizedContent)),
         is_featured: false, // Can be set later through admin or separate feature
+        // Both controls existed in the sidebar from the start and neither was
+        // ever sent, so "Private" published to everyone and a publish date did
+        // nothing at all.
+        visibility,
+        ...(publishDate ? { published_at: new Date(publishDate).toISOString() } : {}),
       };
 
       // This used to POST a new post every time, so publishing a draft you had
@@ -522,7 +485,6 @@ const BlogCreate = () => {
         return;
       }
 
-      setIsDraft(false);
       toast.success('Blog post published.');
       navigate(`/blog/${published.id}`);
     } catch (error) {
@@ -569,22 +531,13 @@ const BlogCreate = () => {
     const newText = content.substring(0, start) + before + selectedText + after + content.substring(end);
     
     setContent(newText);
-    
-    // Save to undo stack
-    setUndoStack(prev => [...prev, content]);
-    setRedoStack([]);
-    
+
     setTimeout(() => {
       textarea.focus();
       textarea.setSelectionRange(start + before.length, start + before.length + selectedText.length);
     }, 0);
   };
 
-  const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
 
   const loadTemplate = (template) => {
     setContent(template.content);
@@ -645,8 +598,8 @@ const BlogCreate = () => {
               <div className="hidden sm:flex items-center space-x-4 text-sm text-gray-500">
                 <span>{wordCount} words</span>
                 <span>{readingTime} min read</span>
-                {lastSaved && (
-                  <span>Saved {lastSaved.toLocaleTimeString()}</span>
+                {draftLastSaved && (
+                  <span>Saved {draftLastSaved.toLocaleTimeString()}</span>
                 )}
               </div>
               
@@ -778,344 +731,64 @@ const BlogCreate = () => {
           {/* Sidebar */}
           {!focusMode && (
             <div className="space-y-6">
-              {/* Pomodoro Timer */}
-              <div className={`rounded-xl shadow-sm border p-6 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold flex items-center">
-                    <Clock className="w-4 h-4 mr-2" />
-                    Focus Timer
-                  </h3>
-                  <button
-                    onClick={() => setSoundEnabled(!soundEnabled)}
-                    className={`p-1 rounded ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
-                  >
-                    {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-                  </button>
-                </div>
-                
-                <div className="text-center">
-                  <div className={`text-3xl font-mono font-bold mb-4 ${isBreak ? 'text-green-500' : 'text-blue-500'}`}>
-                    {formatTime(currentTimer)}
-                  </div>
-                  <div className="text-sm text-gray-500 mb-4">
-                    {isBreak ? 'Break Time' : 'Focus Time'}
-                  </div>
-                  
-                  <div className="flex justify-center space-x-2">
-                    <button
-                      onClick={() => setPomodoroActive(!pomodoroActive)}
-                      className={`flex items-center space-x-2 px-2.5 sm:px-4 py-2 rounded-lg transition-colors ${
-                        pomodoroActive 
-                          ? 'bg-red-500 hover:bg-red-600 text-white' 
-                          : 'bg-blue-500 hover:bg-blue-600 text-white'
-                      }`}
-                    >
-                      {pomodoroActive ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-                      <span>{pomodoroActive ? 'Pause' : 'Start'}</span>
-                    </button>
-                    
-                    <button
-                      onClick={() => {
-                        setCurrentTimer(isBreak ? breakTime : pomodoroTime);
-                        setPomodoroActive(false);
-                      }}
-                      className={`p-2 rounded-lg transition-colors ${
-                        darkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-200 hover:bg-gray-300'
-                      }`}
-                    >
-                      <RotateCcw className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              </div>
+              <FocusTimer
+                darkMode={darkMode}
+                currentTimer={currentTimer}
+                isBreak={isBreak}
+                active={pomodoroActive}
+                onToggle={() => setPomodoroActive(!pomodoroActive)}
+                onReset={() => {
+                  setCurrentTimer(isBreak ? breakTime : pomodoroTime);
+                  setPomodoroActive(false);
+                }}
+                soundEnabled={soundEnabled}
+                onToggleSound={() => setSoundEnabled(!soundEnabled)}
+              />
 
-              {/* AI Writing Assistant */}
-              <div className={`rounded-xl shadow-sm border p-6 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold flex items-center">
-                    <Sparkles className="w-4 h-4 mr-2" />
-                    AI Assistant
-                  </h3>
-                  <button
-                    onClick={generateAISuggestion}
-                    className="p-1 rounded bg-gradient-to-r from-blue-500 to-purple-500 text-white hover:from-blue-600 hover:to-purple-600"
-                  >
-                    <Plus className="w-4 h-4" />
-                  </button>
-                </div>
-                
-                <div className="space-y-3">
-                  {aiSuggestions.slice(-3).map((suggestion) => (
-                    <div key={suggestion.id} className={`p-3 rounded-lg text-sm ${darkMode ? 'bg-gray-700' : 'bg-blue-50'}`}>
-                      <div className="flex items-start space-x-2">
-                        <Lightbulb className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
-                        <p>{suggestion.text}</p>
-                      </div>
-                    </div>
-                  ))}
-                  
-                  {aiSuggestions.length === 0 && (
-                    <p className="text-gray-500 text-sm text-center py-4">
-                      Click + to get AI writing suggestions
-                    </p>
-                  )}
-                </div>
-              </div>
+              <WritingAssistant
+                darkMode={darkMode}
+                suggestions={aiSuggestions}
+                onGenerate={generateAISuggestion}
+              />
 
-              {/* SEO Score */}
-              <div className={`rounded-xl shadow-sm border p-6 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
-                <h3 className="font-semibold flex items-center mb-4">
-                  <TrendingUp className="w-4 h-4 mr-2" />
-                  SEO Score
-                </h3>
-                
-                <div className="text-center">
-                  <div className={`text-3xl font-bold mb-2 ${
-                    seoScore >= 80 ? 'text-green-500' : 
-                    seoScore >= 60 ? 'text-yellow-500' : 'text-red-500'
-                  }`}>
-                    {seoScore}/100
-                  </div>
-                  
-                  <div className={`w-full h-2 rounded-full mb-4 ${darkMode ? 'bg-gray-700' : 'bg-gray-200'}`}>
-                    <div 
-                      className={`h-2 rounded-full transition-all duration-300 ${
-                        seoScore >= 80 ? 'bg-green-500' : 
-                        seoScore >= 60 ? 'bg-yellow-500' : 'bg-red-500'
-                      }`}
-                      style={{ width: `${seoScore}%` }}
-                    ></div>
-                  </div>
-                  
-                  <div className="text-xs text-gray-500 space-y-1">
-                    <div className={title.length > 30 && title.length < 60 ? 'text-green-500' : ''}>
-                      ✓ Title length: {title.length}/60
-                    </div>
-                    <div className={excerpt.length > 120 && excerpt.length < 160 ? 'text-green-500' : ''}>
-                      ✓ Meta description: {excerpt.length}/160
-                    </div>
-                    <div className={wordCount > 300 ? 'text-green-500' : ''}>
-                      ✓ Word count: {wordCount}
-                    </div>
-                    <div className={tags.length >= 3 && tags.length <= 8 ? 'text-green-500' : ''}>
-                      ✓ Tags: {tags.length}/8
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <SeoScorePanel
+                darkMode={darkMode}
+                seoScore={seoScore}
+                title={title}
+                excerpt={excerpt}
+                wordCount={wordCount}
+                tagCount={tags.length}
+              />
 
-              {/* Blog Settings */}
-              <div className={`rounded-xl shadow-sm border p-6 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
-                <h3 className="font-semibold flex items-center mb-4">
-                  <Settings className="w-4 h-4 mr-2" />
-                  Post Settings
-                </h3>
-                
-                <div className="space-y-4">
-                  {/* Category */}
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Category</label>
-                    <select
-                      value={category}
-                      onChange={(e) => setCategory(e.target.value)}
-                      className={`w-full p-2 border rounded-lg ${
-                        darkMode 
-                          ? 'bg-gray-700 border-gray-600 text-white' 
-                          : 'bg-white border-gray-300'
-                      }`}
-                      disabled={isLoadingCategories}
-                    >
-                      <option value="">
-                        {isLoadingCategories ? 'Loading categories...' : 'Select a category'}
-                      </option>
-                      {categories.map((cat) => (
-                        <option key={cat.id} value={cat.id}>
-                          {cat.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+              <PostSettingsPanel
+                darkMode={darkMode}
+                categories={categories}
+                isLoadingCategories={isLoadingCategories}
+                category={category}
+                onCategoryChange={setCategory}
+                visibility={visibility}
+                onVisibilityChange={setVisibility}
+                excerpt={excerpt}
+                onExcerptChange={setExcerpt}
+                tags={tags}
+                onRemoveTag={removeTag}
+                onAddTag={addTag}
+                tagInput={tagInput}
+                onTagInputChange={handleTagInputChange}
+                onTagInputKeyPress={handleTagInputKeyPress}
+                tagSuggestions={tagSuggestions}
+                isLoadingTags={isLoadingTags}
+                publishDate={publishDate}
+                onPublishDateChange={setPublishDate}
+              />
 
-                  {/* Visibility */}
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Visibility</label>
-                    <select
-                      value={visibility}
-                      onChange={(e) => setVisibility(e.target.value)}
-                      className={`w-full p-2 border rounded-lg ${
-                        darkMode 
-                          ? 'bg-gray-700 border-gray-600 text-white' 
-                          : 'bg-white border-gray-300'
-                      }`}
-                    >
-                      <option value="public">🌍 Public</option>
-                      <option value="unlisted">🔗 Unlisted</option>
-                      <option value="private">🔒 Private</option>
-                      <option value="friends">👥 Friends Only</option>
-                    </select>
-                  </div>
+              <TemplatePicker
+                darkMode={darkMode}
+                templates={blogTemplates}
+                onSelect={loadTemplate}
+              />
 
-                  {/* Excerpt */}
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Excerpt</label>
-                    <textarea
-                      placeholder="Brief description for SEO and social sharing..."
-                      value={excerpt}
-                      onChange={(e) => {
-                        const value = e.target.value
-                        // Limit excerpt length
-                        if (value.length <= 300) {
-                          setExcerpt(value)
-                        }
-                      }}
-                      rows={3}
-                      maxLength="300"
-                      className={`w-full p-2 border rounded-lg resize-none ${
-                        darkMode 
-                          ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' 
-                          : 'bg-white border-gray-300 placeholder-gray-500'
-                      }`}
-                    />
-                    <div className="text-xs text-gray-500 mt-1">
-                      {excerpt.length}/300 characters
-                    </div>
-                  </div>
-
-                  {/* Tags */}
-                  <div>
-                    <label className="block text-sm font-medium mb-2">
-                      Tags {isLoadingTags && <span className="text-xs text-gray-500">(Loading...)</span>}
-                    </label>
-                    <div className="flex flex-wrap gap-2 mb-2">
-                      {tags.map((tag) => (
-                        <span
-                          key={tag}
-                          className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800"
-                        >
-                          #{tag}
-                          <button
-                            onClick={() => removeTag(tag)}
-                            className="ml-1 hover:text-blue-600"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        placeholder="Type to search or create tags..."
-                        value={tagInput}
-                        onChange={(e) => handleTagInputChange(e.target.value)}
-                        onKeyPress={handleTagInputKeyPress}
-                        className={`w-full p-2 border rounded-lg ${
-                          darkMode 
-                            ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' 
-                            : 'bg-white border-gray-300 placeholder-gray-500'
-                        }`}
-                        disabled={isLoadingTags}
-                      />
-                      {tagSuggestions.length > 0 && (
-                        <div className={`absolute z-10 w-full mt-1 border rounded-lg shadow-lg max-h-40 overflow-y-auto ${
-                          darkMode ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-300'
-                        }`}>
-                          {tagSuggestions.map((suggestion) => (
-                            <button
-                              key={suggestion.id}
-                              onClick={() => addTag(suggestion.name)}
-                              className={`w-full px-3 py-2 text-left hover:bg-opacity-50 ${
-                                darkMode ? 'hover:bg-gray-600' : 'hover:bg-gray-100'
-                              }`}
-                            >
-                              #{suggestion.name}
-                            </button>
-                          ))}
-                          {tagInput.trim() && !tagSuggestions.find(s => s.name.toLowerCase() === tagInput.toLowerCase()) && (
-                            <button
-                              onClick={() => addTag(tagInput.trim())}
-                              className={`w-full px-3 py-2 text-left border-t ${
-                                darkMode 
-                                  ? 'border-gray-600 text-green-400 hover:bg-gray-600' 
-                                  : 'border-gray-200 text-green-600 hover:bg-gray-100'
-                              }`}
-                            >
-                              + Create "{tagInput.trim()}"
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                    <div className="text-xs text-gray-500 mt-1">
-                      {tags.length}/10 tags • Press Enter to add
-                    </div>
-                  </div>
-
-                  {/* Publish Date */}
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Publish Date</label>
-                    <input
-                      type="datetime-local"
-                      value={publishDate}
-                      onChange={(e) => setPublishDate(e.target.value)}
-                      className={`w-full p-2 border rounded-lg ${
-                        darkMode 
-                          ? 'bg-gray-700 border-gray-600 text-white' 
-                          : 'bg-white border-gray-300'
-                      }`}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Templates */}
-              <div className={`rounded-xl shadow-sm border p-6 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
-                <h3 className="font-semibold flex items-center mb-4">
-                  <FileText className="w-4 h-4 mr-2" />
-                  Templates
-                </h3>
-                
-                <div className="space-y-2">
-                  {blogTemplates.map((template) => (
-                    <button
-                      key={template.id}
-                      onClick={() => loadTemplate(template)}
-                      className={`w-full text-left p-3 rounded-lg transition-colors ${
-                        darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-50'
-                      }`}
-                    >
-                      <div className="font-medium text-sm">{template.name}</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Writing Stats */}
-              <div className={`rounded-xl shadow-sm border p-6 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
-                <h3 className="font-semibold flex items-center mb-4">
-                  <Trophy className="w-4 h-4 mr-2" />
-                  Writing Stats
-                </h3>
-                
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-500">Writing Streak</span>
-                    <span className="font-semibold">{writingStreak} days</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-500">Daily Goal</span>
-                    <span className="font-semibold">{wordCount}/{dailyGoal} words</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-500">Best Time</span>
-                    <span className="font-semibold">Morning</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-500">Avg. Speed</span>
-                    <span className="font-semibold">45 WPM</span>
-                  </div>
-                </div>
-              </div>
+              <WritingStatsPanel darkMode={darkMode} />
             </div>
           )}
         </div>

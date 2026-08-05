@@ -13,6 +13,7 @@ from .views import (
     CategoriesWithCountsView,
     CommentListCreateView,
     CommentLikeView,
+    MyWritingStatsView,
 )
 from .image_upload import upload_image
 
@@ -31,4 +32,5 @@ urlpatterns = [
     path("posts/<int:post_id>/comments/", CommentListCreateView.as_view(), name="comment-list-create"),
     path("comments/<int:comment_id>/like/", CommentLikeView.as_view(), name="comment-like"),
     path("upload/image/", upload_image, name="image-upload"),
+    path("my-stats/", MyWritingStatsView.as_view(), name="my-writing-stats"),
 ]

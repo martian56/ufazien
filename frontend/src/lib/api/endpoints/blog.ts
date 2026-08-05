@@ -11,6 +11,15 @@ export interface BlogTag {
   name: string
 }
 
+/**
+ * Who can reach a post.
+ *
+ * The editor has offered these four since it was written but sent none of
+ * them, so choosing "private" published to everyone. Enforced in
+ * BlogPost.visible_to on the server.
+ */
+export type PostVisibility = 'public' | 'unlisted' | 'followers' | 'private'
+
 export interface BlogPost {
   id: number
   title: string
@@ -28,6 +37,9 @@ export interface BlogPost {
   views: number
   is_published: boolean
   is_featured: boolean
+  visibility: PostVisibility
+  /** Published, but dated forward, so not live yet. */
+  is_scheduled?: boolean
   likes_count?: number
   comments_count?: number
   is_liked?: boolean
@@ -45,6 +57,20 @@ export interface BlogPostInput {
   read_time?: string
   is_published?: boolean
   is_featured?: boolean
+  visibility?: PostVisibility
+  /** A future value schedules the post: it stays out of listings until then. */
+  published_at?: string | null
+}
+
+/** Counted from your own posts. Nothing here is estimated or made up. */
+export interface WritingStats {
+  streak_days: number
+  posts_this_week: number
+  published: number
+  drafts: number
+  /** Local hour you post in most often, or null below three posts. */
+  best_hour: number | null
+  active_days: number
 }
 
 type Params = Record<string, string | number | boolean | null | undefined>
@@ -74,6 +100,8 @@ export const blogApi = {
 
   unpublish: (id: number | string) =>
     api.patch<BlogPost>(`/blog/posts/${id}/`, { is_published: false }),
+
+  myStats: () => api.get<WritingStats>('/blog/my-stats/'),
 
   toggleLike: (id: number | string) => api.post(`/blog/posts/${id}/like/`),
   toggleBookmark: (id: number | string) => api.post(`/blog/posts/${id}/bookmark/`),
