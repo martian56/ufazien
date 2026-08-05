@@ -25,7 +25,7 @@ import {
   Eye,
   Zap,
 } from "lucide-react"
-import aiToolsApi from "../../../services/aiToolsApi"
+import aiToolsApi from "../../../lib/api/endpoints/aiTools"
 
 export default function Humanizer() {
   const navigate = useNavigate()

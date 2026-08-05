@@ -13,7 +13,7 @@ import {
   ExternalLink
 } from 'lucide-react';
 import SideBar from '../components/ui/SideBar';
-import notificationsAPI from '../services/notificationsAPI';
+import notificationsAPI from '../lib/api/endpoints/notifications';
 import pushNotificationService from '../services/pushNotificationService';
 import { useToast, ToastContainer } from '../hooks/useToast';
 

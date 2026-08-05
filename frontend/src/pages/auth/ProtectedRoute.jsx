@@ -1,11 +1,7 @@
 import { useEffect, useState } from "react"
 import { Navigate, useLocation } from "react-router-dom"
-import axios from "axios"
-
-const API_URL = import.meta.env.VITE_API_URL
-
-const API_PROFILE = `${API_URL}/api/auth/user/me/`
-const API_REFRESH = `${API_URL}/api/auth/token/refresh/`
+import { api } from "../../lib/api/client"
+import { getAccessToken } from "../../lib/api/tokens"
 
 export default function ProtectedRoute({ children }) {
   const [checked, setChecked] = useState(false)
@@ -14,35 +10,19 @@ export default function ProtectedRoute({ children }) {
 
   useEffect(() => {
     const checkAuth = async () => {
-      const access = localStorage.getItem("access")
-      const refresh = localStorage.getItem("refresh")
-      if (!access) {
+      if (!getAccessToken()) {
         setChecked(true)
         setAuthenticated(false)
         return
       }
       try {
-        await axios.get(API_PROFILE, {
-          headers: { Authorization: `Bearer ${access}` },
-        })
+        // This used to hand-roll the refresh dance in axios: catch the 401,
+        // post to the refresh endpoint, store the token, retry. The client
+        // does exactly that, and shares one refresh across concurrent calls.
+        await api.get("/auth/user/me/")
         setAuthenticated(true)
-      } catch (err) {
-        // If token expired, try refresh
-        if (err.response?.status === 401 && refresh) {
-          try {
-            const refreshRes = await axios.post(API_REFRESH, { refresh })
-            localStorage.setItem("access", refreshRes.data.access)
-            // Retry profile fetch with new token
-            await axios.get(API_PROFILE, {
-              headers: { Authorization: `Bearer ${refreshRes.data.access}` },
-            })
-            setAuthenticated(true)
-          } catch {
-            setAuthenticated(false)
-          }
-        } else {
-          setAuthenticated(false)
-        }
+      } catch {
+        setAuthenticated(false)
       } finally {
         setChecked(true)
       }

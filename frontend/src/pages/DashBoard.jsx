@@ -9,14 +9,15 @@ import {Calculator, TrendingUp,MessageCircle,
   Menu,X } from "lucide-react"
 import SideBar from "../components/ui/SideBar"
 import NotificationDropdown from "../components/NotificationDropdown"
-import notificationsAPI from "../services/notificationsAPI"
+import notificationsAPI from "../lib/api/endpoints/notifications"
+import { api, ApiError } from "../lib/api/client"
+import { clearTokens } from "../lib/api/tokens"
+import { logger } from "../lib/logger"
 import pushNotificationService from "../services/pushNotificationService"
 import { getMajorDisplayName, formatYearWithOrdinal } from "../utils/majorUtils"
 
 
-const API_URL = import.meta.env.VITE_API_URL
 
-const API_PROFILE = `${API_URL}/api/auth/user/`
 
 export default function Dashboard() {
   const navigate = useNavigate()
@@ -82,25 +83,11 @@ useEffect(() => {
   }
 
   setLoading(true);
-  fetch(API_PROFILE, {
-    headers: {
-      Authorization: `Bearer ${access}`,
-    },
-  })
-    .then((res) => {
-      if (!res.ok) {
-        if (res.status === 401) {
-          localStorage.removeItem("access");
-          localStorage.removeItem("refresh");
-          navigate("/auth");
-          return;
-        }
-        throw new Error("Failed to fetch dashboard data");
-      }
-      return res.json();
-    })
+  // The client refreshes an expired token and retries, so a 401 reaching here
+  // means the session is genuinely gone.
+  api
+    .get("/auth/user/")
     .then((data) => {
-      console.log("Dashboard data:", data);
       setUser({
         name: `${data.first_name} ${data.last_name}` || "Sarah Johnson",
         email: data.email || "sarah.johnson@ufaz.edu.az",
@@ -116,7 +103,12 @@ useEffect(() => {
       setLoading(false);
     })
     .catch((error) => {
-      console.error("Error fetching dashboard data:", error);
+      if (error instanceof ApiError && error.isUnauthorized) {
+        clearTokens();
+        navigate("/auth");
+        return;
+      }
+      logger.error("Error fetching dashboard data:", error);
       setLoading(false);
     });
 }, [navigate]);

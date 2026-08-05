@@ -1,5 +1,5 @@
 import { Room, RoomEvent, Track } from "livekit-client"
-import apiClient from "../utils/api"
+import { api as apiClient } from "../lib/api/client"
 
 /**
  * Voice and screen share for a campus lobby.

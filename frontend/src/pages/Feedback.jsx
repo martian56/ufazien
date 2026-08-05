@@ -23,7 +23,7 @@ import { Input } from "../components/ui/input"
 import { Label } from "../components/ui/label"
 import { Textarea } from "../components/ui/textarea"
 import { useToast, ToastContainer } from "../hooks/useToast"
-import apiClient from "../utils/api"
+import { api as apiClient } from "../lib/api/client"
 
 const API_URL = import.meta.env.VITE_API_URL
 

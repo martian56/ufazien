@@ -1,4 +1,4 @@
-import apiClient from "../utils/api"
+import { api as apiClient } from "../lib/api/client"
 
 const EVENTS = "/calendar/events/"
 

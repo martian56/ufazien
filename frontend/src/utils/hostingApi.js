@@ -1,4 +1,4 @@
-import apiClient from './api.js';
+import { api as apiClient } from '../lib/api/client';
 
 // Hosting API Services
 export const hostingApi = {
