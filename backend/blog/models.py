@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils import timezone
 from django.contrib.auth import get_user_model
 
 User = get_user_model()
@@ -29,7 +30,11 @@ class BlogPost(models.Model):
     author = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='blog_posts')
     category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, related_name='blog_posts')
     tags = models.ManyToManyField(Tag, related_name='blog_posts')
-    published_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    # Was auto_now_add, which made it the creation time. A draft written on
+    # Monday and published on Friday claimed Monday, and ordering by it put a
+    # freshly published post wherever it happened to be started.
+    published_at = models.DateTimeField(null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
     read_time = models.CharField(max_length=20)
     views = models.PositiveIntegerField(default=0)
@@ -37,7 +42,17 @@ class BlogPost(models.Model):
     is_featured = models.BooleanField(default=False)
 
     class Meta:
-        ordering = ['-published_at']
+        # Drafts have no published_at, so fall back to when they were created.
+        ordering = ['-published_at', '-created_at']
+
+    def save(self, *args, **kwargs):
+        # Stamp the moment it actually goes live, and clear it if unpublished
+        # so a repost is dated correctly rather than keeping the old date.
+        if self.is_published and self.published_at is None:
+            self.published_at = timezone.now()
+        elif not self.is_published:
+            self.published_at = None
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.title
