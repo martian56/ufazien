@@ -1,28 +1,53 @@
 import { useEffect, useRef } from "react"
 import { Mic, MicOff, MonitorUp, MonitorOff, ShieldCheck, Volume2 } from "lucide-react"
 
-/** The shared screen, mounted wherever the caller puts the board. */
-export function ScreenShareBoard({ screenShare }) {
+/**
+ * Owns the shared video element.
+ *
+ * The picture belongs on the projector screen in the room, but a `VideoTexture`
+ * only keeps decoding while its element is in the document, so the element
+ * still needs a home. It gets exactly one: this holder never changes parent,
+ * only size, which is what lets `expanded` toggle without interrupting the
+ * texture. Parked it is a 2px corner nobody sees; expanded it is a reader for
+ * slides too small to make out from a seat.
+ */
+export function ScreenShareStage({ screenShare, expanded, onClose }) {
   const holder = useRef(null)
 
   useEffect(() => {
     const node = holder.current
-    if (!node) return
-    node.replaceChildren()
-    if (screenShare?.element) {
-      const video = screenShare.element
-      video.style.width = "100%"
-      video.style.height = "100%"
-      video.style.objectFit = "contain"
-      node.appendChild(video)
-    }
+    const video = screenShare?.element
+    if (!node || !video) return
+
+    video.muted = true
+    video.playsInline = true
+    video.style.width = "100%"
+    video.style.height = "100%"
+    video.style.objectFit = "contain"
+    node.appendChild(video)
+    video.play?.().catch(() => {})
+
+    return () => video.remove()
   }, [screenShare])
 
+  if (!screenShare) return null
+
   return (
-    <div className="w-full h-full bg-black/80 rounded-lg overflow-hidden flex items-center justify-center">
-      <div ref={holder} className="w-full h-full" />
-      {!screenShare && (
-        <p className="absolute text-gray-400 text-sm">No one is sharing a screen</p>
+    <div
+      className={
+        expanded
+          ? "fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-4 pointer-events-auto"
+          : "fixed top-0 left-0 w-[2px] h-[2px] overflow-hidden opacity-0 pointer-events-none -z-10"
+      }
+    >
+      <div ref={holder} className={expanded ? "w-full h-full" : "w-full h-full"} />
+      {expanded && (
+        <button
+          onClick={onClose}
+          className="mt-3 px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm border border-white/20"
+        >
+          Back to the room
+        </button>
       )}
     </div>
   )

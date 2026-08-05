@@ -28,8 +28,14 @@ export function useCampusVoice({ lobbyId, userPosition, playerPositions, enabled
     voice.onParticipantsChanged = (list) => {
       if (!cancelled) setParticipants(list)
     }
-    voice.onScreenShare = ({ identity, element, active }) => {
-      if (!cancelled) setScreenShare(active ? { identity, element } : null)
+    // Tracked per identity rather than as a single slot: the presenter's own
+    // share and a remote one arrive through the same callback, and one ending
+    // used to clear the other.
+    const shares = new Map()
+    voice.onScreenShare = ({ identity, element, active, isLocal }) => {
+      if (active) shares.set(identity, { identity, element, isLocal: Boolean(isLocal) })
+      else shares.delete(identity)
+      if (!cancelled) setScreenShare(shares.values().next().value || null)
     }
 
     voice
