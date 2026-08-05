@@ -181,7 +181,10 @@ function ChatSystem({ isOpen, onToggle, campusHook, isTouchDevice = false }) {
   }
 
   return (
-    <div className="absolute inset-x-2 bottom-2 h-[min(70vh,500px)] sm:inset-x-auto sm:right-4 sm:bottom-4 sm:w-96 sm:h-[min(80vh,500px)] bg-black bg-opacity-95 backdrop-blur-sm border border-blue-500/30 rounded-xl pointer-events-auto shadow-2xl">
+    // z-40 puts it above the touch controls. Without a layer of its own it
+    // sat under the joystick and the jump and enter buttons, which are z-30,
+    // so they were drawn across the message list and the input.
+    <div className="absolute inset-x-2 bottom-2 h-[min(70vh,500px)] sm:inset-x-auto sm:right-4 sm:bottom-4 sm:w-96 sm:h-[min(80vh,500px)] z-40 bg-black bg-opacity-95 backdrop-blur-sm border border-blue-500/30 rounded-xl pointer-events-auto shadow-2xl">
       {/* Chat Header */}
       <div className="flex items-center justify-between p-4 border-b border-gray-700 bg-gradient-to-r from-blue-600/20 to-purple-600/20">
         <div className="flex space-x-2">
@@ -306,7 +309,7 @@ function PlayerAvatar({ position, userData, isCurrentUser = false }) {
       />
 
       {/* Full Name Label */}
-      <Html position={[0, 2, 0]} center>
+      <Html position={[0, 2, 0]} center zIndexRange={[9, 0]}>
         <div className="bg-black bg-opacity-75 text-white px-2 py-1 rounded text-xs whitespace-nowrap pointer-events-none">
           {userData.full_name || userData.username || userData.name}
           {userData.activity && (
@@ -531,7 +534,7 @@ function StudyAreaInteraction({ area, campusHook }) {
   const studyMembers = lobbyMembers.slice(0, Math.floor(Math.random() * area.maxUsers))
 
   return (
-    <Html position={area.position} center>
+    <Html position={area.position} center zIndexRange={[9, 0]}>
       <div className="bg-black bg-opacity-95 backdrop-blur-sm border border-blue-500/30 rounded-xl p-6 text-white text-center min-w-[350px] shadow-2xl pointer-events-auto">
         <div className="text-3xl mb-3">{area.icon}</div>
         <h3 className="text-xl font-bold text-blue-400 mb-2">{area.name}</h3>
@@ -771,7 +774,9 @@ const CampusWithBackend = () => {
         </div>
       )}
 
-      {isTouchDevice && (
+      {/* Chat takes over the bottom of a phone screen, which is exactly where
+          the controls live. Nobody steers while typing, so they stand down. */}
+      {isTouchDevice && !isChatOpen && (
         <TouchControls
           stateRef={touchState}
           insideBuilding={insideBuilding}

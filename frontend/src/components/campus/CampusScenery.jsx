@@ -187,7 +187,7 @@ export function Building({
         </mesh>
 
         {canEnter && (
-          <Html position={[0, 3.6, 0]} center distanceFactor={18}>
+          <Html position={[0, 3.6, 0]} center distanceFactor={18} zIndexRange={[9, 0]}>
             <button
               onClick={(e) => {
                 e.stopPropagation()
@@ -202,7 +202,7 @@ export function Building({
       </group>
 
       {name && (
-        <Html position={[0, height + 2, 0]} center distanceFactor={26}>
+        <Html position={[0, height + 2, 0]} center distanceFactor={26} zIndexRange={[9, 0]}>
           <div className="bg-black/70 text-white px-3 py-1 rounded text-sm whitespace-nowrap pointer-events-none">
             {icon} {name}
           </div>

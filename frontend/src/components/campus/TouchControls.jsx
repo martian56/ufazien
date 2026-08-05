@@ -149,6 +149,18 @@ function Joystick({ onChange }) {
 export default function TouchControls({ stateRef, insideBuilding, canInteract }) {
   useWorldLook(stateRef)
 
+  // Unmounting mid-drag, which is what opening chat does, would otherwise
+  // leave the last vector in the shared state and the player walking on alone.
+  useEffect(
+    () => () => {
+      stateRef.current.move = { x: 0, y: 0 }
+      stateRef.current.look = { dx: 0, dy: 0 }
+      stateRef.current.jump = false
+      stateRef.current.interact = false
+    },
+    [stateRef],
+  )
+
   return (
     <>
       <div className="absolute bottom-5 left-5 z-30 pointer-events-auto">
