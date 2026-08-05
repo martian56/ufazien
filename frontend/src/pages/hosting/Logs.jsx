@@ -214,7 +214,7 @@ export default function Logs() {
                     </div>
                   </div>
                 </div>
-                <div className="mt-4 sm:mt-0 flex space-x-2">
+                <div className="mt-4 sm:mt-0 flex flex-wrap items-center gap-2">
                   <button 
                     onClick={handleRefresh}
                     disabled={loading}

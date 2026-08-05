@@ -417,7 +417,7 @@ export default function Profile() {
           {/* Content Tabs */}
           <div className="mt-8">
             <div className="border-b border-gray-200">
-              <nav className="-mb-px flex space-x-8">
+              <nav className="-mb-px flex gap-6 sm:gap-8 overflow-x-auto whitespace-nowrap">
                 <button
                   onClick={() => setActiveTab('posts')}
                   className={`py-2 px-1 border-b-2 font-medium text-sm ${

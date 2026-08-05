@@ -302,14 +302,18 @@ export default function CreateWebsite() {
               <p className="mt-2 text-gray-600">Deploy your website to Ufazien hosting platform</p>
             </div>
 
-            {/* Progress Steps */}
+            {/* Progress Steps.
+                Three labelled columns need about 795px, so on a phone this
+                forced the whole page 400px wider than the screen. The labels
+                drop out below sm and only the current step is named, under the
+                dots. */}
             <div className="mb-8">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center">
                 {steps.map((step, index) => (
-                  <div key={step.id} className="flex items-center">
-                    <div className={`flex items-center justify-center w-8 h-8 rounded-full border-2 ${
-                      currentStep >= step.id 
-                        ? 'bg-blue-600 border-blue-600 text-white' 
+                  <div key={step.id} className="flex items-center min-w-0 last:shrink-0 sm:flex-none">
+                    <div className={`flex items-center justify-center w-8 h-8 shrink-0 rounded-full border-2 ${
+                      currentStep >= step.id
+                        ? 'bg-blue-600 border-blue-600 text-white'
                         : 'border-gray-300 text-gray-400'
                     }`}>
                       {currentStep > step.id ? (
@@ -318,8 +322,8 @@ export default function CreateWebsite() {
                         <span className="text-sm font-medium">{step.id}</span>
                       )}
                     </div>
-                    <div className="ml-3">
-                      <div className={`text-sm font-medium ${
+                    <div className="ml-3 hidden sm:block min-w-0">
+                      <div className={`text-sm font-medium truncate ${
                         currentStep >= step.id ? 'text-blue-600' : 'text-gray-500'
                       }`}>
                         {step.title}
@@ -327,12 +331,21 @@ export default function CreateWebsite() {
                       <div className="text-xs text-gray-500">{step.description}</div>
                     </div>
                     {index < steps.length - 1 && (
-                      <div className={`mx-6 h-0.5 w-12 ${
+                      <div className={`mx-3 sm:mx-6 h-0.5 flex-1 sm:w-12 sm:flex-none ${
                         currentStep > step.id ? 'bg-blue-600' : 'bg-gray-300'
                       }`} />
                     )}
                   </div>
                 ))}
+              </div>
+
+              <div className="mt-3 sm:hidden">
+                <div className="text-sm font-medium text-blue-600">
+                  {steps.find((s) => s.id === currentStep)?.title}
+                </div>
+                <div className="text-xs text-gray-500">
+                  {steps.find((s) => s.id === currentStep)?.description}
+                </div>
               </div>
             </div>
 
@@ -444,12 +457,12 @@ export default function CreateWebsite() {
                                   type="text"
                                   value={formData.subdomain}
                                   onChange={(e) => handleInputChange("subdomain", e.target.value.toLowerCase())}
-                                  className={`flex-1 px-3 py-2 border rounded-l-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                                  className={`flex-1 min-w-0 px-3 py-2 border rounded-l-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                                     errors.subdomain ? 'border-red-300' : 'border-gray-300'
                                   }`}
                                   placeholder="mywebsite"
                                 />
-                                <span className="px-3 py-2 bg-gray-100 border border-l-0 border-gray-300 rounded-r-lg text-gray-500">
+                                <span className="shrink-0 px-2 sm:px-3 py-2 bg-gray-100 border border-l-0 border-gray-300 rounded-r-lg text-sm sm:text-base text-gray-500 whitespace-nowrap">
                                   .ufazien.com
                                 </span>
                               </div>
