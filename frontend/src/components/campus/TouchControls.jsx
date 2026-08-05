@@ -124,7 +124,7 @@ export default function TouchControls({ stateRef, insideBuilding, canInteract })
   return (
     <>
       {/* Sits under the HUD so buttons still receive their own taps. */}
-      <div className="absolute inset-0 z-0 pointer-events-auto md:hidden">
+      <div className="absolute inset-0 z-0 pointer-events-auto">
         <LookArea
           onLook={({ dx, dy }) => {
             stateRef.current.look.dx += dx
@@ -133,11 +133,11 @@ export default function TouchControls({ stateRef, insideBuilding, canInteract })
         />
       </div>
 
-      <div className="absolute bottom-6 left-6 z-30 pointer-events-auto md:hidden">
+      <div className="absolute bottom-6 left-6 z-30 pointer-events-auto">
         <Joystick onChange={(v) => (stateRef.current.move = v)} />
       </div>
 
-      <div className="absolute bottom-6 right-6 z-30 pointer-events-auto md:hidden flex flex-col gap-3 items-end">
+      <div className="absolute bottom-6 right-6 z-30 pointer-events-auto flex flex-col gap-3 items-end">
         {(canInteract || insideBuilding) && (
           <button
             onTouchStart={() => (stateRef.current.interact = true)}

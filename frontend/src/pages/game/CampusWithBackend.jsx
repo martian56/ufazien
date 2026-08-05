@@ -116,7 +116,7 @@ function isTypingInField() {
 }
 
 // Enhanced chat system with backend integration
-function ChatSystem({ isOpen, onToggle, campusHook }) {
+function ChatSystem({ isOpen, onToggle, campusHook, isTouchDevice = false }) {
   const [newMessage, setNewMessage] = useState("")
   const [activeTab, setActiveTab] = useState("global")
   const [isTyping, setIsTyping] = useState(false)
@@ -163,7 +163,7 @@ function ChatSystem({ isOpen, onToggle, campusHook }) {
 
   if (!isOpen) {
     return (
-      <div className="absolute bottom-48 right-4 sm:bottom-24 z-30 pointer-events-auto">
+      <div className={`absolute z-30 pointer-events-auto ${isTouchDevice ? "bottom-8 right-24" : "bottom-24 right-4"}`}>
         <button
           onClick={onToggle}
           className="bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-full shadow-lg transition-all transform hover:scale-105"
@@ -180,7 +180,7 @@ function ChatSystem({ isOpen, onToggle, campusHook }) {
   }
 
   return (
-    <div className="absolute inset-x-2 bottom-2 h-[70vh] sm:inset-x-auto sm:right-4 sm:bottom-4 sm:w-96 sm:h-[500px] bg-black bg-opacity-95 backdrop-blur-sm border border-blue-500/30 rounded-xl pointer-events-auto shadow-2xl">
+    <div className="absolute inset-x-2 bottom-2 h-[min(70vh,500px)] sm:inset-x-auto sm:right-4 sm:bottom-4 sm:w-96 sm:h-[min(80vh,500px)] bg-black bg-opacity-95 backdrop-blur-sm border border-blue-500/30 rounded-xl pointer-events-auto shadow-2xl">
       {/* Chat Header */}
       <div className="flex items-center justify-between p-4 border-b border-gray-700 bg-gradient-to-r from-blue-600/20 to-purple-600/20">
         <div className="flex space-x-2">
@@ -225,7 +225,7 @@ function ChatSystem({ isOpen, onToggle, campusHook }) {
       </div>
 
       {/* Messages Area */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3 h-[calc(70vh-9.5rem)] sm:h-[350px]">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3 h-[calc(min(70vh,500px)-9.5rem)] sm:h-[calc(min(80vh,500px)-9.5rem)]">
         {filteredMessages.length === 0 ? (
           <div className="text-center text-gray-500 py-8">
             <MessageCircle className="w-8 h-8 mx-auto mb-2 opacity-50" />
@@ -593,6 +593,14 @@ const CampusWithBackend = () => {
     coordsTo3D
   } = campusHook
 
+  // Release the pointer when any panel opens: while it is locked the cursor is
+  // hidden and clicks go to the 3D view instead of the UI.
+  useEffect(() => {
+    if ((isChatOpen || isMenuOpen || insideBuilding) && document.pointerLockElement) {
+      document.exitPointerLock()
+    }
+  }, [isChatOpen, isMenuOpen, insideBuilding])
+
   // Voice rides on the positions the game already streams.
   const voice = useCampusVoice({
     lobbyId,
@@ -744,7 +752,7 @@ const CampusWithBackend = () => {
       )}
 
       {/* Voice, screen share and host controls */}
-      <div className="absolute top-28 left-4 sm:top-auto sm:bottom-4 sm:left-4 z-20 pointer-events-auto">
+      <div className={`absolute z-20 pointer-events-auto ${isTouchDevice ? "top-28 left-1/2 -translate-x-1/2" : "bottom-4 left-4"}`}>
         <VoicePanel
           connected={voice.connected}
           error={voice.error}
@@ -808,7 +816,7 @@ const CampusWithBackend = () => {
 
       {/* 3D Canvas */}
       <KeyboardControls map={keyMap}>
-        <Canvas shadows camera={{ position: [0, 1.5, 0], fov: 75 }}>
+        <Canvas id="campus-canvas" shadows camera={{ position: [0, 1.5, 0], fov: 75 }}>
           <Suspense fallback={null}>
             {insideBuilding ? (
               <BuildingInterior
@@ -879,7 +887,9 @@ const CampusWithBackend = () => {
             <Player campusHook={campusHook} insideBuilding={insideBuilding} touch={touchState} />
             
             {/* Camera Controls */}
-            {!isTouchDevice && <PointerLockControls />}
+            {/* Without a selector drei binds the lock handler to document, so every
+   HUD click grabbed the pointer and the next click never landed. */}
+            {!isTouchDevice && <PointerLockControls selector="#campus-canvas" />}
           </Suspense>
         </Canvas>
       </KeyboardControls>
@@ -892,7 +902,7 @@ const CampusWithBackend = () => {
       />
 
       {/* Instructions */}
-      <div className="absolute bottom-44 sm:bottom-4 left-1/2 transform -translate-x-1/2 pointer-events-none z-10 max-w-[90vw]">
+      <div className={`absolute left-1/2 transform -translate-x-1/2 pointer-events-none z-10 max-w-[90vw] ${isTouchDevice ? "hidden" : "bottom-4"}`}>
         <div className="bg-black bg-opacity-75 text-white px-4 py-2 rounded-lg text-sm">
           <span className="hidden sm:inline">WASD to move • Space to jump • Shift to run • Click to look around • E to enter or leave a building</span>
           <span className="sm:hidden">Drag to look • Joystick to move</span>
