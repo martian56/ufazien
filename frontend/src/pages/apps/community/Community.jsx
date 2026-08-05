@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Helmet } from "react-helmet"
 import { Link, useNavigate } from "react-router-dom"
 import {
@@ -46,6 +46,7 @@ import {
 import { useCommunityData, useGroupChat } from "../../../hooks/useCommunity"
 import { communityApi as communityAPI } from "../../../lib/api/endpoints/community"
 import { api } from "../../../lib/api/client"
+import { logger } from "../../../lib/logger"
 import { isAuthenticated } from "../../../lib/api/tokens"
 import { getYearDisplay } from "../../../utils/majorUtils"
 
@@ -92,9 +93,9 @@ export default function Community() {
 
   // Chat functionality
   const {
-    messages: chatMessages,
+    messages: liveGroupMessages,
     isConnected,
-    sendMessage: sendChatMessage,
+    sendMessage: sendGroupMessage,
     sendTyping,
     sendStopTyping
   } = useGroupChat(selectedGroup?.id)
@@ -252,18 +253,20 @@ export default function Community() {
     if (!newMessage.trim() || !chatId) return
 
     try {
-      // Send message via API
-      await communityAPI.sendChatMessage(chatId, newMessage)
-      
-      // Clear the message input
+      // A group and a private chat are different things. This used to send
+      // everything to /community/chats/{id}/messages/, so selecting a group
+      // posted its id to the private chat endpoint and got a 404. Group
+      // messages belong on the socket that useGroupChat already opened, which
+      // was connected and then never used to send anything.
+      if (selectedGroup && String(chatId) === String(selectedGroup.id)) {
+        sendGroupMessage(newMessage)
+      } else {
+        await communityAPI.sendChatMessage(chatId, newMessage)
+      }
+
       setNewMessage("")
-      
-      // Optionally reload chat data to show the new message
-      // In a real implementation, this would be handled by WebSocket
-      
     } catch (error) {
-      console.error('Error sending message:', error)
-      // You could show a toast notification here
+      logger.error('Error sending message:', error)
     }
   }
 
@@ -584,6 +587,7 @@ export default function Community() {
               groups={groups.filter((g) => g.is_joined)}
               chats={chats}
               selectedGroup={selectedGroup}
+              liveMessages={liveGroupMessages}
               onSelectGroup={setSelectedGroup}
               newMessage={newMessage}
               onMessageChange={setNewMessage}
@@ -708,7 +712,7 @@ function ForumsView({ forums, posts, onSelectForum, onLikePost, onBookmarkPost, 
 }
 
 // Chat View Component
-function ChatView({ groups, chats, selectedGroup, onSelectGroup, newMessage, onMessageChange, onSendMessage, user }) {
+function ChatView({ groups, chats, selectedGroup, liveMessages, onSelectGroup, newMessage, onMessageChange, onSendMessage, user }) {
   const [selectedChat, setSelectedChat] = useState(null)
   const [chatType, setChatType] = useState("groups") // "groups" or "private"
   const [messages, setMessages] = useState([])
@@ -745,6 +749,17 @@ function ChatView({ groups, chats, selectedGroup, onSelectGroup, newMessage, onM
 
     loadMessages()
   }, [selectedGroup, selectedChat])
+
+  // History comes from REST, but anything sent while the panel is open arrives
+  // on the socket. ChatView kept only its own REST state, so live messages,
+  // including your own, never appeared until a reload.
+  const visibleMessages = useMemo(() => {
+    if (!selectedGroup) return messages
+
+    const seen = new Set(messages.map((m) => String(m.id)))
+    const extra = (liveMessages || []).filter((m) => !seen.has(String(m.id)))
+    return [...messages, ...extra]
+  }, [messages, liveMessages, selectedGroup])
 
   if (!selectedGroup && !selectedChat) {
     return (
@@ -1014,8 +1029,8 @@ function ChatView({ groups, chats, selectedGroup, onSelectGroup, newMessage, onM
               <div className="animate-spin w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full mx-auto mb-2"></div>
               <p>Loading messages...</p>
             </div>
-          ) : messages.length > 0 ? (
-            messages.map((message) => (
+          ) : visibleMessages.length > 0 ? (
+            visibleMessages.map((message) => (
               <div key={message.id} className="flex items-start gap-3">
                 <img
                   src={message.sender_avatar || "/placeholder.svg"}
