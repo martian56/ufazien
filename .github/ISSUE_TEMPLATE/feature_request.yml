@@ -1,0 +1,55 @@
+name: Feature request
+description: Suggest something Ufazien should do
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Most of what's in Ufazien got built because a student asked for it. Tell us what you need.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: What are you trying to do at the moment, and what makes it awkward?
+      placeholder: I'm trying to ... but currently I have to ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like it to do?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part of the platform?
+      options:
+        - Campus simulator
+        - Community (groups, forums, chat)
+        - Hosting (websites, databases, domains)
+        - Blog
+        - GPA calculator
+        - Average calculator
+        - Calendar
+        - AI tools
+        - Accounts, login, settings
+        - Something new
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Anything you've tried or considered?
+      description: Optional. Including workarounds you're using today.
+
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Would you like to build it?
+      options:
+        - label: I'd be up for opening a pull request for this

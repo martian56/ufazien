@@ -1,253 +1,80 @@
-# UFAZIEN
+<div align="center">
 
-A modern full-stack web application built with Django REST Framework and React, featuring a comprehensive blog system, dashboard, average calculator, GPA calculator, and various productivity applications for Ufaz students.
+<img src="frontend/public/icon-512.png" alt="Ufazien" width="104" height="104">
 
-## 🚀 Project Overview
+# Ufazien
 
-UFAZIEN is a multi-purpose platform that combines:
-- **Blog System**: Rich text editor with image support, categories, and tags
-- **Dashboard**: User-friendly interface with various productivity apps
-- **Authentication**: Secure user registration and login system
-- **Productivity Tools**: GPA calculator, average calculator, calendar, and more
+**A student platform for UFAZ: calculators, a blog, a community, web hosting, and a multiplayer 3D campus.**
 
-## 🛠️ Tech Stack
+[![Live](https://img.shields.io/badge/live-ufazien.com-1F3A93?style=for-the-badge)](https://ufazien.com)
+[![License](https://img.shields.io/badge/license-MIT-1F3A93?style=for-the-badge)](LICENCE)
 
-### Backend
-- **Django 5.x**: Python web framework
-- **Django REST Framework**: API development
-- **SQLite**: Database (development)
-- **Python 3.12**: Programming language
+[![CI](https://img.shields.io/github/actions/workflow/status/martian56/ufazien/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/martian56/ufazien/actions/workflows/ci.yml)
+[![Issues](https://img.shields.io/github/issues/martian56/ufazien?style=flat-square)](https://github.com/martian56/ufazien/issues)
+[![Pull requests](https://img.shields.io/github/issues-pr/martian56/ufazien?style=flat-square)](https://github.com/martian56/ufazien/pulls)
+[![Last commit](https://img.shields.io/github/last-commit/martian56/ufazien?style=flat-square)](https://github.com/martian56/ufazien/commits/main)
+[![Stars](https://img.shields.io/github/stars/martian56/ufazien?style=flat-square)](https://github.com/martian56/ufazien/stargazers)
 
-### Frontend
-- **React 19**: JavaScript library for UI
-- **Vite**: Build tool and development server
-- **TailwindCSS**: Utility-first CSS framework
-- **Lucide React**: Icon library
-- **Axios**: HTTP client
-- **React Router**: Client-side routing
+[![Django](https://img.shields.io/badge/Django-5.2-092E20?style=flat-square&logo=django&logoColor=white)](https://www.djangoproject.com/)
+[![DRF](https://img.shields.io/badge/DRF-3.16-A30000?style=flat-square)](https://www.django-rest-framework.org/)
+[![Channels](https://img.shields.io/badge/Channels-4.0-092E20?style=flat-square)](https://channels.readthedocs.io/)
+[![Python](https://img.shields.io/badge/Python-3.11-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
+[![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
+[![Vite](https://img.shields.io/badge/Vite-7-646CFF?style=flat-square&logo=vite&logoColor=white)](https://vite.dev/)
+[![three.js](https://img.shields.io/badge/three.js-r178-000000?style=flat-square&logo=three.js&logoColor=white)](https://threejs.org/)
+[![Tailwind](https://img.shields.io/badge/Tailwind-4.1-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
+[![LiveKit](https://img.shields.io/badge/LiveKit-WebRTC-1E1E1E?style=flat-square)](https://livekit.io/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 
-### Additional Tools
-- **TipTap**: Rich text editor for blog posts
-- **DOMPurify**: HTML sanitization
-- **ESLint**: Code linting
-
-## 📁 Project Structure
-
-```
-ufazien/
-├── backend/                 # Django backend
-│   ├── api/                # Main API app
-│   │   ├── models.py       # Database models
-│   │   ├── views.py        # API views
-│   │   ├── urls.py         # URL routing
-│   │   └── migrations/     # Database migrations
-│   ├── ufazien/           # Django project settings
-│   │   ├── settings.py     # Project configuration
-│   │   ├── urls.py         # Main URL configuration
-│   │   └── wsgi.py         # WSGI configuration
-│   ├── db.sqlite3         # SQLite database
-│   ├── manage.py          # Django management script
-│   └── schema.yml         # API schema documentation
-├── frontend/              # React frontend
-│   ├── src/
-│   │   ├── components/    # Reusable components
-│   │   │   └── ui/        # UI components (buttons, inputs, etc.)
-│   │   ├── pages/         # Page components
-│   │   │   ├── apps/      # Application pages
-│   │   │   │   └── blog/  # Blog-related pages
-│   │   │   └── auth/      # Authentication pages
-│   │   ├── utils/         # Utility functions
-│   │   └── assets/        # Static assets
-│   ├── public/            # Public static files
-│   ├── package.json       # Node.js dependencies
-│   ├── vite.config.js     # Vite configuration
-│   └── eslint.config.js   # ESLint configuration
-└── README.md              # This file
-```
-
-## 🚦 Getting Started
-
-### Prerequisites
-
-- **Python 3.12+**
-- **Node.js 24.3+**
-- **npm or yarn**
-
-### Backend Setup
-
-1. **Navigate to the backend directory:**
-   ```bash
-   cd backend
-   ```
-
-2. **Create a virtual environment:**
-   ```bash
-   python -m venv venv
-   ```
-
-3. **Activate the virtual environment:**
-   ```bash
-   # Windows
-   venv\Scripts\activate
-   
-   # macOS/Linux
-   source venv/bin/activate
-   ```
-
-4. **Install Python dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-5. **Run database migrations:**
-   ```bash
-   python manage.py migrate
-   ```
-
-6. **Create a superuser (optional):**
-   ```bash
-   python manage.py createsuperuser
-   ```
-
-7. **Start the Django development server:**
-   ```bash
-   python manage.py runserver
-   ```
-
-The backend API will be available at `http://localhost:8000`
-
-### Frontend Setup
-
-1. **Navigate to the frontend directory:**
-   ```bash
-   cd frontend
-   ```
-
-2. **Install Node.js dependencies:**
-   ```bash
-   npm install
-   ```
-
-3. **Start the development server:**
-   ```bash
-   npm run dev
-   ```
-
-The frontend application will be available at `http://localhost:5173`
-
-## 🔧 Configuration
-
-### Environment Variables
-
-Create a `.env` file in the frontend directory:
-
-```env
-VITE_API_URL=http://localhost:8000
-```
-
-### Django Settings
-
-The Django settings are configured in `backend/ufazien/settings.py`. Key configurations include:
-
-- **CORS settings** for frontend-backend communication
-- **Media files** configuration for image uploads
-- **Database** configuration (SQLite for development)
-
-## 📱 Features
-
-### Blog System
-- **Rich Text Editor**: TipTap-powered editor with formatting options
-- **Image Upload**: Support for image uploads with alignment options
-- **Categories & Tags**: Organize blog posts with categories and tags
-- **SEO Optimization**: Meta descriptions, reading time calculation
-- **Content Processing**: HTML sanitization and content enhancement
-
-### Dashboard
-- **User Authentication**: Secure login/signup system
-- **Productivity Apps**: 
-  - GPA Calculator
-  - Average Calculator
-  - Calendar
-  - Community features
-
-### UI/UX
-- **Responsive Design**: Mobile-first approach with TailwindCSS
-- **Dark Mode**: Toggle between light and dark themes
-- **Modern Interface**: Clean and intuitive user interface
-
-## 🧪 Development
-
-### Running Tests
-
-**Backend:**
-```bash
-cd backend
-python manage.py test
-```
-
-**Frontend:**
-```bash
-cd frontend
-npm run test
-```
-
-### Code Linting
-
-**Frontend:**
-```bash
-cd frontend
-npm run lint
-```
-
-### Building for Production
-
-**Frontend:**
-```bash
-cd frontend
-npm run build
-```
-
-## 📚 API Documentation
-
-The API schema is available in `backend/schema.yml`. Key endpoints include:
-
-- **Authentication**: `/api/auth/`
-- **Blog Posts**: `/api/blog/posts/`
-- **Categories**: `/api/blog/categories/`
-- **Tags**: `/api/blog/tags/`
-- **User Profile**: `/api/profile/`
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature-name`
-3. Commit your changes: `git commit -m 'Add some feature'`
-4. Push to the branch: `git push origin feature-name`
-5. Submit a pull request
-
-## 📝 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 👥 Authors
-
-- **Fuad Alizada** - *Initial work* - [GitHub](https://github.com/martian58)
-
-## 🙏 Acknowledgments
-
-- Django and React communities for excellent documentation
-- TailwindCSS for the amazing utility-first CSS framework
-- TipTap for the rich text editor
-- All contributors and users of this project
-
-## 📞 Support
-
-If you have any questions or need help, please:
-
-1. Check the [Issues](https://github.com/martian58/ufazien/issues) page
-2. Create a new issue if your problem isn't already listed
-3. Contact the maintainers
+</div>
 
 ---
 
-**Happy coding!** 🎉
+## What it is
+
+Ufazien is a platform built for students at the French-Azerbaijani University. It started as a GPA calculator and grew into the tools students kept asking for: somewhere to write, somewhere to talk, somewhere to put their projects online, and a campus they can walk around together.
+
+It runs at **[ufazien.com](https://ufazien.com)**.
+
+## What you can do with it
+
+**Work out your grades.** A GPA calculator with semesters, targets and grade conversion. An average calculator where you build a grading schema once and publish it, so classmates reuse it instead of rebuilding the same spreadsheet every term.
+
+**Put your project online.** Every user gets subdomains under `*.ufazien.com`, static or PHP hosting, provisioned MySQL and PostgreSQL databases, and TLS. Deploy from the dashboard or with the [`ufazien-cli`](https://github.com/martian56/ufazien-cli).
+
+**Write and read.** A blog with a rich text editor, image uploads, categories and tags.
+
+**Talk to people.** Study groups with real-time chat, plus forums, posts and threaded replies.
+
+**Meet on campus.** A multiplayer 3D campus you can walk around with other students. Voice fades with distance, so conversations happen where you're standing. Buildings can be entered, and inside there's a board for screen sharing, enough to run a study session or a lecture, with the host controlling who can speak and present.
+
+**Ask an AI.** A text humanizer backed by Azure OpenAI, with more tools planned.
+
+## How it fits together
+
+A Django REST API with WebSocket consumers for anything real-time, and a React single-page app in front of it.
+
+| Layer | Built with |
+|---|---|
+| **API** | Django 5.2 · Django REST Framework · JWT auth · drf-spectacular |
+| **Real-time** | Django Channels, for campus positions, group chat and notifications |
+| **Voice & screen share** | LiveKit, with publishing rights issued server-side per participant |
+| **Frontend** | React 19 · Vite · Tailwind CSS · three.js via react-three-fiber |
+| **Data** | PostgreSQL for the app; per-user MySQL and PostgreSQL for hosted projects |
+| **Edge** | Traefik, wildcard TLS across `*.ufazien.com` |
+
+API reference is generated from the code and served at **[api.ufazien.com/api/docs/](https://api.ufazien.com/api/docs/)**.
+
+## Contributing
+
+Contributions are welcome: bug reports, fixes and features alike.
+
+**Start with [CONTRIBUTING.md](CONTRIBUTING.md).** It covers getting the project running locally, how branches and pull requests work here, and what CI expects before a change can merge.
+
+By taking part you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
+
+Found a security problem? Please don't open a public issue. See the [Security Policy](SECURITY.md).
+
+## License
+
+[MIT](LICENCE) © Fuad Alizada
