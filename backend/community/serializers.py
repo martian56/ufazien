@@ -2,7 +2,7 @@ from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from .models import (
-    Group, GroupMembership, GroupMessage, Forum, ForumPost, 
+    Group, GroupMembership, GroupMessage, Forum, ForumPost, PostAttachment,
     PostLike, PostReply, PrivateChat, PrivateMessage, UserActivity
 )
 
@@ -234,6 +234,15 @@ class PostReplySerializer(serializers.ModelSerializer):
         return super().create(validated_data)
 
 
+class PostAttachmentSerializer(serializers.ModelSerializer):
+    """An image attached to a forum post."""
+
+    class Meta:
+        model = PostAttachment
+        fields = ['id', 'image', 'caption', 'position', 'created_at']
+        read_only_fields = ['id', 'created_at']
+
+
 class ForumPostSerializer(serializers.ModelSerializer):
     """Serializer for forum posts"""
     author = UserProfileSerializer(read_only=True)
@@ -242,8 +251,9 @@ class ForumPostSerializer(serializers.ModelSerializer):
     reply_count = serializers.ReadOnlyField()
     is_liked = serializers.SerializerMethodField()
     is_bookmarked = serializers.SerializerMethodField()
-    # Temporarily removed replies to prevent React rendering issues
-    # replies = PostReplySerializer(many=True, read_only=True)
+    attachments = PostAttachmentSerializer(many=True, read_only=True)
+    # Replies are fetched through /posts/{id}/replies/ rather than nested here,
+    # so a feed of posts does not drag every comment with it.
     timestamp = serializers.DateTimeField(source='created_at', read_only=True)
     
     class Meta:
@@ -251,8 +261,7 @@ class ForumPostSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'title', 'content', 'author', 'forum', 'tags', 'is_pinned',
             'is_locked', 'view_count', 'like_count', 'reply_count', 'is_liked',
-            'is_bookmarked', 'timestamp', 'created_at', 'updated_at'
-            # Temporarily removed 'replies' from fields
+            'is_bookmarked', 'attachments', 'timestamp', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'author', 'view_count', 'created_at', 'updated_at']
     

@@ -1,5 +1,7 @@
+import tempfile
+
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from rest_framework.test import APIClient, APIRequestFactory
 
 from .models import Group, GroupMembership
@@ -175,3 +177,98 @@ class CommunityWriteFlowTests(TestCase):
     def test_stats_endpoint(self):
         response = self.client_api.get("/api/community/stats/")
         self.assertEqual(response.status_code, 200, response.content[:400])
+
+
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp(prefix="ufazien-test-media-"))
+class PostAttachmentTests(TestCase):
+    """Images on forum posts.
+
+    MEDIA_ROOT is redirected to a temp directory: without it these uploads
+    would accumulate in the real media folder on every test run.
+
+    ForumPost could only ever show text, while GroupMessage already carried
+    images and files.
+    """
+
+    def setUp(self):
+        from .models import Forum, ForumPost
+
+        self.author = User.objects.create_user(
+            username="author", email="author@example.com", password="pw"
+        )
+        self.other = User.objects.create_user(
+            username="other", email="other@example.com", password="pw"
+        )
+        self.forum = Forum.objects.create(title="General", description="general talk")
+        self.post = ForumPost.objects.create(
+            forum=self.forum,
+            author=self.author,
+            title="A post with pictures",
+            content="Body text",
+        )
+        self.client_api = APIClient()
+
+    def _png(self, name="shot.png"):
+        """A real one-pixel PNG, since ImageField verifies the file."""
+        import io
+
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from PIL import Image
+
+        buffer = io.BytesIO()
+        Image.new("RGB", (1, 1), "blue").save(buffer, format="PNG")
+        return SimpleUploadedFile(name, buffer.getvalue(), content_type="image/png")
+
+    def test_author_can_attach_an_image(self):
+        self.client_api.force_authenticate(user=self.author)
+        response = self.client_api.post(
+            f"/api/community/posts/{self.post.id}/attachments/",
+            {"image": self._png(), "caption": "A diagram"},
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, 201, response.content[:400])
+        self.assertEqual(response.json()["caption"], "A diagram")
+        self.assertEqual(self.post.attachments.count(), 1)
+
+    def test_attachments_appear_on_the_post(self):
+        self.client_api.force_authenticate(user=self.author)
+        self.client_api.post(
+            f"/api/community/posts/{self.post.id}/attachments/",
+            {"image": self._png()},
+            format="multipart",
+        )
+
+        response = self.client_api.get(f"/api/community/posts/{self.post.id}/")
+        self.assertEqual(response.status_code, 200, response.content[:400])
+        self.assertEqual(len(response.json()["attachments"]), 1)
+
+    def test_another_user_cannot_attach_to_someone_elses_post(self):
+        self.client_api.force_authenticate(user=self.other)
+        response = self.client_api.post(
+            f"/api/community/posts/{self.post.id}/attachments/",
+            {"image": self._png()},
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, 403, response.content[:400])
+        self.assertEqual(self.post.attachments.count(), 0)
+
+    def test_a_request_without_a_file_is_rejected(self):
+        self.client_api.force_authenticate(user=self.author)
+        response = self.client_api.post(
+            f"/api/community/posts/{self.post.id}/attachments/",
+            {"caption": "no file"},
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, 400, response.content[:400])
+
+    def test_attachments_keep_their_order(self):
+        self.client_api.force_authenticate(user=self.author)
+        for name in ("first.png", "second.png", "third.png"):
+            self.client_api.post(
+                f"/api/community/posts/{self.post.id}/attachments/",
+                {"image": self._png(name)},
+                format="multipart",
+            )
+
+        positions = list(self.post.attachments.values_list("position", flat=True))
+        self.assertEqual(positions, [0, 1, 2])

@@ -5,22 +5,28 @@ from rest_framework import viewsets, status, permissions, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.parsers import MultiPartParser, FormParser
 from django_filters.rest_framework import DjangoFilterBackend
 from django.core.exceptions import PermissionDenied
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 
 from .models import (
-    Group, GroupMembership, GroupMessage, Forum, ForumPost, 
+    Group, GroupMembership, GroupMessage, Forum, ForumPost, PostAttachment,
     PostReply, PrivateChat, PrivateMessage, UserActivity
 )
 from .serializers import (
+    PostAttachmentSerializer,
     GroupSerializer, GroupCreateSerializer, GroupMessageSerializer,
     ForumSerializer, ForumPostSerializer, ForumPostCreateSerializer,
     PostReplySerializer, PrivateChatSerializer, PrivateChatCreateSerializer,
     PrivateMessageSerializer, GroupJoinSerializer, PostLikeSerializer,
     PostBookmarkSerializer, UserActivitySerializer
 )
+
+
+# Matches the frontend's own upload guard in utils/security.
+MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
 
 
 class CommunityPermission(permissions.BasePermission):
@@ -374,6 +380,43 @@ class ForumPostViewSet(viewsets.ModelViewSet):
             metadata={'post_title': post.title, 'forum_name': post.forum.title}
         )
     
+    @action(detail=True, methods=['post'], parser_classes=[MultiPartParser, FormParser])
+    def attachments(self, request, pk=None):
+        """Attach an image to a post.
+
+        Only the author may add one, matching who may edit the post.
+        """
+        post = self.get_object()
+
+        if post.author != request.user:
+            return Response(
+                {'error': 'You can only add images to your own post.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        image = request.FILES.get('image')
+        if not image:
+            return Response(
+                {'error': 'An image file is required.'}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if image.size > MAX_ATTACHMENT_BYTES:
+            return Response(
+                {'error': 'Images must be 5MB or smaller.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        attachment = PostAttachment.objects.create(
+            post=post,
+            image=image,
+            caption=request.data.get('caption', '')[:200],
+            position=post.attachments.count(),
+        )
+        return Response(
+            PostAttachmentSerializer(attachment, context={'request': request}).data,
+            status=status.HTTP_201_CREATED,
+        )
+
     @action(detail=True, methods=['post'])
     def like(self, request, pk=None):
         """Like or unlike a post"""

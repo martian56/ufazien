@@ -30,6 +30,14 @@ export interface Forum {
   created_at: string
 }
 
+export interface PostAttachment {
+  id: string
+  image: string
+  caption: string
+  position: number
+  created_at: string
+}
+
 export interface ForumPost {
   id: string
   forum: string
@@ -44,6 +52,7 @@ export interface ForumPost {
   reply_count: number
   is_liked: boolean
   is_bookmarked: boolean
+  attachments: PostAttachment[]
   created_at: string
   updated_at: string
 }
@@ -109,6 +118,14 @@ export const communityApi = {
   likePost: (id: string) => api.post<{ liked: boolean; like_count: number }>(`/community/posts/${id}/like/`),
   bookmarkPost: (id: string) =>
     api.post<{ bookmarked: boolean }>(`/community/posts/${id}/bookmark/`),
+  /** Attach an image to your own post. */
+  addPostAttachment: (postId: string, image: File, caption = '') => {
+    const form = new FormData()
+    form.append('image', image)
+    if (caption) form.append('caption', caption)
+    return api.post<PostAttachment>(`/community/posts/${postId}/attachments/`, form)
+  },
+
   getPostReplies: (postId: string, params: Params = {}) =>
     api.get<Paginated<PostReply> | PostReply[]>(`/community/posts/${postId}/replies/`, { params }),
 
