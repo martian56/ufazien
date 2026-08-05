@@ -272,3 +272,77 @@ class PostAttachmentTests(TestCase):
 
         positions = list(self.post.attachments.values_list("position", flat=True))
         self.assertEqual(positions, [0, 1, 2])
+
+
+class ReplyThreadTests(TestCase):
+    """Threaded replies.
+
+    PostReply.parent_reply has always existed, but the replies endpoint filtered
+    to parent_reply=None and the nested serializer was commented out, so a reply
+    to a reply was stored and never sent to anyone.
+    """
+
+    def setUp(self):
+        from .models import Forum, ForumPost
+
+        self.user = User.objects.create_user(
+            username="threader", email="threader@example.com", password="pw"
+        )
+        self.forum = Forum.objects.create(title="General", description="general talk")
+        self.post = ForumPost.objects.create(
+            forum=self.forum, author=self.user, title="A question", content="Body"
+        )
+        self.client_api = APIClient()
+        self.client_api.force_authenticate(user=self.user)
+
+    def _reply(self, content, parent=None):
+        payload = {"post": str(self.post.id), "content": content}
+        if parent:
+            payload["parent_reply"] = str(parent)
+        response = self.client_api.post("/api/community/replies/", payload, format="json")
+        self.assertIn(response.status_code, (200, 201), response.content[:400])
+        return response.json()
+
+    def test_a_nested_reply_is_returned(self):
+        top = self._reply("Top level")
+        self._reply("A reply to the reply", parent=top["id"])
+
+        response = self.client_api.get(f"/api/community/posts/{self.post.id}/replies/")
+        self.assertEqual(response.status_code, 200, response.content[:400])
+
+        body = response.json()
+        items = body["results"] if isinstance(body, dict) else body
+        self.assertEqual(len(items), 2, "the nested reply was dropped")
+
+    def test_each_reply_carries_its_parent(self):
+        top = self._reply("Top level")
+        child = self._reply("Child", parent=top["id"])
+
+        self.assertIsNone(top["parent_reply"])
+        self.assertEqual(str(child["parent_reply"]), str(top["id"]))
+
+    def test_the_thread_can_be_rebuilt_from_the_flat_list(self):
+        top = self._reply("Top")
+        child = self._reply("Child", parent=top["id"])
+        self._reply("Grandchild", parent=child["id"])
+
+        response = self.client_api.get(f"/api/community/posts/{self.post.id}/replies/")
+        body = response.json()
+        items = body["results"] if isinstance(body, dict) else body
+
+        by_parent = {}
+        for item in items:
+            by_parent.setdefault(item["parent_reply"], []).append(item)
+
+        roots = by_parent.get(None, [])
+        self.assertEqual(len(roots), 1)
+        self.assertEqual(len(by_parent.get(roots[0]["id"], [])), 1)
+
+    def test_replies_are_oldest_first(self):
+        self._reply("First")
+        self._reply("Second")
+
+        response = self.client_api.get(f"/api/community/posts/{self.post.id}/replies/")
+        body = response.json()
+        items = body["results"] if isinstance(body, dict) else body
+        self.assertEqual([i["content"] for i in items], ["First", "Second"])

@@ -465,15 +465,30 @@ class ForumPostViewSet(viewsets.ModelViewSet):
     
     @action(detail=True)
     def replies(self, request, pk=None):
-        """Get post replies"""
+        """Every reply on the post, flat, oldest first.
+
+        This used to return only top-level replies, with nested ones commented
+        out to avoid recursive serialization. That left the thread unreachable:
+        a reply to a reply was stored but never sent.
+
+        Returning the thread flat, each row carrying its parent_reply, lets the
+        client assemble the tree in one pass. No recursion, no depth limit, and
+        one query rather than one per level.
+        """
         post = self.get_object()
-        replies = PostReply.objects.filter(post=post, parent_reply=None).select_related('author').prefetch_related('likes', 'nested_replies__author').order_by('created_at')
-        
+        replies = (
+            PostReply.objects
+            .filter(post=post)
+            .select_related('author')
+            .prefetch_related('likes')
+            .order_by('created_at')
+        )
+
         page = self.paginate_queryset(replies)
         if page is not None:
             serializer = PostReplySerializer(page, many=True, context={'request': request})
             return self.get_paginated_response(serializer.data)
-        
+
         serializer = PostReplySerializer(replies, many=True, context={'request': request})
         return Response(serializer.data)
 

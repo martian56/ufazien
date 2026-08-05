@@ -9,6 +9,7 @@ import Blog from "./pages/apps/blog/Blog"
 import GpaCalculator from "./pages/apps/gpa/GpaCalculator"
 import Calendar from "./pages/apps/calendar/Calendar"
 import Community from "./pages/apps/community/Community"
+import PostDetail from "./pages/community/PostDetail"
 import Settings from "./pages/Settings"
 import Notifications from "./pages/Notifications"
 import Feedback from "./pages/Feedback"
@@ -73,6 +74,7 @@ function App() {
         <Route path="/blog/new" element={<ProtectedRoute><BlogCreate /></ProtectedRoute>} />
         <Route path="/blog/:id" element={<ProtectedRoute><BlogRead /></ProtectedRoute>} />
         <Route path="/community" element={<ProtectedRoute><Community /></ProtectedRoute>} />
+        <Route path="/community/posts/:postId" element={<ProtectedRoute><PostDetail /></ProtectedRoute>} />
         <Route path="/calendar" element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
         <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
