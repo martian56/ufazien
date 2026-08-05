@@ -424,3 +424,148 @@ class TagAPITest(APITestCase):
         """Test getting tags when not authenticated"""
         response = self.client.get('/api/blog/tags/')
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+class DraftVisibilityTests(APITestCase):
+    """An unpublished post is a draft and belongs only to its author.
+
+    The list and detail views never filtered on is_published, so a draft was
+    served to every authenticated user exactly like a published post. That
+    makes "save as draft" impossible: saving published it.
+    """
+
+    def setUp(self):
+        self.author = User.objects.create_user(
+            username="writer", email="writer@example.com", password="pw"
+        )
+        self.reader = User.objects.create_user(
+            username="reader", email="reader@example.com", password="pw"
+        )
+        self.category = Category.objects.create(name="Tech")
+
+        self.published = BlogPost.objects.create(
+            title="A published post",
+            content="<p>Public</p>",
+            author=self.author,
+            category=self.category,
+            read_time="1 min",
+            is_published=True,
+        )
+        self.draft = BlogPost.objects.create(
+            title="An unfinished draft",
+            content="<p>Half written</p>",
+            author=self.author,
+            category=self.category,
+            read_time="1 min",
+            is_published=False,
+        )
+        self.client = APIClient()
+
+    def _titles(self, response):
+        body = response.json()
+        items = body["results"] if isinstance(body, dict) and "results" in body else body
+        return [item["title"] for item in items]
+
+    def test_another_user_does_not_see_a_draft_in_the_list(self):
+        self.client.force_authenticate(user=self.reader)
+        response = self.client.get("/api/blog/posts/")
+        self.assertEqual(response.status_code, 200, response.content[:300])
+        self.assertIn("A published post", self._titles(response))
+        self.assertNotIn("An unfinished draft", self._titles(response))
+
+    def test_another_user_cannot_open_a_draft(self):
+        self.client.force_authenticate(user=self.reader)
+        response = self.client.get(f"/api/blog/posts/{self.draft.id}/")
+        self.assertEqual(response.status_code, 404, response.content[:300])
+
+    def test_the_author_sees_their_own_draft_in_the_list(self):
+        self.client.force_authenticate(user=self.author)
+        response = self.client.get("/api/blog/posts/")
+        self.assertIn("An unfinished draft", self._titles(response))
+
+    def test_the_author_can_open_their_own_draft(self):
+        self.client.force_authenticate(user=self.author)
+        response = self.client.get(f"/api/blog/posts/{self.draft.id}/")
+        self.assertEqual(response.status_code, 200, response.content[:300])
+
+    def test_drafts_only_returns_the_users_own_unpublished_posts(self):
+        BlogPost.objects.create(
+            title="Someone else's draft",
+            content="<p>x</p>",
+            author=self.reader,
+            category=self.category,
+            read_time="1 min",
+            is_published=False,
+        )
+        self.client.force_authenticate(user=self.author)
+        response = self.client.get("/api/blog/posts/?status=draft")
+        titles = self._titles(response)
+        self.assertIn("An unfinished draft", titles)
+        self.assertNotIn("Someone else's draft", titles)
+        self.assertNotIn("A published post", titles)
+
+
+class PublishDateTests(TestCase):
+    """published_at should mean published, not created.
+
+    It was auto_now_add, so it recorded creation. A draft written on Monday and
+    published on Friday claimed Monday, and the feed ordered by it put a
+    freshly published post wherever it happened to have been started.
+    """
+
+    def setUp(self):
+        self.author = User.objects.create_user(
+            username="dater", email="dater@example.com", password="pw"
+        )
+        self.category = Category.objects.create(name="Tech")
+
+    def _post(self, title, published):
+        return BlogPost.objects.create(
+            title=title,
+            content="<p>x</p>",
+            author=self.author,
+            category=self.category,
+            read_time="1 min",
+            is_published=published,
+        )
+
+    def test_a_draft_has_no_publication_date(self):
+        draft = self._post("Draft", published=False)
+        self.assertIsNone(draft.published_at)
+        self.assertIsNotNone(draft.created_at)
+
+    def test_publishing_stamps_the_date(self):
+        draft = self._post("Draft", published=False)
+        draft.is_published = True
+        draft.save()
+        draft.refresh_from_db()
+        self.assertIsNotNone(draft.published_at)
+
+    def test_the_publication_date_is_later_than_creation(self):
+        draft = self._post("Draft", published=False)
+        created = draft.created_at
+        draft.is_published = True
+        draft.save()
+        draft.refresh_from_db()
+        self.assertGreaterEqual(draft.published_at, created)
+
+    def test_unpublishing_clears_the_date(self):
+        post = self._post("Live", published=True)
+        self.assertIsNotNone(post.published_at)
+        post.is_published = False
+        post.save()
+        post.refresh_from_db()
+        self.assertIsNone(post.published_at)
+
+    def test_republishing_uses_a_fresh_date(self):
+        post = self._post("Live", published=True)
+        first = post.published_at
+
+        post.is_published = False
+        post.save()
+        post.is_published = True
+        post.save()
+        post.refresh_from_db()
+
+        self.assertIsNotNone(post.published_at)
+        self.assertGreaterEqual(post.published_at, first)

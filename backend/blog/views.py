@@ -2,6 +2,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import generics, permissions, status, filters
 from rest_framework.pagination import PageNumberPagination
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
@@ -45,6 +46,18 @@ class BlogPostApiView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         queryset = super().get_queryset()
+
+        # is_published was never filtered, so an unfinished post was served to
+        # everyone exactly like a published one. That made a draft impossible:
+        # saving one published it. A draft is visible only to its author.
+        user = self.request.user
+        status_filter = self.request.query_params.get("status")
+
+        if status_filter == "draft":
+            queryset = queryset.filter(is_published=False, author=user)
+        else:
+            queryset = queryset.filter(Q(is_published=True) | Q(author=user))
+
         category = self.request.query_params.get("category")
         tag = self.request.query_params.get("tag")
         by = self.request.query_params.get("by")
@@ -110,6 +123,12 @@ class BlogPostDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = BlogPostSerializer
     queryset = BlogPost.objects.select_related('author', 'category').prefetch_related('tags', 'comments')
     permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        """Someone else's draft should 404, not merely be absent from lists."""
+        return super().get_queryset().filter(
+            Q(is_published=True) | Q(author=self.request.user)
+        )
 
     def get_serializer_context(self):
         return {'request': self.request}
