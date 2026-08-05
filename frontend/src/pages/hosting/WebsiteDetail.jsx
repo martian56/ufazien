@@ -1,5 +1,12 @@
 import { useState, useEffect } from "react"
 import WebsiteAnalyticsTab from "../../features/hosting/WebsiteAnalyticsTab"
+import WebsiteDeploymentsTab from "../../features/hosting/WebsiteDeploymentsTab"
+import WebsiteFilesTab from "../../features/hosting/WebsiteFilesTab"
+import WebsiteOverviewTab from "../../features/hosting/WebsiteOverviewTab"
+import WebsiteSettingsTab from "../../features/hosting/WebsiteSettingsTab"
+import { formatDate, formatStorage, getSSLStatus, getStatusIcon, getWebsiteUrl } from "../../features/hosting/websiteFormat"
+import { copyText } from "../../lib/clipboard"
+import { errorMessage } from "../../lib/api/errors"
 import { useParams, useNavigate } from "react-router-dom"
 import { Helmet } from "react-helmet"
 import {
@@ -7,45 +14,20 @@ import {
   ExternalLink,
   Settings,
   Activity,
-  Database,
   FileText,
-  Folder,
   Globe,
   Shield,
   Upload,
   Download,
   RefreshCw,
-  Trash2,
-  Edit,
   Copy,
-  CheckCircle,
   AlertCircle,
   Clock,
   Eye,
   HardDrive,
   Zap,
-  Menu,
-  Play,
-  Square,
   BarChart3,
-  Code,
-  Terminal,
-  Users,
-  TrendingUp
 } from "lucide-react"
-import { 
-  LineChart, 
-  Line, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer,
-  AreaChart,
-  Area,
-  BarChart,
-  Bar
-} from 'recharts'
 import HostingSidebar from "../../components/hosting/HostingSidebar"
 import ConfirmationModal from "../../components/ui/ConfirmationModal"
 import { hostingApi } from "../../utils/hostingApi"
@@ -72,6 +54,8 @@ export default function WebsiteDetail() {
   const [uploading, setUploading] = useState(false)
   const [selectedFiles, setSelectedFiles] = useState([])
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, loading: false })
+  const [copied, setCopied] = useState(null)
+  const [filesError, setFilesError] = useState(null)
   const { deployWebsite, deleteWebsite } = useWebsites()
 
   // Fetch website data
@@ -136,10 +120,15 @@ export default function WebsiteDetail() {
       const res = await hostingApi.listFiles(websiteId)
       setFiles(res.files || [])
       setFolders(res.folders || [])
+      setFilesError(null)
     } catch (err) {
-      console.error('Failed to list files:', err)
+      // A failed listing used to be swallowed into empty arrays, so the tab
+      // said "No files or folders uploaded yet" when the server had actually
+      // refused. Website.domain is SET_NULL, so a deleted domain leaves every
+      // file operation returning 400 and the site looking merely empty.
       setFiles([])
       setFolders([])
+      setFilesError(errorMessage(err, 'Could not load files'))
     }
   }
 
@@ -210,17 +199,6 @@ export default function WebsiteDetail() {
       setDeployments(deploymentsData.results || deploymentsData || [])
     } catch (err) {
       alert('Failed to deploy website: ' + err.message)
-    }
-  }
-
-  const handleDelete = async () => {
-    if (confirm('Are you sure you want to delete this website? This action cannot be undone.')) {
-      try {
-        await deleteWebsite(websiteId)
-        navigate('/hosting/websites')
-      } catch (err) {
-        alert('Failed to delete website: ' + err.message)
-      }
     }
   }
 
@@ -321,67 +299,10 @@ export default function WebsiteDetail() {
     setEditingEnvVars(false)
   }
 
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
-  }
-
-  const formatStorage = (mb) => {
-    const storage = mb || 0
-    if (storage < 1024) return `${storage.toFixed(1)} MB`
-    return `${(storage / 1024).toFixed(1)} GB`
-  }
-
-  const getWebsiteUrl = () => {
-    if (website?.domain?.name) {
-      return website.domain.name
-    }
-    // Generate subdomain URL as fallback
-    return `${website?.name?.toLowerCase().replace(/\s+/g, '-')}.ufazien.com`
-  }
-
-  const getSSLStatus = () => {
-    // Check if website has SSL enabled through domain
-    return website?.domain?.ssl_enabled || false
-  }
-
-  const getStatusIcon = (status) => {
-    switch (status) {
-      case 'active':
-        return <CheckCircle className="w-5 h-5 text-green-600" />
-      case 'building':
-        return <RefreshCw className="w-5 h-5 text-yellow-600 animate-spin" />
-      case 'inactive':
-        return <Square className="w-5 h-5 text-gray-400" />
-      default:
-        return <AlertCircle className="w-5 h-5 text-red-600" />
-    }
-  }
-
-  const getLogIcon = (status) => {
-    switch (status) {
-      case 'success':
-      case 'completed':
-        return <CheckCircle className="w-4 h-4 text-green-600" />
-      case 'error':
-      case 'failed':
-        return <AlertCircle className="w-4 h-4 text-red-600" />
-      case 'building':
-      case 'queued':
-        return <RefreshCw className="w-4 h-4 text-blue-600 animate-spin" />
-      default:
-        return <Clock className="w-4 h-4 text-gray-400" />
-    }
-  }
-
-  const copyToClipboard = (text) => {
-    navigator.clipboard.writeText(text)
-    // Could add toast notification here
+  const handleCopyUrl = async () => {
+    const ok = await copyText(`https://${getWebsiteUrl(website)}`)
+    setCopied(ok ? 'copied' : 'failed')
+    setTimeout(() => setCopied(null), 2000)
   }
 
   if (loading) {
@@ -463,14 +384,19 @@ export default function WebsiteDetail() {
                   </div>
                   <div className="flex items-center space-x-4 mt-2">
                     <button
-                      onClick={() => copyToClipboard(`https://${getWebsiteUrl()}`)}
+                      onClick={handleCopyUrl}
                       className="flex items-center text-blue-600 hover:text-blue-700 transition-colors"
                     >
                       <Globe className="w-4 h-4 mr-1" />
-                      {getWebsiteUrl()}
+                      {getWebsiteUrl(website)}
                       <Copy className="w-3 h-3 ml-1" />
                     </button>
-                    {getSSLStatus() && (
+                    {copied && (
+                      <span className={`text-sm ${copied === 'copied' ? 'text-green-600' : 'text-red-600'}`}>
+                        {copied === 'copied' ? 'Copied' : 'Could not copy'}
+                      </span>
+                    )}
+                    {getSSLStatus(website) && (
                       <span className="flex items-center text-green-600 text-sm">
                         <Shield className="w-4 h-4 mr-1" />
                         SSL Enabled
@@ -480,7 +406,7 @@ export default function WebsiteDetail() {
                 </div>
                 <div className="flex items-center space-x-2">
                   <a 
-                    href={`https://${getWebsiteUrl()}`} 
+                    href={`https://${getWebsiteUrl(website)}`} 
                     target="_blank" 
                     rel="noopener noreferrer"
                   >
@@ -573,474 +499,57 @@ export default function WebsiteDetail() {
 
             {/* Tab Content */}
             {activeTab === 'overview' && (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Deployment Status */}
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Deployment Status</h3>
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-gray-700">Status</span>
-                      <div className="flex items-center">
-                        {getStatusIcon(website.status)}
-                        <span className="ml-2 text-sm capitalize">{website.status}</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-gray-700">Type</span>
-                      <span className="text-sm text-gray-600 capitalize">{website.website_type || 'static'}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-gray-700">Last Deployment</span>
-                      <span className="text-sm text-gray-600">
-                        {website.last_deployment ? formatDate(website.last_deployment) : 'Never'}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-gray-700">SSL Certificate</span>
-                      <span className={`text-sm ${getSSLStatus() ? 'text-green-600' : 'text-red-600'}`}>
-                        {getSSLStatus() ? 'Active' : 'Inactive'}
-                      </span>
-                    </div>
-                  </div>
-                  
-                  <div className="mt-6 flex space-x-3">
-                    <button 
-                      onClick={handleDeploy}
-                      className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
-                    >
-                      Deploy Now
-                    </button>
-                    <button 
-                      onClick={() => setActiveTab('deployments')}
-                      className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                    >
-                      View Logs
-                    </button>
-                  </div>
-                </div>
-
-                {/* Recent Activity */}
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Activity</h3>
-                  <div className="space-y-4">
-                    {deployments.slice(0, 4).map((deployment) => (
-                      <div key={deployment.id} className="flex items-start space-x-3">
-                        <div className="flex-shrink-0 mt-0.5">
-                          {getLogIcon(deployment.status)}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm text-gray-900">
-                            {deployment.commit_message || `Deployment ${deployment.status}`}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            {deployment.started_at ? formatDate(deployment.started_at) : 'Unknown time'}
-                          </p>
-                        </div>
-                        {deployment.deploy_time_seconds && (
-                          <span className="text-xs text-gray-500">{deployment.deploy_time_seconds}s</span>
-                        )}
-                      </div>
-                    ))}
-                    {deployments.length === 0 && (
-                      <p className="text-sm text-gray-500">No deployment history available</p>
-                    )}
-                  </div>
-                </div>
-              </div>
+              <WebsiteOverviewTab
+                website={website}
+                deployments={deployments}
+                onDeploy={handleDeploy}
+                onViewLogs={() => setActiveTab('deployments')}
+              />
             )}
 
             {activeTab === 'deployments' && (
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-                <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-                  <h3 className="text-lg font-semibold text-gray-900">Deployment History</h3>
-                  <button 
-                    onClick={handleDeploy}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
-                  >
-                    New Deployment
-                  </button>
-                </div>
-                <div className="divide-y divide-gray-200">
-                  {deployments.map((deployment) => (
-                    <div key={deployment.id} className="p-6 hover:bg-gray-50 transition-colors">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                          {getLogIcon(deployment.status)}
-                          <div>
-                            <p className="font-medium text-gray-900">
-                              {deployment.commit_message || `Deployment ${deployment.status}`}
-                            </p>
-                            <p className="text-sm text-gray-600">
-                              {deployment.started_at ? formatDate(deployment.started_at) : 'Unknown time'}
-                            </p>
-                            {deployment.commit_hash && (
-                              <p className="text-xs text-gray-500">
-                                Commit: {deployment.commit_hash.substring(0, 8)}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          {deployment.deploy_time_seconds && (
-                            <span className="text-sm text-gray-500">{deployment.deploy_time_seconds}s</span>
-                          )}
-                          <button className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
-                            <Eye className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                      {deployment.error_message && (
-                        <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
-                          <p className="text-sm text-red-700">{deployment.error_message}</p>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                  {deployments.length === 0 && (
-                    <div className="p-6 text-center">
-                      <p className="text-gray-500">No deployments yet</p>
-                      <button 
-                        onClick={handleDeploy}
-                        className="mt-2 text-blue-600 hover:text-blue-700"
-                      >
-                        Create your first deployment
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
+              <WebsiteDeploymentsTab deployments={deployments} onDeploy={handleDeploy} />
             )}
 
             {activeTab === 'files' && (
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-lg font-semibold text-gray-900">File Manager</h3>
-                  <div className="flex space-x-2">
-                            <label className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer inline-flex items-center">
-                              <Upload className="w-4 h-4 mr-2 inline" />
-                              <input type="file" multiple className="hidden" onChange={(e) => setSelectedFiles(Array.from(e.target.files))} />
-                              Upload Files
-                            </label>
-                            <label className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer inline-flex items-center">
-                              <Folder className="w-4 h-4 mr-2 inline" />
-                              <input type="file" multiple webkitdirectory="" className="hidden" onChange={(e) => {
-                                const files = Array.from(e.target.files);
-                                
-                                // Store the webkitRelativePath in a custom property
-                                const filesWithFolderStructure = files.map(file => {
-                                  // Create a new File object and add the relative path as a custom property
-                                  const fileWithPath = new File([file], file.name, { type: file.type });
-                                  fileWithPath.relativePath = file.webkitRelativePath;
-                                  return fileWithPath;
-                                });
-                                
-                                
-                                setSelectedFiles(filesWithFolderStructure);
-                              }} />
-                              Upload Folder
-                            </label>
-                            <button onClick={async () => { await refreshFiles() }} className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
-                              <RefreshCw className="w-4 h-4 mr-2 inline" />
-                              Refresh
-                            </button>
-                  </div>
-                </div>
-                
-                <div className="h-96 border-2 border-dashed border-gray-300 rounded-lg p-4 overflow-auto">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="text-sm text-gray-600">
-                      {files.length} files, {folders.length} folders
-                    </div>
-                    <div className="text-sm text-gray-500">{website.storage_used_mb ? formatStorage(website.storage_used_mb) : ''}</div>
-                  </div>
-
-                  {selectedFiles.length > 0 && (
-                    <div className="mb-4">
-                      <div className="text-sm font-medium text-gray-700 mb-2">Files to upload</div>
-                      <ul className="space-y-2">
-                        {selectedFiles.map((f, idx) => (
-                          <li key={idx} className="flex items-center justify-between bg-gray-50 p-2 rounded">
-                            <span className="text-sm text-gray-800">
-                              {f.relativePath || f.name}
-                              {f.relativePath && f.relativePath !== f.name && (
-                                <span className="text-xs text-gray-400 ml-2">(from folder)</span>
-                              )}
-                            </span>
-                            <span className="text-xs text-gray-500">{(f.size/1024).toFixed(1)} KB</span>
-                          </li>
-                        ))}
-                      </ul>
-                      <div className="text-xs text-gray-500 mt-2">
-                        Debug: {selectedFiles.length} files selected
-                      </div>
-                      <div className="mt-2 flex space-x-2">
-                        <button disabled={uploading} onClick={async () => await handleUpload()} className="px-3 py-1 bg-blue-600 text-white rounded">Upload</button>
-                        <button onClick={() => setSelectedFiles([])} className="px-3 py-1 border rounded">Cancel</button>
-                      </div>
-                    </div>
-                  )}
-
-                  <div>
-                    {files.length === 0 && folders.length === 0 ? (
-                      <div className="text-center py-8">
-                        <FileText className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-                        <p className="text-gray-600">No files or folders uploaded yet</p>
-                      </div>
-                    ) : (
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="text-left text-xs text-gray-500">
-                            <th>Name</th>
-                            <th>Type</th>
-                            <th>Size</th>
-                            <th>Modified</th>
-                            <th></th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {/* Display folders first */}
-                          {folders.map((folder) => (
-                            <tr key={`folder-${folder.name}`} className="border-t">
-                              <td className="py-2 flex items-center">
-                                <Folder className="w-4 h-4 text-blue-500 mr-2" />
-                                {folder.name}
-                              </td>
-                              <td className="py-2 text-gray-500">Folder ({folder.file_count} files)</td>
-                              <td className="py-2 text-gray-500">-</td>
-                              <td className="py-2 text-gray-500">{folder.modified ? new Date(folder.modified).toLocaleString() : '-'}</td>
-                              <td className="py-2 text-right">
-                                <button onClick={() => handleDownload(folder.name)} className="px-2 py-1 text-sm mr-2 bg-gray-100 rounded">Download</button>
-                                <button onClick={() => handleFileDelete(folder.name)} className="px-2 py-1 text-sm bg-red-50 text-red-600 rounded">Delete</button>
-                              </td>
-                            </tr>
-                          ))}
-                          {/* Display files */}
-                          {files.map((f) => (
-                            <tr key={`file-${f.name}`} className="border-t">
-                              <td className="py-2 flex items-center">
-                                <FileText className="w-4 h-4 text-gray-500 mr-2" />
-                                {f.name}
-                              </td>
-                              <td className="py-2 text-gray-500">File</td>
-                              <td className="py-2 text-gray-500">{(f.size/1024).toFixed(1)} KB</td>
-                              <td className="py-2 text-gray-500">{f.modified ? new Date(f.modified).toLocaleString() : '-'}</td>
-                              <td className="py-2 text-right">
-                                <button onClick={() => handleDownload(f.name)} className="px-2 py-1 text-sm mr-2 bg-gray-100 rounded">Download</button>
-                                <button onClick={() => handleFileDelete(f.name)} className="px-2 py-1 text-sm bg-red-50 text-red-600 rounded">Delete</button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    )}
-                  </div>
-                </div>
-              </div>
+              <WebsiteFilesTab
+                website={website}
+                files={files}
+                folders={folders}
+                selectedFiles={selectedFiles}
+                onSelectFiles={setSelectedFiles}
+                uploading={uploading}
+                onUpload={handleUpload}
+                onDownload={handleDownload}
+                onDelete={handleFileDelete}
+                onRefresh={refreshFiles}
+                error={filesError}
+              />
             )}
 
             {activeTab === 'analytics' && (
               <WebsiteAnalyticsTab website={website} analytics={analytics} />
             )}
 
-
             {activeTab === 'settings' && (
-              <div className="space-y-6">
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold text-gray-900">General Settings</h3>
-                    {!editingSettings ? (
-                      <button
-                        onClick={() => setEditingSettings(true)}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
-                      >
-                        <Edit className="w-4 h-4 mr-2 inline" />
-                        Edit
-                      </button>
-                    ) : (
-                      <div className="flex space-x-2">
-                        <button
-                          onClick={handleSaveSettings}
-                          className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
-                        >
-                          Save
-                        </button>
-                        <button
-                          onClick={handleCancelSettings}
-                          className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Website Name
-                      </label>
-                      <input
-                        type="text"
-                        value={settingsForm.name}
-                        onChange={(e) => handleSettingsChange('name', e.target.value)}
-                        disabled={!editingSettings}
-                        className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                          !editingSettings ? 'bg-gray-50 cursor-not-allowed' : ''
-                        }`}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Description
-                      </label>
-                      <textarea
-                        value={settingsForm.description}
-                        onChange={(e) => handleSettingsChange('description', e.target.value)}
-                        disabled={!editingSettings}
-                        rows={3}
-                        className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                          !editingSettings ? 'bg-gray-50 cursor-not-allowed' : ''
-                        }`}
-                        placeholder="Optional description of your website"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Domain
-                      </label>
-                      <input
-                        type="text"
-                        value={getWebsiteUrl()}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50"
-                        readOnly
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Environment Variables */}
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold text-gray-900">Environment Variables</h3>
-                    {!editingEnvVars ? (
-                      <button
-                        onClick={() => setEditingEnvVars(true)}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
-                      >
-                        <Edit className="w-4 h-4 mr-2 inline" />
-                        Edit
-                      </button>
-                    ) : (
-                      <div className="flex space-x-2">
-                        <button
-                          onClick={handleSaveEnvVars}
-                          className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
-                        >
-                          Save
-                        </button>
-                        <button
-                          onClick={handleCancelEnvVars}
-                          className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                  
-                  <div className="space-y-3">
-                    {envVars.length === 0 ? (
-                      <div className="text-center py-8">
-                        <Terminal className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                        <p className="text-gray-600 font-medium">No environment variables</p>
-                        <p className="text-sm text-gray-500">Add environment variables for your application</p>
-                      </div>
-                    ) : (
-                      envVars.map((envVar) => (
-                        <div key={envVar.id} className="flex items-center space-x-3">
-                          <input
-                            type="text"
-                            value={envVar.key}
-                            onChange={(e) => handleEnvVarChange(envVar.id, 'key', e.target.value)}
-                            disabled={!editingEnvVars}
-                            placeholder="Variable name"
-                            className={`flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                              !editingEnvVars ? 'bg-gray-50 cursor-not-allowed' : ''
-                            }`}
-                          />
-                          <span className="text-gray-400">=</span>
-                          <input
-                            type="text"
-                            value={envVar.value}
-                            onChange={(e) => handleEnvVarChange(envVar.id, 'value', e.target.value)}
-                            disabled={!editingEnvVars}
-                            placeholder="Variable value"
-                            className={`flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                              !editingEnvVars ? 'bg-gray-50 cursor-not-allowed' : ''
-                            }`}
-                          />
-                          {editingEnvVars && (
-                            <button
-                              onClick={() => handleRemoveEnvVar(envVar.id)}
-                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          )}
-                        </div>
-                      ))
-                    )}
-                    
-                    {editingEnvVars && (
-                      <button
-                        onClick={handleAddEnvVar}
-                        className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-400 hover:text-blue-600 transition-colors font-medium"
-                      >
-                        + Add Environment Variable
-                      </button>
-                    )}
-                  </div>
-                  
-                  <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                    <p className="text-sm text-yellow-800">
-                      <strong>Note:</strong> Environment variables are available during build and runtime. 
-                      Changes will take effect on the next deployment.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">SSL Certificate</h3>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-700">SSL encryption protects your website and visitors</p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Status: {getSSLStatus() ? 'Active' : 'Inactive'}
-                      </p>
-                    </div>
-                    <button className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
-                      {getSSLStatus() ? 'Renew SSL' : 'Enable SSL'}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="bg-red-50 border border-red-200 rounded-lg p-6">
-                  <h3 className="text-lg font-semibold text-red-900 mb-4">Danger Zone</h3>
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-red-900">Delete Website</p>
-                        <p className="text-xs text-red-700">This action cannot be undone</p>
-                      </div>
-                      <button 
-                        onClick={openDeleteModal}
-                        className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <WebsiteSettingsTab
+                website={website}
+                editingSettings={editingSettings}
+                onEditSettings={() => setEditingSettings(true)}
+                settingsForm={settingsForm}
+                onSettingsChange={handleSettingsChange}
+                onSaveSettings={handleSaveSettings}
+                onCancelSettings={handleCancelSettings}
+                envVars={envVars}
+                editingEnvVars={editingEnvVars}
+                onEditEnvVars={() => setEditingEnvVars(true)}
+                onEnvVarChange={handleEnvVarChange}
+                onAddEnvVar={handleAddEnvVar}
+                onRemoveEnvVar={handleRemoveEnvVar}
+                onSaveEnvVars={handleSaveEnvVars}
+                onCancelEnvVars={handleCancelEnvVars}
+                onDeleteWebsite={openDeleteModal}
+              />
             )}
           </div>
         </div>
