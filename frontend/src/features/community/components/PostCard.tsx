@@ -1,8 +1,19 @@
 import { Link } from "react-router-dom"
 import { Bookmark, Eye, Flag, Heart, MessageSquare, Pin, Reply, Share2 } from "lucide-react"
 import { getYearDisplay } from "../../../utils/majorUtils"
+import type { ForumPost } from "../../../lib/api/endpoints/community"
+import type { User } from "../../../lib/api/types"
 
-export default function PostCard({ post, onLike, onBookmark, onShare }) {
+interface PostCardProps {
+  post: ForumPost
+  onLike: () => void
+  onBookmark: () => void
+  onShare: (post: ForumPost) => void
+  user: User | null
+}
+
+
+export default function PostCard({ post, onLike, onBookmark, onShare, user }: PostCardProps) {
   return (
     <article className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
       {/* Header */}
@@ -10,7 +21,7 @@ export default function PostCard({ post, onLike, onBookmark, onShare }) {
         <div className="flex items-center gap-3">
           <img
             src={post.author.avatar || "/placeholder.svg"}
-            alt={post.author.name}
+            alt={post.author.username}
             className="w-10 h-10 rounded-full border-2 border-gray-200"
           />
           <div>

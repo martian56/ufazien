@@ -1,7 +1,16 @@
 import { Users } from "lucide-react"
 import GroupCard from "./GroupCard"
+import type { Group } from "../../../lib/api/endpoints/community"
 
-export default function GroupsView({ groups, onJoinGroup, onLeaveGroup, onSelectGroup, user }) {
+interface GroupsViewProps {
+  groups: Group[]
+  onJoinGroup: (groupId: string) => void
+  onLeaveGroup: (groupId: string) => void
+  onSelectGroup: (group: Group) => void
+}
+
+
+export default function GroupsView({ groups, onJoinGroup, onLeaveGroup, onSelectGroup }: GroupsViewProps) {
   return (
     <div className="p-4 sm:p-6 lg:p-8">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -12,7 +21,6 @@ export default function GroupsView({ groups, onJoinGroup, onLeaveGroup, onSelect
             onJoin={() => onJoinGroup(group.id)}
             onLeave={() => onLeaveGroup(group.id)}
             onSelect={() => onSelectGroup(group)}
-            user={user}
           />
         ))}
       </div>

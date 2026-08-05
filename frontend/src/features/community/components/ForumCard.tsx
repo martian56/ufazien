@@ -1,9 +1,16 @@
 import { Book, Briefcase, Camera, Code, Coffee, MessageCircle } from "lucide-react"
+import type { Forum } from "../../../lib/api/endpoints/community"
+
+interface ForumCardProps {
+  forum: Forum
+  onSelect: () => void
+}
 
 
-export default function ForumCard({ forum, onSelect }) {
+
+export default function ForumCard({ forum, onSelect }: ForumCardProps) {
   // Import icons dynamically based on icon_name from API
-  const iconMap = {
+  const iconMap: Record<string, typeof MessageCircle> = {
     MessageCircle,
     Book,
     Briefcase,

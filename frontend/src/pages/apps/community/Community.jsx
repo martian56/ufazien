@@ -528,7 +528,6 @@ export default function Community() {
               onJoinGroup={handleJoinGroup}
               onLeaveGroup={handleLeaveGroup}
               onSelectGroup={setSelectedGroup}
-              user={user}
             />
           )}
 

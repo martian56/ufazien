@@ -1,7 +1,16 @@
 import { Book, Briefcase, Camera, Clock, Code, Coffee, Crown, Globe, Lock, MessageCircle, Users } from "lucide-react"
+import type { Group } from "../../../lib/api/endpoints/community"
 
-export default function GroupCard({ group, onJoin, onLeave, onSelect }) {
-  const categoryIcons = {
+interface GroupCardProps {
+  group: Group
+  onJoin: () => void
+  onLeave: () => void
+  onSelect: () => void
+}
+
+
+export default function GroupCard({ group, onJoin, onLeave, onSelect }: GroupCardProps) {
+  const categoryIcons: Record<string, typeof Users> = {
     study: Book,
     tech: Code,
     language: MessageCircle,
@@ -32,7 +41,7 @@ export default function GroupCard({ group, onJoin, onLeave, onSelect }) {
             </div>
           </div>
         </div>
-        {group.isOwner && <Crown className="w-5 h-5 text-yellow-500" />}
+        {group.is_owner && <Crown className="w-5 h-5 text-yellow-500" />}
       </div>
 
       {/* Description */}
