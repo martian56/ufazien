@@ -1,3 +1,5 @@
+import logging
+
 from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.conf import settings
@@ -7,6 +9,8 @@ import threading
 from pywebpush import webpush, WebPushException
 
 from ..models import Notification, NotificationPreference, PushSubscription
+
+logger = logging.getLogger(__name__)
 
 User = get_user_model()
 
@@ -26,9 +30,9 @@ class NotificationService:
                     html_message=html_message,
                     fail_silently=False,
                 )
-                print(f"✅ Email sent successfully to {', '.join(recipient_list)}")
+                logger.info(f"Email sent successfully to {', '.join(recipient_list)}")
             except Exception as e:
-                print(f"❌ Error sending email: {e}")
+                logger.error(f"Error sending email: {e}")
         
         # Start email sending in background thread
         email_thread = threading.Thread(target=_send_email)
@@ -151,10 +155,10 @@ class NotificationService:
             notification.email_sent = True
             notification.save(update_fields=['email_sent'])
             
-            print(f"📧 Email queued for {notification.recipient.email}")
+            logger.info(f"Email queued for {notification.recipient.email}")
             
         except Exception as e:
-            print(f"❌ Error preparing email notification: {e}")
+            logger.error(f"Error preparing email notification: {e}")
             # Still try to send a basic email
             try:
                 NotificationService.send_email_async(
@@ -165,9 +169,9 @@ class NotificationService:
                 )
                 notification.email_sent = True
                 notification.save(update_fields=['email_sent'])
-                print(f"📧 Fallback email queued for {notification.recipient.email}")
+                logger.info(f"Fallback email queued for {notification.recipient.email}")
             except Exception as fallback_error:
-                print(f"❌ Even fallback email failed: {fallback_error}")
+                logger.error(f"Even fallback email failed: {fallback_error}")
     
     @staticmethod
     def _send_push_notification(notification):
@@ -368,7 +372,7 @@ class NotificationService:
                 recipient_list=[user.email]
             )
             
-            print(f"📧 Welcome email queued for {user.email}")
+            logger.info(f"Welcome email queued for {user.email}")
             return True
             
         except Exception as e:
@@ -435,7 +439,7 @@ class NotificationService:
                 recipient_list=[user.email]
             )
             
-            print(f"🔐 Login alert email queued for {user.email}")
+            logger.info(f"Login alert email queued for {user.email}")
             return True
             
         except Exception as e:
