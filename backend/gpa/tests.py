@@ -559,3 +559,54 @@ class SavedCalculationApiTests(APITestCase):
         self.client.force_authenticate(user=None)
         response = self.client.post("/api/gpa/calculations/", self._payload(), format="json")
         self.assertEqual(response.status_code, 401)
+
+    def test_a_period_can_carry_a_semesters_worth_of_credits(self):
+        """CourseGrade holds a whole period, not a single course.
+
+        The validator capped credits at 10, the figure for one course, while
+        update_user_gpa wrote 30 for a semester straight through the ORM,
+        which skips validation. The API path rejected what the ORM path had
+        been storing all along.
+        """
+        payload = {
+            "name": "Full year",
+            "calculation_type": "yearly",
+            "course_grades": [
+                {"course_name": "Year 1", "credits": 60, "grade_type": "ufaz", "ufaz_grade": 15.0},
+            ],
+        }
+        response = self.client.post("/api/gpa/calculations/", payload, format="json")
+        self.assertEqual(response.status_code, 201, response.content[:300])
+        self.assertEqual(UserGPA.objects.get(user=self.user).total_credits, 60)
+
+    def test_credits_beyond_a_full_year_are_still_refused(self):
+        payload = {
+            "name": "Impossible",
+            "calculation_type": "yearly",
+            "course_grades": [
+                {"course_name": "Year 1", "credits": 500, "grade_type": "ufaz", "ufaz_grade": 15.0},
+            ],
+        }
+        self.assertEqual(
+            self.client.post("/api/gpa/calculations/", payload, format="json").status_code, 400
+        )
+
+    def test_the_credit_value_does_not_change_the_gpa(self):
+        """Every period carries the same weight, so the figure is a display
+        detail rather than something that moves the result."""
+        def gpa_for(credits, name):
+            self.client.post(
+                "/api/gpa/calculations/",
+                {
+                    "name": name,
+                    "calculation_type": "semester",
+                    "course_grades": [
+                        {"course_name": "S1", "credits": credits, "grade_type": "ufaz", "ufaz_grade": 17.0},
+                        {"course_name": "S2", "credits": credits, "grade_type": "ufaz", "ufaz_grade": 12.0},
+                    ],
+                },
+                format="json",
+            )
+            return UserGPA.objects.get(user=self.user, name=name).overall_gpa
+
+        self.assertEqual(gpa_for(10, "ten"), gpa_for(30, "thirty"))

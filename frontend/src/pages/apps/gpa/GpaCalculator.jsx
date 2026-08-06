@@ -152,12 +152,13 @@ export default function GpaCalculator() {
       await gpaApi.save(
         name.trim(),
         lastCalculatorTab,
-        // CourseGrade.credits is validated as a course's credits and capped
-        // at 10. A period is not a course, and every period here carries the
-        // same weight, so the value does not change the resulting GPA.
+        // 30 ECTS for a semester, 60 for a year, matching what the autosave
+        // writes. Every period carries the same weight either way, so this
+        // does not change the GPA, but total_credits is displayed and should
+        // mean something.
         filled.map((avg) => ({
           course_name: avg.period,
-          credits: 10,
+          credits: lastCalculatorTab === "yearly" ? 60 : 30,
           grade_type: "ufaz",
           ufaz_grade: parseFloat(avg.average),
         }))
@@ -883,7 +884,17 @@ export default function GpaCalculator() {
                           className="flex-1 text-left flex items-center justify-between"
                         >
                           <div>
-                            <h4 className="font-medium text-gray-900">{calc.name}</h4>
+                            <h4 className="font-medium text-gray-900 flex items-center gap-2">
+                              {calc.name}
+                              {/* One of these exists per type and is rewritten
+                                  on every change, so it is not a snapshot
+                                  anyone chose to keep. */}
+                              {calc.name?.startsWith("Auto-saved") && (
+                                <span className="text-xs font-normal px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                                  automatic
+                                </span>
+                              )}
+                            </h4>
                             <p className="text-sm text-gray-500">
                               {calc.calculation_type} • {calc.course_count || 0} periods
                             </p>
