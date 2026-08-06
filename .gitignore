@@ -18,3 +18,9 @@ id_ed25519*
 
 # Playwright MCP scratch output
 .playwright-mcp/
+
+# Locally installed Claude Code skills and their generated caches.
+.claude/
+.github/skills/
+.github/agents/
+.github/hooks/

@@ -6,6 +6,18 @@
    posts came out as one undifferentiated wall of text. */
 @plugin "@tailwindcss/typography";
 
+/* Inter for interface text, Lexend for headings. The app had no font at all,
+   so it fell back to whatever the OS offered. */
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Lexend", "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+}
+
 /* Post bodies. Tuned for reading rather than for scanning a UI. */
 .blog-content :where(h2) {
   @apply mt-10 mb-3 scroll-mt-24;
