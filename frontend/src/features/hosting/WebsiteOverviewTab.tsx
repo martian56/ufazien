@@ -1,7 +1,16 @@
 import { formatDate, getLogIcon, getSSLStatus, getStatusIcon } from "./websiteFormat"
+import type { Deployment, Website } from "../../utils/hostingApi"
+
+interface WebsiteOverviewTabProps {
+  website: Website
+  deployments: Deployment[]
+  onDeploy: () => void
+  onViewLogs: () => void
+}
+
 
 /** Deployment status and recent activity, the tab the page opens on. */
-export default function WebsiteOverviewTab({ website, deployments, onDeploy, onViewLogs }) {
+export default function WebsiteOverviewTab({ website, deployments, onDeploy, onViewLogs }: WebsiteOverviewTabProps) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">

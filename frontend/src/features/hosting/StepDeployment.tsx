@@ -1,3 +1,31 @@
+import type React from "react"
+
+interface WizardFormData {
+  name: string
+  subdomain?: string
+  description?: string
+  website_type?: string
+  domainOption?: string
+  selectedDomainId?: string
+  phpVersion?: string
+  ssl?: boolean
+  git_repository?: string
+  deployment_branch?: string
+  environment_variables?: { key: string; value: string }[]
+  deploymentMethod?: string
+  files?: File[]
+}
+
+type WizardErrors = Record<string, string | undefined>
+
+interface StepDeploymentProps {
+  formData: WizardFormData
+  errors: WizardErrors
+  handleInputChange: (field: string, value: unknown) => void
+  handleFileUpload: (event: React.ChangeEvent<HTMLInputElement>) => void
+  removeFile: (index: number) => void
+}
+
 import { FileText, Server, Upload } from "lucide-react"
 
 export default function StepDeployment({
@@ -6,7 +34,7 @@ export default function StepDeployment({
   handleInputChange,
   handleFileUpload,
   removeFile,
-}) {
+}: StepDeploymentProps) {
   return (
             <div className="space-y-6">
               <div>
@@ -102,8 +130,8 @@ export default function StepDeployment({
                             <span>Browse Folder</span>
                             <input
                               type="file"
-                              webkitdirectory=""
-                              directory=""
+                              {...{ webkitdirectory: "", directory: "" }}
+                              
                               multiple
                               onChange={handleFileUpload}
                               className="sr-only"
@@ -112,11 +140,11 @@ export default function StepDeployment({
                         </div>
                       </div>
                   
-                      {formData.files.length > 0 && (
+                      {(formData.files ?? []).length > 0 && (
                         <div className="mt-4">
                           <h4 className="text-sm font-medium text-gray-700 mb-2">Uploaded Files:</h4>
                           <div className="space-y-2 max-h-48 overflow-y-auto">
-                            {formData.files.map((file, index) => (
+                            {(formData.files ?? []).map((file, index) => (
                               <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded">
                                 <span className="text-sm">{file.webkitRelativePath || file.name}</span>
                                 <button
@@ -146,7 +174,7 @@ export default function StepDeployment({
                       <input
                         type="file"
                         accept=".zip"
-                        onChange={(e) => handleInputChange("zipFile", e.target.files[0])}
+                        onChange={(e) => handleInputChange("zipFile", e.target.files?.[0])}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       />
                       {errors.zipFile && (

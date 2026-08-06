@@ -11,6 +11,12 @@ import {
   XAxis,
   YAxis,
 } from "recharts"
+import type { Website } from "../../utils/hostingApi"
+
+interface WebsiteAnalyticsTabProps {
+  website: Website
+  analytics: Record<string, unknown> | null
+}
 
 /**
  * Traffic and bandwidth for one website.
@@ -18,7 +24,7 @@ import {
  * Carved out of WebsiteDetail, which held all five tabs inline in one
  * 1,300-line function.
  */
-export default function WebsiteAnalyticsTab({ website, analytics }) {
+export default function WebsiteAnalyticsTab({ website, analytics }: WebsiteAnalyticsTabProps) {
   return (
         <div className="space-y-6">
           {/* Analytics Stats Cards */}
