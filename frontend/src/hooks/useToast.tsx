@@ -17,7 +17,7 @@ export interface Toast {
 export const useToast = () => {
   const [notifications, setNotifications] = useState<Toast[]>([]);
 
-  const addNotification = useCallback((message: string, type: ToastType = 'success', duration = 4000) => {
+  const addNotification = useCallback((message: string, type: ToastType = 'success', duration: number = 4000) => {
     const id = Date.now() + Math.random();
     const notification: Toast = { id, message, type, duration };
     
@@ -36,10 +36,10 @@ export const useToast = () => {
   }, []);
 
   const toast = {
-    success: (message: string, duration: number) => addNotification(message, 'success', duration),
-    error: (message: string, duration: number) => addNotification(message, 'error', duration),
-    info: (message: string, duration: number) => addNotification(message, 'info', duration),
-    warning: (message: string, duration: number) => addNotification(message, 'warning', duration),
+    success: (message: string, duration?: number) => addNotification(message, 'success', duration),
+    error: (message: string, duration?: number) => addNotification(message, 'error', duration),
+    info: (message: string, duration?: number) => addNotification(message, 'info', duration),
+    warning: (message: string, duration?: number) => addNotification(message, 'warning', duration),
   };
 
   return {

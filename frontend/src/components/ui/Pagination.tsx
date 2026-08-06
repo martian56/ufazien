@@ -1,16 +1,25 @@
 import { ChevronLeft, ChevronRight } from "lucide-react"
 
-export default function Pagination({ 
-  currentPage, 
-  totalPages, 
-  totalCount, 
-  onPageChange, 
-  itemsPerPage = 20 
-}) {
+interface PaginationProps {
+  currentPage: number
+  totalPages: number
+  totalCount: number
+  onPageChange: (page: number) => void
+  itemsPerPage?: number
+}
+
+export default function Pagination({
+  currentPage,
+  totalPages,
+  totalCount,
+  onPageChange,
+  itemsPerPage = 20,
+}: PaginationProps) {
   if (totalPages <= 1) return null
 
   const getPageNumbers = () => {
-    const pages = []
+    // Page numbers, with "..." standing in for a skipped run.
+    const pages: (number | "...")[] = []
     const maxVisible = 5
     
     if (totalPages <= maxVisible) {

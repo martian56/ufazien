@@ -1,6 +1,8 @@
 import React from "react"
 
-const Label = React.forwardRef(({ className = "", ...props }, ref) => {
+type LabelProps = React.LabelHTMLAttributes<HTMLLabelElement>
+
+const Label = React.forwardRef<HTMLLabelElement, LabelProps>(({ className = "", ...props }, ref) => {
   return (
     <label
       ref={ref}
