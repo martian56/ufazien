@@ -42,8 +42,24 @@ class UserGPASerializer(serializers.ModelSerializer):
     def get_course_count(self, obj):
         return obj.course_grades.count()
 
+class NestedCourseGradeSerializer(serializers.ModelSerializer):
+    """A grade being created as part of its parent calculation.
+
+    CourseGradeSerializer uses fields = '__all__', which makes user_gpa a
+    required input. Nested inside a create that is what builds the parent, it
+    cannot be supplied, so POST /gpa/calculations/ always answered
+    "user_gpa: This field is required" and the endpoint could never be used.
+    create() below has always set the parent itself.
+    """
+
+    class Meta:
+        model = CourseGrade
+        exclude = ['user_gpa']
+        read_only_fields = ('gpa_points', 'letter_grade')
+
+
 class CreateUserGPASerializer(serializers.ModelSerializer):
-    course_grades = CourseGradeSerializer(many=True, write_only=True)
+    course_grades = NestedCourseGradeSerializer(many=True, write_only=True)
     
     class Meta:
         model = UserGPA

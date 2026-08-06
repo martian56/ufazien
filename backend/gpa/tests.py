@@ -3,6 +3,7 @@ from django.core.exceptions import ValidationError
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError
 from decimal import Decimal
+from rest_framework.test import APITestCase
 
 from .models import (
     AcademicYear, Semester, Course, UserGPA, CourseGrade, 
@@ -480,3 +481,81 @@ class GradeConversionTest(TestCase):
         for gpa, expected_letter in test_cases:
             letter = CourseGrade.gpa_to_letter(gpa)
             self.assertEqual(letter, expected_letter)
+
+
+class SavedCalculationApiTests(APITestCase):
+    """Deliberately saving, reopening and deleting a calculation.
+
+    POST /gpa/calculations/ could never be used: its nested grade serializer
+    used fields = '__all__', which made user_gpa a required input, and inside
+    a create that is what builds the parent there is nothing to supply.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="gpauser", email="gpa@example.com", password="pw"
+        )
+        self.other = User.objects.create_user(
+            username="gpaother", email="gpaother@example.com", password="pw"
+        )
+        self.client.force_authenticate(user=self.user)
+
+    def _payload(self, name="Third year"):
+        return {
+            "name": name,
+            "calculation_type": "semester",
+            "course_grades": [
+                {"course_name": "Semester 1", "credits": 10, "grade_type": "ufaz", "ufaz_grade": 17.5},
+                {"course_name": "Semester 2", "credits": 10, "grade_type": "ufaz", "ufaz_grade": 14.0},
+            ],
+        }
+
+    def test_a_calculation_can_be_saved_with_a_name(self):
+        response = self.client.post("/api/gpa/calculations/", self._payload(), format="json")
+        self.assertEqual(response.status_code, 201, response.content[:300])
+
+        saved = UserGPA.objects.get(user=self.user, name="Third year")
+        self.assertEqual(saved.course_grades.count(), 2)
+        self.assertIsNotNone(saved.overall_gpa)
+
+    def test_saving_twice_keeps_both(self):
+        """update_user_gpa overwrites one fixed name per type; this does not."""
+        self.client.post("/api/gpa/calculations/", self._payload("First"), format="json")
+        self.client.post("/api/gpa/calculations/", self._payload("Second"), format="json")
+
+        self.assertEqual(UserGPA.objects.filter(user=self.user).count(), 2)
+
+    def test_a_saved_calculation_carries_the_periods_back(self):
+        self.client.post("/api/gpa/calculations/", self._payload(), format="json")
+
+        listed = self.client.get("/api/gpa/calculations/").json()
+        results = listed["results"] if isinstance(listed, dict) else listed
+        grades = results[0]["course_grades"]
+        self.assertEqual(
+            sorted((g["course_name"], g["ufaz_grade"]) for g in grades),
+            [("Semester 1", 17.5), ("Semester 2", 14.0)],
+        )
+
+    def test_a_calculation_can_be_deleted(self):
+        created = self.client.post("/api/gpa/calculations/", self._payload(), format="json")
+        calc_id = UserGPA.objects.get(user=self.user).id
+
+        response = self.client.delete(f"/api/gpa/calculations/{calc_id}/")
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(UserGPA.objects.filter(id=calc_id).exists())
+
+    def test_someone_elses_calculation_is_not_listed_or_reachable(self):
+        self.client.post("/api/gpa/calculations/", self._payload(), format="json")
+        calc_id = UserGPA.objects.get(user=self.user).id
+
+        self.client.force_authenticate(user=self.other)
+        listed = self.client.get("/api/gpa/calculations/").json()
+        results = listed["results"] if isinstance(listed, dict) else listed
+        self.assertEqual(results, [])
+        self.assertEqual(self.client.get(f"/api/gpa/calculations/{calc_id}/").status_code, 404)
+        self.assertEqual(self.client.delete(f"/api/gpa/calculations/{calc_id}/").status_code, 404)
+
+    def test_saving_requires_authentication(self):
+        self.client.force_authenticate(user=None)
+        response = self.client.post("/api/gpa/calculations/", self._payload(), format="json")
+        self.assertEqual(response.status_code, 401)
