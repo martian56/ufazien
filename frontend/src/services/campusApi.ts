@@ -5,6 +5,17 @@
 
 import { api, ApiError } from '../lib/api/client';
 import { clearTokens, setTokens } from '../lib/api/tokens';
+import type {
+    CampusChatMessage,
+    Lobby,
+    LobbyListParams,
+    LobbyMember,
+    LobbyStats,
+    Paginated,
+    PlayerPosition,
+    SavedLobby,
+    StudyRoom,
+} from './campusTypes';
 
 
 class CampusApiService {
@@ -53,11 +64,11 @@ class CampusApiService {
      * @param {string} params.ordering - Ordering field (-created_at, current_players_count, etc.)
      * @returns {Promise<Object>} Paginated lobbies response
      */
-    async getLobbies(params = {}) {
+    async getLobbies(params: LobbyListParams = {}): Promise<Paginated<Lobby>> {
         const queryParams = new URLSearchParams();
         
         // Set default parameters
-        const defaultParams = {
+        const defaultParams: LobbyListParams = {
             page: 1,
             page_size: 20,
             ordering: '-created_at',
@@ -78,7 +89,7 @@ class CampusApiService {
      * @param {string} lobbyId - 8-digit lobby ID
      * @returns {Promise<Object>} Lobby details
      */
-    async getLobby(lobbyId: string) {
+    async getLobby(lobbyId: string): Promise<Lobby> {
         return this.apiRequest(`/lobbies/${lobbyId}/`);
     }
 
@@ -92,7 +103,13 @@ class CampusApiService {
      * @param {string} lobbyData.password - Optional password for private lobbies
      * @returns {Promise<Object>} Created lobby data
      */
-    async createLobby(lobbyData: any) {
+    async createLobby(lobbyData: {
+        name: string;
+        description?: string;
+        max_players?: number;
+        is_private?: boolean;
+        password?: string;
+    }): Promise<Lobby> {
         return this.apiRequest('/lobbies/', {
             method: 'POST',
             body: JSON.stringify(lobbyData)
@@ -105,7 +122,7 @@ class CampusApiService {
      * @param {Object} updateData - Data to update
      * @returns {Promise<Object>} Updated lobby data
      */
-    async updateLobby(lobbyId: string, updateData: any) {
+    async updateLobby(lobbyId: string, updateData: Partial<Lobby>): Promise<Lobby> {
         return this.apiRequest(`/lobbies/${lobbyId}/`, {
             method: 'PUT',
             body: JSON.stringify(updateData)
@@ -204,7 +221,7 @@ class CampusApiService {
      * Get user's current lobbies
      * @returns {Promise<Array>} List of user's current lobbies
      */
-    async getMyLobbies() {
+    async getMyLobbies(): Promise<Lobby[] | Paginated<Lobby>> {
         return this.apiRequest('/my-lobbies/', {
             method: 'GET'
         });
@@ -238,7 +255,7 @@ class CampusApiService {
      * @param {string} lobbyId - 8-digit lobby ID
      * @returns {Promise<Array>} List of lobby members
      */
-    async getLobbyMembers(lobbyId: string) {
+    async getLobbyMembers(lobbyId: string): Promise<LobbyMember[]> {
         const lobby = await this.apiRequest(`/lobbies/${lobbyId}/`);
         return lobby.members || [];
     }
@@ -248,7 +265,7 @@ class CampusApiService {
      * @param {string} lobbyId - 8-digit lobby ID
      * @returns {Promise<Array>} Empty array (positions come via WebSocket)
      */
-    async getPlayerPositions(lobbyId: string) {
+    async getPlayerPositions(lobbyId: string): Promise<PlayerPosition[]> {
         // Positions are handled in real-time via WebSocket
         // This method exists for compatibility but returns empty array
         return [];
@@ -260,7 +277,7 @@ class CampusApiService {
      * @param {number} limit - Number of messages to retrieve (default: 50)
      * @returns {Promise<Array>} Empty array (messages come via WebSocket)
      */
-    async getChatMessages(lobbyId: string, limit = 50) {
+    async getChatMessages(lobbyId: string, limit = 50): Promise<CampusChatMessage[]> {
         // Chat messages are handled in real-time via WebSocket
         // This method exists for compatibility but returns empty array
         return [];
@@ -271,7 +288,7 @@ class CampusApiService {
      * @param {string} lobbyId - 8-digit lobby ID
      * @returns {Promise<Array>} List of study rooms
      */
-    async getStudyRooms(lobbyId: string) {
+    async getStudyRooms(lobbyId: string): Promise<StudyRoom[]> {
         const lobby = await this.apiRequest(`/lobbies/${lobbyId}/`);
         return lobby.study_rooms || [];
     }
@@ -303,7 +320,7 @@ class CampusApiService {
      * Get user's saved lobbies
      * @returns {Promise<Array>} List of saved lobbies
      */
-    async getSavedLobbies() {
+    async getSavedLobbies(): Promise<SavedLobby[] | Paginated<SavedLobby>> {
         return this.apiRequest('/saved-lobbies/');
     }
 
@@ -313,7 +330,7 @@ class CampusApiService {
      * @param {Object} filters - Additional filters
      * @returns {Promise<Object>} Search results
      */
-    async searchLobbies(query: string, filters = {}) {
+    async searchLobbies(query: string, filters: LobbyListParams = {}): Promise<Paginated<Lobby>> {
         const params = {
             search: query,
             ...filters
@@ -325,7 +342,7 @@ class CampusApiService {
      * Get lobby statistics
      * @returns {Promise<Object>} Lobby statistics
      */
-    async getLobbyStats() {
+    async getLobbyStats(): Promise<LobbyStats> {
         return this.apiRequest('/lobbies/stats/');
     }
 

@@ -3,6 +3,8 @@ import { Helmet } from 'react-helmet';
 import { Search, Plus, Lock, Unlock, Users, Star, StarOff, Settings, RefreshCw, Filter, Eye, EyeOff, Zap, ArrowLeft, Building2, Play, Trophy, Users2, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import campusApi from '../../services/campusApi';
+import { campusUserName, type Lobby, type LobbyListParams, type SavedLobby } from '../../services/campusTypes';
+import { errorMessage } from '../../lib/api/errors';
 
 const CampusSimulatorMenu = () => {
   const navigate = useNavigate();
@@ -11,7 +13,7 @@ const CampusSimulatorMenu = () => {
   const [showCreateLobby, setShowCreateLobby] = useState(false);
   const [showQuickJoin, setShowQuickJoin] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
-  const [passwordModalLobbyId, setPasswordModalLobbyId] = useState(null);
+  const [passwordModalLobbyId, setPasswordModalLobbyId] = useState<string | null>(null);
   const [passwordInput, setPasswordInput] = useState('');
   const [filterOpen, setFilterOpen] = useState(true);
   const [passwordFilter, setPasswordFilter] = useState('all'); // 'all', 'public', 'private'
@@ -19,10 +21,10 @@ const CampusSimulatorMenu = () => {
   const [sortBy, setSortBy] = useState('-created_at'); // API sorting field
   
   // API state
-  const [lobbies, setLobbies] = useState([]);
-  const [savedLobbies, setSavedLobbies] = useState([]);
+  const [lobbies, setLobbies] = useState<Lobby[]>([]);
+  const [savedLobbies, setSavedLobbies] = useState<SavedLobby[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1, totalCount: 0 });
   
   // Quick Join state
@@ -61,7 +63,7 @@ const CampusSimulatorMenu = () => {
     setError(null);
 
     try {
-      const params = {
+      const params: LobbyListParams = {
         page: pagination.page,
         page_size: 20,
         ordering: sortBy,
@@ -96,7 +98,7 @@ const CampusSimulatorMenu = () => {
         totalCount: response.count || 0
       });
     } catch (err) {
-      setError(err.message || 'Failed to load lobbies');
+      setError(errorMessage(err, 'Failed to load lobbies'));
       console.error('Failed to load lobbies:', err);
     } finally {
       setIsLoading(false);
@@ -111,7 +113,8 @@ const CampusSimulatorMenu = () => {
 
     try {
       const response = await campusApi.getSavedLobbies();
-      setSavedLobbies(response || []);
+      // The endpoint paginates on some deployments and not others.
+      setSavedLobbies(Array.isArray(response) ? response : (response?.results ?? []));
     } catch (err) {
       console.error('Failed to load saved lobbies:', err);
     }
@@ -133,7 +136,7 @@ const CampusSimulatorMenu = () => {
       // Navigate directly to the new lobby
       navigate(`/campus-simulator/${createdLobby.id}`);
     } catch (err) {
-      setError(err.message || 'Failed to create lobby');
+      setError(errorMessage(err, 'Failed to create lobby'));
     } finally {
       setIsLoading(false);
     }
@@ -142,7 +145,7 @@ const CampusSimulatorMenu = () => {
   /**
    * Handle click on join button - check if password is needed
    */
-  const handleJoinButtonClick = (lobby) => {
+  const handleJoinButtonClick = (lobby: Lobby) => {
     if (lobby.is_private) {
       // Show password modal for password-protected lobbies
       setPasswordModalLobbyId(lobby.id);
@@ -157,7 +160,7 @@ const CampusSimulatorMenu = () => {
   /**
    * Join a specific lobby
    */
-  const handleJoinLobby = async (lobbyId, password = '') => {
+  const handleJoinLobby = async (lobbyId: string, password = '') => {
     setIsLoading(true);
     try {
       await campusApi.joinLobby(lobbyId, password);
@@ -167,7 +170,7 @@ const CampusSimulatorMenu = () => {
       setPasswordModalLobbyId(null);
       navigate(`/campus-simulator/${lobbyId}`);
     } catch (err) {
-      setError(err.message || 'Failed to join lobby');
+      setError(errorMessage(err, 'Failed to join lobby'));
       // Keep password modal open on error so user can retry
     } finally {
       setIsLoading(false);
@@ -203,7 +206,7 @@ const CampusSimulatorMenu = () => {
         const lobby = response.lobby || response;
         navigate(`/campus-simulator/${lobby.id}`);
       } catch (err) {
-        setError(err.message || 'No available lobbies found');
+        setError(errorMessage(err, 'No available lobbies found'));
       } finally {
         setIsLoading(false);
       }
@@ -213,7 +216,7 @@ const CampusSimulatorMenu = () => {
   /**
    * Toggle saved status of a lobby
    */
-  const toggleSaveLobby = async (lobbyId, isSaved) => {
+  const toggleSaveLobby = async (lobbyId: string, isSaved?: boolean) => {
     try {
       if (isSaved) {
         await campusApi.unsaveLobby(lobbyId);
@@ -255,7 +258,7 @@ const CampusSimulatorMenu = () => {
     const matchesSearch = !searchTerm || 
       lobby.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       lobby.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (lobby.host?.first_name + ' ' + lobby.host?.last_name || '').toLowerCase().includes(searchTerm.toLowerCase());
+      campusUserName(lobby.host).toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchesPassword = passwordFilter === 'all' ||
       (passwordFilter === 'public' && !lobby.is_private) ||
@@ -270,7 +273,7 @@ const CampusSimulatorMenu = () => {
     return matchesSearch && matchesPassword && matchesPlayerCount;
   });
 
-  const LobbyCard = ({ lobby, isSaved = false }) => {
+  const LobbyCard = ({ lobby, isSaved = false }: { lobby: Lobby; isSaved?: boolean }) => {
     const playerPercentage = (lobby.current_players_count / lobby.max_players) * 100;
     const isNearFull = playerPercentage >= 80;
     const isFull = lobby.current_players_count >= lobby.max_players;
@@ -302,7 +305,11 @@ const CampusSimulatorMenu = () => {
                 <Users className="w-4 h-4" />
                 {lobby.current_players_count}/{lobby.max_players}
               </span>
-              <span>Host: {lobby.host?.first_name + ' ' + lobby.host?.last_name || 'Unknown'}</span>
+              {/* `a + ' ' + b || 'Unknown'` reads as `(a + ' ' + b) || 'Unknown'`,
+                  and a template with a space in it is truthy even when both
+                  halves are empty. A host who never set a name showed as
+                  "Host:" followed by nothing, or "undefined undefined". */}
+              <span>Host: {campusUserName(lobby.host)}</span>
               <span>{lobby.created_at ? new Date(lobby.created_at).toLocaleDateString() : 'Recently created'}</span>
             </div>
           </div>

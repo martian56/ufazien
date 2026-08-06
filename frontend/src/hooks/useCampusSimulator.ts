@@ -51,6 +51,14 @@ export interface ChatMessage {
   channel: string
 }
 
+/** What getNearbyPlayers returns for each player within range. */
+export interface NearbyPlayer {
+  userId: string | number
+  username?: string
+  position: PlayerPosition
+  distance: number
+}
+
 export interface PlayerPosition {
   x: number
   y: number
@@ -62,7 +70,7 @@ export interface PlayerPosition {
   last_updated?: string
 }
 
-export const useCampusSimulator = (lobbyId = null) => {
+export const useCampusSimulator = (lobbyId: string | null = null) => {
     // Defensive: ignore string values that may come from route params like 'null' or 'undefined'
     if (typeof lobbyId === 'string' && (lobbyId === 'null' || lobbyId === 'undefined')) {
         lobbyId = null;
@@ -441,12 +449,7 @@ export const useCampusSimulator = (lobbyId = null) => {
      * Get nearby players based on distance
      */
     const getNearbyPlayers = useCallback((maxDistance = 50) => {
-        const nearby: Array<{
-            userId: string | number
-            username?: string
-            position: PlayerPosition
-            distance: number
-        }> = [];
+        const nearby: NearbyPlayer[] = [];
         const userPos = positionRef.current;
 
         playerPositions.forEach((position, userId) => {
