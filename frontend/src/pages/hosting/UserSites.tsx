@@ -4,11 +4,28 @@ import { ExternalLink, Globe, Search, X, Tag, Menu, ChevronDown } from 'lucide-r
 import SideBar from '../../components/ui/SideBar'
 import { api } from '../../lib/api/client'
 
+/** Mirrors PublicWebsiteSerializer. */
+interface PublicSite {
+  id: string
+  name: string
+  domain?: string | null
+  /** A display name assembled by the server, not a user object. */
+  creator?: string | null
+  description?: string
+  website_type?: string
+  storage_used_mb?: number | null
+  total_visits?: number
+  status?: string
+  created_at?: string
+}
+
+type SitesResponse = PublicSite[] | { results: PublicSite[]; count?: number } | string
+
 export default function UserSites() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
-  const [sites, setSites] = useState([])
+  const [sites, setSites] = useState<PublicSite[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+  const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [lastQuery, setLastQuery] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
@@ -18,11 +35,11 @@ export default function UserSites() {
   const [sortBy, setSortBy] = useState('-total_visits') // Default: most visited first
 
   // Debounced load for search
-  const buildQuery = (search, page, page_size, ordering) => {
+  const buildQuery = (search: string, page: number, page_size: number, ordering: string) => {
     const params = new URLSearchParams()
     if (search) params.set('search', search)
-    if (page) params.set('page', page)
-    if (page_size) params.set('page_size', page_size)
+    if (page) params.set('page', String(page))
+    if (page_size) params.set('page_size', String(page_size))
     if (ordering) params.set('ordering', ordering)
     const s = params.toString()
     return s ? `?${s}` : ''
@@ -36,7 +53,7 @@ export default function UserSites() {
       // The hand-rolled content-type and JSON guards here were defending
       // against index.html coming back from a proxy. The client returns the
       // body as text in that case, so one check is enough.
-      const data = await api.get(`/hosting/public/websites/${q}`)
+      const data = await api.get<SitesResponse>(`/hosting/public/websites/${q}`)
       if (typeof data === 'string') {
         throw new Error(`Expected JSON but the server returned: ${data.slice(0, 300)}`)
       }
@@ -56,7 +73,6 @@ export default function UserSites() {
         setTotalCount(0)
         setTotalPages(1)
       }
-      console.debug('Search result count:', Array.isArray(data) ? data.length : (data && Array.isArray(data.results) ? data.results.length : 0))
     } catch (err) {
       setError(String(err))
     } finally {
@@ -79,12 +95,12 @@ export default function UserSites() {
     load(s, currentPage, pageSize, sortBy)
   }, [currentPage, pageSize])
 
-  const formatDate = (s) => {
+  const formatDate = (s?: string | null) => {
     try {
       return s ? new Date(s).toISOString().slice(0,10) : '-'
     } catch (e) { return '-' }
   }
-  const siteUrl = (site) => {
+  const siteUrl = (site?: PublicSite | null) => {
     if (!site) return '#'
     if (site.domain) return `https://${site.domain}`
     return `https://${(site.name || '').toLowerCase()}.ufazien.com`
@@ -134,7 +150,7 @@ export default function UserSites() {
                     <div>
                       <div className="font-semibold text-gray-900">{site.name}</div>
                       <div className="text-sm text-gray-500">{site.domain || `${(site.name || '').toLowerCase()}.ufazien.com`}</div>
-                      <div className="text-xs text-gray-400 mt-1">By: {site.creator || site.owner?.username || 'unknown'}</div>
+                      <div className="text-xs text-gray-400 mt-1">By: {site.creator?.trim() || 'unknown'}</div>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
