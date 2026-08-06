@@ -8,7 +8,7 @@
  * @param {string} htmlContent - Raw HTML content from editor
  * @returns {string} - Fixed HTML content
  */
-export const fixMalformedHtml = (htmlContent) => {
+export const fixMalformedHtml = (htmlContent: string | null | undefined): string => {
   if (!htmlContent || typeof htmlContent !== 'string') {
     return ''
   }
@@ -84,7 +84,7 @@ export const fixMalformedHtml = (htmlContent) => {
  * @param {string} htmlContent - Raw HTML content
  * @returns {string} - Enhanced HTML content
  */
-export const processblogContent = (htmlContent) => {
+export const processblogContent = (htmlContent: string | null | undefined): string => {
   if (!htmlContent) return ''
 
   // First fix malformed HTML
@@ -105,7 +105,7 @@ export const processblogContent = (htmlContent) => {
   // The comment here used to claim it skipped code inside a pre tag; it did
   // not, so every block of code was given inline pill styling and a fenced
   // block rendered as one long pink line. Park the pre blocks first.
-  const preBlocks = []
+  const preBlocks: string[] = []
   content = content.replace(/<pre[\s\S]*?<\/pre>/g, (block) => {
     preBlocks.push(block)
     return `[[ufz-pre-${preBlocks.length - 1}]]`
@@ -146,7 +146,7 @@ export const processblogContent = (htmlContent) => {
  * @param {string} htmlContent - HTML content
  * @returns {string} - Plain text content
  */
-export const extractPlainText = (htmlContent) => {
+export const extractPlainText = (htmlContent: string | null | undefined): string => {
   if (!htmlContent) return ''
   
   // Remove HTML tags and decode entities
@@ -168,7 +168,7 @@ export const extractPlainText = (htmlContent) => {
  * @param {number} wordsPerMinute - Average reading speed (default: 200)
  * @returns {number} - Estimated reading time in minutes
  */
-export const calculateReadTime = (content, wordsPerMinute = 200) => {
+export const calculateReadTime = (content: string | null | undefined, wordsPerMinute = 200): number => {
   if (!content) return 0
   
   const plainText = typeof content === 'string' && content.includes('<') 
