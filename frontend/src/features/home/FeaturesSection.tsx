@@ -1,4 +1,4 @@
-import { ChevronRight, Zap } from "lucide-react"
+import { ArrowRight } from "lucide-react"
 
 import type React from "react"
 
@@ -10,7 +10,6 @@ interface Feature {
   color: string
   featured?: boolean
   stats?: string
-  badge?: string
 }
 
 interface Technology {
@@ -31,100 +30,54 @@ interface FeaturesSectionProps {
 export default function FeaturesSection({ features, technologies, featuresRef, navigate }: FeaturesSectionProps) {
   return (
     <>
-    {/* Features Section */}
-    <section id="features" className="py-16 sm:py-24 lg:py-32 relative">
+    <section id="features" className="py-20 sm:py-28 bg-gray-50 border-y border-gray-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Section Header */}
-        <div className="text-center mb-12 sm:mb-16 lg:mb-20">
-          <div className="inline-flex items-center gap-3 bg-gradient-to-r from-purple-500/10 to-pink-500/10 text-purple-700 px-4 sm:px-6 py-2 sm:py-3 rounded-full text-sm font-bold mb-6 sm:mb-8">
-            <Zap className="w-4 h-4 sm:w-5 sm:h-5" />
-            Powerful Features
-          </div>
-          <h2 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black text-gray-900 mb-6 sm:mb-8">
-            Everything You Need to
-            <span className="block bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-              Excel at UFAZ
-            </span>
+        <div className="max-w-2xl mb-12">
+          <h2 className="text-3xl sm:text-4xl font-semibold tracking-tight text-gray-900 mb-4">
+            What is in it
           </h2>
-          <p className="text-lg sm:text-xl text-gray-600 max-w-4xl mx-auto leading-relaxed">
-            Cutting-edge tools and features designed to transform your academic journey with AI-powered insights,
-            seamless collaboration, and intelligent automation.
+          <p className="text-lg text-gray-600 leading-relaxed">
+            Nine tools, all free. Most of them exist because somebody needed them for a
+            deadline and there was nothing that fit UFAZ.
           </p>
         </div>
 
-        {/* Features Grid */}
-        <div ref={featuresRef} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
-          {features.map((feature, index) => (
-            <div
-              key={index}
-              className="feature-card group cursor-pointer bg-white/60 backdrop-blur-sm rounded-2xl sm:rounded-3xl p-6 sm:p-8 border border-white/30 hover:bg-white hover:shadow-2xl hover:scale-105 transition-all duration-500"
+        <div ref={featuresRef} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {features.map((feature) => (
+            <button
+              key={feature.title}
+              type="button"
               onClick={() => navigate(feature.link)}
+              className="feature-card cursor-pointer text-left bg-white rounded-xl p-6 border border-gray-200 hover:border-gray-300 hover:shadow-sm transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
             >
-              <div className="flex items-start gap-4 sm:gap-6">
-                <div
-                  className={`w-12 h-12 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl flex items-center justify-center bg-gradient-to-r ${feature.color} shadow-xl group-hover:scale-110 transition-transform duration-300`}
-                >
-                  <feature.icon className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2 sm:mb-3">
-                    <h3 className="text-lg sm:text-xl lg:text-2xl font-black text-gray-900">{feature.title}</h3>
-                    {feature.badge && (
-                      <span className="px-2 py-1 bg-gradient-to-r from-blue-500 to-purple-500 text-white text-xs font-bold rounded-full">
-                        {feature.badge}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-gray-600 mb-3 sm:mb-4 text-sm sm:text-base leading-relaxed">
-                    {feature.description}
-                  </p>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs sm:text-sm font-bold text-gray-500">{feature.stats}</span>
-                    <div className="flex items-center gap-2 text-blue-600 font-bold group-hover:gap-3 transition-all duration-300">
-                      <span className="text-sm">Explore</span>
-                      <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform duration-300" />
-                    </div>
-                  </div>
-                </div>
+              <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-blue-50 mb-4">
+                <feature.icon className="w-5 h-5 text-blue-600" aria-hidden="true" />
               </div>
-            </div>
+              <h3 className="text-base font-semibold text-gray-900 mb-2">{feature.title}</h3>
+              <p className="text-gray-600 text-sm leading-relaxed mb-4">{feature.description}</p>
+              <div className="flex items-center justify-between border-t border-gray-100 pt-3">
+                <span className="text-xs text-gray-500">{feature.stats}</span>
+                <span className="flex items-center gap-1.5 text-blue-600 text-sm font-medium">
+                  Open
+                  <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+                </span>
+              </div>
+            </button>
           ))}
         </div>
 
-        {/* Technology Stack */}
-        <div className="text-center mt-16 sm:mt-20 lg:mt-24">
-          <h3 className="text-2xl sm:text-3xl font-black text-gray-900 mb-8 sm:mb-12">
-            Built with Cutting-Edge Technology
+        <div className="mt-20">
+          <h3 className="text-sm font-medium text-gray-500 mb-6 text-center">
+            What it runs on
           </h3>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 sm:gap-6">
-            {technologies.map((tech, index) => (
+          <div className="flex flex-wrap justify-center gap-2">
+            {technologies.map((tech) => (
               <div
-                key={index}
-                className="group bg-white/60 backdrop-blur-sm p-4 sm:p-6 rounded-xl sm:rounded-2xl border border-white/30 hover:bg-white hover:shadow-xl hover:scale-105 transition-all duration-300 cursor-pointer"
+                key={tech.name}
+                className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border border-gray-200"
               >
-                <div className="flex flex-col items-center gap-2 sm:gap-3">
-                  <div
-                    className={`p-2 sm:p-3 rounded-lg sm:rounded-xl bg-gradient-to-r ${
-                      tech.color === "text-blue-500"
-                        ? "from-blue-500 to-cyan-500"
-                        : tech.color === "text-green-500"
-                          ? "from-green-500 to-emerald-500"
-                          : tech.color === "text-purple-500"
-                            ? "from-purple-500 to-pink-500"
-                            : tech.color === "text-cyan-500"
-                              ? "from-cyan-500 to-blue-500"
-                              : tech.color === "text-pink-500"
-                                ? "from-pink-500 to-red-500"
-                                : "from-indigo-500 to-purple-500"
-                    }`}
-                  >
-                    <tech.icon className="w-4 h-4 sm:w-6 sm:h-6 text-white" />
-                  </div>
-                  <div className="text-center">
-                    <div className="font-bold text-gray-900 text-sm sm:text-base">{tech.name}</div>
-                    <div className="text-xs text-gray-500">{tech.description}</div>
-                  </div>
-                </div>
+                <tech.icon className={`w-4 h-4 ${tech.color}`} aria-hidden="true" />
+                <span className="text-sm text-gray-700">{tech.name}</span>
               </div>
             ))}
           </div>
