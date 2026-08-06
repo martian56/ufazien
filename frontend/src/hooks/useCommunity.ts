@@ -3,6 +3,7 @@ import type {
   ChatMessage,
   CommunityStats,
   Forum,
+  NewForumPost,
   ForumPost,
   Group,
   PrivateChat,
@@ -132,12 +133,15 @@ export const useCommunityData = () => {
           group.id === groupId ? updatedGroup : group
         )
       );
+      // The sidebar counts groups joined and posts liked, and read them once
+      // on mount, so it sat on its opening numbers for the whole session.
+      loadStats();
       return updatedGroup;
     } catch (err) {
       setError(errorMessage(err));
       throw err;
     }
-  }, []);
+  }, [loadStats]);
 
   const leaveGroup = useCallback(async (groupId: string) => {
     try {
@@ -147,12 +151,13 @@ export const useCommunityData = () => {
           group.id === groupId ? updatedGroup : group
         )
       );
+      loadStats();
       return updatedGroup;
     } catch (err) {
       setError(errorMessage(err));
       throw err;
     }
-  }, []);
+  }, [loadStats]);
 
   const createGroup = useCallback(async (groupData: Record<string, unknown>) => {
     try {
@@ -187,12 +192,13 @@ export const useCommunityData = () => {
             : post
         )
       );
+      loadStats();
       return result;
     } catch (err) {
       setError(errorMessage(err));
       throw err;
     }
-  }, []);
+  }, [loadStats]);
 
   const bookmarkPost = useCallback(async (postId: string) => {
     try {
@@ -204,23 +210,28 @@ export const useCommunityData = () => {
             : post
         )
       );
+      loadStats();
       return result;
     } catch (err) {
       setError(errorMessage(err));
       throw err;
     }
-  }, []);
+  }, [loadStats]);
 
-  const createPost = useCallback(async (postData: Record<string, unknown>) => {
+  const createPost = useCallback(async (postData: NewForumPost) => {
     try {
       const newPost = await communityAPI.createPost(postData);
       setPosts(prevPosts => [newPost, ...prevPosts]);
+      // The forum card shows a post count that only the forums endpoint
+      // computes, so it sat one behind until the page was reloaded.
+      loadForums();
+      loadStats();
       return newPost;
     } catch (err) {
       setError(errorMessage(err));
       throw err;
     }
-  }, []);
+  }, [loadForums, loadStats]);
 
   const createChat = useCallback(async (chatData: { participant_ids: number[]; name?: string | null; is_group_chat?: boolean }) => {
     try {

@@ -30,15 +30,27 @@ MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
 
 
 class CommunityPermission(permissions.BasePermission):
-    """Custom permission class for community features"""
-    
+    """Anyone signed in may read and react; only the owner may edit or delete."""
+
+    #: Actions whose whole point is to act on someone else's object.
+    #:
+    #: These are POSTs, so they are not SAFE_METHODS, and they used to fall
+    #: through to the ownership check below: liking or bookmarking a post
+    #: written by anybody else answered 403, and the only post you could like
+    #: was your own. Uploading an attachment is deliberately not in this set,
+    #: because that writes to the post itself.
+    REACTION_ACTIONS = frozenset({'like', 'bookmark'})
+
     def has_permission(self, request, view):
-        return request.user and request.user.is_authenticated
-    
+        return bool(request.user and request.user.is_authenticated)
+
     def has_object_permission(self, request, view, obj):
         if request.method in permissions.SAFE_METHODS:
             return True
-        
+
+        if getattr(view, 'action', None) in self.REACTION_ACTIONS:
+            return True
+
         # Check ownership or moderation rights
         if hasattr(obj, 'owner'):
             return obj.owner == request.user
@@ -46,7 +58,7 @@ class CommunityPermission(permissions.BasePermission):
             return obj.author == request.user
         if hasattr(obj, 'sender'):
             return obj.sender == request.user
-            
+
         return False
 
 
@@ -142,16 +154,26 @@ class GroupViewSet(viewsets.ModelViewSet):
             metadata={'group_name': group.name}
         )
     
+    def _serialize_after_membership_change(self, group):
+        """Re-read the group before serializing it.
+
+        get_queryset prefetches `members`, and `Group.member_count` is
+        `self.members.count()`, which answers from that prefetch cache. So the
+        instance in hand still holds the roster from before this request
+        changed it: joining a group answered with the count from before you
+        joined, and leaving one with the count from before you left. The card
+        showed the wrong number until the page was reloaded.
+        """
+        fresh = Group.objects.get(pk=group.pk)
+        return Response(self.get_serializer(fresh).data)
+
     @action(detail=True, methods=['post'])
     def join(self, request, pk=None):
         """Join a group"""
-        print(f"User {request.user} trying to join group {pk}")
         group = self.get_object()
-        print(f"Group found: {group.name}, type: {group.type}, is_full: {group.is_full}")
         
         # Check if user is already a member
         is_member = group.members.filter(id=request.user.id).exists()
-        print(f"User is already member: {is_member}")
         
         if is_member:
             return Response(
@@ -161,7 +183,6 @@ class GroupViewSet(viewsets.ModelViewSet):
         
         # Check if group is full
         if group.is_full:
-            print(f"Group is full: {group.member_count}/{group.max_members}")
             return Response(
                 {'error': 'Group is full'}, 
                 status=status.HTTP_400_BAD_REQUEST
@@ -169,7 +190,6 @@ class GroupViewSet(viewsets.ModelViewSet):
         
         # Check if group is private
         if group.type == 'private':
-            print(f"Group is private, cannot join without invitation")
             return Response(
                 {'error': 'Cannot join private group without invitation'}, 
                 status=status.HTTP_400_BAD_REQUEST
@@ -209,9 +229,8 @@ class GroupViewSet(viewsets.ModelViewSet):
             }
         )
         
-        serializer = self.get_serializer(group)
-        return Response(serializer.data)
-    
+        return self._serialize_after_membership_change(group)
+
     @action(detail=True, methods=['post'])
     def leave(self, request, pk=None):
         """Leave a group"""
@@ -255,9 +274,8 @@ class GroupViewSet(viewsets.ModelViewSet):
             }
         )
         
-        serializer = self.get_serializer(group)
-        return Response(serializer.data)
-    
+        return self._serialize_after_membership_change(group)
+
     @action(detail=False)
     def my_groups(self, request):
         """Get user's joined groups"""

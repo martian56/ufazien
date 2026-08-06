@@ -9,7 +9,6 @@ import MonthView from "../../../features/calendar/MonthView"
 import WeekView from "../../../features/calendar/WeekView"
 import { downloadCsv, eventsToCsv } from "../../../features/calendar/exportCsv"
 import { Helmet } from "react-helmet"
-import { useNavigate } from "react-router-dom"
 import { calendarApi } from "../../../services/calendarApi"
 import {
   CalendarIcon,
@@ -19,30 +18,20 @@ import {
   Search,
   Filter,
   Menu,
-  X,
   BookOpen,
-  BarChart3,
-  Calculator,
-  TrendingUp,
   FileText,
   Users,
-  Clock,
-  MapPin,
   User,
-  Edit,
-  Trash2,
   Download,
   AlertCircle,
   BookMarked,
   Heart,
   Star,
-  Activity,
-  PenTool,
-  Settings,
 } from "lucide-react"
+import SideBar from "../../../components/ui/SideBar"
+import { toLocalDateKey, todayKey } from "../../../lib/localDate"
 
 export default function Calendar() {
-  const navigate = useNavigate()
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState(new Date())
@@ -138,7 +127,9 @@ export default function Calendar() {
 
   // Get events for a specific date
   const getEventsForDate = (date: Date) => {
-    const dateStr = date.toISOString().split("T")[0]
+    // Local parts, not toISOString: see lib/localDate. Every cell is local
+    // midnight, so going through UTC shifted the whole grid by a day here.
+    const dateStr = toLocalDateKey(date)
     return events.filter((event) => {
       const eventDate = event.date
       const matchesDate = eventDate === dateStr
@@ -172,7 +163,6 @@ export default function Calendar() {
     const year = currentDate.getFullYear()
     const month = currentDate.getMonth()
     const firstDay = new Date(year, month, 1)
-    const lastDay = new Date(year, month + 1, 0)
     const startDate = new Date(firstDay)
     startDate.setDate(startDate.getDate() - firstDay.getDay())
 
@@ -244,19 +234,9 @@ export default function Calendar() {
   const exportCalendar = () => {
     downloadCsv(
       eventsToCsv(getFilteredEvents()),
-      `calendar-${new Date().toISOString().split("T")[0]}.csv`
+      `calendar-${todayKey()}.csv`
     )
   }
-
-  const sidebarItems = [
-    { name: "Dashboard", icon: Activity, link: "/dashboard" },
-    { name: "GPA Calculator", icon: Calculator, link: "/gpa-calculator" },
-    { name: "Average Calculator", icon: TrendingUp, link: "/average-calculator" },
-    { name: "Blog", icon: PenTool, link: "/blog" },
-    { name: "Community", icon: Users, link: "/community" },
-    { name: "Calendar", icon: CalendarIcon, active: true },
-    { name: "Settings", icon: Settings, link: "/settings" },
-  ]
 
   const monthNames = [
     "January",
@@ -272,8 +252,6 @@ export default function Calendar() {
     "November",
     "December",
   ]
-
-  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
   return (
     <>
@@ -293,67 +271,34 @@ export default function Calendar() {
           </div>
         )}
         {/* Sidebar */}
-        <aside
-          className={`fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0 ${
-            isSidebarOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
-      >
-        <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center">
-              <BookOpen className="w-5 h-5 text-white" />
-            </div>
-            <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-              Ufazien
-            </span>
-          </div>
-          <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden p-1 rounded-md hover:bg-gray-100">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        <nav className="mt-6 px-3">
-          {sidebarItems.map((item, index) => (
-            <a
-              key={index}
-              href={item.link || "#"}
-              className={`flex items-center gap-3 px-3 py-2 rounded-lg mb-1 transition-colors ${
-                item.active ? "bg-blue-50 text-blue-600 border-r-2 border-blue-600" : "text-gray-700 hover:bg-gray-100"
-              }`}
-            >
-              <item.icon className="w-5 h-5" />
-              <span className="font-medium">{item.name}</span>
-            </a>
-          ))}
-        </nav>
-
-        {/* Mini Calendar */}
-        <div className="mt-8 px-3">
-          <div className="bg-gray-50 rounded-lg p-4">
-            <h3 className="font-medium text-gray-900 mb-3">Quick Navigation</h3>
-            <button
-              onClick={goToToday}
-              className="w-full px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors mb-3"
-            >
-              Go to Today
-            </button>
-            <div className="space-y-2">
-              {categories.slice(1, 5).map((category) => (
-                <button
-                  key={category.id}
-                  onClick={() => setFilterCategory(category.id)}
-                  className={`flex items-center gap-2 w-full px-2 py-1 text-sm rounded transition-colors ${
-                    filterCategory === category.id ? "bg-white shadow-sm" : "hover:bg-white"
-                  }`}
-                >
-                  <div className={`w-3 h-3 rounded-full ${category.color}`} />
-                  <span className="text-gray-700">{category.name}</span>
-                </button>
-              ))}
+        <SideBar isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen} pageTitle="Calendar">
+          {/* Quick Navigation */}
+          <div className="mt-8 px-3">
+            <div className="bg-gray-50 rounded-lg p-4">
+              <h3 className="font-medium text-gray-900 mb-3">Quick Navigation</h3>
+              <button
+                onClick={goToToday}
+                className="w-full px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors mb-3"
+              >
+                Go to Today
+              </button>
+              <div className="space-y-2">
+                {categories.slice(1, 5).map((category) => (
+                  <button
+                    key={category.id}
+                    onClick={() => setFilterCategory(category.id)}
+                    className={`flex items-center gap-2 w-full px-2 py-1 text-sm rounded transition-colors ${
+                      filterCategory === category.id ? "bg-white shadow-sm" : "hover:bg-white"
+                    }`}
+                  >
+                    <div className={`w-3 h-3 rounded-full ${category.color}`} />
+                    <span className="text-gray-700">{category.name}</span>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
-      </aside>
+        </SideBar>
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -367,7 +312,6 @@ export default function Calendar() {
               <div>
                 <h1 className="text-lg sm:text-2xl font-bold text-gray-900 flex items-center gap-2">
                   Calendar
-                  <span className="hidden sm:inline-block px-2 py-1 text-xs bg-yellow-100 text-yellow-800 rounded-full">In Development</span>
                 </h1>
                 <p className="hidden sm:block text-sm text-gray-500">Manage your academic schedule</p>
               </div>

@@ -9,11 +9,20 @@ import { useNavigate } from "react-router-dom"
 interface SideBarProps {
   isSidebarOpen: boolean
   setIsSidebarOpen: (open: boolean) => void
+  /** Highlights the matching entry. Use the exact name from the nav below. */
   pageTitle?: string
+  /**
+   * Extra panel under the nav, for pages that want one there.
+   *
+   * Community and Calendar each grew their own copy of this whole sidebar so
+   * they could add a panel, and both copies then fell behind: Calendar's was
+   * missing six destinations and neither had a way to sign out.
+   */
+  children?: React.ReactNode
 }
 
 
-export default function SideBar({ isSidebarOpen, setIsSidebarOpen, pageTitle }: SideBarProps) {
+export default function SideBar({ isSidebarOpen, setIsSidebarOpen, pageTitle, children }: SideBarProps) {
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -43,11 +52,11 @@ export default function SideBar({ isSidebarOpen, setIsSidebarOpen, pageTitle }: 
     return (
 
         <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0 ${
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg flex flex-col transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0 ${
           isSidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200">
+        <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200 shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center">
               <BookOpen className="w-5 h-5 text-white" />
@@ -61,6 +70,8 @@ export default function SideBar({ isSidebarOpen, setIsSidebarOpen, pageTitle }: 
           </button>
         </div>
 
+        {/* Scrolls, so a page panel below cannot push Sign Out off screen. */}
+        <div className="flex-1 overflow-y-auto">
         <nav className="mt-6 px-3">
           {sidebarItems.map((item, index) => (
             <a
@@ -78,7 +89,10 @@ export default function SideBar({ isSidebarOpen, setIsSidebarOpen, pageTitle }: 
           ))}
         </nav>
 
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200">
+        {children}
+        </div>
+
+        <div className="p-4 border-t border-gray-200 shrink-0">
           <button onClick={handleLogout} className="flex items-center gap-3 w-full px-3 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
             <LogOut className="w-5 h-5" />
             <span className="font-medium">Sign Out</span>

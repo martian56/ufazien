@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { toLocalDateKey } from '../../lib/localDate'
 import { Helmet } from 'react-helmet'
 import { ExternalLink, Globe, Search, X, Tag, Menu, ChevronDown } from 'lucide-react'
 import SideBar from '../../components/ui/SideBar'
@@ -97,7 +98,9 @@ export default function UserSites() {
 
   const formatDate = (s?: string | null) => {
     try {
-      return s ? new Date(s).toISOString().slice(0,10) : '-'
+      // Local date, not UTC: a site created at 02:00 in Baku showed the
+      // previous day.
+      return s ? toLocalDateKey(new Date(s)) : '-'
     } catch (e) { return '-' }
   }
   const siteUrl = (site?: PublicSite | null) => {
