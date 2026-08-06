@@ -6,7 +6,14 @@ import { BookOpen,Calculator,TrendingUp,PenTool,
 
 import { useNavigate } from "react-router-dom"
 
-export default function SideBar({ isSidebarOpen, setIsSidebarOpen, pageTitle }) {
+interface SideBarProps {
+  isSidebarOpen: boolean
+  setIsSidebarOpen: (open: boolean) => void
+  pageTitle?: string
+}
+
+
+export default function SideBar({ isSidebarOpen, setIsSidebarOpen, pageTitle }: SideBarProps) {
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -31,13 +38,7 @@ export default function SideBar({ isSidebarOpen, setIsSidebarOpen, pageTitle }) 
     { name: "Feedback", icon: MessageSquare, url: "/feedback" },
     { name: "Settings", icon: Settings, url: "/settings" },
   ]
-  for (let i = 0; i < sidebarItems.length; i++) {
-    if (sidebarItems[i].name === pageTitle) {
-      sidebarItems[i].active = true
-    } else {
-      sidebarItems[i].active = false
-    }
-  }
+
 
     return (
 
@@ -66,7 +67,9 @@ export default function SideBar({ isSidebarOpen, setIsSidebarOpen, pageTitle }) 
               key={index}
               href={item.url}
               className={`flex items-center gap-3 px-3 py-2 rounded-lg mb-1 transition-colors ${
-                item.active ? "bg-blue-50 text-blue-600 border-r-2 border-blue-600" : "text-gray-700 hover:bg-gray-100"
+                item.name === pageTitle
+                  ? "bg-blue-50 text-blue-600 border-r-2 border-blue-600"
+                  : "text-gray-700 hover:bg-gray-100"
               }`}
             >
               <item.icon className="w-5 h-5" />
