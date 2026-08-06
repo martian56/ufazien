@@ -7,6 +7,14 @@ import { CheckCircle, AlertCircle, Info, AlertTriangle, X } from 'lucide-react';
  */
 export type ToastType = 'success' | 'error' | 'info' | 'warning';
 
+/** The four raisers, so components can take a `toast` prop without re-declaring them. */
+export interface ToastApi {
+  success: (message: string, duration?: number) => number;
+  error: (message: string, duration?: number) => number;
+  info: (message: string, duration?: number) => number;
+  warning: (message: string, duration?: number) => number;
+}
+
 export interface Toast {
   id: number;
   message: string;
@@ -35,7 +43,7 @@ export const useToast = () => {
     setNotifications(prev => prev.filter(notif => notif.id !== id));
   }, []);
 
-  const toast = {
+  const toast: ToastApi = {
     success: (message: string, duration?: number) => addNotification(message, 'success', duration),
     error: (message: string, duration?: number) => addNotification(message, 'error', duration),
     info: (message: string, duration?: number) => addNotification(message, 'info', duration),

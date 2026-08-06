@@ -91,9 +91,12 @@ const ResizableImage = Image.extend({
         container.appendChild(handle)
         
         let isResizing = false
-        let startX, startY, startWidth, startHeight
-        
-        handle.addEventListener('mousedown', (e) => {
+        let startX = 0
+        let startY = 0
+        let startWidth = 0
+        let startHeight = 0
+
+        handle.addEventListener('mousedown', (e: MouseEvent) => {
           e.preventDefault()
           isResizing = true
           startX = e.clientX
@@ -102,7 +105,7 @@ const ResizableImage = Image.extend({
           startHeight = img.offsetHeight
           container.classList.add('resizing')
           
-          const handleMouseMove = (e) => {
+          const handleMouseMove = (e: MouseEvent) => {
             if (!isResizing) return
             
             const deltaX = e.clientX - startX
@@ -230,38 +233,44 @@ import {
   Minus,
   Plus
 } from 'lucide-react'
+import type { Editor } from '@tiptap/react'
+import type { ToastApi } from '../hooks/useToast'
 
-const MenuBar = ({ editor, darkMode }) => {
-  const fileInputRef = useRef(null)
+interface MenuBarProps {
+  editor: Editor | null
+  darkMode?: boolean
+  /** Reports upload and link problems; falls back to alert() when absent. */
+  toast?: ToastApi
+}
 
-  if (!editor) {
-    return null
-  }
+const MenuBar = ({ editor, darkMode, toast }: MenuBarProps) => {
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const addImage = useCallback(() => {
     fileInputRef.current?.click()
   }, [])
 
-  const handleImageUpload = useCallback(async (event) => {
+  const handleImageUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!editor) return
     const file = event.target.files?.[0]
     if (file) {
       try {
         // Validate file before upload
         const validation = validateImageFile(file)
         if (!validation.valid) {
-          reportUploadProblem(`Upload failed: ${validation.error}`)
+          reportUploadProblem(`Upload failed: ${validation.error}`, toast)
           return
         }
 
         // Check rate limiting
         const userIdentifier = localStorage.getItem('user_id') || 'anonymous'
         if (!uploadRateLimiter.isAllowed(userIdentifier)) {
-          reportUploadProblem('Upload rate limit exceeded. Please wait before uploading again.')
+          reportUploadProblem('Upload rate limit exceeded. Please wait before uploading again.', toast)
           return
         }
 
         if (!isAuthenticated()) {
-          reportUploadProblem('Authentication required for image upload.')
+          reportUploadProblem('Authentication required for image upload.', toast)
           return
         }
 
@@ -271,21 +280,21 @@ const MenuBar = ({ editor, darkMode }) => {
         try {
           // FormData goes through untouched, so the browser sets the multipart
           // boundary itself.
-          const data = await api.post('/blog/upload/image/', formData)
+          const data = await api.post<{ url?: string }>('/blog/upload/image/', formData)
 
           // Validate the returned URL
           if (data.url && isValidImageUrl(data.url)) {
             editor.chain().focus().setImage({ src: data.url }).run()
           } else {
-            reportUploadProblem('Invalid image URL returned from server.')
+            reportUploadProblem('Invalid image URL returned from server.', toast)
           }
         } catch (uploadError) {
           const reason = uploadError instanceof ApiError ? uploadError.userMessage : 'Unknown error'
-          reportUploadProblem(`Failed to upload image: ${reason}`)
+          reportUploadProblem(`Failed to upload image: ${reason}`, toast)
         }
       } catch (error) {
         console.error('Image upload error:', error)
-        reportUploadProblem('Failed to upload image. Please try again.')
+        reportUploadProblem('Failed to upload image. Please try again.', toast)
       }
     }
     
@@ -294,6 +303,7 @@ const MenuBar = ({ editor, darkMode }) => {
   }, [editor])
 
   const setLink = useCallback(() => {
+    if (!editor) return
     const previousUrl = editor.getAttributes('link').href
     let url = window.prompt('URL', previousUrl)
 
@@ -318,7 +328,7 @@ const MenuBar = ({ editor, darkMode }) => {
       // Only allow safe protocols
       const allowedProtocols = ['http:', 'https:', 'mailto:', 'tel:']
       if (!allowedProtocols.includes(urlObj.protocol)) {
-        reportUploadProblem('Invalid URL protocol. Only HTTP, HTTPS, mailto, and tel are allowed.')
+        reportUploadProblem('Invalid URL protocol. Only HTTP, HTTPS, mailto, and tel are allowed.', toast)
         return
       }
 
@@ -329,11 +339,12 @@ const MenuBar = ({ editor, darkMode }) => {
         target: '_blank'
       }).run()
     } catch (error) {
-      reportUploadProblem('Invalid URL format. Please enter a valid URL.')
+      reportUploadProblem('Invalid URL format. Please enter a valid URL.', toast)
     }
   }, [editor])
 
-  const alignImage = useCallback((alignment) => {
+  const alignImage = useCallback((alignment: string) => {
+    if (!editor) return
     const { selection } = editor.state
     const { from } = selection
     const node = editor.state.doc.nodeAt(from)
@@ -348,6 +359,12 @@ const MenuBar = ({ editor, darkMode }) => {
       editor.view.dispatch(tr)
     }
   }, [editor])
+
+  // After the hooks, not before: an early return above a useCallback changes
+  // the number of hooks between renders, which React rejects outright.
+  if (!editor) {
+    return null
+  }
 
   const colors = [
     '#000000', '#e60000', '#ff9900', '#ffff00', '#008a00', '#0066cc', '#9933ff',
@@ -656,11 +673,26 @@ const MenuBar = ({ editor, darkMode }) => {
  * never defined in this file, so the optional chaining did not save them: the
  * bare identifier threw ReferenceError and the user saw nothing at all.
  */
-function reportUploadProblem(message) {
-  alert(message)
+function reportUploadProblem(message: string, toast?: ToastApi) {
+  if (toast) toast.error(message)
+  else alert(message)
 }
 
-const RichTextEditor = ({ content, onChange, darkMode = false, placeholder = "Start writing...", toast }) => {
+interface RichTextEditorProps {
+  content?: string
+  onChange?: (html: string) => void
+  darkMode?: boolean
+  placeholder?: string
+  toast?: ToastApi
+}
+
+const RichTextEditor = ({
+  content,
+  onChange,
+  darkMode = false,
+  placeholder = "Start writing...",
+  toast,
+}: RichTextEditorProps) => {
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -695,9 +727,9 @@ const RichTextEditor = ({ content, onChange, darkMode = false, placeholder = "St
       }),
       Underline,
     ],
-    content: content,
+    content: content ?? '',
     onUpdate: ({ editor }) => {
-      onChange(editor.getHTML())
+      onChange?.(editor.getHTML())
     },
     editorProps: {
       attributes: {
@@ -709,14 +741,14 @@ const RichTextEditor = ({ content, onChange, darkMode = false, placeholder = "St
   })
 
   useEffect(() => {
-    if (editor && content !== editor.getHTML()) {
+    if (editor && content !== undefined && content !== editor.getHTML()) {
       editor.commands.setContent(content)
     }
   }, [content, editor])
 
   return (
     <div className={`border rounded-lg ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-      <MenuBar editor={editor} darkMode={darkMode} />
+      <MenuBar editor={editor} darkMode={darkMode} toast={toast} />
       <div className={`min-h-[400px] ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
         <EditorContent editor={editor} />
       </div>

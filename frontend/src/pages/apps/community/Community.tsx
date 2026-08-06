@@ -1,11 +1,12 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Helmet } from "react-helmet"
 import { Link } from "react-router-dom"
 import { MessageCircle, Search, Plus, Filter, Menu, Globe, Book, Coffee, Camera, Code, Briefcase, BookOpen, Calculator, Home, Gamepad2, Brain, Telescope, TrendingUp, PenTool, Users, Settings, Activity, X, Calendar } from "lucide-react"
 
 import { useCommunityData, useGroupChat } from "../../../hooks/useCommunity"
+import type { Forum, ForumPost, Group } from "../../../lib/api/endpoints/community"
 import { communityApi as communityAPI } from "../../../lib/api/endpoints/community"
 import { api } from "../../../lib/api/client"
 import { logger } from "../../../lib/logger"
@@ -23,17 +24,17 @@ import PrivateChatModal from "../../../features/community/components/PrivateChat
 export default function Community() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [activeTab, setActiveTab] = useState("groups") // groups, forums, chat
-  const [selectedGroup, setSelectedGroup] = useState(null)
+  const [selectedGroup, setSelectedGroup] = useState<Group | null>(null)
   // Only the setter is used; ForumsView reports the selection but nothing
   // reads it back yet.
-  const [, setSelectedForum] = useState(null)
+  const [, setSelectedForum] = useState<Forum | null>(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
-  const [createModalType, setCreateModalType] = useState("group") // "group", "forum", "post"
+  const [createModalType, setCreateModalType] = useState<"group" | "forum" | "post">("group")
   const [showPrivateChatModal, setShowPrivateChatModal] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [filterCategory, setFilterCategory] = useState("all")
   const [showFilters, setShowFilters] = useState(false)
-  const [shareNotice, setShareNotice] = useState(null)
+  const [shareNotice, setShareNotice] = useState<string | null>(null)
   const [newMessage, setNewMessage] = useState("")
 
   // Use community data hook
@@ -66,45 +67,7 @@ export default function Community() {
     sendMessage: sendGroupMessage,
     sendTyping,
     sendStopTyping
-  } = useGroupChat(selectedGroup?.id)
-
-  const [user, setUser] = useState(null)
-  
-  // Load current user data
-  useEffect(() => {
-    const loadCurrentUser = async () => {
-      try {
-        // Was fetch('/api/auth/me/'): a relative path, so it hit the web server
-        // rather than the API and came back as index.html, throwing
-        // "Unexpected token '<'" on every load. That endpoint does not exist
-        // either; the current user is /auth/user/me/.
-        if (isAuthenticated()) {
-          const userData = await api.get('/auth/user/me/')
-          setUser({
-            id: userData.id,
-            name: userData.get_full_name || userData.username,
-            avatar: userData.avatar || "/placeholder.svg?height=40&width=40",
-            year: userData.year || "Student",
-            major: userData.major || "UFAZ",
-            role: "student",
-          })
-        }
-      } catch (error) {
-        console.error('Error loading user data:', error)
-        // Fallback user data
-        setUser({
-          id: 1,
-          name: "Guest User",
-          avatar: "/placeholder.svg?height=40&width=40",
-          year: "Student",
-          major: "UFAZ",
-          role: "student",
-        })
-      }
-    }
-    
-    loadCurrentUser()
-  }, [])
+  } = useGroupChat(selectedGroup?.id ?? null)
 
   // Load data on component mount
   useEffect(() => {
@@ -165,13 +128,16 @@ export default function Community() {
       post.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (post.tags && post.tags.some((tag) => tag.toLowerCase().includes(searchQuery.toLowerCase())))
 
-    const matchesCategory = filterCategory === "all" || post.author?.category === filterCategory
+    // A post has no category of its own; the category belongs to its forum.
+    // This read post.author.category, which the user serializer has never
+    // sent, so every filter but "all" matched nothing.
+    const matchesCategory = filterCategory === "all" || post.forum?.category === filterCategory
 
     return matchesSearch && matchesCategory
   })
 
   // Handle creating new content
-  const handleCreateGroup = async (groupData) => {
+  const handleCreateGroup = async (groupData: Record<string, unknown>) => {
     try {
       await createGroup(groupData)
       setShowCreateModal(false)
@@ -180,7 +146,7 @@ export default function Community() {
     }
   }
 
-  const handleCreateForum = async (forumData) => {
+  const handleCreateForum = async (forumData: Record<string, unknown>) => {
     try {
       await createForum(forumData)
       setShowCreateModal(false)
@@ -189,7 +155,7 @@ export default function Community() {
     }
   }
 
-  const handleCreatePost = async (postData) => {
+  const handleCreatePost = async (postData: Record<string, unknown>) => {
     try {
       await createPost(postData)
       setShowCreateModal(false)
@@ -199,7 +165,7 @@ export default function Community() {
   }
 
   // Handle joining a group
-  const handleJoinGroup = async (groupId) => {
+  const handleJoinGroup = async (groupId: string) => {
     try {
       await joinGroup(groupId)
     } catch (error) {
@@ -208,7 +174,7 @@ export default function Community() {
   }
 
   // Handle leaving a group
-  const handleLeaveGroup = async (groupId) => {
+  const handleLeaveGroup = async (groupId: string) => {
     try {
       await leaveGroup(groupId)
     } catch (error) {
@@ -217,7 +183,7 @@ export default function Community() {
   }
 
   // Handle sending a message
-  const handleSendMessage = async (chatId) => {
+  const handleSendMessage = async (chatId: string) => {
     if (!newMessage.trim() || !chatId) return
 
     try {
@@ -239,7 +205,7 @@ export default function Community() {
   }
 
   // Handle post interactions
-  const handleSharePost = async (post) => {
+  const handleSharePost = async (post: ForumPost) => {
     // Copy a permalink. The button used to do nothing at all, and the first
     // version of this silently did nothing when the clipboard rejected, which
     // it does whenever the document is not focused.
@@ -249,7 +215,7 @@ export default function Community() {
     setTimeout(() => setShareNotice(null), 2000)
   }
 
-  const handleLikePost = async (postId) => {
+  const handleLikePost = async (postId: string) => {
     try {
       await likePost(postId)
     } catch (error) {
@@ -257,7 +223,7 @@ export default function Community() {
     }
   }
 
-  const handleBookmarkPost = async (postId) => {
+  const handleBookmarkPost = async (postId: string) => {
     try {
       await bookmarkPost(postId)
     } catch (error) {
@@ -265,12 +231,15 @@ export default function Community() {
     }
   }
 
-  // Handle typing indicators
+  // Handle typing indicators. The timer used to hang off `window`, which
+  // meant two mounted chats shared one handle and cancelled each other.
+  const typingTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+
   const handleTyping = () => {
     sendTyping()
     // Stop typing after 1 second of inactivity
-    clearTimeout(window.typingTimeout)
-    window.typingTimeout = setTimeout(() => {
+    clearTimeout(typingTimeout.current)
+    typingTimeout.current = setTimeout(() => {
       sendStopTyping()
     }, 1000)
   }
@@ -287,6 +256,8 @@ export default function Community() {
     { id: "career", name: "Career", icon: TrendingUp, color: "bg-yellow-500" },
   ]
 
+  // No entry carried an `active` flag, so the sidebar never showed which page
+  // you were on. This is the community page, so Community is the current one.
   const sidebarItems = [
     { name: "Dashboard", icon: Activity, url: "/dashboard" },
     { name: "GPA Calculator", icon: Calculator, url: "/gpa-calculator" },
@@ -364,7 +335,9 @@ export default function Community() {
               key={index}
               href={item.url || "#"}
               className={`flex items-center gap-3 px-3 py-2 rounded-lg mb-1 transition-colors ${
-                item.active ? "bg-blue-50 text-blue-600 border-r-2 border-blue-600" : "text-gray-700 hover:bg-gray-100"
+                item.url === "/community"
+                  ? "bg-blue-50 text-blue-600 border-r-2 border-blue-600"
+                  : "text-gray-700 hover:bg-gray-100"
               }`}
             >
               <item.icon className="w-5 h-5" />
@@ -543,7 +516,6 @@ export default function Community() {
                 setCreateModalType("post")
                 setShowCreateModal(true)
               }}
-              user={user}
             />
           )}
 
@@ -562,7 +534,6 @@ export default function Community() {
                 if (selectedGroup) handleTyping()
               }}
               onSendMessage={handleSendMessage}
-              user={user}
             />
           )}
         </main>

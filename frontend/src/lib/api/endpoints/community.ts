@@ -51,7 +51,8 @@ export interface PostAttachment {
 
 export interface ForumPost {
   id: string
-  forum: string
+  /** Nested in full by ForumPostSerializer, not just its id. */
+  forum: Forum
   author: User
   title: string
   content: string
@@ -64,8 +65,30 @@ export interface ForumPost {
   is_liked: boolean
   is_bookmarked: boolean
   attachments: PostAttachment[]
+  /** Alias of created_at, kept because the feed sorts on it. */
+  timestamp?: string
   created_at: string
   updated_at: string
+}
+
+/** What /community/stats/ returns, from CommunityStatsView. */
+export interface CommunityStats {
+  user_stats: {
+    groups_joined: number
+    groups_owned: number
+    posts_created: number
+    posts_liked: number
+    posts_bookmarked: number
+    replies_created: number
+    messages_sent: number
+    recent_activity: number
+  }
+  community_stats: {
+    total_groups: number
+    total_forums: number
+    total_posts: number
+    total_members: number
+  }
 }
 
 export interface PostReply {
@@ -169,11 +192,7 @@ export const communityApi = {
   markChatAsRead: (chatId: string) => api.post(`/community/chats/${chatId}/mark_read/`),
 
   // Statistics and discovery
-  getCommunityStats: () =>
-    api.get<{
-      user_stats: Record<string, number>
-      community_stats: Record<string, number>
-    }>('/community/stats/'),
+  getCommunityStats: () => api.get<CommunityStats>('/community/stats/'),
   getRecommendedGroups: () => api.get<Group[]>('/community/recommended-groups/'),
   getUserActivity: (params: Params = {}) => api.get('/community/activity/', { params }),
 

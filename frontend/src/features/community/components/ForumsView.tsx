@@ -12,7 +12,6 @@ interface ForumsViewProps {
   onBookmarkPost: (postId: string) => void
   onSharePost: (post: ForumPost) => void
   onCreatePost: () => void
-  user: User | null
 }
 
 
@@ -24,7 +23,6 @@ export default function ForumsView({
   onBookmarkPost,
   onSharePost,
   onCreatePost,
-  user,
 }: ForumsViewProps) {
   return (
     <div className="p-4 sm:p-6 lg:p-8">
@@ -59,7 +57,6 @@ export default function ForumsView({
                 onLike={() => onLikePost(post.id)}
                 onBookmark={() => onBookmarkPost(post.id)}
                 onShare={onSharePost}
-                user={user}
               />
             ))}
           </div>

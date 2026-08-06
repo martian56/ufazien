@@ -942,10 +942,11 @@ const CampusWithBackend = () => {
         <Canvas id="campus-canvas" shadows camera={{ position: [0, 1.5, 0], fov: 75 }}>
           <Suspense fallback={null}>
             {insideBuilding ? (
-              <BuildingInterior
-                name={insideBuilding.name}
-                onExit={() => setInsideBuilding(null)}
-              >
+              <BuildingInterior>
+                {/* No name or onExit prop: the interior draws neither. The
+                    building name is in the page header and the way out is the
+                    overlay button, because a marker placed behind the spawn
+                    point cannot be seen. */}
                 <ProjectorScreen video={shareIsInThisRoom ? voice.screenShare?.element || null : null} />
               </BuildingInterior>
             ) : (
