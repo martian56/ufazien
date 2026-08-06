@@ -346,3 +346,193 @@ class ReplyThreadTests(TestCase):
         body = response.json()
         items = body["results"] if isinstance(body, dict) else body
         self.assertEqual([i["content"] for i in items], ["First", "Second"])
+
+
+class ReactionPermissionTests(TestCase):
+    """Liking and bookmarking someone else's post.
+
+    CommunityPermission checked ownership for every unsafe method, and like and
+    bookmark are POSTs, so they fell through to `obj.author == request.user`:
+    reacting to anybody else's post answered 403 and the only post you could
+    like was your own, which is not what a like button is for.
+    """
+
+    def setUp(self):
+        from .models import Forum, ForumPost
+
+        self.author = User.objects.create_user(
+            username="author", email="author@example.com", password="pw"
+        )
+        self.reader = User.objects.create_user(
+            username="reader", email="reader@example.com", password="pw"
+        )
+        self.forum = Forum.objects.create(title="General", description="general talk")
+        self.post = ForumPost.objects.create(
+            forum=self.forum, author=self.author, title="Worth reading", content="Body"
+        )
+        self.client_api = APIClient()
+        self.client_api.force_authenticate(user=self.reader)
+
+    def test_another_users_post_can_be_liked(self):
+        response = self.client_api.post(f"/api/community/posts/{self.post.id}/like/")
+
+        self.assertEqual(response.status_code, 200, response.content[:400])
+        self.assertTrue(response.json()["liked"])
+        self.assertEqual(response.json()["like_count"], 1)
+
+    def test_liking_twice_removes_the_like(self):
+        self.client_api.post(f"/api/community/posts/{self.post.id}/like/")
+        response = self.client_api.post(f"/api/community/posts/{self.post.id}/like/")
+
+        self.assertEqual(response.status_code, 200, response.content[:400])
+        self.assertFalse(response.json()["liked"])
+        self.assertEqual(response.json()["like_count"], 0)
+
+    def test_another_users_post_can_be_bookmarked(self):
+        response = self.client_api.post(f"/api/community/posts/{self.post.id}/bookmark/")
+
+        self.assertEqual(response.status_code, 200, response.content[:400])
+        self.assertTrue(response.json()["bookmarked"])
+
+    def test_another_users_reply_can_be_liked(self):
+        from .models import PostReply
+
+        reply = PostReply.objects.create(
+            post=self.post, author=self.author, content="I agree"
+        )
+
+        response = self.client_api.post(f"/api/community/replies/{reply.id}/like/")
+
+        self.assertEqual(response.status_code, 200, response.content[:400])
+        self.assertTrue(response.json()["liked"])
+
+    def test_another_users_post_still_cannot_be_edited(self):
+        """Loosening reactions must not loosen editing."""
+        response = self.client_api.patch(
+            f"/api/community/posts/{self.post.id}/",
+            {"title": "Hijacked"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 403, response.content[:400])
+        self.post.refresh_from_db()
+        self.assertEqual(self.post.title, "Worth reading")
+
+    def test_another_users_post_still_cannot_be_deleted(self):
+        response = self.client_api.delete(f"/api/community/posts/{self.post.id}/")
+
+        self.assertEqual(response.status_code, 403, response.content[:400])
+        self.assertTrue(
+            type(self.post).objects.filter(pk=self.post.pk).exists(),
+            "a post was deleted by someone who did not write it",
+        )
+
+
+class GroupMembershipCountTests(TestCase):
+    """The member count in a join or leave response.
+
+    GroupViewSet prefetches `members`, and `Group.member_count` is
+    `self.members.count()`, which answers from that prefetch cache. The group
+    instance was serialized with the roster from before the request changed it,
+    so joining answered with the count from before you joined.
+    """
+
+    def setUp(self):
+        self.owner = User.objects.create_user(
+            username="owner", email="owner@example.com", password="pw"
+        )
+        self.joiner = User.objects.create_user(
+            username="joiner", email="joiner@example.com", password="pw"
+        )
+        self.group = Group.objects.create(
+            name="Algorithms", description="Weekly problems", owner=self.owner, type="public"
+        )
+        GroupMembership.objects.create(user=self.owner, group=self.group, role="owner")
+        self.client_api = APIClient()
+        self.client_api.force_authenticate(user=self.joiner)
+
+    def test_join_reports_the_count_including_you(self):
+        response = self.client_api.post(f"/api/community/groups/{self.group.id}/join/")
+
+        self.assertEqual(response.status_code, 200, response.content[:400])
+        body = response.json()
+        self.assertTrue(body["is_joined"])
+        self.assertEqual(body["member_count"], 2, "the count predates the join")
+        self.assertEqual(self.group.member_count, 2)
+
+    def test_leave_reports_the_count_without_you(self):
+        self.client_api.post(f"/api/community/groups/{self.group.id}/join/")
+
+        response = self.client_api.post(f"/api/community/groups/{self.group.id}/leave/")
+
+        self.assertEqual(response.status_code, 200, response.content[:400])
+        body = response.json()
+        self.assertFalse(body["is_joined"])
+        self.assertEqual(body["member_count"], 1, "the count predates the leave")
+        self.assertEqual(self.group.member_count, 1)
+
+
+class ForumPostCreateTests(TestCase):
+    """Creating a post from the community page.
+
+    ForumPostCreateSerializer declares a write-only `forum_id`, and the create
+    modal sent `forum`, so every attempt answered 400 and no post was ever
+    created from the UI. Nothing caught it because the client typed the payload
+    as Partial<ForumPost>, which is the read shape and nests the whole forum.
+    """
+
+    def setUp(self):
+        from .models import Forum
+
+        self.user = User.objects.create_user(
+            username="poster", email="poster@example.com", password="pw"
+        )
+        self.forum = Forum.objects.create(title="General", description="general talk")
+        self.client_api = APIClient()
+        self.client_api.force_authenticate(user=self.user)
+
+    def test_a_post_is_created_from_forum_id(self):
+        response = self.client_api.post(
+            "/api/community/posts/",
+            {
+                "forum_id": str(self.forum.id),
+                "title": "Which electives",
+                "content": "A body long enough to pass the validator.",
+                "tags": ["electives"],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.content[:400])
+
+    def test_the_response_carries_the_id_and_author(self):
+        """The client needs both to open, like or edit what it just created."""
+        response = self.client_api.post(
+            "/api/community/posts/",
+            {
+                "forum_id": str(self.forum.id),
+                "title": "Which electives",
+                "content": "A body long enough to pass the validator.",
+            },
+            format="json",
+        )
+
+        body = response.json()
+        self.assertIn("id", body)
+        self.assertEqual(body["author"]["username"], "poster")
+        self.assertEqual(body["forum"]["id"], str(self.forum.id))
+
+    def test_forum_is_not_accepted_in_place_of_forum_id(self):
+        """Pins the contract the modal now sends, so it cannot drift back."""
+        response = self.client_api.post(
+            "/api/community/posts/",
+            {
+                "forum": str(self.forum.id),
+                "title": "Which electives",
+                "content": "A body long enough to pass the validator.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400, response.content[:400])
+        self.assertIn("forum_id", response.json())

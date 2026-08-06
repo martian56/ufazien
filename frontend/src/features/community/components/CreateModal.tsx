@@ -1,14 +1,14 @@
 import { useState } from "react"
 import type React from "react"
 import { X } from "lucide-react"
-import type { Forum } from "../../../lib/api/endpoints/community"
+import type { Forum, NewForumPost } from "../../../lib/api/endpoints/community"
 
 interface CreateModalProps {
   type: "group" | "forum" | "post"
   onClose: () => void
   onCreateGroup: (data: Record<string, unknown>) => void
   onCreateForum: (data: Record<string, unknown>) => void
-  onCreatePost: (data: Record<string, unknown>) => void
+  onCreatePost: (data: NewForumPost) => void
   forums: Forum[]
   categories: { id: string; name: string }[]
 }
@@ -67,7 +67,10 @@ export default function CreateModal({
         await onCreatePost({
           title: formData.title,
           content: formData.content,
-          forum: formData.forumId,
+          // forum_id, not forum: ForumPostCreateSerializer declares a
+          // write-only forum_id, so sending `forum` was rejected as a missing
+          // required field and the post was never created.
+          forum_id: formData.forumId,
           tags: formData.tags
         })
       }

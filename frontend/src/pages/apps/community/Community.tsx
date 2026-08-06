@@ -3,21 +3,17 @@
 import { useState, useEffect, useRef } from "react"
 import { Helmet } from "react-helmet"
 import { Link } from "react-router-dom"
-import { MessageCircle, Search, Plus, Filter, Menu, Globe, Book, Coffee, Camera, Code, Briefcase, BookOpen, Calculator, Home, Gamepad2, Brain, Telescope, TrendingUp, PenTool, Users, Settings, Activity, X, Calendar } from "lucide-react"
+import { MessageCircle, Search, Plus, Filter, Menu, Globe, Book, Coffee, Camera, Code, Briefcase, BookOpen, TrendingUp, Activity } from "lucide-react"
 
 import { useCommunityData, useGroupChat } from "../../../hooks/useCommunity"
-import type { Forum, ForumPost, Group } from "../../../lib/api/endpoints/community"
+import type { Forum, ForumPost, Group, NewForumPost } from "../../../lib/api/endpoints/community"
 import { communityApi as communityAPI } from "../../../lib/api/endpoints/community"
-import { api } from "../../../lib/api/client"
 import { logger } from "../../../lib/logger"
 import { copyText } from "../../../lib/clipboard"
-import { isAuthenticated } from "../../../lib/api/tokens"
+import SideBar from "../../../components/ui/SideBar"
 import GroupsView from "../../../features/community/components/GroupsView"
 import ForumsView from "../../../features/community/components/ForumsView"
 import ChatView from "../../../features/community/components/ChatView"
-import GroupCard from "../../../features/community/components/GroupCard"
-import ForumCard from "../../../features/community/components/ForumCard"
-import PostCard from "../../../features/community/components/PostCard"
 import CreateModal from "../../../features/community/components/CreateModal"
 import PrivateChatModal from "../../../features/community/components/PrivateChatModal"
 
@@ -155,7 +151,7 @@ export default function Community() {
     }
   }
 
-  const handleCreatePost = async (postData: Record<string, unknown>) => {
+  const handleCreatePost = async (postData: NewForumPost) => {
     try {
       await createPost(postData)
       setShowCreateModal(false)
@@ -256,21 +252,6 @@ export default function Community() {
     { id: "career", name: "Career", icon: TrendingUp, color: "bg-yellow-500" },
   ]
 
-  // No entry carried an `active` flag, so the sidebar never showed which page
-  // you were on. This is the community page, so Community is the current one.
-  const sidebarItems = [
-    { name: "Dashboard", icon: Activity, url: "/dashboard" },
-    { name: "GPA Calculator", icon: Calculator, url: "/gpa-calculator" },
-    { name: "Average Calculator", icon: TrendingUp, url: "/average-calculator" },
-    { name: "Campus Simulator", icon: Gamepad2, url: "/campus-simulator" },
-    { name: "Hosting", icon: Home, url: "/hosting" },
-    { name: "AI Tools", icon: Brain, url: "/ai-tools" },
-    { name: "Blog", icon: PenTool, url: "/blog" },
-    { name: "User Sites", icon: Telescope, url: "/user-sites" },
-    { name: "Community", icon: Users, url: "/community" },
-    { name: "Calendar", icon: Calendar, url: "/calendar" },
-    { name: "Settings", icon: Settings, url: "/settings" },
-  ]
 
   if (loading) {
     return (
@@ -309,64 +290,28 @@ export default function Community() {
         <meta name="description" content="Connect with peers and join study groups on Ufazien's community page." />
       </Helmet>
       <div className="min-h-screen bg-gray-50 flex">
-        {/* Sidebar */}
-        <aside
-          className={`fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0 ${
-            isSidebarOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
-      >
-        <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center">
-              <BookOpen className="w-5 h-5 text-white" />
-            </div>
-            <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-              Ufazien
-            </span>
-          </div>
-          <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden p-1 rounded-md hover:bg-gray-100">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        <nav className="mt-6 px-3">
-          {sidebarItems.map((item, index) => (
-            <a
-              key={index}
-              href={item.url || "#"}
-              className={`flex items-center gap-3 px-3 py-2 rounded-lg mb-1 transition-colors ${
-                item.url === "/community"
-                  ? "bg-blue-50 text-blue-600 border-r-2 border-blue-600"
-                  : "text-gray-700 hover:bg-gray-100"
-              }`}
-            >
-              <item.icon className="w-5 h-5" />
-              <span className="font-medium">{item.name}</span>
-            </a>
-          ))}
-        </nav>
-
-        {/* Quick Stats */}
-        <div className="mt-8 px-3">
-          <div className="bg-gray-50 rounded-lg p-4">
-            <h3 className="font-medium text-gray-900 mb-3">Your Activity</h3>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-600">Groups Joined</span>
-                <span className="font-medium">{stats?.user_stats?.groups_joined ?? 0}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Posts Liked</span>
-                <span className="font-medium">{stats?.user_stats?.posts_liked ?? 0}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Bookmarked</span>
-                <span className="font-medium">{stats?.user_stats?.posts_bookmarked ?? 0}</span>
+        <SideBar isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen} pageTitle="Community">
+          {/* Quick Stats */}
+          <div className="mt-8 px-3">
+            <div className="bg-gray-50 rounded-lg p-4">
+              <h3 className="font-medium text-gray-900 mb-3">Your Activity</h3>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Groups Joined</span>
+                  <span className="font-medium">{stats?.user_stats?.groups_joined ?? 0}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Posts Liked</span>
+                  <span className="font-medium">{stats?.user_stats?.posts_liked ?? 0}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Bookmarked</span>
+                  <span className="font-medium">{stats?.user_stats?.posts_bookmarked ?? 0}</span>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      </aside>
+        </SideBar>
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -378,10 +323,7 @@ export default function Community() {
                 <Menu className="w-5 h-5" />
               </button>
               <div>
-                <h1 className="text-lg sm:text-2xl font-bold text-gray-900 flex items-center gap-2">
-                  Community
-                  <span className="hidden sm:inline-block px-2 py-1 text-xs bg-yellow-100 text-yellow-800 rounded-full">In Development</span>
-                </h1>
+                <h1 className="text-lg sm:text-2xl font-bold text-gray-900">Community</h1>
                 <p className="hidden sm:block text-sm text-gray-500">Connect with fellow UFAZ students</p>
               </div>
             </div>

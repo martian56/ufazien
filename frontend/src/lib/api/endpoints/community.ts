@@ -71,6 +71,22 @@ export interface ForumPost {
   updated_at: string
 }
 
+/**
+ * What ForumPostCreateSerializer accepts.
+ *
+ * Not Partial<ForumPost>: the read shape nests the whole forum under `forum`,
+ * while the write path wants `forum_id`. The modal was sending `forum` and the
+ * API answered 400 every time, so creating a post from the community page has
+ * never once worked. Typing the write shape separately is what makes that
+ * disagreement visible.
+ */
+export interface NewForumPost {
+  title: string
+  content: string
+  forum_id: string
+  tags?: string[]
+}
+
 /** What /community/stats/ returns, from CommunityStatsView. */
 export interface CommunityStats {
   user_stats: {
@@ -155,7 +171,7 @@ export const communityApi = {
   // Posts
   getPosts: (params: Params = {}) => api.get<Paginated<ForumPost> | ForumPost[]>('/community/posts/', { params }),
   getPost: (id: string) => api.get<ForumPost>(`/community/posts/${id}/`),
-  createPost: (data: Partial<ForumPost>) => api.post<ForumPost>('/community/posts/', data),
+  createPost: (data: NewForumPost) => api.post<ForumPost>('/community/posts/', data),
   updatePost: (id: string, data: Partial<ForumPost>) => api.patch<ForumPost>(`/community/posts/${id}/`, data),
   deletePost: (id: string) => api.delete(`/community/posts/${id}/`),
   likePost: (id: string) => api.post<{ liked: boolean; like_count: number }>(`/community/posts/${id}/like/`),
