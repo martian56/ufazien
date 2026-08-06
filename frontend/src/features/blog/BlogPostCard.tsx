@@ -3,7 +3,20 @@ import { useNavigate } from "react-router-dom"
 import { formatYearWithOrdinal } from "../../utils/majorUtils"
 import { createExcerpt } from "./createExcerpt"
 
-export default function BlogPostCard({ post, onLike, onBookmark, onPostClick, onSelect, currentUser, onShare }) {
+import type { BlogPost } from "../../lib/api/endpoints/blog"
+
+interface BlogPostCardProps {
+  post: BlogPost
+  onLike: () => void
+  onBookmark: () => void
+  onPostClick: (id: number) => void
+  onSelect?: (post: BlogPost) => void
+  currentUser: { id?: number }
+  onShare: (post: BlogPost) => void
+}
+
+
+export default function BlogPostCard({ post, onLike, onBookmark, onPostClick, onSelect, currentUser, onShare }: BlogPostCardProps) {
   const navigate = useNavigate()
   const isOwnPost = post.author.id === currentUser.id
 
@@ -70,7 +83,7 @@ export default function BlogPostCard({ post, onLike, onBookmark, onPostClick, on
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1">
             <Calendar className="w-4 h-4" />
-            {new Date(post.published_at).toLocaleDateString()}
+            {new Date(post.published_at ?? post.created_at).toLocaleDateString()}
           </span>
           <span className="flex items-center gap-1">
             <Clock className="w-4 h-4" />
@@ -87,7 +100,7 @@ export default function BlogPostCard({ post, onLike, onBookmark, onPostClick, on
       <div className="flex items-center justify-between pt-4 border-t border-gray-200">
         <div className="flex items-center gap-4">
           <button
-            onClick={() => onLike(post.id)}
+            onClick={onLike}
             className={`flex items-center gap-2 px-3 py-1 rounded-lg transition-colors ${
               post.is_liked
                 ? "text-red-600 bg-red-50 hover:bg-red-100"
@@ -113,7 +126,7 @@ export default function BlogPostCard({ post, onLike, onBookmark, onPostClick, on
         </div>
 
         <button
-          onClick={() => onBookmark(post.id)}
+          onClick={onBookmark}
           className={`p-2 rounded-lg transition-colors ${
             post.is_bookmarked
               ? "text-blue-600 bg-blue-50 hover:bg-blue-100"

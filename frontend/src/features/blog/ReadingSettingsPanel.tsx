@@ -1,5 +1,20 @@
 import { Minus, Plus, Type, Volume2 } from "lucide-react"
 
+interface ReadingSettingsPanelProps {
+  darkMode: boolean
+  fontSize: number
+  setFontSize: (size: number) => void
+  fontFamily: string
+  setFontFamily: (family: string) => void
+  lineHeight: number
+  setLineHeight: (height: number) => void
+  speechRate: number
+  setSpeechRate: (rate: number) => void
+  isPlaying: boolean
+  speechSupported: boolean
+}
+
+
 /**
  * Reading preferences for an article: type size, typeface, line height and
  * the speech rate for read-aloud.
@@ -19,7 +34,7 @@ export default function ReadingSettingsPanel({
   setSpeechRate,
   isPlaying,
   speechSupported,
-}) {
+}: ReadingSettingsPanelProps) {
   return (
     <div className={`border-t p-4 ${darkMode ? "border-gray-700 bg-gray-800" : "border-gray-200 bg-white"}`}>
       <div className="flex items-center justify-between max-w-4xl mx-auto">

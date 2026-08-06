@@ -1,6 +1,35 @@
 import { ChevronRight, Zap } from "lucide-react"
 
-export default function FeaturesSection({ features, technologies, featuresRef, navigate }) {
+import type React from "react"
+
+interface Feature {
+  icon: React.ComponentType<{ className?: string }>
+  title: string
+  description: string
+  link: string
+  color: string
+  category: string
+  featured?: boolean
+  stats?: string
+  badge?: string
+}
+
+interface Technology {
+  name: string
+  icon: React.ComponentType<{ className?: string }>
+  color: string
+  description: string
+}
+
+interface FeaturesSectionProps {
+  features: Feature[]
+  technologies: Technology[]
+  featuresRef: React.RefObject<HTMLDivElement | null>
+  navigate: (path: string) => void
+}
+
+
+export default function FeaturesSection({ features, technologies, featuresRef, navigate }: FeaturesSectionProps) {
   return (
     <>
     {/* Features Section */}

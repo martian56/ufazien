@@ -1,6 +1,25 @@
 import { CheckCircle, Heart, Star } from "lucide-react"
 
-export default function TestimonialsSection({ testimonials, currentTestimonial, setCurrentTestimonial, testimonialsRef }) {
+import type React from "react"
+
+interface Testimonial {
+  name: string
+  role: string
+  avatar: string
+  content: string
+  rating: number
+  verified?: boolean
+}
+
+interface TestimonialsSectionProps {
+  testimonials: Testimonial[]
+  currentTestimonial: number
+  setCurrentTestimonial: (index: number) => void
+  testimonialsRef: React.RefObject<HTMLDivElement | null>
+}
+
+
+export default function TestimonialsSection({ testimonials, currentTestimonial, setCurrentTestimonial, testimonialsRef }: TestimonialsSectionProps) {
   return (
     <>
     {/* Testimonials Section */}

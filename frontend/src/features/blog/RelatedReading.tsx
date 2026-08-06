@@ -1,12 +1,37 @@
 import { ArrowLeft, Clock, Heart, MessageCircle } from "lucide-react"
 
+import type { BlogPost } from "../../lib/api/endpoints/blog"
+
+/**
+ * BlogRead projects each post into this shape before passing it in: the
+ * author is already a formatted name, and category is the category's name
+ * rather than the nested object.
+ */
+interface RelatedPostSummary {
+  id: number
+  title: string
+  author: string
+  read_time?: string
+  likes?: number
+  category?: string | null
+}
+
+interface RelatedReadingProps {
+  relatedPosts: RelatedPostSummary[]
+  authorPosts: RelatedPostSummary[]
+  post: BlogPost | null
+  darkMode: boolean
+  onOpenPost: (id: number | null) => void
+}
+
+
 /**
  * Further reading: posts sharing this article's tags, and more by its author.
  *
  * Carved out of BlogRead, which held all of this inline in one 1,400-line
  * function.
  */
-export default function RelatedReading({ relatedPosts, authorPosts, post, darkMode, onOpenPost }) {
+export default function RelatedReading({ relatedPosts, authorPosts, post, darkMode, onOpenPost }: RelatedReadingProps) {
   return (
     <>
       <div
@@ -109,7 +134,7 @@ export default function RelatedReading({ relatedPosts, authorPosts, post, darkMo
         {authorPosts.length > 0 && (
           <div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
             <h4 className="text-lg font-semibold mb-4">
-              More by {`${post.author?.first_name || ""} ${post.author?.last_name || ""}`.trim() || "This Author"}
+              More by {`${post?.author?.first_name || ""} ${post?.author?.last_name || ""}`.trim() || "This Author"}
             </h4>
             <div className="space-y-3">
               {authorPosts.slice(0, 3).map((authorPost) => (

@@ -1,5 +1,13 @@
 import { Copy, Facebook, Linkedin, Twitter, X } from "lucide-react"
 
+interface ShareModalProps {
+  darkMode: boolean
+  onClose: () => void
+  onShare: (network: "twitter" | "facebook" | "linkedin") => void
+  onCopyLink: () => void
+}
+
+
 /**
  * Share sheet for an article.
  *
@@ -8,7 +16,7 @@ import { Copy, Facebook, Linkedin, Twitter, X } from "lucide-react"
  * and then claimed success unconditionally. The clipboard rejects whenever the
  * document is not focused, so that message was sometimes simply untrue.
  */
-export default function ShareModal({ darkMode, onClose, onShare, onCopyLink }) {
+export default function ShareModal({ darkMode, onClose, onShare, onCopyLink }: ShareModalProps) {
   const optionClass = "w-full flex items-center space-x-3 p-3 rounded-lg transition-colors"
 
   return (

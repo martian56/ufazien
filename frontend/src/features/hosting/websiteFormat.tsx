@@ -1,4 +1,5 @@
 import { AlertCircle, CheckCircle, Clock, RefreshCw, Square } from "lucide-react"
+import type { Website } from "../../utils/hostingApi"
 
 /**
  * Formatting and status helpers shared by the website detail tabs.
@@ -8,7 +9,7 @@ import { AlertCircle, CheckCircle, Clock, RefreshCw, Square } from "lucide-react
  * arguments, so they live here instead and each tab imports what it needs.
  */
 
-export function formatDate(dateString) {
+export function formatDate(dateString: string): string {
   return new Date(dateString).toLocaleDateString("en-US", {
     year: "numeric",
     month: "short",
@@ -18,23 +19,23 @@ export function formatDate(dateString) {
   })
 }
 
-export function formatStorage(mb) {
+export function formatStorage(mb: number | null | undefined): string {
   const storage = mb || 0
   if (storage < 1024) return `${storage.toFixed(1)} MB`
   return `${(storage / 1024).toFixed(1)} GB`
 }
 
 /** The website's own address, falling back to the generated subdomain. */
-export function getWebsiteUrl(website) {
+export function getWebsiteUrl(website: Website | null | undefined): string {
   if (website?.domain?.name) return website.domain.name
   return `${website?.name?.toLowerCase().replace(/\s+/g, "-")}.ufazien.com`
 }
 
-export function getSSLStatus(website) {
+export function getSSLStatus(website: Website | null | undefined): boolean {
   return website?.domain?.ssl_enabled || false
 }
 
-export function getStatusIcon(status) {
+export function getStatusIcon(status: string | undefined) {
   switch (status) {
     case "active":
       return <CheckCircle className="w-5 h-5 text-green-600" />
@@ -47,7 +48,7 @@ export function getStatusIcon(status) {
   }
 }
 
-export function getLogIcon(status) {
+export function getLogIcon(status: string | undefined) {
   switch (status) {
     case "success":
     case "completed":

@@ -1,6 +1,22 @@
 import { X } from "lucide-react"
 
-export default function ConversionTableModal({ onClose, ufazConversionTable }) {
+interface ConversionRow {
+  min: number
+  max: number
+  gpa: number
+  letter: string
+  status: string
+  azMin: number
+  azMax: number
+}
+
+interface ConversionTableModalProps {
+  onClose: () => void
+  ufazConversionTable: ConversionRow[]
+}
+
+
+export default function ConversionTableModal({ onClose, ufazConversionTable }: ConversionTableModalProps) {
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">

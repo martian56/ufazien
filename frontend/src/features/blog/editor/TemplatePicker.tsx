@@ -1,7 +1,20 @@
 import { FileText } from "lucide-react"
 
+interface Template {
+  id: number | string
+  name: string
+  content?: string
+}
+
+interface TemplatePickerProps {
+  darkMode: boolean
+  templates: Template[]
+  onSelect: (template: Template) => void
+}
+
+
 /** Starting points that drop a skeleton into an empty editor. */
-export default function TemplatePicker({ darkMode, templates, onSelect }) {
+export default function TemplatePicker({ darkMode, templates, onSelect }: TemplatePickerProps) {
   return (
     <div className={`rounded-xl shadow-sm border p-6 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
       <h3 className="font-semibold flex items-center mb-4">

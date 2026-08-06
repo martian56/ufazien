@@ -1,6 +1,16 @@
 import { Trash2 } from "lucide-react"
 
-export default function AverageRow({ average, index, onUpdate, onRemove, canRemove, activeTab }) {
+interface AverageRowProps {
+  average: { id: number; period: string; average: string; gradeType: string }
+  index: number
+  onUpdate: (id: number, field: string, value: string) => void
+  onRemove: (id: number) => void
+  canRemove: boolean
+  activeTab: string
+}
+
+
+export default function AverageRow({ average, index, onUpdate, onRemove, canRemove, activeTab }: AverageRowProps) {
   return (
     <div className="p-4 bg-gray-50 rounded-lg space-y-3">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

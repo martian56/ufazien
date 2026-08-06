@@ -1,4 +1,15 @@
+import type React from "react"
 import { TrendingUp } from "lucide-react"
+
+interface SeoScorePanelProps {
+  darkMode: boolean
+  seoScore: number
+  title: string
+  excerpt: string
+  wordCount: number
+  tagCount: number
+}
+
 
 /**
  * SEO checklist and score, derived from what is in the editor right now.
@@ -13,7 +24,7 @@ const TONES = {
   poor: { text: 'text-red-500', bar: 'bg-red-500' },
 }
 
-function Check({ passed, children }) {
+function Check({ passed, children }: { passed: boolean; children: React.ReactNode }) {
   return (
     <div className={passed ? 'text-green-500' : ''}>
       {passed ? '✓ ' : '· '}
@@ -22,7 +33,7 @@ function Check({ passed, children }) {
   )
 }
 
-export default function SeoScorePanel({ darkMode, seoScore, title, excerpt, wordCount, tagCount }) {
+export default function SeoScorePanel({ darkMode, seoScore, title, excerpt, wordCount, tagCount }: SeoScorePanelProps) {
   const tone = seoScore >= 80 ? TONES.good : seoScore >= 60 ? TONES.fair : TONES.poor
 
   return (

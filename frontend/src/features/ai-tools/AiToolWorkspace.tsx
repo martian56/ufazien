@@ -8,6 +8,30 @@ import aiToolsApi from "../../lib/api/endpoints/aiTools"
 import { copyText } from "../../lib/clipboard"
 import { errorMessage } from "../../lib/api/errors"
 
+import type React from "react"
+
+interface ToolOption {
+  id: string
+  name: string
+  description?: string
+}
+
+interface AiToolWorkspaceProps {
+  toolType: string
+  title: string
+  tagline: string
+  icon: React.ComponentType<{ className?: string }>
+  accent: string
+  inputLabel: string
+  outputLabel: string
+  placeholder: string
+  actionLabel: string
+  options?: ToolOption[]
+  optionKey?: string
+  optionLabel?: string
+}
+
+
 /**
  * The shared workspace behind the paraphraser, summarizer and grammar
  * assistant.
@@ -31,16 +55,16 @@ export default function AiToolWorkspace({
   options,
   optionKey,
   optionLabel,
-}) {
+}: AiToolWorkspaceProps) {
   const navigate = useNavigate()
   const [inputText, setInputText] = useState("")
   const [outputText, setOutputText] = useState("")
-  const [selectedOption, setSelectedOption] = useState(options?.[0]?.id ?? null)
+  const [selectedOption, setSelectedOption] = useState<string | null>(options?.[0]?.id ?? null)
   const [isProcessing, setIsProcessing] = useState(false)
-  const [error, setError] = useState(null)
+  const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
-  const [elapsed, setElapsed] = useState(null)
-  const inputRef = useRef(null)
+  const [elapsed, setElapsed] = useState<number | null>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
 
   const wordCount = inputText.trim() ? inputText.trim().split(/\s+/).length : 0
   const MAX_CHARS = 10000
@@ -122,11 +146,11 @@ export default function AiToolWorkspace({
         </header>
 
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          {options?.length > 0 && (
+          {(options?.length ?? 0) > 0 && (
             <div className="mb-6">
               <label className="block text-sm font-semibold text-gray-700 mb-2">{optionLabel}</label>
               <div className="flex flex-wrap gap-2">
-                {options.map((option) => (
+                {(options ?? []).map((option) => (
                   <button
                     key={option.id}
                     onClick={() => setSelectedOption(option.id)}

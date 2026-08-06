@@ -28,7 +28,13 @@ export interface BlogPost {
   featured_image_url?: string | null
   author: User
   category?: BlogCategory | null
-  tags: BlogTag[]
+  /** The serializer sends the name alongside the id. */
+  category_name?: string | null
+  /**
+   * Names, not objects. get_tags returns [tag.name for tag in ...], so a
+   * card that rendered these as objects was rendering "[object Object]".
+   */
+  tags: string[]
   /** Null while the post is a draft. */
   published_at: string | null
   created_at: string
@@ -42,6 +48,8 @@ export interface BlogPost {
   is_scheduled?: boolean
   likes_count?: number
   comments_count?: number
+  /** Root comments, each with its own nested replies. */
+  comments?: unknown[]
   is_liked?: boolean
   is_bookmarked?: boolean
 }
