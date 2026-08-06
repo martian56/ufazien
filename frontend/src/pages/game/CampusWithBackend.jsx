@@ -492,8 +492,10 @@ function Player({ campusHook, insideBuilding, touch }) {
       direction: playerDirection,
       is_moving: isMoving,
       // Was hardcoded null, so the server never knew which building anyone
-      // was standing in, and neither did anyone else's client.
-      current_room: insideBuilding?.name ?? null,
+      // was standing in, and neither did anyone else's client. Sent as the
+      // building's id rather than its name: two buildings could be given the
+      // same name, and they would then share a projector.
+      current_room: insideBuilding ? String(insideBuilding.id) : null,
     })
   })
 
@@ -647,14 +649,16 @@ const CampusWithBackend = () => {
     const presenter = playerPositions?.get?.(userId) ?? playerPositions?.get?.(Number(userId))
     // Without a position for the presenter their room is unknown, and showing
     // the share everywhere is the behaviour being fixed.
-    return Boolean(presenter && presenter.current_room === insideBuilding.name)
+    return Boolean(presenter && presenter.current_room === String(insideBuilding.id))
   }, [voice.screenShare, insideBuilding, playerPositions])
 
   const sharerRoom = useMemo(() => {
     if (!voice.screenShare || voice.screenShare.isLocal) return null
     const userId = String(voice.screenShare.identity || '').replace(/^user-/, '')
     const presenter = playerPositions?.get?.(userId) ?? playerPositions?.get?.(Number(userId))
-    return presenter?.current_room || null
+    // The id is what travels; the name is what a person can read.
+    const room = presenter?.current_room
+    return campusBuildings.find((b) => String(b.id) === room)?.name || null
   }, [voice.screenShare, playerPositions])
 
   // Nothing to zoom into once the share stops, or once it is out of the room.
