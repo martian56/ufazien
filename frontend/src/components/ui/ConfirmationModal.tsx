@@ -1,16 +1,28 @@
 import { X, AlertTriangle } from "lucide-react"
 
-export default function ConfirmationModal({ 
-  isOpen, 
-  onClose, 
-  onConfirm, 
-  title, 
-  message, 
-  confirmText = "Delete", 
+interface ConfirmationModalProps {
+  isOpen: boolean
+  onClose: () => void
+  onConfirm: () => void
+  title: string
+  message: string
+  confirmText?: string
+  cancelText?: string
+  type?: "danger" | "warning" | "info"
+  loading?: boolean
+}
+
+export default function ConfirmationModal({
+  isOpen,
+  onClose,
+  onConfirm,
+  title,
+  message,
+  confirmText = "Delete",
   cancelText = "Cancel",
   type = "danger",
-  loading = false 
-}) {
+  loading = false,
+}: ConfirmationModalProps) {
   if (!isOpen) return null
 
   const getIconColor = () => {

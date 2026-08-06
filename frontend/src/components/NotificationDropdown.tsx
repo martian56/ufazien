@@ -3,15 +3,21 @@ import { Bell, X, Check, Settings, Trash2, ExternalLink } from 'lucide-react';
 import notificationsAPI from '../lib/api/endpoints/notifications';
 import pushNotificationService from '../services/pushNotificationService';
 import { useToast, ToastContainer } from '../hooks/useToast';
+import type { Notification, NotificationPreferences } from '../lib/api/endpoints/notifications';
 
-export default function NotificationDropdown({ unreadCount, onCountUpdate }) {
+interface NotificationDropdownProps {
+  unreadCount: number
+  onCountUpdate: (count: number) => void
+}
+
+export default function NotificationDropdown({ unreadCount, onCountUpdate }: NotificationDropdownProps) {
   const { notifications: toastNotifications, toast, removeNotification } = useToast();
   const [isOpen, setIsOpen] = useState(false);
-  const [notifications, setNotifications] = useState([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(false);
   const [showPreferences, setShowPreferences] = useState(false);
   const [pushEnabled, setPushEnabled] = useState(false);
-  const [preferences, setPreferences] = useState({});
+  const [preferences, setPreferences] = useState<Partial<NotificationPreferences>>({});
 
   useEffect(() => {
     if (isOpen && notifications.length === 0) {
@@ -41,15 +47,15 @@ export default function NotificationDropdown({ unreadCount, onCountUpdate }) {
     }
   };
 
-  const markAsRead = async (notificationId) => {
+  const markAsRead = async (notificationId: number) => {
     try {
       await notificationsAPI.markAsRead([notificationId]);
       setNotifications(prev => 
         prev.map(n => n.id === notificationId ? { ...n, is_read: true } : n)
       );
       if (onCountUpdate) {
-        const newCount = await notificationsAPI.getUnreadCount();
-        onCountUpdate(newCount);
+        const { count } = await notificationsAPI.getUnreadCount();
+        onCountUpdate(count);
       }
     } catch (error) {
       console.error('Failed to mark notification as read:', error);
@@ -90,7 +96,7 @@ export default function NotificationDropdown({ unreadCount, onCountUpdate }) {
     }
   };
 
-  const getNotificationIcon = (type) => {
+  const getNotificationIcon = (type: string) => {
     switch (type) {
       case 'follow':
         return '👤';
@@ -106,10 +112,8 @@ export default function NotificationDropdown({ unreadCount, onCountUpdate }) {
     }
   };
 
-  const getTimeAgo = (dateString) => {
-    const now = new Date();
-    const time = new Date(dateString);
-    const diffInSeconds = Math.floor((now - time) / 1000);
+  const getTimeAgo = (dateString: string) => {
+    const diffInSeconds = Math.floor((Date.now() - new Date(dateString).getTime()) / 1000);
 
     if (diffInSeconds < 60) return 'just now';
     if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
