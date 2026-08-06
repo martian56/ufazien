@@ -1,20 +1,31 @@
 import { Crown, ArrowRight, X } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 
-export default function UpgradePrompt({ 
-  isVisible, 
-  onClose, 
-  title, 
-  description, 
-  currentUsage, 
-  limit, 
-  feature 
-}) {
+interface UpgradePromptProps {
+  isVisible: boolean
+  onClose: () => void
+  title: string
+  description: string
+  currentUsage?: number
+  limit?: number
+  feature?: string
+}
+
+
+export default function UpgradePrompt({
+  isVisible,
+  onClose,
+  title,
+  description,
+  currentUsage,
+  limit,
+  feature = "this",
+}: UpgradePromptProps) {
   const navigate = useNavigate()
 
   if (!isVisible) return null
 
-  const usagePercentage = (currentUsage / limit) * 100
+  const usagePercentage = limit ? ((currentUsage ?? 0) / limit) * 100 : 0
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">

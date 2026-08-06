@@ -10,7 +10,22 @@ import {
   ArrowRight,
 } from "lucide-react"
 
-export default function HumanizerCard({ tool }) {
+import type React from "react"
+
+interface HumanizerCardProps {
+  tool: {
+    id: string
+    name: string
+    description: string
+    icon: React.ComponentType<{ className?: string }>
+    color: string
+    category: string
+    stats?: string
+    badge?: string
+  }
+}
+
+export default function HumanizerCard({ tool }: HumanizerCardProps) {
   const navigate = useNavigate()
   const [isHovered, setIsHovered] = useState(false)
 

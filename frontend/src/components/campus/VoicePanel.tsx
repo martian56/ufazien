@@ -1,6 +1,32 @@
 import { useEffect, useRef } from "react"
 import { Mic, MicOff, MonitorUp, MonitorOff, ShieldCheck, Volume2 } from "lucide-react"
 
+/** Mirrors LobbyMember; the server decides these, never the client. */
+/** Mirrors LobbyMember; the server decides these, never the client. */
+interface LobbyMemberPermission {
+  user_id: number | string
+  full_name?: string
+  is_host?: boolean
+  is_muted?: boolean
+  can_share_screen?: boolean
+}
+
+interface VoicePanelProps {
+  embedded?: boolean
+  connected: boolean
+  error?: string | null
+  participants: unknown[]
+  micEnabled: boolean
+  mayScreenShare: boolean
+  isHost: boolean
+  permissions?: { members?: LobbyMemberPermission[] } | null
+  onToggleMic: () => void
+  onToggleScreenShare: () => void
+  onSetMemberMuted: (userId: number | string, muted: boolean) => void
+  onSetMemberScreenShare: (userId: number | string, allowed: boolean) => void
+}
+
+
 /**
  * Owns the shared video element.
  *
@@ -11,8 +37,14 @@ import { Mic, MicOff, MonitorUp, MonitorOff, ShieldCheck, Volume2 } from "lucide
  * texture. Parked it is a 2px corner nobody sees; expanded it is a reader for
  * slides too small to make out from a seat.
  */
-export function ScreenShareStage({ screenShare, expanded, onClose }) {
-  const holder = useRef(null)
+interface ScreenShareStageProps {
+  screenShare?: { element?: HTMLVideoElement | null; identity?: string; isLocal?: boolean } | null
+  expanded: boolean
+  onClose: () => void
+}
+
+export function ScreenShareStage({ screenShare, expanded, onClose }: ScreenShareStageProps) {
+  const holder = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const node = holder.current
@@ -66,7 +98,7 @@ export default function VoicePanel({
   onToggleScreenShare,
   onSetMemberMuted,
   onSetMemberScreenShare,
-}) {
+}: VoicePanelProps) {
   const members = permissions?.members || []
 
   return (
