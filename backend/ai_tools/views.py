@@ -170,9 +170,9 @@ def process_text(request):
         }, status=status.HTTP_201_CREATED)
         
     except Exception as e:
-        logger.error(f"Error creating task: {str(e)}")
+        logger.exception("Could not create AI task")
         return Response(
-            {'error': 'Failed to create task. Please try again.'},
+            {'error': 'Could not start that job. Please try again.'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
@@ -181,28 +181,28 @@ def process_text(request):
 def task_status(request, task_id):
     """Get status of a specific task"""
     try:
-        # First check cache for quick response
+        # Ownership first. The cache lookup used to come before this and
+        # returned early on a hit, so anyone who knew a task id could read the
+        # finished output of someone else's job for the hour it stayed cached.
+        # The ownership check below existed the whole time; the cache jumped
+        # over it.
+        if not AITask.objects.filter(id=task_id, user=request.user).exists():
+            return Response(
+                {'error': 'Task not found or access denied'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
         cached_result = cache.get(f"task_result_{task_id}")
         if cached_result:
             return Response(cached_result)
-        
-        # Get from database
+
         task_data = TaskManager.get_task_status(task_id)
         if not task_data:
             return Response(
                 {'error': 'Task not found'},
                 status=status.HTTP_404_NOT_FOUND
             )
-        
-        # Verify user owns this task
-        try:
-            task = AITask.objects.get(id=task_id, user=request.user)
-        except AITask.DoesNotExist:
-            return Response(
-                {'error': 'Task not found or access denied'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-        
+
         return Response(task_data)
         
     except Exception as e:

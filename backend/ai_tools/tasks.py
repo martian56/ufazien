@@ -14,6 +14,24 @@ logger = logging.getLogger(__name__)
 
 class TaskManager:
     """Manages AI task processing and queuing"""
+
+    @staticmethod
+    def _dispatch(task_id: str):
+        """Hand a task to the worker, or run it here if eager.
+
+        CELERY_TASK_ALWAYS_EAGER is on, so this runs the work synchronously in
+        the request. process_ai_task already records its own failure on the
+        task before re-raising for retry, so an exception escaping here means
+        the task is marked failed and the client can read why by polling. It
+        is not a reason to fail the request that created it: the task exists,
+        and "the provider is down" is a different thing from "we could not
+        accept your work".
+        """
+        try:
+            process_ai_task.delay(task_id)
+        except Exception as exc:
+            logger.error(f"Task {task_id} failed while being processed: {exc}")
+
     
     @staticmethod
     def create_humanizer_task(user: User, input_text: str, **kwargs) -> AITask:
@@ -38,9 +56,10 @@ class TaskManager:
             # Update user stats
             TaskManager._update_user_stats(user, AIToolType.HUMANIZER, len(input_text))
             
-            # Queue the task for processing
-            process_ai_task.delay(str(ai_task.id))
-            
+            # Queued after commit, so the row survives a failure while
+            # processing it. See _dispatch.
+            transaction.on_commit(lambda: TaskManager._dispatch(str(ai_task.id)))
+
             return ai_task
     
     @staticmethod
@@ -57,9 +76,10 @@ class TaskManager:
             # Update user stats
             TaskManager._update_user_stats(user, tool_type, len(input_text))
             
-            # Queue the task for processing
-            process_ai_task.delay(str(ai_task.id))
-            
+            # Queued after commit, so the row survives a failure while
+            # processing it. See _dispatch.
+            transaction.on_commit(lambda: TaskManager._dispatch(str(ai_task.id)))
+
             return ai_task
     
     @staticmethod
@@ -79,6 +99,13 @@ class TaskManager:
         
         stats.save()
     
+    #: What a failed task tells the person who submitted it. The full error is
+    #: kept on the row and in the logs, but a provider's own wording is not fit
+    #: to show a student: the live one reads "Access denied due to invalid
+    #: subscription key", which is true, useless to them, and says more about
+    #: our configuration than it should.
+    USER_FACING_FAILURE = "The AI service is unavailable right now. Please try again shortly."
+
     @staticmethod
     def get_task_status(task_id: str) -> Optional[dict]:
         """Get current status of a task"""
@@ -88,7 +115,11 @@ class TaskManager:
                 'id': str(task.id),
                 'status': task.status,
                 'output_text': task.output_text,
-                'error_message': task.error_message,
+                'error_message': (
+                    TaskManager.USER_FACING_FAILURE
+                    if task.status == TaskStatus.FAILED and task.error_message
+                    else task.error_message
+                ),
                 'processing_time': task.processing_time,
                 'created_at': task.created_at,
                 'completed_at': task.completed_at,
@@ -221,10 +252,12 @@ def process_ai_task(self, task_id: str):
             task.completed_at = timezone.now()
             task.save()
             
-            # Cache the error
+            # Cached for the client to read, so it carries the same
+            # user-facing wording as get_task_status. The full error stays on
+            # the row above and in the log line at the top of this handler.
             cache.set(f"task_result_{task_id}", {
                 'status': TaskStatus.FAILED,
-                'error_message': str(e)
+                'error_message': TaskManager.USER_FACING_FAILURE
             }, timeout=3600)
             
         except Exception as save_error:
