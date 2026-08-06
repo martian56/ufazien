@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react"
+import { errorMessage } from "../../lib/api/errors"
 import { useNavigate } from "react-router-dom"
 import { Helmet } from "react-helmet"
 import {
@@ -42,25 +43,25 @@ export default function Websites() {
     navigate('/hosting/websites/create')
   }
 
-  const handleDeleteWebsite = async (websiteId) => {
+  const handleDeleteWebsite = async (websiteId: string) => {
     if (confirm('Are you sure you want to delete this website? This action cannot be undone.')) {
       try {
         await deleteWebsite(websiteId)
       } catch (error) {
-        alert('Failed to delete website: ' + error.message)
+        alert('Failed to delete website: ' + errorMessage(error))
       }
     }
   }
 
-  const handleDeployWebsite = async (websiteId) => {
+  const handleDeployWebsite = async (websiteId: string) => {
     try {
       await deployWebsite(websiteId)
     } catch (error) {
-      alert('Failed to deploy website: ' + error.message)
+      alert('Failed to deploy website: ' + errorMessage(error))
     }
   }
 
-  const getStatusIcon = (status) => {
+  const getStatusIcon = (status?: string) => {
     switch (status) {
       case 'active':
         return <CheckCircle className="h-4 w-4 text-green-500" />
@@ -73,7 +74,7 @@ export default function Websites() {
     }
   }
 
-  const getStatusText = (status) => {
+  const getStatusText = (status?: string) => {
     switch (status) {
       case 'active':
         return 'Active'
@@ -297,8 +298,10 @@ export default function Websites() {
 
         {/* Upgrade Prompt Modal */}
         <UpgradePrompt
-          isOpen={showUpgradePrompt}
+          isVisible={showUpgradePrompt}
           onClose={() => setShowUpgradePrompt(false)}
+          title="You have reached your plan's limit"
+          description="Upgrade to add more websites to your account."
           feature="websites"
           currentUsage={filteredWebsites.length}
           limit={subscription?.plan?.max_websites || 5}

@@ -2,31 +2,63 @@ import { useState } from "react"
 import { Search, Play, Users, Eye, Calendar, Globe, Heart, HeartOff } from "lucide-react"
 import Pagination from "../../../components/ui/Pagination"
 
-export default function PublicSchemasTab({ 
-  schemas, 
-  useSchema, 
-  saveSchema, 
-  unsaveSchema, 
-  searchTerm, 
+/** Mirrors AverageSchemaSerializer, as in MySchemasTab. */
+interface Schema {
+  id: number
+  name: string
+  description?: string
+  creator?: number
+  creator_full_name?: string
+  creator_username?: string
+  is_public?: boolean
+  is_saved_by_user?: boolean
+  usage_count?: number
+  fields?: { name: string; weight: number }[]
+  created_at?: string
+}
+
+interface PublicSchemasTabProps {
+  schemas: Schema[]
+  useSchema: (schemaId: number) => Promise<void> | void
+  saveSchema: (schemaId: number) => Promise<void> | void
+  unsaveSchema: (schemaId: number) => Promise<void> | void
+  searchTerm: string
+  setSearchTerm: (term: string) => void
+  pagination?: {
+    count: number
+    current_page: number
+    total_pages: number
+    next?: string | null
+    previous?: string | null
+  } | null
+  onPageChange: (page: number) => void
+}
+
+export default function PublicSchemasTab({
+  schemas,
+  useSchema,
+  saveSchema,
+  unsaveSchema,
+  searchTerm,
   setSearchTerm,
   pagination,
-  onPageChange 
-}) {
-  const [selectedSchema, setSelectedSchema] = useState(null)
+  onPageChange,
+}: PublicSchemasTabProps) {
+  const [selectedSchema, setSelectedSchema] = useState<Schema | null>(null)
 
-  const handleUseSchema = async (schemaId) => {
+  const handleUseSchema = async (schemaId: number) => {
     await useSchema(schemaId)
   }
 
-  const handleSaveSchema = async (schemaId) => {
+  const handleSaveSchema = async (schemaId: number) => {
     await saveSchema(schemaId)
   }
 
-  const handleUnsaveSchema = async (schemaId) => {
+  const handleUnsaveSchema = async (schemaId: number) => {
     await unsaveSchema(schemaId)
   }
 
-  const handleViewSchema = (schema) => {
+  const handleViewSchema = (schema: Schema) => {
     setSelectedSchema(schema)
   }
 
@@ -81,7 +113,7 @@ export default function PublicSchemasTab({
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-2">
                       <h3 className="font-semibold text-gray-900 truncate">{schema.name}</h3>
-                      <Globe className="w-4 h-4 text-green-600" title="Public Schema" />
+                      <span title="Public Schema"><Globe className="w-4 h-4 text-green-600" /></span>
                     </div>
                     {schema.description && (
                       <p className="text-sm text-gray-600 line-clamp-2">{schema.description}</p>
@@ -112,7 +144,7 @@ export default function PublicSchemasTab({
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-gray-600">Published</span>
                     <span className="font-medium">
-                      {new Date(schema.created_at).toLocaleDateString()}
+                      {schema.created_at ? new Date(schema.created_at).toLocaleDateString() : "-"}
                     </span>
                   </div>
                 </div>
@@ -122,7 +154,7 @@ export default function PublicSchemasTab({
                   <div className="mb-4">
                     <div className="text-xs font-medium text-gray-700 mb-2">Fields:</div>
                     <div className="space-y-1">
-                      {schema.fields.slice(0, 3).map((field, index) => (
+                      {(schema.fields ?? []).slice(0, 3).map((field, index) => (
                         <div key={index} className="flex items-center justify-between text-xs">
                           <span className="text-gray-600 truncate">{field.name}</span>
                           <span className="text-gray-500 ml-2">×{field.weight}</span>
@@ -209,7 +241,7 @@ export default function PublicSchemasTab({
                 </div>
                 <div>
                   <span className="text-gray-600">Published:</span>
-                  <span className="ml-2 font-medium">{new Date(selectedSchema.created_at).toLocaleDateString()}</span>
+                  <span className="ml-2 font-medium">{selectedSchema.created_at ? new Date(selectedSchema.created_at).toLocaleDateString() : "-"}</span>
                 </div>
                 <div>
                   <span className="text-gray-600">Total Uses:</span>

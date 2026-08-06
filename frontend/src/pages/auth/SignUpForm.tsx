@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import type React from "react"
 import { Eye, EyeOff, User, Mail, Lock } from "lucide-react"
 import { Button } from "../../components/ui/button"
 import { Input } from "../../components/ui/input"
@@ -12,6 +13,16 @@ import { api, ApiError } from "../../lib/api/client"
 import { setTokens } from "../../lib/api/tokens"
 
 
+/** What /auth/signup/ answers with. */
+interface SignUpResponse {
+  access?: string
+  refresh?: string
+  user?: { id: number; username: string }
+}
+
+type SignUpField = "firstName" | "lastName" | "email" | "password" | "confirmPassword"
+type SignUpErrors = Partial<Record<SignUpField, string>>
+
 export default function SignUpForm() {
   const [formData, setFormData] = useState({
     firstName: "",
@@ -22,14 +33,14 @@ export default function SignUpForm() {
   })
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
-  const [errors, setErrors] = useState({})
+  const [errors, setErrors] = useState<SignUpErrors>({})
   const [apiError, setApiError] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [success, setSuccess] = useState(false)
   const navigate = useNavigate()
 
   const validateForm = () => {
-    const newErrors = {}
+    const newErrors: SignUpErrors = {}
 
     if (!formData.firstName.trim()) {
       newErrors.firstName = "First name is required"
@@ -59,7 +70,7 @@ export default function SignUpForm() {
     return Object.keys(newErrors).length === 0
   }
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setApiError("")
     setSuccess(false)
@@ -68,7 +79,7 @@ export default function SignUpForm() {
     setIsLoading(true)
 
     try {
-      const data = await api.post(
+      const data = await api.post<SignUpResponse>(
         "/auth/signup/",
         {
           email: formData.email,
@@ -104,7 +115,7 @@ export default function SignUpForm() {
     }
   }
 
-  const handleInputChange = (field, value) => {
+  const handleInputChange = (field: SignUpField, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
     if (errors[field]) {
       setErrors((prev) => ({ ...prev, [field]: "" }))

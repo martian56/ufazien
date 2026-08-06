@@ -436,8 +436,10 @@ export default function Databases() {
 
         {/* Upgrade Prompt Modal */}
         <UpgradePrompt
-          isOpen={showUpgradePrompt}
+          isVisible={showUpgradePrompt}
           onClose={() => setShowUpgradePrompt(false)}
+          title="You have reached your plan's limit"
+          description="Upgrade to add more databases to your account."
           feature="databases"
           currentUsage={filteredDatabases.length}
           limit={subscription?.plan?.max_databases || 5}
