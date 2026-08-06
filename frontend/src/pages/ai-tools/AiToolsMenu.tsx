@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import type React from "react"
 import { Helmet } from "react-helmet"
 import { useNavigate } from "react-router-dom"
 import {
@@ -154,7 +155,7 @@ export default function AiToolsMenu() {
                   {filteredTools
                     .filter(tool => tool.featured)
                     .map((tool) => {
-                      const ToolComponent = tool.component
+                      const ToolComponent = tool.component as React.ComponentType<{ tool: typeof tool }>
                       return <ToolComponent key={tool.id} tool={tool} />
                     })
                   }
@@ -171,7 +172,7 @@ export default function AiToolsMenu() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 {filteredTools.map((tool) => {
                   if (tool.component) {
-                    const ToolComponent = tool.component
+                    const ToolComponent = tool.component as React.ComponentType<{ tool: typeof tool }>
                     return <ToolComponent key={tool.id} tool={tool} />
                   }
                   
@@ -188,13 +189,6 @@ export default function AiToolsMenu() {
                       }}
                       className="bg-gray-800 bg-opacity-50 backdrop-blur-sm border border-gray-700 rounded-xl p-6 hover:bg-opacity-70 transition-all duration-300 group relative overflow-hidden cursor-pointer"
                     >
-                      {/* Coming Soon Badge */}
-                      {tool.coming_soon && (
-                        <div className="absolute top-3 right-3 bg-yellow-500 text-black text-xs font-bold px-2 py-1 rounded-full">
-                          Coming Soon
-                        </div>
-                      )}
-
                       {/* Gradient Background */}
                       <div className={`absolute inset-0 bg-gradient-to-br ${tool.color} opacity-5 group-hover:opacity-10 transition-opacity`} />
                       
@@ -216,17 +210,10 @@ export default function AiToolsMenu() {
                             {tool.category}
                           </span>
                           
-                          <button
-                            disabled={tool.coming_soon}
-                            className={`flex items-center gap-1 text-sm font-medium transition-all ${
-                              tool.coming_soon
-                                ? "text-gray-500 cursor-not-allowed"
-                                : "text-white hover:text-blue-400 group-hover:translate-x-1"
-                            }`}
-                          >
-                            {tool.coming_soon ? "Soon" : "Use Tool"}
-                            {!tool.coming_soon && <ChevronRight className="w-4 h-4" />}
-                          </button>
+                          <span className="flex items-center gap-1 text-sm font-medium text-white group-hover:text-blue-400 group-hover:translate-x-1 transition-all">
+                            Use Tool
+                            <ChevronRight className="w-4 h-4" />
+                          </span>
                         </div>
                       </div>
                     </div>
