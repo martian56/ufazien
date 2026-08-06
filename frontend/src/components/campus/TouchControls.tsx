@@ -30,7 +30,15 @@ interface TouchControlsProps {
  * than React state, because they are read every frame.
  */
 
-export function createTouchState() {
+/** The shared mutable state the on-screen joystick writes and Player reads. */
+export interface TouchState {
+  move: { x: number; y: number }
+  look: { dx: number; dy: number }
+  jump: boolean
+  interact: boolean
+}
+
+export function createTouchState(): TouchState {
   return {
     move: { x: 0, y: 0 }, // -1..1, y is forward
     look: { dx: 0, dy: 0 }, // consumed each frame

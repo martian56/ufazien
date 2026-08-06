@@ -3,15 +3,45 @@ import { Helmet } from "react-helmet"
 import { Canvas, useFrame, useThree } from "@react-three/fiber"
 import { Text, Html, Sky, KeyboardControls, useKeyboardControls, PointerLockControls } from "@react-three/drei"
 import { Vector3, MathUtils } from "three"
+import type { Group } from "three"
 import { useNavigate, useParams } from "react-router-dom"
 import { MessageCircle, Users, Settings, LogOut, Mic, MicOff, Video, VideoOff, MonitorUp } from "lucide-react"
 import { useCampusSimulator } from '../../hooks/useCampusSimulator'
+import type { ChatMessage, NearbyPlayer, PlayerPosition } from '../../hooks/useCampusSimulator'
+
+/** Everything the hook returns, so the pieces below can take it as a prop. */
+type CampusHook = ReturnType<typeof useCampusSimulator>
+
+/** One of the five campus buildings declared at the top of this file. */
+/** One of the study areas declared at the top of this file. */
+interface StudyArea {
+  id: string
+  name: string
+  position: [number, number, number]
+  radius: number
+  icon: string
+  description: string
+  maxUsers: number
+  subject: string
+  duration: string
+  features: string[]
+}
+
+interface CampusBuilding {
+  id: number
+  name: string
+  position: [number, number, number]
+  size: [number, number, number]
+  color: string
+  icon: string
+}
 import { useCampusVoice } from '../../hooks/useCampusVoice'
 import VoicePanel, { ScreenShareStage } from '../../components/campus/VoicePanel'
 import ProjectorScreen from '../../components/campus/ProjectorScreen'
 import { api } from '../../lib/api/client'
 import { isAuthenticated } from '../../lib/api/tokens'
 import TouchControls, { createTouchState, useIsTouchDevice } from '../../components/campus/TouchControls'
+import type { TouchState } from '../../components/campus/TouchControls'
 import {
   CampusEnvironment,
   CampusGround,
@@ -21,9 +51,20 @@ import {
   CharacterModel,
 } from '../../components/campus/CampusScenery'
 
-// User data will be fetched from backend
-const getCurrentUser = () => {
-  // This will be replaced with actual user data from the backend
+/** The signed-in player, as this page needs them. Never carries an email. */
+interface CampusPlayer {
+  id: number | null
+  name: string
+  avatar: string
+  year: string
+  major: string
+  color: string
+  level: number
+  achievements: string[]
+}
+
+/** Placeholder until /auth/user/ answers. */
+const getCurrentUser = (): CampusPlayer => {
   return {
     id: null,
     name: "Loading...",
@@ -48,7 +89,7 @@ const keyMap = [
 ]
 
 // Campus buildings and areas
-const campusBuildings = [
+const campusBuildings: CampusBuilding[] = [
   { id: 1, name: "Library", position: [-20, 0, -15], size: [15, 8, 12], color: "#8B5A2B", icon: "📚" },
   { id: 2, name: "Science Lab", position: [15, 0, 8], size: [12, 6, 10], color: "#2D5016", icon: "🔬" },
   { id: 3, name: "Student Center", position: [0, 0, 25], size: [20, 10, 15], color: "#4A1A5C", icon: "🏢" },
@@ -57,7 +98,7 @@ const campusBuildings = [
 ]
 
 // Enhanced study areas with more interactive features
-const studyAreas = [
+const studyAreas: StudyArea[] = [
   {
     id: "library-quiet",
     name: "Quiet Study Zone",
@@ -112,18 +153,28 @@ const studyAreas = [
 // fields, so typing in chat also drove the player: "we need" walked forward and
 // e opened a building mid-sentence.
 function isTypingInField() {
-  const el = typeof document !== 'undefined' ? document.activeElement : null
+  const el = typeof document !== 'undefined' ? (document.activeElement as HTMLElement | null) : null
   if (!el) return false
   const tag = el.tagName
   return tag === 'INPUT' || tag === 'TEXTAREA' || el.isContentEditable
 }
 
 // Enhanced chat system with backend integration
-function ChatSystem({ isOpen, onToggle, campusHook, isTouchDevice = false }) {
+function ChatSystem({
+  isOpen,
+  onToggle,
+  campusHook,
+  isTouchDevice = false,
+}: {
+  isOpen: boolean
+  onToggle: () => void
+  campusHook: CampusHook
+  isTouchDevice?: boolean
+}) {
   const [newMessage, setNewMessage] = useState("")
   const [activeTab, setActiveTab] = useState("global")
   const [isTyping, setIsTyping] = useState(false)
-  const scrollRef = useRef(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
   const seenCountRef = useRef(0)
 
   const { chatMessages, sendChatMessage, getNearbyPlayers } = campusHook
@@ -152,7 +203,7 @@ function ChatSystem({ isOpen, onToggle, campusHook, isTouchDevice = false }) {
     }
   }
 
-  const handleTyping = (e) => {
+  const handleTyping = (e: React.ChangeEvent<HTMLInputElement>) => {
     setNewMessage(e.target.value)
     setIsTyping(e.target.value.length > 0)
   }
@@ -291,8 +342,17 @@ function ChatSystem({ isOpen, onToggle, campusHook, isTouchDevice = false }) {
 }
 
 // Player avatar component with backend position sync
-function PlayerAvatar({ position, userData, isCurrentUser = false }) {
-  const meshRef = useRef()
+function PlayerAvatar({
+  position,
+  userData,
+  isCurrentUser = false,
+}: {
+  position: { x: number; z: number }
+  /** Loose: the same component renders both a socket payload and local state. */
+  userData: Record<string, unknown>
+  isCurrentUser?: boolean
+}) {
+  const meshRef = useRef<Group>(null)
 
   useFrame((state) => {
     if (meshRef.current && !isCurrentUser) {
@@ -305,17 +365,17 @@ function PlayerAvatar({ position, userData, isCurrentUser = false }) {
   return (
     <group ref={meshRef} position={isCurrentUser ? [0, 0, 0] : [position.x, 0.5, position.z]}>
       <CharacterModel
-        color={userData.color || "#4F46E5"}
+        color={String(userData.color ?? "#4F46E5")}
         isMoving={Boolean(userData.is_moving)}
-        direction={userData.direction || "down"}
+        direction={String(userData.direction ?? "down")}
       />
 
       {/* Full Name Label */}
       <Html position={[0, 2, 0]} center zIndexRange={[9, 0]}>
         <div className="bg-black bg-opacity-75 text-white px-2 py-1 rounded text-xs whitespace-nowrap pointer-events-none">
-          {userData.full_name || userData.username || userData.name}
-          {userData.activity && (
-            <div className="text-green-400 text-xs">{userData.activity}</div>
+          {String(userData.full_name || userData.username || userData.name || "Student")}
+          {Boolean(userData.activity) && (
+            <div className="text-green-400 text-xs">{String(userData.activity)}</div>
           )}
         </div>
       </Html>
@@ -326,9 +386,9 @@ function PlayerAvatar({ position, userData, isCurrentUser = false }) {
 // Entering a building swaps in a room built at the world origin. Without moving
 // the camera the player keeps their outdoor position, which is usually outside
 // that room, so they end up looking at the back of the walls.
-function InteriorCameraPlacement({ insideBuilding }) {
+function InteriorCameraPlacement({ insideBuilding }: { insideBuilding: CampusBuilding | null }) {
   const { camera } = useThree()
-  const outsidePosition = useRef(null)
+  const outsidePosition = useRef<Vector3 | null>(null)
 
   useEffect(() => {
     if (insideBuilding) {
@@ -348,7 +408,19 @@ function InteriorCameraPlacement({ insideBuilding }) {
 // Entering by clicking a DOM button does not work while the pointer is locked
 // for mouse-look, which is the normal way to play. E does the same thing from
 // wherever the player is standing.
-function ProximityInteraction({ buildings, insideBuilding, onEnter, onExit, touch }) {
+function ProximityInteraction({
+  buildings,
+  insideBuilding,
+  onEnter,
+  onExit,
+  touch,
+}: {
+  buildings: CampusBuilding[]
+  insideBuilding: CampusBuilding | null
+  onEnter: (building: CampusBuilding) => void
+  onExit: () => void
+  touch?: React.RefObject<TouchState | null>
+}) {
   const { camera } = useThree()
   const [, get] = useKeyboardControls()
   const wasPressed = useRef(false)
@@ -382,10 +454,18 @@ function ProximityInteraction({ buildings, insideBuilding, onEnter, onExit, touc
 }
 
 // First person player controller with backend position sync
-function Player({ campusHook, insideBuilding, touch }) {
+function Player({
+  campusHook,
+  insideBuilding,
+  touch,
+}: {
+  campusHook: CampusHook
+  insideBuilding: CampusBuilding | null
+  touch?: React.RefObject<TouchState | null>
+}) {
   const { camera } = useThree()
   const [, get] = useKeyboardControls()
-  const playerRef = useRef()
+  const playerRef = useRef<Group>(null)
   const velocity = useRef(new Vector3())
   const direction = useRef(new Vector3())
   const [isOnGround, setIsOnGround] = useState(true)
@@ -503,7 +583,7 @@ function Player({ campusHook, insideBuilding, touch }) {
 }
 
 // Study area interaction component
-function StudyAreaInteraction({ area, campusHook }) {
+function StudyAreaInteraction({ area, campusHook }: { area: StudyArea; campusHook: CampusHook }) {
   const { camera } = useThree()
   const [isInArea, setIsInArea] = useState(false)
   const [showUI, setShowUI] = useState(false)
@@ -582,12 +662,12 @@ const CampusWithBackend = () => {
   // Sanitize route param: some callers may accidentally navigate to '/campus-simulator/null'
   const lobbyId = (rawLobbyId === 'null' || rawLobbyId === 'undefined') ? null : rawLobbyId;
   const [isChatOpen, setIsChatOpen] = useState(false)
-  const [insideBuilding, setInsideBuilding] = useState(null)
+  const [insideBuilding, setInsideBuilding] = useState<CampusBuilding | null>(null)
   const isTouchDevice = useIsTouchDevice()
   const touchState = useRef(createTouchState())
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [shareExpanded, setShareExpanded] = useState(false)
-  const [currentUser, setCurrentUser] = useState(getCurrentUser())
+  const [currentUser, setCurrentUser] = useState<CampusPlayer>(getCurrentUser())
 
   // Initialize campus simulation hook
   const campusHook = useCampusSimulator(lobbyId)
@@ -626,7 +706,7 @@ const CampusWithBackend = () => {
     if (!identity) return 'Someone'
     const userId = identity.replace(/^user-/, '')
     const member = (voice.permissions?.members || []).find(
-      (m) => String(m.user_id) === userId,
+      (m: { user_id?: string | number; full_name?: string }) => String(m.user_id) === userId,
     )
     return member?.full_name || 'Someone'
   }, [voice.screenShare?.identity, voice.permissions])
@@ -675,7 +755,13 @@ const CampusWithBackend = () => {
         // rather than the API and came back as index.html, and that endpoint
         // does not exist either. The current user is /auth/user/.
         if (isAuthenticated()) {
-          const userData = await api.get('/auth/user/')
+          const userData = await api.get<{
+            id: number
+            username: string
+            full_name?: string
+            year?: string
+            major?: string
+          }>('/auth/user/')
           setCurrentUser({
             id: userData.id,
             name: userData.full_name || userData.username,
@@ -704,7 +790,11 @@ const CampusWithBackend = () => {
   // Convert backend player positions to 3D world coordinates
   // Filter out current user's position since they control their own camera (first-person view)
   const playerAvatars = useMemo(() => {
-    const avatars = []
+    const avatars: {
+      id: string | number
+      position: { x: number; z: number }
+      userData: Record<string, unknown>
+    }[] = []
     const currentUserId = currentUser?.id
     playerPositions.forEach((position, userId) => {
       // Skip current user's position - they control their own camera, not a separate avatar
@@ -718,7 +808,7 @@ const CampusWithBackend = () => {
         userData: {
           username: position.username,
           full_name: position.full_name || position.username,  // Use full_name, fallback to username
-          color: `hsl(${userId * 137.5 % 360}, 70%, 60%)` // Generate color from user ID
+          color: `hsl(${(Number(userId) * 137.5) % 360}, 70%, 60%)`, // Generate colour from user id
         }
       })
     })
