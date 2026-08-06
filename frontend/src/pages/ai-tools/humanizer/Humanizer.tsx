@@ -41,8 +41,8 @@ export default function Humanizer() {
   const [charCount, setCharCount] = useState(0)
   const [showSettings, setShowSettings] = useState(false)
   const [processingProgress, setProcessingProgress] = useState(0)
-  const [currentTaskId, setCurrentTaskId] = useState(null)
-  const [apiError, setApiError] = useState(null)
+  const [currentTaskId, setCurrentTaskId] = useState<string | null>(null)
+  const [apiError, setApiError] = useState<string | null>(null)
   
   const textareaRef = useRef(null)
   const outputRef = useRef(null)
@@ -91,7 +91,7 @@ export default function Humanizer() {
           
           if (status.status === 'processing') {
             // Estimate progress based on time
-            const elapsed = Date.now() - new Date(status.created_at).getTime();
+            const elapsed = Date.now() - new Date((status as { created_at?: string }).created_at ?? Date.now()).getTime();
             const estimatedProgress = Math.min(90, Math.floor((elapsed / 30000) * 90));
             setProcessingProgress(estimatedProgress);
           } else if (status.status === 'pending') {
@@ -101,7 +101,7 @@ export default function Humanizer() {
       );
 
       // Task completed successfully
-      setOutputText(result.outputText);
+      setOutputText(result.outputText ?? "");
       setProcessingProgress(100);
       setIsProcessing(false);
       setIsComplete(true);
@@ -118,7 +118,7 @@ export default function Humanizer() {
     }
   }
 
-  const copyToClipboard = async (text) => {
+  const copyToClipboard = async (text: string) => {
     // The clipboard rejects whenever the document is not focused, and the
     // previous version treated that as nothing having happened.
     const copied = await copyText(text)

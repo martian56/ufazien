@@ -1,6 +1,8 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import type React from "react"
+import type { User as ApiUser } from "../lib/api/types"
 import { useNavigate } from "react-router-dom"
 import { Button } from "../components/ui/button"
 import { Input } from "../components/ui/input"
@@ -10,7 +12,7 @@ import SideBar from "../components/ui/SideBar"
 import { majorOptions, getMajorDisplayName } from "../utils/majorUtils"
 import { useToast, ToastContainer } from "../hooks/useToast"
 import { settingsApi } from "../lib/api/endpoints/settings"
-import { DEFAULT_SETTINGS, fromApi, toApi } from "../features/settings/settingsMapping"
+import { DEFAULT_SETTINGS, fromApi, toApi, type SettingsGroups } from "../features/settings/settingsMapping"
 import PrivacyTab from "../features/settings/PrivacyTab"
 import AppearanceTab from "../features/settings/AppearanceTab"
 import { api } from "../lib/api/client"
@@ -32,12 +34,12 @@ const Settings = () => {
     email: "",
     username: "",
     major: "",
-    year: "",
+    year: "" as string | number,
     phone: "",
     bio: "",
-    avatar: null,
-    avatar_url: null,
-    gpa: "0.00",
+    avatar: null as string | null,
+    avatar_url: null as string | null,
+    gpa: "0.00" as string | number,
     completed_credits: 0,
     followers_count: 0,
   })
@@ -67,7 +69,7 @@ const Settings = () => {
         return;
       }
 
-      const data = await api.get("/auth/user/");
+      const data = await api.get<ApiUser>("/auth/user/");
       setProfileData({
         firstName: data.first_name || "",
         lastName: data.last_name || "",
@@ -77,8 +79,8 @@ const Settings = () => {
         year: data.year || "",
         phone: data.phone || "",
         bio: data.bio || "",
-        avatar: data.avatar,
-        avatar_url: data.avatar_url,
+        avatar: data.avatar ?? null,
+        avatar_url: data.avatar_url ?? null,
         gpa: data.gpa || "0.00",
         completed_credits: data.completed_credits || 0,
         followers_count: data.followers_count || 0,
@@ -89,7 +91,7 @@ const Settings = () => {
     } catch (error) {
       // ApiError carries the status directly; there is no axios envelope. The
       // client has already tried to refresh by the time a 401 reaches here.
-      if (error?.status === 401) {
+      if ((error as { status?: number })?.status === 401) {
         localStorage.removeItem("access");
         localStorage.removeItem("refresh");
         navigate("/auth");
@@ -100,16 +102,18 @@ const Settings = () => {
   };
 
   // Handle Profile Data Change
-  const handleProfileChange = (field, value) => {
+  const handleProfileChange = (field: string, value: unknown) => {
     setProfileData((prev) => ({
       ...prev,
       [field]: value,
     }))
   }
 
-  const changeSetting = (group) => (field, value) => {
-    setSettings((prev) => ({ ...prev, [group]: { ...prev[group], [field]: value } }))
-  }
+  const changeSetting =
+    <G extends keyof SettingsGroups>(group: G) =>
+    (field: keyof SettingsGroups[G], value: SettingsGroups[G][keyof SettingsGroups[G]]) => {
+      setSettings((prev) => ({ ...prev, [group]: { ...prev[group], [field]: value } }))
+    }
 
   const handleAcademicChange = changeSetting("academic")
   const handleNotificationChange = changeSetting("notifications")
@@ -117,7 +121,7 @@ const Settings = () => {
   const handleAppearanceChange = changeSetting("appearance")
 
   // Handle Password Setup (for Google OAuth users)
-  const handlePasswordChange = (field, value) => {
+  const handlePasswordChange = (field: string, value: unknown) => {
     setPasswordData((prev) => ({
       ...prev,
       [field]: value,
@@ -157,7 +161,7 @@ const Settings = () => {
         },
       );
 
-      toast.success(response?.message || "Password set successfully!");
+      toast.success((response as { message?: string })?.message || "Password set successfully!");
       setHasPassword(true);
       setPasswordData({ password: "", password_confirm: "" });
     } catch (error) {
@@ -222,8 +226,8 @@ const Settings = () => {
   }, [navigate]);
 
   // Handle Avatar Upload
-  const handleAvatarUpload = async (event) => {
-    const file = event.target.files[0];
+  const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
     
     if (file) {
       try {
@@ -255,14 +259,14 @@ const Settings = () => {
 
         // The client leaves FormData alone so the browser can set the
         // multipart boundary itself.
-        const updated = await api.patch("/auth/user/", formData);
+        const updated = await api.patch<ApiUser>("/auth/user/", formData);
 
 
         // Update profile data with new avatar
         setProfileData(prev => ({
           ...prev,
-          avatar: updated.avatar,
-          avatar_url: updated.avatar_url,
+          avatar: (updated as { avatar?: string | null })?.avatar ?? null,
+          avatar_url: (updated as { avatar_url?: string | null })?.avatar_url ?? null,
         }));
 
         toast.success("Avatar uploaded successfully!");
@@ -513,7 +517,7 @@ const Settings = () => {
                   <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="p-4 bg-blue-50 rounded-xl border border-blue-200">
                       <h3 className="text-sm font-semibold text-blue-800 mb-1">Current GPA</h3>
-                      <p className="text-2xl font-bold text-blue-900">{parseFloat(profileData.gpa).toFixed(2)}</p>
+                      <p className="text-2xl font-bold text-blue-900">{parseFloat(String(profileData.gpa)).toFixed(2)}</p>
                     </div>
                     <div className="p-4 bg-green-50 rounded-xl border border-green-200">
                       <h3 className="text-sm font-semibold text-green-800 mb-1">Credits Completed</h3>
@@ -616,22 +620,12 @@ const Settings = () => {
                         />
                       </div>
 
-                      <div className="space-y-2">
-                        <Label htmlFor="reminderTime" className="text-sm font-semibold text-gray-700">
-                          Class Reminder (minutes before)
-                        </Label>
-                        <select
-                          id="reminderTime"
-                          value={settings.academic.reminderTime}
-                          onChange={(e) => handleAcademicChange("reminderTime", e.target.value)}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        >
-                          <option value="15">15 minutes</option>
-                          <option value="30">30 minutes</option>
-                          <option value="60">1 hour</option>
-                          <option value="120">2 hours</option>
-                        </select>
-                      </div>
+                      {/* A "Class Reminder (minutes before)" select used to sit
+                          here, bound to settings.academic.reminderTime. That
+                          field does not exist on UserSettings, so it read
+                          undefined and saving it stored nothing. Reminders
+                          also need something that can run at a future time,
+                          which Celery is not configured to do. */}
                     </div>
 
                     {/* Academic Toggles */}
@@ -647,17 +641,11 @@ const Settings = () => {
                           className="data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
                         />
                       </div>
-                      <div className="flex items-center justify-between p-4 bg-white rounded-xl border border-gray-200">
-                        <div>
-                          <Label className="font-semibold text-gray-900">Track Attendance</Label>
-                          <p className="text-sm text-gray-500">Monitor class attendance automatically</p>
-                        </div>
-                        <Checkbox
-                          checked={settings.academic.trackAttendance}
-                          onCheckedChange={(checked) => handleAcademicChange("trackAttendance", checked)}
-                          className="data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
-                        />
-                      </div>
+                      {/* A "Track Attendance — Monitor class attendance
+                          automatically" toggle used to sit here. Nothing in
+                          the platform tracks attendance, and UserSettings has
+                          no field for it, so the switch stored nothing and
+                          promised something that does not exist. */}
                     </div>
                   </div>
                 </div>
@@ -692,17 +680,11 @@ const Settings = () => {
                             className="data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
                           />
                         </div>
-                        <div className="flex items-center justify-between p-4 bg-white rounded-xl border border-gray-200">
-                          <div>
-                            <Label className="font-semibold text-gray-900">Push Notifications</Label>
-                            <p className="text-sm text-gray-500">Browser and mobile push notifications</p>
-                          </div>
-                          <Checkbox
-                            checked={settings.notifications.pushNotifications}
-                            onCheckedChange={(checked) => handleNotificationChange("pushNotifications", checked)}
-                            className="data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
-                          />
-                        </div>
+                        {/* Push notifications are real, but they are managed
+                            on the Notifications page, which actually
+                            subscribes through pushNotificationService. This
+                            copy was bound to a field UserSettings does not
+                            have, so switching it did nothing at all. */}
                       </div>
                     </div>
 

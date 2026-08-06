@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import type { CalendarEvent } from "../../../services/calendarApi"
 import DayView from "../../../features/calendar/DayView"
 import EventDetailsModal from "../../../features/calendar/EventDetailsModal"
 import EventModal from "../../../features/calendar/EventModal"
@@ -48,12 +49,12 @@ export default function Calendar() {
   const [viewMode, setViewMode] = useState("month") // month, week, day
   const [showEventModal, setShowEventModal] = useState(false)
   const [showEventDetails, setShowEventDetails] = useState(false)
-  const [selectedEvent, setSelectedEvent] = useState(null)
+  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [filterCategory, setFilterCategory] = useState("all")
   const [showFilters, setShowFilters] = useState(false)
 
-  const [newEvent, setNewEvent] = useState({
+  const [newEvent, setNewEvent] = useState<Partial<CalendarEvent>>({
     title: "",
     description: "",
     date: "",
@@ -62,13 +63,12 @@ export default function Calendar() {
     location: "",
     category: "class",
     priority: "medium",
-    reminder: "15",
     recurring: "none",
   })
 
-  const [events, setEvents] = useState([])
+  const [events, setEvents] = useState<CalendarEvent[]>([])
   const [eventsLoading, setEventsLoading] = useState(true)
-  const [eventsError, setEventsError] = useState(null)
+  const [eventsError, setEventsError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -112,19 +112,19 @@ export default function Calendar() {
 
 
   // Calendar navigation
-  const navigateMonth = (direction) => {
+  const navigateMonth = (direction: number) => {
     const newDate = new Date(currentDate)
     newDate.setMonth(currentDate.getMonth() + direction)
     setCurrentDate(newDate)
   }
 
-  const navigateWeek = (direction) => {
+  const navigateWeek = (direction: number) => {
     const newDate = new Date(currentDate)
     newDate.setDate(currentDate.getDate() + direction * 7)
     setCurrentDate(newDate)
   }
 
-  const navigateDay = (direction) => {
+  const navigateDay = (direction: number) => {
     const newDate = new Date(currentDate)
     newDate.setDate(currentDate.getDate() + direction)
     setCurrentDate(newDate)
@@ -137,7 +137,7 @@ export default function Calendar() {
   }
 
   // Get events for a specific date
-  const getEventsForDate = (date) => {
+  const getEventsForDate = (date: Date) => {
     const dateStr = date.toISOString().split("T")[0]
     return events.filter((event) => {
       const eventDate = event.date
@@ -146,8 +146,8 @@ export default function Calendar() {
       const matchesSearch =
         !searchQuery ||
         event.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        event.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        event.location.toLowerCase().includes(searchQuery.toLowerCase())
+        (event.description ?? "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (event.location ?? "").toLowerCase().includes(searchQuery.toLowerCase())
 
       return matchesDate && matchesCategory && matchesSearch
     })
@@ -160,8 +160,8 @@ export default function Calendar() {
       const matchesSearch =
         !searchQuery ||
         event.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        event.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        event.location.toLowerCase().includes(searchQuery.toLowerCase())
+        (event.description ?? "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (event.location ?? "").toLowerCase().includes(searchQuery.toLowerCase())
 
       return matchesCategory && matchesSearch
     })
@@ -222,14 +222,13 @@ export default function Calendar() {
       location: "",
       category: "class",
       priority: "medium",
-      reminder: "15",
       recurring: "none",
     })
     setShowEventModal(false)
   }
 
   // Handle event deletion
-  const handleDeleteEvent = (eventId) => {
+  const handleDeleteEvent = (eventId: number) => {
     const previous = events
     setEvents(events.filter((event) => event.id !== eventId))
     setShowEventDetails(false)
