@@ -1,6 +1,21 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import type React from "react"
+
+/** The fields this page reads off /auth/user/. */
+interface UserProfileResponse {
+  first_name?: string
+  last_name?: string
+  email?: string | null
+  year?: string
+  major?: string
+  avatar_url?: string | null
+  gpa?: string | number
+  completed_credits?: number
+  username?: string
+  followers_count?: number
+}
 import { useNavigate, Link } from "react-router-dom"
 import { Helmet } from 'react-helmet';
 import {Calculator, TrendingUp,MessageCircle,
@@ -64,14 +79,14 @@ export default function Dashboard() {
 
   const fetchUnreadCount = async () => {
     try {
-      const count = await notificationsAPI.getUnreadCount();
+      const { count } = await notificationsAPI.getUnreadCount();
       setUnreadCount(count);
-    } catch (error) {
-      console.error('Failed to fetch unread count:', error);
+    } catch {
+      // The bell simply keeps its last count.
     }
   };
 
-  const handleCountUpdate = (newCount) => {
+  const handleCountUpdate = (newCount: number) => {
     setUnreadCount(newCount);
   };
 
@@ -86,18 +101,22 @@ useEffect(() => {
   // The client refreshes an expired token and retries, so a 401 reaching here
   // means the session is genuinely gone.
   api
-    .get("/auth/user/")
+    .get<UserProfileResponse>("/auth/user/")
     .then((data) => {
       setUser({
-        name: `${data.first_name} ${data.last_name}` || "Sarah Johnson",
-        email: data.email || "sarah.johnson@ufaz.edu.az",
-        year: data.year ? formatYearWithOrdinal(data.year) : "3rd Year",
+        // These used to fall back to "Sarah Johnson", her email address and
+        // "3rd Year": a real student with no year set was told they were in
+        // their third. The name fallback could never fire either, since a
+        // template string is truthy even when both halves are empty.
+        name: `${data.first_name ?? ""} ${data.last_name ?? ""}`.trim() || data.username || "Your profile",
+        email: data.email || "",
+        year: data.year ? formatYearWithOrdinal(data.year) : "",
         major: getMajorDisplayName(data.major || "UD"),
         avatar: data.avatar_url || "/placeholder.svg?height=40&width=40",
-        gpa: parseFloat(data.gpa) || 0.00,
+        gpa: parseFloat(String(data.gpa ?? 0)) || 0.0,
         completedCredits: data.completed_credits || 0,
         totalCredits: 120, // This seems to be a fixed value or calculated elsewhere
-        username: data.username,
+        username: data.username ?? "",
         followersCount: data.followers_count || 0,
       })
       setLoading(false);
@@ -401,7 +420,15 @@ useEffect(() => {
 }
 
 // Stats Card Component
-function StatsCard({ title, value, icon: Icon, color, bgColor }) {
+interface StatsCardProps {
+  title: string
+  value: React.ReactNode
+  icon: React.ComponentType<{ className?: string }>
+  color: string
+  bgColor: string
+}
+
+function StatsCard({ title, value, icon: Icon, color, bgColor }: StatsCardProps) {
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
       <div className="flex items-center justify-between">
@@ -418,7 +445,15 @@ function StatsCard({ title, value, icon: Icon, color, bgColor }) {
 }
 
 // Quick Action Card Component
-function QuickActionCard({ title, description, icon: Icon, color, link }) {
+interface QuickActionCardProps {
+  title: string
+  description: string
+  icon: React.ComponentType<{ className?: string }>
+  color: string
+  link: string
+}
+
+function QuickActionCard({ title, description, icon: Icon, color, link }: QuickActionCardProps) {
   const navigate = useNavigate();
   
   const handleClick = () => {
@@ -442,7 +477,13 @@ function QuickActionCard({ title, description, icon: Icon, color, link }) {
 }
 
 // Course Progress Card Component
-function CourseProgressCard({ name, progress, grade }) {
+interface CourseProgressCardProps {
+  name: string
+  progress: number
+  grade: string
+}
+
+function CourseProgressCard({ name, progress, grade }: CourseProgressCardProps) {
   return (
     <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
       <div className="flex-1">
@@ -463,8 +504,15 @@ function CourseProgressCard({ name, progress, grade }) {
 }
 
 // Event Card Component
-function EventCard({ title, date, time, type }) {
-  const getTypeColor = (type) => {
+interface EventCardProps {
+  title: string
+  date: string
+  time: string
+  type: string
+}
+
+function EventCard({ title, date, time, type }: EventCardProps) {
+  const getTypeColor = (type: string) => {
     switch (type) {
       case "exam":
         return "bg-red-100 text-red-700"
@@ -491,7 +539,14 @@ function EventCard({ title, date, time, type }) {
 }
 
 // Activity Card Component
-function ActivityCard({ title, description, time, icon: Icon }) {
+interface ActivityCardProps {
+  title: string
+  description: string
+  time: string
+  icon: React.ComponentType<{ className?: string }>
+}
+
+function ActivityCard({ title, description, time, icon: Icon }: ActivityCardProps) {
   return (
     <div className="flex items-start gap-3">
       <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">

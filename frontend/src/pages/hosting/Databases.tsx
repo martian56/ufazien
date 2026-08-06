@@ -1,4 +1,7 @@
 import { useState, useEffect } from "react"
+import type { HostingDatabase } from "../../utils/hostingApi"
+import { errorMessage } from "../../lib/api/errors"
+import { copyText } from "../../lib/clipboard"
 import { Helmet } from "react-helmet"
 import { useNavigate } from "react-router-dom"
 import {
@@ -32,11 +35,11 @@ export default function Databases() {
   const { databases, loading, error, canCreate, deleteDatabase, updateDatabase } = useDatabases()
   const [searchTerm, setSearchTerm] = useState("")
   const [typeFilter, setTypeFilter] = useState("all")
-  const [showPassword, setShowPassword] = useState({})
+  const [showPassword, setShowPassword] = useState<Record<string, boolean>>({})
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false)
-  const [changingPassword, setChangingPassword] = useState({})
-  const [newPasswords, setNewPasswords] = useState({})
-  const [deleteModal, setDeleteModal] = useState({ isOpen: false, database: null, loading: false })
+  const [changingPassword, setChangingPassword] = useState<Record<string, boolean>>({})
+  const [newPasswords, setNewPasswords] = useState<Record<string, string>>({})
+  const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; database: HostingDatabase | null; loading: boolean }>({ isOpen: false, database: null, loading: false })
 
   const handleCreateDatabase = () => {
     if (!canCreate) {
@@ -46,17 +49,17 @@ export default function Databases() {
     navigate('/hosting/databases/create')
   }
 
-  const handleDeleteDatabase = async (databaseId) => {
+  const handleDeleteDatabase = async (databaseId: string) => {
     if (confirm('Are you sure you want to delete this database? This action cannot be undone.')) {
       try {
         await deleteDatabase(databaseId)
       } catch (error) {
-        alert('Failed to delete database: ' + error.message)
+        alert('Failed to delete database: ' + errorMessage(error))
       }
     }
   }
 
-  const openDeleteModal = (database) => {
+  const openDeleteModal = (database: HostingDatabase) => {
     setDeleteModal({ isOpen: true, database, loading: false })
   }
 
@@ -73,12 +76,12 @@ export default function Databases() {
       await deleteDatabase(deleteModal.database.id)
       closeDeleteModal()
     } catch (error) {
-      alert('Failed to delete database: ' + error.message)
+      alert('Failed to delete database: ' + errorMessage(error))
       setDeleteModal(prev => ({ ...prev, loading: false }))
     }
   }
 
-  const getStatusIcon = (status) => {
+  const getStatusIcon = (status?: string) => {
     switch (status) {
       case 'active':
         return <CheckCircle className="h-4 w-4 text-green-500" />
@@ -89,7 +92,7 @@ export default function Databases() {
     }
   }
 
-  const getStatusText = (status) => {
+  const getStatusText = (status?: string) => {
     switch (status) {
       case 'active':
         return 'Active'
@@ -100,29 +103,28 @@ export default function Databases() {
     }
   }
 
-  const togglePasswordVisibility = (id) => {
+  const togglePasswordVisibility = (id: string) => {
     setShowPassword(prev => ({
       ...prev,
       [id]: !prev[id]
     }))
   }
 
-  const copyToClipboard = (text) => {
-    navigator.clipboard.writeText(text)
-    // You could add a toast notification here
+  const copyToClipboard = (text: string) => {
+    void copyText(text)
   }
 
-  const startPasswordChange = (databaseId) => {
+  const startPasswordChange = (databaseId: string) => {
     setChangingPassword(prev => ({ ...prev, [databaseId]: true }))
     setNewPasswords(prev => ({ ...prev, [databaseId]: '' }))
   }
 
-  const cancelPasswordChange = (databaseId) => {
+  const cancelPasswordChange = (databaseId: string) => {
     setChangingPassword(prev => ({ ...prev, [databaseId]: false }))
     setNewPasswords(prev => ({ ...prev, [databaseId]: '' }))
   }
 
-  const handlePasswordChange = async (databaseId) => {
+  const handlePasswordChange = async (databaseId: string) => {
     const newPassword = newPasswords[databaseId]
     if (!newPassword || newPassword.length < 8) {
       alert('Password must be at least 8 characters long')
@@ -135,11 +137,11 @@ export default function Databases() {
       setNewPasswords(prev => ({ ...prev, [databaseId]: '' }))
       alert('Password updated successfully')
     } catch (error) {
-      alert('Failed to update password: ' + error.message)
+      alert('Failed to update password: ' + errorMessage(error))
     }
   }
 
-  const formatDatabaseSize = (sizeMb) => {
+  const formatDatabaseSize = (sizeMb?: number | null) => {
     if (!sizeMb || sizeMb === 0) return '0 MB'
     if (sizeMb < 1024) return `${sizeMb} MB`
     return `${(sizeMb / 1024).toFixed(1)} GB`
@@ -298,7 +300,7 @@ export default function Databases() {
                       <div className="flex items-center space-x-2">
                         <code className="text-sm bg-gray-100 px-2 py-1 rounded">{database.host}</code>
                         <button 
-                          onClick={() => copyToClipboard(database.host)}
+                          onClick={() => copyToClipboard(database.host ?? "")}
                           className="p-1 hover:bg-gray-100 rounded"
                         >
                           <Copy className="h-3 w-3 text-gray-400" />
@@ -309,9 +311,9 @@ export default function Databases() {
                     <div className="space-y-2">
                       <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Port</label>
                       <div className="flex items-center space-x-2">
-                        <code className="text-sm bg-gray-100 px-2 py-1 rounded">{database.port}</code>
+                        <code className="text-sm bg-gray-100 px-2 py-1 rounded">{database.port ?? "-"}</code>
                         <button 
-                          onClick={() => copyToClipboard(database.port.toString())}
+                          onClick={() => copyToClipboard(String(database.port ?? ""))}
                           className="p-1 hover:bg-gray-100 rounded"
                         >
                           <Copy className="h-3 w-3 text-gray-400" />
@@ -324,7 +326,7 @@ export default function Databases() {
                       <div className="flex items-center space-x-2">
                         <code className="text-sm bg-gray-100 px-2 py-1 rounded">{database.username}</code>
                         <button 
-                          onClick={() => copyToClipboard(database.username)}
+                          onClick={() => copyToClipboard(database.username ?? "")}
                           className="p-1 hover:bg-gray-100 rounded"
                         >
                           <Copy className="h-3 w-3 text-gray-400" />
@@ -371,7 +373,7 @@ export default function Databases() {
                             {showPassword[database.id] ? <EyeOff className="h-3 w-3 text-gray-400" /> : <Eye className="h-3 w-3 text-gray-400" />}
                           </button>
                           <button 
-                            onClick={() => copyToClipboard(database.password)}
+                            onClick={() => copyToClipboard(database.password ?? "")}
                             className="p-1 hover:bg-gray-100 rounded"
                             title="Copy password"
                           >

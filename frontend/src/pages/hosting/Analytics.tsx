@@ -1,4 +1,25 @@
 import { useState, useEffect, useMemo } from "react"
+import type { Website } from "../../utils/hostingApi"
+import { errorMessage } from "../../lib/api/errors"
+
+/** What /hosting/analytics/ returns for one website. */
+interface AnalyticsDay {
+  page_views?: number
+  unique_visitors?: number
+  bounce_rate?: number
+  avg_session_duration?: number
+  bandwidth_used?: number
+}
+
+interface WebsiteAnalytics {
+  analytics?: Record<string, AnalyticsDay>
+  summary?: {
+    total_page_views?: number
+    total_unique_visitors?: number
+    avg_bounce_rate?: number
+    avg_session_duration?: number
+  }
+}
 import { useNavigate } from "react-router-dom"
 import { 
   BarChart3, 
@@ -44,11 +65,11 @@ export default function Analytics() {
   const { getBandwidthUsage } = useSubscription()
   
   const [loading, setLoading] = useState(true)
-  const [selectedWebsite, setSelectedWebsite] = useState(null)
+  const [selectedWebsite, setSelectedWebsite] = useState<Website | null>(null)
   const [selectedPeriod, setSelectedPeriod] = useState('7d')
-  const [analyticsData, setAnalyticsData] = useState(null)
-  const [bandwidthData, setBandwidthData] = useState(null)
-  const [error, setError] = useState(null)
+  const [analyticsData, setAnalyticsData] = useState<WebsiteAnalytics | null>(null)
+  const [bandwidthData, setBandwidthData] = useState<unknown>(null)
+  const [error, setError] = useState<string | null>(null)
 
   // Load analytics data
   useEffect(() => {
@@ -74,8 +95,7 @@ export default function Analytics() {
         }
 
       } catch (err) {
-        setError(err.message)
-        console.error('Failed to load analytics:', err)
+        setError(errorMessage(err, 'Failed to load analytics'))
       } finally {
         setLoading(false)
       }
@@ -96,7 +116,7 @@ export default function Analytics() {
   }, [websites, websitesLoading, selectedWebsite])
 
   // Format numbers for display
-  const formatNumber = (num) => {
+  const formatNumber = (num?: number | null) => {
     if (!num) return '0'
     if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`
     if (num >= 1000) return `${(num / 1000).toFixed(1)}K`
@@ -104,7 +124,7 @@ export default function Analytics() {
   }
 
   // Format bytes
-  const formatBytes = (bytes) => {
+  const formatBytes = (bytes?: number | null) => {
     if (!bytes) return '0 B'
     const sizes = ['B', 'KB', 'MB', 'GB']
     const i = Math.floor(Math.log(bytes) / Math.log(1024))
@@ -112,46 +132,31 @@ export default function Analytics() {
   }
 
   // Get mock data for demonstration (until real analytics data is available)
-  const mockData = useMemo(() => {
-    // Generate traffic data for the last 7 days
-    const generateTrafficData = () => {
-      const data = []
-      const today = new Date()
-      
-      for (let i = 6; i >= 0; i--) {
-        const date = new Date(today)
-        date.setDate(date.getDate() - i)
-        
-        const baseVisitors = Math.floor(Math.random() * 500) + 200
-        const basePageViews = baseVisitors + Math.floor(Math.random() * 800) + 300
-        
-        data.push({
-          date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-          fullDate: date.toISOString().split('T')[0],
-          visitors: baseVisitors,
-          pageViews: basePageViews,
-          sessions: Math.floor(baseVisitors * (0.7 + Math.random() * 0.3)),
-          bounceRate: (Math.random() * 40 + 20).toFixed(1),
-          bandwidth: Math.floor(Math.random() * 100) + 50 // MB per day
-        })
-      }
-      return data
-    }
-
-    return {
-      visitors: Math.floor(Math.random() * 10000) + 1000,
-      pageViews: Math.floor(Math.random() * 50000) + 5000,
-      bounceRate: (Math.random() * 40 + 20).toFixed(1), // 20-60%
-      avgSessionDuration: Math.floor(Math.random() * 300 + 60), // 1-5 minutes
-      topPages: [
-        { page: '/', views: Math.floor(Math.random() * 1000) + 500 },
-        { page: '/about', views: Math.floor(Math.random() * 500) + 200 },
-        { page: '/contact', views: Math.floor(Math.random() * 300) + 100 },
-        { page: '/blog', views: Math.floor(Math.random() * 800) + 300 },
-      ],
-      trafficData: generateTrafficData()
-    }
-  }, [selectedWebsite?.id]) // Regenerate when website changes
+  /**
+   * The real figures, from what the endpoint actually returns.
+   *
+   * This block used to be `mockData`: Math.random() visitors, page views,
+   * bounce rate and a week of invented traffic, regenerated whenever the
+   * website changed. Every metric was rendered as
+   * `analyticsData?.visitors || mockData.visitors`, and since the API sends
+   * summary.total_unique_visitors rather than `visitors`, the real value was
+   * always undefined and the dice roll always won. Nobody has ever seen their
+   * own traffic on this page.
+   */
+  const summary = analyticsData?.summary
+  const trafficData = useMemo(() => {
+    const byDate = analyticsData?.analytics ?? {}
+    return Object.entries(byDate)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, day]) => ({
+        date: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        fullDate: date,
+        visitors: day.unique_visitors ?? 0,
+        pageViews: day.page_views ?? 0,
+        bounceRate: day.bounce_rate ?? 0,
+        bandwidth: Math.round((day.bandwidth_used ?? 0) / (1024 * 1024)),
+      }))
+  }, [analyticsData])
 
   // Memoize bandwidth usage to prevent multiple function calls
   const bandwidthUsage = useMemo(() => {
@@ -257,7 +262,7 @@ export default function Analytics() {
                     value={selectedWebsite?.id || ''}
                     onChange={(e) => {
                       const website = websites.find(w => w.id === e.target.value)
-                      setSelectedWebsite(website)
+                      setSelectedWebsite(website ?? null)
                     }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   >
@@ -315,7 +320,7 @@ export default function Analytics() {
                       <div className="ml-4">
                         <p className="text-sm font-medium text-gray-600">Visitors</p>
                         <p className="text-2xl font-bold text-gray-900">
-                          {formatNumber(analyticsData?.visitors || mockData.visitors)}
+                          {formatNumber(summary?.total_unique_visitors ?? 0)}
                         </p>
                       </div>
                     </div>
@@ -329,7 +334,7 @@ export default function Analytics() {
                       <div className="ml-4">
                         <p className="text-sm font-medium text-gray-600">Page Views</p>
                         <p className="text-2xl font-bold text-gray-900">
-                          {formatNumber(analyticsData?.pageViews || mockData.pageViews)}
+                          {formatNumber(summary?.total_page_views ?? 0)}
                         </p>
                       </div>
                     </div>
@@ -343,7 +348,7 @@ export default function Analytics() {
                       <div className="ml-4">
                         <p className="text-sm font-medium text-gray-600">Bounce Rate</p>
                         <p className="text-2xl font-bold text-gray-900">
-                          {analyticsData?.bounceRate || mockData.bounceRate}%
+                          {(summary?.avg_bounce_rate ?? 0).toFixed(1)}%
                         </p>
                       </div>
                     </div>
@@ -357,7 +362,7 @@ export default function Analytics() {
                       <div className="ml-4">
                         <p className="text-sm font-medium text-gray-600">Avg. Session</p>
                         <p className="text-2xl font-bold text-gray-900">
-                          {Math.floor((analyticsData?.avgSessionDuration || mockData.avgSessionDuration) / 60)}m {(analyticsData?.avgSessionDuration || mockData.avgSessionDuration) % 60}s
+                          {Math.floor((summary?.avg_session_duration ?? 0) / 60)}m {Math.round((summary?.avg_session_duration ?? 0) % 60)}s
                         </p>
                       </div>
                     </div>
@@ -383,7 +388,7 @@ export default function Analytics() {
                     </div>
                     <div className="h-64">
                       <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={mockData.trafficData}>
+                        <AreaChart data={trafficData}>
                           <defs>
                             <linearGradient id="colorVisitors" x1="0" y1="0" x2="0" y2="1">
                               <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
@@ -442,17 +447,13 @@ export default function Analytics() {
                   <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                     <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Pages</h3>
                     <div className="space-y-3">
-                      {(analyticsData?.topPages || mockData.topPages).map((page, index) => (
-                        <div key={index} className="flex items-center justify-between">
-                          <div className="flex items-center">
-                            <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center mr-3">
-                              <span className="text-sm font-medium text-gray-600">{index + 1}</span>
-                            </div>
-                            <span className="text-sm font-medium text-gray-900">{page.page}</span>
-                          </div>
-                          <span className="text-sm text-gray-600">{formatNumber(page.views)} views</span>
-                        </div>
-                      ))}
+                      {/* The endpoint returns no per-page breakdown, so this
+                          used to list four invented pages with invented view
+                          counts. Saying nothing is better than saying that. */}
+                      <p className="text-sm text-gray-500">
+                        Per-page figures are not collected yet. Visits and page views
+                        above are counted for the whole site.
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -485,7 +486,7 @@ export default function Analytics() {
                         <p className="text-sm font-medium text-gray-700 mb-2">Daily Usage (MB)</p>
                         <div className="h-20">
                           <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={mockData.trafficData}>
+                            <LineChart data={trafficData}>
                               <Line
                                 type="monotone"
                                 dataKey="bandwidth"

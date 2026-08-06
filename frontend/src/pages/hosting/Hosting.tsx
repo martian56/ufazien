@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import type { ActivityLog } from "../../hooks/useLogs"
 import { useNavigate } from "react-router-dom"
 import { Helmet } from "react-helmet"
 import {
@@ -52,7 +53,7 @@ export default function Hosting() {
   const { databases, loading: databasesLoading } = useDatabases()
   const { stats, loading: statsLoading, fetchActivityLog } = useDashboard()
   const [activeTab, setActiveTab] = useState("overview")
-  const [recentActivity, setRecentActivity] = useState([])
+  const [recentActivity, setRecentActivity] = useState<ActivityLog[]>([])
   const [activityLoading, setActivityLoading] = useState(false)
 
   const loading = subLoading || websitesLoading || statsLoading
@@ -60,20 +61,24 @@ export default function Hosting() {
   // Load recent activity when stats are available
   useEffect(() => {
     if (stats?.recent_activity) {
-      setRecentActivity(stats.recent_activity)
+      setRecentActivity(stats.recent_activity as ActivityLog[])
     }
   }, [stats])
 
   // Load additional activity if needed
   useEffect(() => {
     const loadRecentActivity = async () => {
-      if (!activityLoading && (!stats?.recent_activity || stats.recent_activity.length === 0)) {
+      if (!activityLoading && (!stats?.recent_activity || (stats.recent_activity as unknown[]).length === 0)) {
         try {
           setActivityLoading(true)
-          const activityData = await fetchActivityLog({ limit: 5 })
-          setRecentActivity(activityData.results || activityData || [])
-        } catch (error) {
-          console.error('Failed to load recent activity:', error)
+          // Was { limit: 5 }, which the hook dropped and the API does not
+          // accept; page_size is the parameter it reads.
+          const activityData = (await fetchActivityLog({ page_size: 5 })) as
+            | ActivityLog[]
+            | { results?: ActivityLog[] }
+          setRecentActivity(Array.isArray(activityData) ? activityData : activityData?.results ?? [])
+        } catch {
+          // The panel simply stays empty.
         } finally {
           setActivityLoading(false)
         }
@@ -97,7 +102,7 @@ export default function Hosting() {
   }
 
   // Activity icon mapping
-  const getActivityIcon = (action) => {
+  const getActivityIcon = (action: string) => {
     switch (action) {
       case 'website_created':
       case 'website_deployed':
@@ -119,7 +124,7 @@ export default function Hosting() {
   }
 
   // Activity description mapping
-  const getActivityDescription = (activity) => {
+  const getActivityDescription = (activity: ActivityLog & { target_name?: string; website_name?: string; database_name?: string }) => {
     const target = activity.target_name || activity.website_name || activity.database_name || 'Resource'
     
     switch (activity.action) {
@@ -145,22 +150,20 @@ export default function Hosting() {
   }
 
   // Format relative time
-  const getRelativeTime = (dateString) => {
+  const getRelativeTime = (dateString: string) => {
     if (!dateString) return 'Unknown time'
     
-    const now = new Date()
-    const date = new Date(dateString)
-    const diffInSeconds = Math.floor((now - date) / 1000)
+    const diffInSeconds = Math.floor((Date.now() - new Date(dateString).getTime()) / 1000)
     
     if (diffInSeconds < 60) return 'Just now'
     if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} minutes ago`
     if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`
     if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)} days ago`
     
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    return new Date(dateString).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   }
 
-  const formatDate = (dateString) => {
+  const formatDate = (dateString: string) => {
     if (!dateString) return 'Never'
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -171,13 +174,13 @@ export default function Hosting() {
     })
   }
 
-  const formatStorage = (mb) => {
-    if (!mb || mb === 0) return '0 MB'
+  const formatStorage = (mb?: number | null) => {
+    if (!mb) return '0 MB'
     if (mb < 1024) return `${mb.toFixed(1)} MB`
     return `${(mb / 1024).toFixed(1)} GB`
   }
 
-  const getStatusIcon = (status) => {
+  const getStatusIcon = (status: string) => {
     switch (status) {
       case 'active':
         return <CheckCircle className="w-4 h-4 text-green-600" />
@@ -190,7 +193,7 @@ export default function Hosting() {
     }
   }
 
-  const getStatusColor = (status) => {
+  const getStatusColor = (status: string) => {
     switch (status) {
       case 'active':
         return 'bg-green-100 text-green-800 border-green-200'
@@ -203,7 +206,7 @@ export default function Hosting() {
     }
   }
 
-  const getTypeIcon = (type) => {
+  const getTypeIcon = (type: string) => {
     switch (type) {
       case 'static':
         return <FileText className="w-4 h-4 text-blue-600" />
@@ -273,7 +276,7 @@ export default function Hosting() {
                   </div>
                   <div className="ml-4">
                     <p className="text-sm font-medium text-gray-600">Total Websites</p>
-                    <p className="text-2xl font-bold text-gray-900">{stats?.total_websites || websites.length}</p>
+                    <p className="text-2xl font-bold text-gray-900">{stats?.stats?.total_websites ?? websites.length}</p>
                   </div>
                 </div>
               </div>
@@ -285,7 +288,7 @@ export default function Hosting() {
                   </div>
                   <div className="ml-4">
                     <p className="text-sm font-medium text-gray-600">Active Sites</p>
-                    <p className="text-2xl font-bold text-gray-900">{stats?.active_websites || websites.filter(w => w.status === 'active').length}</p>
+                    <p className="text-2xl font-bold text-gray-900">{stats?.stats?.active_websites ?? websites.filter(w => w.status === 'active').length}</p>
                   </div>
                 </div>
               </div>
@@ -297,7 +300,7 @@ export default function Hosting() {
                   </div>
                   <div className="ml-4">
                     <p className="text-sm font-medium text-gray-600">Total Visits</p>
-                    <p className="text-2xl font-bold text-gray-900">{(stats?.total_visits || 0).toLocaleString()}</p>
+                    <p className="text-2xl font-bold text-gray-900">{(stats?.stats?.total_visits ?? 0).toLocaleString()}</p>
                   </div>
                 </div>
               </div>
@@ -459,7 +462,7 @@ export default function Hosting() {
                       recentActivity.slice(0, 5).map((activity, index) => {
                         const { title, subtitle } = getActivityDescription(activity)
                         return (
-                          <div key={activity.id || index} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-b-0">
+                          <div key={(activity as { id?: string }).id ?? index} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-b-0">
                             <div className="flex items-center">
                               {getActivityIcon(activity.action)}
                               <div className="ml-3">
@@ -468,7 +471,7 @@ export default function Hosting() {
                               </div>
                             </div>
                             <span className="text-sm text-gray-500">
-                              {getRelativeTime(activity.created_at || activity.timestamp)}
+                              {getRelativeTime(activity.created_at ?? (activity as { timestamp?: string }).timestamp ?? "")}
                             </span>
                           </div>
                         )
@@ -515,15 +518,15 @@ export default function Hosting() {
                             <div>
                               <div className="flex items-center space-x-2">
                                 <h4 className="text-lg font-medium text-gray-900">{website.name}</h4>
-                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(website.status)}`}>
-                                  {getStatusIcon(website.status)}
+                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(website.status ?? "")}`}>
+                                  {getStatusIcon(website.status ?? "")}
                                   <span className="ml-1 capitalize">{website.status}</span>
                                 </span>
                               </div>
                               <div className="flex items-center space-x-4 mt-1">
                                 <span className="text-sm text-gray-600 flex items-center">
                                   <Globe className="w-4 h-4 mr-1" />
-                                  {website.domain?.domain_name || website.url || 'No domain'}
+                                  {website.domain?.name || website.url || 'No domain'}
                                 </span>
                                 {website.domain && website.domain.domain_type === 'custom' && (
                                   <span className="text-sm text-blue-600 flex items-center">
@@ -541,7 +544,7 @@ export default function Hosting() {
                               <div className="flex items-center space-x-4 mt-2 text-sm text-gray-500">
                                 <span className="flex items-center">
                                   <Clock className="w-4 h-4 mr-1" />
-                                  {formatDate(website.last_deployment)}
+                                  {formatDate(website.last_deployment ?? "")}
                                 </span>
                                 <span className="flex items-center">
                                   <Eye className="w-4 h-4 mr-1" />
@@ -557,10 +560,10 @@ export default function Hosting() {
                           <div className="flex items-center space-x-2">
                             <button 
                               onClick={() => {
-                                const url = website.url || (website.domain?.domain_name ? `https://${website.domain.domain_name}` : null)
+                                const url = website.url || (website.domain?.name ? `https://${website.domain.name}` : null)
                                 if (url) window.open(url, '_blank')
                               }}
-                              disabled={!website.url && !website.domain?.domain_name}
+                              disabled={!website.url && !website.domain?.name}
                               className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               <ExternalLink className="w-4 h-4" />
@@ -649,8 +652,8 @@ export default function Hosting() {
                                 </p>
                               </div>
                             </div>
-                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(database.status)}`}>
-                              {getStatusIcon(database.status)}
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(database.status ?? "")}`}>
+                              {getStatusIcon(database.status ?? "")}
                               <span className="ml-1 capitalize">{database.status}</span>
                             </span>
                           </div>

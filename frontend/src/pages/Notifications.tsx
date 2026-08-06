@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import type { Notification, NotificationPreferences } from "../lib/api/endpoints/notifications"
 import { useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
 import { 
@@ -21,10 +22,10 @@ export default function NotificationsPage() {
   const { notifications: toastNotifications, toast, removeNotification } = useToast();
   const navigate = useNavigate();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [notifications, setNotifications] = useState([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedFilter, setSelectedFilter] = useState('all');
-  const [preferences, setPreferences] = useState({});
+  const [preferences, setPreferences] = useState<Partial<NotificationPreferences>>({});
   const [showPreferences, setShowPreferences] = useState(false);
   const [pushEnabled, setPushEnabled] = useState(false);
   const [page, setPage] = useState(1);
@@ -80,7 +81,7 @@ export default function NotificationsPage() {
     }
   };
 
-  const markAsRead = async (notificationId) => {
+  const markAsRead = async (notificationId: number) => {
     try {
       await notificationsAPI.markAsRead([notificationId]);
       setNotifications(prev => 
@@ -100,7 +101,7 @@ export default function NotificationsPage() {
     }
   };
 
-  const updatePreferences = async (newPrefs) => {
+  const updatePreferences = async (newPrefs: Partial<NotificationPreferences>) => {
     try {
       await notificationsAPI.updatePreferences(newPrefs);
       setPreferences(newPrefs);
@@ -138,7 +139,7 @@ export default function NotificationsPage() {
     return notification.notification_type === selectedFilter;
   });
 
-  const getNotificationIcon = (type) => {
+  const getNotificationIcon = (type: string) => {
     switch (type) {
       case 'follow':
         return '👤';
@@ -154,10 +155,8 @@ export default function NotificationsPage() {
     }
   };
 
-  const getTimeAgo = (dateString) => {
-    const now = new Date();
-    const time = new Date(dateString);
-    const diffInSeconds = Math.floor((now - time) / 1000);
+  const getTimeAgo = (dateString: string) => {
+    const diffInSeconds = Math.floor((Date.now() - new Date(dateString).getTime()) / 1000);
 
     if (diffInSeconds < 60) return 'just now';
     if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;

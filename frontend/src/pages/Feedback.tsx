@@ -1,6 +1,8 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import type React from "react"
+import { ApiError, errorMessage } from "../lib/api/errors"
 import { useNavigate } from "react-router-dom"
 import { Helmet } from "react-helmet"
 import {
@@ -27,16 +29,37 @@ import { api as apiClient } from "../lib/api/client"
 
 const API_URL = import.meta.env.VITE_API_URL
 
+interface FeedbackType {
+  value: string
+  label: string
+}
+
+interface RateLimitStatus {
+  can_submit?: boolean
+  seconds_remaining?: number
+}
+
+interface FeedbackEntry {
+  id: number
+  feedback_type: string
+  subject: string
+  message: string
+  status?: string
+  /** Filled in when someone answers. */
+  admin_response?: string | null
+  created_at: string
+}
+
 export default function Feedback() {
   const navigate = useNavigate()
   const { notifications, toast, removeNotification } = useToast()
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [canSubmit, setCanSubmit] = useState(true)
-  const [rateLimitInfo, setRateLimitInfo] = useState(null)
+  const [rateLimitInfo, setRateLimitInfo] = useState<RateLimitStatus | null>(null)
   const [countdown, setCountdown] = useState(0)
-  const [feedbackTypes, setFeedbackTypes] = useState([])
-  const [userFeedbacks, setUserFeedbacks] = useState([])
+  const [feedbackTypes, setFeedbackTypes] = useState<FeedbackType[]>([])
+  const [userFeedbacks, setUserFeedbacks] = useState<FeedbackEntry[]>([])
   const [loadingHistory, setLoadingHistory] = useState(true)
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
@@ -48,10 +71,10 @@ export default function Feedback() {
     message: "",
   })
 
-  const [errors, setErrors] = useState({})
+  const [errors, setErrors] = useState<Record<string, string>>({})
 
   // Feedback type icons mapping
-  const getFeedbackIcon = (type) => {
+  const getFeedbackIcon = (type: string) => {
     switch (type) {
       case "bug":
         return <Bug className="w-5 h-5" />
@@ -74,7 +97,7 @@ export default function Feedback() {
   useEffect(() => {
     const fetchFeedbackTypes = async () => {
       try {
-        const data = await apiClient.get('/feedback/types/')
+        const data = await apiClient.get<{ feedback_types: FeedbackType[] }>('/feedback/types/')
         if (data?.feedback_types) {
           setFeedbackTypes(data.feedback_types)
         }
@@ -90,7 +113,7 @@ export default function Feedback() {
   // Check rate limit status
   const checkRateLimitStatus = async () => {
     try {
-      const data = await apiClient.get('/feedback/status/')
+      const data = await apiClient.get<RateLimitStatus>('/feedback/status/')
       if (data) {
         setCanSubmit(data.can_submit !== false)
         setRateLimitInfo(data)
@@ -110,7 +133,7 @@ export default function Feedback() {
   const fetchUserFeedbacks = async (page = 1) => {
     try {
       setLoadingHistory(true)
-      const data = await apiClient.get(`/feedback/?page=${page}`)
+      const data = await apiClient.get<{ results?: FeedbackEntry[]; count?: number }>(`/feedback/?page=${page}`)
       setUserFeedbacks(data?.results || [])
       setCurrentPage(page)
       
@@ -153,7 +176,7 @@ export default function Feedback() {
   }, [countdown])
 
   // Format countdown time
-  const formatCountdown = (seconds) => {
+  const formatCountdown = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
     const secs = seconds % 60
     return `${mins}:${secs.toString().padStart(2, "0")}`
@@ -161,7 +184,7 @@ export default function Feedback() {
 
   // Validate form
   const validateForm = () => {
-    const newErrors = {}
+    const newErrors: Record<string, string> = {}
 
     if (!formData.feedback_type) {
       newErrors.feedback_type = "Please select a feedback type"
@@ -180,7 +203,7 @@ export default function Feedback() {
   }
 
   // Handle form submission
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (!canSubmit) {
@@ -196,7 +219,7 @@ export default function Feedback() {
     setLoading(true)
 
     try {
-      const data = await apiClient.post('/feedback/', formData)
+      const data = await apiClient.post<{ message?: string }>('/feedback/', formData)
       
       toast.success(data?.message || "Feedback submitted successfully! Thank you for your input.")
       
@@ -213,14 +236,13 @@ export default function Feedback() {
       // Refresh feedback history
       await fetchUserFeedbacks()
     } catch (error) {
-      console.error("Feedback submission error:", error)
-      
-      // Check if it's a rate limit error by trying to parse the error message
-      if (error.message?.includes('429') || error.message?.includes('throttle')) {
+      // ApiError carries the status, so the rate limit is a number to read
+      // rather than a string to search for.
+      if (error instanceof ApiError && error.status === 429) {
         toast.error("You're submitting feedback too quickly. Please wait a moment.")
         await checkRateLimitStatus()
       } else {
-        toast.error(error.message || "Failed to submit feedback. Please try again.")
+        toast.error(errorMessage(error, "Failed to submit feedback. Please try again."))
       }
     } finally {
       setLoading(false)
@@ -228,7 +250,7 @@ export default function Feedback() {
   }
 
   // Handle input change
-  const handleInputChange = (field, value) => {
+  const handleInputChange = (field: "feedback_type" | "subject" | "message", value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
     if (errors[field]) {
       setErrors((prev) => ({ ...prev, [field]: "" }))
@@ -236,7 +258,7 @@ export default function Feedback() {
   }
 
   // Get status badge
-  const getStatusBadge = (status) => {
+  const getStatusBadge = (status?: string) => {
     const badges = {
       pending: { color: "bg-yellow-100 text-yellow-800", icon: <Clock className="w-3 h-3" />, label: "Pending" },
       in_review: { color: "bg-blue-100 text-blue-800", icon: <RefreshCw className="w-3 h-3" />, label: "In Review" },
@@ -244,7 +266,7 @@ export default function Feedback() {
       closed: { color: "bg-gray-100 text-gray-800", icon: <AlertCircle className="w-3 h-3" />, label: "Closed" },
     }
 
-    const badge = badges[status] || badges.pending
+    const badge = badges[status as keyof typeof badges] || badges.pending
 
     return (
       <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${badge.color}`}>
@@ -255,18 +277,16 @@ export default function Feedback() {
   }
 
   // Format relative time
-  const getRelativeTime = (dateString) => {
+  const getRelativeTime = (dateString?: string) => {
     if (!dateString) return "Unknown time"
 
-    const now = new Date()
-    const date = new Date(dateString)
-    const diffInSeconds = Math.floor((now - date) / 1000)
+    const diffInSeconds = Math.floor((Date.now() - new Date(dateString).getTime()) / 1000)
 
     if (diffInSeconds < 60) return "Just now"
     if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} minutes ago`
     if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`
     if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)} days ago`
-    return date.toLocaleDateString()
+    return new Date(dateString).toLocaleDateString()
   }
 
   return (

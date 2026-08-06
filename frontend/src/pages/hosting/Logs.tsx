@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react"
+import { downloadCsv, toCsv } from "../../lib/csv"
 import { Helmet } from "react-helmet"
 import {
   FileText,
@@ -34,36 +35,32 @@ export default function Logs() {
   }
 
   const handleExport = () => {
-    // Create CSV data
-    const csvData = filteredLogs.map(log => ({
-      timestamp: new Date(log.timestamp).toLocaleString(),
-      level: log.level,
-      type: log.type,
-      source: log.source,
-      message: log.message,
-      details: log.details
-    }))
-
-    // Convert to CSV string
-    const headers = Object.keys(csvData[0] || {})
-    const csvContent = [
-      headers.join(','),
-      ...csvData.map(row => headers.map(key => `"${row[key] || ''}"`).join(','))
-    ].join('\n')
-
-    // Download CSV
-    const blob = new Blob([csvContent], { type: 'text/csv' })
-    const url = window.URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `hosting-logs-${new Date().toISOString().split('T')[0]}.csv`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    window.URL.revokeObjectURL(url)
+    // Was built by hand here: fields were wrapped in quotes but the quotes
+    // inside them were never doubled, so one quotation mark in a log message
+    // broke its row.
+    const csv = toCsv(
+      filteredLogs.map((log) => ({
+        timestamp: new Date(log.timestamp).toLocaleString(),
+        level: log.level,
+        type: log.type,
+        source: log.source,
+        message: log.message,
+        details: log.details,
+      })),
+      [
+        { key: "timestamp", header: "Timestamp" },
+        { key: "level", header: "Level" },
+        { key: "type", header: "Type" },
+        { key: "source", header: "Source" },
+        { key: "message", header: "Message" },
+        { key: "details", header: "Details" },
+      ]
+    )
+    downloadCsv(csv, `hosting-logs-${new Date().toISOString().split("T")[0]}.csv`)
   }
 
-  const getLevelIcon = (level) => {
+
+  const getLevelIcon = (level: string) => {
     switch (level) {
       case 'error':
         return <XCircle className="h-4 w-4 text-red-500" />
@@ -76,7 +73,7 @@ export default function Logs() {
     }
   }
 
-  const getLevelColor = (level) => {
+  const getLevelColor = (level: string) => {
     switch (level) {
       case 'error':
         return 'bg-red-50 border-red-200'
@@ -89,7 +86,7 @@ export default function Logs() {
     }
   }
 
-  const getTypeIcon = (type) => {
+  const getTypeIcon = (type: string) => {
     switch (type) {
       case 'website':
         return <Globe className="h-4 w-4 text-blue-600" />
@@ -104,10 +101,9 @@ export default function Logs() {
     }
   }
 
-  const formatTimestamp = (timestamp) => {
+  const formatTimestamp = (timestamp: string | Date) => {
     const date = new Date(timestamp)
-    const now = new Date()
-    const diffInMinutes = Math.floor((now - date) / (1000 * 60))
+    const diffInMinutes = Math.floor((Date.now() - date.getTime()) / (1000 * 60))
     
     if (diffInMinutes < 1) return 'Just now'
     if (diffInMinutes < 60) return `${diffInMinutes}m ago`
@@ -316,7 +312,7 @@ export default function Logs() {
                           <span className="text-xs px-2 py-1 bg-gray-200 rounded-full text-gray-600 capitalize">
                             {log.type}
                           </span>
-                          {log.original?.id?.includes('deployment') && (
+                          {String((log.original as { id?: string })?.id ?? '').includes('deployment') && (
                             <span className="text-xs px-2 py-1 bg-blue-100 text-blue-600 rounded-full">
                               Deployment
                             </span>

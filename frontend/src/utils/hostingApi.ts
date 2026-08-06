@@ -2,21 +2,38 @@ import { api as apiClient } from '../lib/api/client';
 import type { Paginated } from '../lib/api/types';
 import { clearTokens, setTokens } from '../lib/api/tokens';
 
+/** Mirrors SubscriptionPlanSerializer. */
 export interface SubscriptionPlan {
   id: number;
   name: string;
-  price: number;
+  display_name?: string;
+  /** A decimal, so DRF serialises it as a string. */
+  price: number | string;
   max_websites: number;
   max_databases: number;
   storage_limit_mb: number;
   bandwidth_limit_mb: number;
-  [feature: string]: unknown;
+  ssl_included?: boolean;
+  custom_domains?: boolean;
+  priority_support?: boolean;
+  backup_frequency_days?: number;
 }
+
+/** Mirrors UserSubscriptionSerializer. */
+/** The boolean flags a plan can carry. */
+export type PlanFeature = 'ssl_included' | 'custom_domains' | 'priority_support';
 
 export interface UserSubscription {
   id: number;
   plan: SubscriptionPlan;
+  status?: string;
+  started_at?: string;
+  expires_at?: string | null;
+  next_billing_date?: string | null;
+  cancelled_at?: string | null;
   storage_used_mb?: number;
+  storage_websites_mb?: number;
+  storage_databases_mb?: number;
   bandwidth_used_mb?: number;
   is_active?: boolean;
 }
@@ -51,19 +68,34 @@ export interface Website {
   updated_at?: string;
 }
 
+/** Mirrors DatabaseSerializer; the list endpoint sends a subset of it. */
 export interface HostingDatabase {
   id: string;
   name: string;
   db_type?: string;
   status?: string;
+  host?: string;
+  port?: number;
+  username?: string;
+  password?: string;
+  size_mb?: number;
+  error_message?: string | null;
+  connection_info?: Record<string, unknown> | null;
   created_at: string;
+  updated_at?: string;
 }
 
+/** Mirrors DomainSerializer. */
 export interface Domain {
   id: number;
   name: string;
   domain_type?: string;
+  status?: string;
+  ssl_enabled?: boolean;
+  ssl_expires_at?: string | null;
   is_available?: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Deployment {
@@ -80,12 +112,37 @@ export interface Deployment {
   completed_at?: string | null;
 }
 
+/**
+ * What /hosting/dashboard/ returns.
+ *
+ * Note the counts are nested under `stats`, not at the top level: the page
+ * read stats.total_visits and always got undefined, so the Total Visits tile
+ * has been showing 0 whatever the real figure.
+ */
 export interface DashboardStats {
-  websites?: number;
-  active_sites?: number;
-  total_visits?: number;
-  storage_used?: number;
-  [key: string]: unknown;
+  subscription?: {
+    plan?: string;
+    price?: number | string;
+    limits?: {
+      websites?: number;
+      databases?: number;
+      storage_mb?: number;
+      bandwidth_mb?: number;
+    };
+  };
+  usage?: {
+    websites?: number;
+    databases?: number;
+    storage_mb?: number;
+    bandwidth_mb?: number;
+  };
+  stats?: {
+    total_websites?: number;
+    active_websites?: number;
+    total_visits?: number;
+    bandwidth_used_mb?: number;
+  };
+  recent_activity?: unknown[];
 }
 
 /** Query parameters accepted by the list endpoints. */
@@ -250,8 +307,9 @@ export const subscriptionHelpers = {
   },
   
   // Check if plan has feature
-  hasFeature: (userSubscription: UserSubscription | null, feature: string) => {
-    if (!userSubscription || !userSubscription.plan) return false;
+  /** The boolean feature flags a plan carries. */
+  hasFeature: (userSubscription: UserSubscription | null, feature: PlanFeature) => {
+    if (!userSubscription?.plan) return false;
     return userSubscription.plan[feature] === true;
   },
 };

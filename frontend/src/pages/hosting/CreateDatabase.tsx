@@ -1,4 +1,6 @@
 import { useState } from "react"
+import type React from "react"
+import { errorMessage } from "../../lib/api/errors"
 import { Helmet } from "react-helmet"
 import { useNavigate } from "react-router-dom"
 import {
@@ -18,6 +20,15 @@ import HostingSidebar from "../../components/hosting/HostingSidebar"
 import { useDatabases } from "../../hooks/useDatabases.js"
 import { useSubscription } from "../../hooks/useSubscription"
 
+interface FormData {
+  name: string
+  db_type: string
+  description: string
+}
+
+/** Per-field messages, plus `submit` for a failure of the whole form. */
+type FormErrors = Partial<Record<keyof FormData | "submit", string>>
+
 export default function CreateDatabase() {
   const navigate = useNavigate()
   const { createDatabase, loading: databaseLoading } = useDatabases()
@@ -29,9 +40,9 @@ export default function CreateDatabase() {
     description: ""
   })
   
-  const [errors, setErrors] = useState({})
+  const [errors, setErrors] = useState<FormErrors>({})
   const [showPassword, setShowPassword] = useState(false)
-  const [generatedCredentials, setGeneratedCredentials] = useState(null)
+  const [generatedCredentials, setGeneratedCredentials] = useState<{ username: string; password: string } | null>(null)
   const [isCreating, setIsCreating] = useState(false)
   const [isCreated, setIsCreated] = useState(false)
 
@@ -56,7 +67,7 @@ export default function CreateDatabase() {
     }
   ]
 
-  const handleInputChange = (e) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
     setFormData(prev => ({
       ...prev,
@@ -64,7 +75,7 @@ export default function CreateDatabase() {
     }))
     
     // Clear error when user starts typing
-    if (errors[name]) {
+    if (errors[name as keyof FormErrors]) {
       setErrors(prev => ({
         ...prev,
         [name]: null
@@ -72,7 +83,7 @@ export default function CreateDatabase() {
     }
   }
 
-  const handleTypeSelect = (type) => {
+  const handleTypeSelect = (type: string) => {
     setFormData(prev => ({
       ...prev,
       db_type: type
@@ -80,7 +91,7 @@ export default function CreateDatabase() {
   }
 
   const validateForm = () => {
-    const newErrors = {}
+    const newErrors: FormErrors = {}
 
     if (!formData.name.trim()) {
       newErrors.name = "Database name is required"
@@ -104,7 +115,7 @@ export default function CreateDatabase() {
     return { username, password }
   }
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
     if (!validateForm()) {
@@ -136,7 +147,7 @@ export default function CreateDatabase() {
       }, 5000)
       
     } catch (error) {
-      setErrors({ submit: error.message })
+      setErrors({ submit: errorMessage(error, "Could not create that database.") })
     } finally {
       setIsCreating(false)
     }

@@ -1,22 +1,6 @@
 import type React from "react"
 
-interface WizardFormData {
-  name: string
-  subdomain?: string
-  description?: string
-  website_type?: string
-  domainOption?: string
-  selectedDomainId?: string
-  phpVersion?: string
-  ssl?: boolean
-  git_repository?: string
-  deployment_branch?: string
-  environment_variables?: { key: string; value: string }[]
-  deploymentMethod?: string
-  files?: File[]
-}
-
-type WizardErrors = Record<string, string | undefined>
+import type { WizardErrors, WizardFormData } from "./wizardTypes"
 
 interface StepConfigurationProps {
   formData: WizardFormData

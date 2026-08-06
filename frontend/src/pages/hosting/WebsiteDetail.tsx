@@ -1,4 +1,8 @@
 import { useState, useEffect } from "react"
+import type { Deployment, Website } from "../../utils/hostingApi"
+
+/** A folder upload attaches this; File has no writable name. */
+type PickedFile = File & { relativePath?: string }
 import WebsiteAnalyticsTab from "../../features/hosting/WebsiteAnalyticsTab"
 import WebsiteDeploymentsTab from "../../features/hosting/WebsiteDeploymentsTab"
 import WebsiteFilesTab from "../../features/hosting/WebsiteFilesTab"
@@ -34,28 +38,28 @@ import { hostingApi } from "../../utils/hostingApi"
 import { useWebsites } from "../../hooks/useWebsites.js"
 
 export default function WebsiteDetail() {
-  const { websiteId } = useParams()
+  const { websiteId = "" } = useParams()
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState("overview")
   const [loading, setLoading] = useState(true)
-  const [website, setWebsite] = useState(null)
-  const [deployments, setDeployments] = useState([])
-  const [analytics, setAnalytics] = useState(null)
-  const [error, setError] = useState(null)
+  const [website, setWebsite] = useState<Website | null>(null)
+  const [deployments, setDeployments] = useState<Deployment[]>([])
+  const [analytics, setAnalytics] = useState<Record<string, unknown> | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const [editingSettings, setEditingSettings] = useState(false)
   const [settingsForm, setSettingsForm] = useState({
     name: "",
     description: ""
   })
-  const [envVars, setEnvVars] = useState([])
+  const [envVars, setEnvVars] = useState<{ id: string; key: string; value: string }[]>([])
   const [editingEnvVars, setEditingEnvVars] = useState(false)
-  const [files, setFiles] = useState([])
-  const [folders, setFolders] = useState([])
+  const [files, setFiles] = useState<{ name: string; size: number; modified?: string | null }[]>([])
+  const [folders, setFolders] = useState<{ name: string; file_count: number; modified?: string | null }[]>([])
   const [uploading, setUploading] = useState(false)
-  const [selectedFiles, setSelectedFiles] = useState([])
+  const [selectedFiles, setSelectedFiles] = useState<PickedFile[]>([])
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, loading: false })
-  const [copied, setCopied] = useState(null)
-  const [filesError, setFilesError] = useState(null)
+  const [copied, setCopied] = useState<"copied" | "failed" | null>(null)
+  const [filesError, setFilesError] = useState<string | null>(null)
   const { deployWebsite, deleteWebsite } = useWebsites()
 
   // Fetch website data
@@ -84,12 +88,12 @@ export default function WebsiteDetail() {
         setEnvVars(envVarArray)
 
         // Fetch deployments
-        const deploymentsData = await hostingApi.getWebsiteDeployments(websiteId)
-        setDeployments(deploymentsData.results || deploymentsData || [])
+        const deploymentsData = (await hostingApi.getWebsiteDeployments(websiteId)) as Deployment[] | { results?: Deployment[] }
+        setDeployments(Array.isArray(deploymentsData) ? deploymentsData : deploymentsData?.results ?? [])
 
         // Fetch analytics (with fallback for errors)
         try {
-          const analyticsData = await hostingApi.getWebsiteAnalytics(websiteId)
+          const analyticsData = (await hostingApi.getWebsiteAnalytics(websiteId)) as Record<string, unknown>
           setAnalytics(analyticsData)
         } catch (analyticsError) {
           console.warn('Analytics not available:', analyticsError)
@@ -103,7 +107,7 @@ export default function WebsiteDetail() {
 
       } catch (err) {
         console.error('Failed to fetch website data:', err)
-        setError(err.message || 'Failed to load website data')
+        setError(errorMessage(err, 'Failed to load website data'))
       } finally {
         setLoading(false)
       }
@@ -117,7 +121,7 @@ export default function WebsiteDetail() {
   // File manager helpers
   const refreshFiles = async () => {
     try {
-      const res = await hostingApi.listFiles(websiteId)
+      const res = (await hostingApi.listFiles(websiteId)) as { files?: typeof files; folders?: typeof folders }
       setFiles(res.files || [])
       setFolders(res.folders || [])
       setFilesError(null)
@@ -149,26 +153,26 @@ export default function WebsiteDetail() {
       setSelectedFiles([])
       await refreshFiles()
     } catch (err) {
-      alert('Upload failed: ' + (err.message || err))
+      alert('Upload failed: ' + errorMessage(err))
     } finally {
       setUploading(false)
     }
   }
 
-  const handleFileDelete = async (filename) => {
+  const handleFileDelete = async (filename: string) => {
     if (!confirm(`Delete ${filename}?`)) return
     try {
       await hostingApi.deleteFile(websiteId, filename)
       await refreshFiles()
     } catch (err) {
-      alert('Delete failed: ' + (err.message || err))
+      alert('Delete failed: ' + errorMessage(err))
     }
   }
 
-  const handleDownload = async (filename) => {
+  const handleDownload = async (filename: string) => {
     try {
       // Use the authenticated API to download the file
-      const response = await hostingApi.downloadFile(websiteId, filename)
+      const response = (await hostingApi.downloadFile(websiteId, filename)) as Response
       
       // Get the blob from the response
       const blob = await response.blob()
@@ -181,7 +185,7 @@ export default function WebsiteDetail() {
       document.body.removeChild(link)
       window.URL.revokeObjectURL(url)
     } catch (err) {
-      alert('Download failed: ' + (err.message || err))
+      alert('Download failed: ' + errorMessage(err))
     }
   }
 
@@ -195,10 +199,10 @@ export default function WebsiteDetail() {
     try {
       await deployWebsite(websiteId)
       // Refresh deployments after deploy
-      const deploymentsData = await hostingApi.getWebsiteDeployments(websiteId)
-      setDeployments(deploymentsData.results || deploymentsData || [])
+      const deploymentsData = (await hostingApi.getWebsiteDeployments(websiteId)) as Deployment[] | { results?: Deployment[] }
+      setDeployments(Array.isArray(deploymentsData) ? deploymentsData : deploymentsData?.results ?? [])
     } catch (err) {
-      alert('Failed to deploy website: ' + err.message)
+      alert('Failed to deploy website: ' + errorMessage(err))
     }
   }
 
@@ -217,12 +221,12 @@ export default function WebsiteDetail() {
       await deleteWebsite(websiteId)
       navigate('/hosting/websites')
     } catch (err) {
-      alert('Failed to delete website: ' + err.message)
+      alert('Failed to delete website: ' + errorMessage(err))
       setDeleteModal(prev => ({ ...prev, loading: false }))
     }
   }
 
-  const handleSettingsChange = (field, value) => {
+  const handleSettingsChange = (field: "name" | "description", value: string) => {
     setSettingsForm(prev => ({
       ...prev,
       [field]: value
@@ -236,14 +240,14 @@ export default function WebsiteDetail() {
       setEditingSettings(false)
       // Show success message (could add toast notification here)
     } catch (err) {
-      alert('Failed to update website settings: ' + err.message)
+      alert('Failed to update website settings: ' + errorMessage(err))
     }
   }
 
   const handleCancelSettings = () => {
     setSettingsForm({
-      name: website.name || "",
-      description: website.description || ""
+      name: website?.name || "",
+      description: website?.description || ""
     })
     setEditingSettings(false)
   }
@@ -257,20 +261,20 @@ export default function WebsiteDetail() {
     }])
   }
 
-  const handleEnvVarChange = (id, field, value) => {
+  const handleEnvVarChange = (id: string, field: "key" | "value", value: string) => {
     setEnvVars(prev => prev.map(envVar => 
       envVar.id === id ? { ...envVar, [field]: value } : envVar
     ))
   }
 
-  const handleRemoveEnvVar = (id) => {
+  const handleRemoveEnvVar = (id: string) => {
     setEnvVars(prev => prev.filter(envVar => envVar.id !== id))
   }
 
   const handleSaveEnvVars = async () => {
     try {
       // Convert array back to object format for API
-      const envVarObject = {}
+      const envVarObject: Record<string, string> = {}
       envVars.forEach(envVar => {
         if (envVar.key.trim()) {
           envVarObject[envVar.key.trim()] = envVar.value
@@ -284,7 +288,7 @@ export default function WebsiteDetail() {
       setEditingEnvVars(false)
       // Show success message (could add toast notification here)
     } catch (err) {
-      alert('Failed to update environment variables: ' + err.message)
+      alert('Failed to update environment variables: ' + errorMessage(err))
     }
   }
 

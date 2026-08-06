@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react"
+import type { BlogPost } from "../lib/api/endpoints/blog"
+import type { Paginated, User as ApiUser } from "../lib/api/types"
 import { Helmet } from "react-helmet"
 import { useParams, useNavigate } from "react-router-dom"
 import {
@@ -36,9 +38,9 @@ export default function Profile() {
   const { userId } = useParams()
   const navigate = useNavigate()
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
-  const [user, setUser] = useState(null)
-  const [userPosts, setUserPosts] = useState([])
-  const [currentUser, setCurrentUser] = useState(null)
+  const [user, setUser] = useState<ApiUser | null>(null)
+  const [userPosts, setUserPosts] = useState<BlogPost[]>([])
+  const [currentUser, setCurrentUser] = useState<ApiUser | null>(null)
   const [loading, setLoading] = useState(true)
   const [postsLoading, setPostsLoading] = useState(true)
   const [following, setFollowing] = useState(false)
@@ -64,7 +66,7 @@ export default function Profile() {
           return
         }
 
-        const userData = await api.get('/auth/user/')
+        const userData = await api.get<ApiUser>('/auth/user/')
         setCurrentUser(userData)
       } catch (error) {
         console.error('Error fetching current user:', error)
@@ -84,7 +86,7 @@ export default function Profile() {
         }
 
         const targetUserId = userId || 'me'
-        const userData = await api.get(`/auth/user/${targetUserId}/`)
+        const userData = await api.get<ApiUser>(`/auth/user/${targetUserId}/`)
         setUser(userData)
         setFollowing(userData.is_following || false)
         setStats(prev => ({
@@ -110,8 +112,8 @@ export default function Profile() {
     try {
       const offset = (page - 1) * postsPerPage
       {
-        const data = await api.get('/blog/posts/', {
-          params: { by: user.id, limit: postsPerPage, offset },
+        const data = await api.get<Paginated<BlogPost>>('/blog/posts/', {
+          params: { by: user?.id, limit: postsPerPage, offset },
         })
         setUserPosts(data.results || [])
         setStats(prev => ({
@@ -142,7 +144,7 @@ export default function Profile() {
   }, [user])
 
   // Handle page change
-  const handlePageChange = (newPage) => {
+  const handlePageChange = (newPage: number) => {
     if (newPage >= 1 && newPage <= totalPages) {
       setCurrentPage(newPage)
       fetchUserPosts(newPage)
@@ -155,7 +157,7 @@ export default function Profile() {
 
     try {
       {
-        const responseData = await api.post(`/auth/user/${user.id}/follow/`)
+        const responseData = await api.post<{ following_count?: number }>(`/auth/user/${user?.id}/follow/`)
         const isOwnProfile = currentUser && user && currentUser.id === user.id
         setFollowing(!following)
         setStats(prev => ({
@@ -170,7 +172,8 @@ export default function Profile() {
     }
   }
 
-  const formatDate = (dateString) => {
+  const formatDate = (dateString?: string | null) => {
+    if (!dateString) return "-"
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'long',
@@ -477,7 +480,7 @@ export default function Profile() {
                               
                               <div className="flex items-center space-x-1">
                                 {(() => {
-                                  const showPages = []
+                                  const showPages: (number | "...")[] = []
                                   const maxVisiblePages = 5
                                   
                                   if (totalPages <= maxVisiblePages) {
@@ -510,7 +513,7 @@ export default function Profile() {
                                     ) : (
                                       <button
                                         key={page}
-                                        onClick={() => handlePageChange(page)}
+                                        onClick={() => handlePageChange(page as number)}
                                         className={`px-3 py-2 rounded-lg text-sm font-medium ${
                                           currentPage === page
                                             ? 'bg-blue-600 text-white'
