@@ -1,4 +1,15 @@
 import { useState, useEffect } from "react"
+import { errorMessage } from "../../lib/api/errors"
+/** Mirrors InvoiceSerializer. */
+interface Invoice {
+  id: number
+  invoice_number?: string
+  description?: string
+  amount?: number | string
+  status?: string
+  date?: string
+  created_at?: string
+}
 import { Helmet } from "react-helmet"
 import { useNavigate } from "react-router-dom"
 import {
@@ -29,9 +40,9 @@ export default function Billing() {
   const { websites, loading: websitesLoading } = useWebsites()
   const { databases, loading: databasesLoading } = useDatabases()
   const [loading, setLoading] = useState(true)
-  const [invoices, setInvoices] = useState([])
+  const [invoices, setInvoices] = useState<Invoice[]>([])
   const [invoicesLoading, setInvoicesLoading] = useState(false)
-  const [error, setError] = useState(null)
+  const [error, setError] = useState<string | null>(null)
   const [dataLoaded, setDataLoaded] = useState(false)
 
   // Load billing data
@@ -43,13 +54,12 @@ export default function Billing() {
         setError(null)
         
         // Fetch invoices directly from API
-        const invoicesData = await hostingApi.getInvoices()
-        setInvoices(invoicesData?.results || invoicesData || [])
+        const invoicesData = await hostingApi.getInvoices() as Invoice[] | { results?: Invoice[] }
+        setInvoices(Array.isArray(invoicesData) ? invoicesData : invoicesData?.results ?? [])
         setDataLoaded(true)
         
       } catch (err) {
-        setError(err.message)
-        console.error('Failed to load billing data:', err)
+        setError(errorMessage(err, 'Failed to load billing data'))
       } finally {
         setLoading(false)
         setInvoicesLoading(false)
@@ -77,7 +87,7 @@ export default function Billing() {
     return nextMonth.toISOString()
   }
 
-  const getStatusIcon = (status) => {
+  const getStatusIcon = (status?: string) => {
     switch (status) {
       case 'paid':
         return <CheckCircle className="h-4 w-4 text-green-500" />
@@ -90,7 +100,7 @@ export default function Billing() {
     }
   }
 
-  const getStatusColor = (status) => {
+  const getStatusColor = (status?: string) => {
     switch (status) {
       case 'paid':
         return 'bg-green-100 text-green-800'
@@ -103,7 +113,7 @@ export default function Billing() {
     }
   }
 
-  const formatDate = (dateString) => {
+  const formatDate = (dateString?: string | null) => {
     if (!dateString) return 'N/A'
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -112,7 +122,7 @@ export default function Billing() {
     })
   }
 
-  const formatDateTime = (dateString) => {
+  const formatDateTime = (dateString?: string | null) => {
     if (!dateString) return 'N/A'
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -123,7 +133,7 @@ export default function Billing() {
     })
   }
 
-  const downloadInvoice = async (invoiceId) => {
+  const downloadInvoice = async (invoiceId: number) => {
     try {
       // This would call the API to download the invoice
       // await hostingApi.downloadInvoice(invoiceId)
@@ -419,7 +429,7 @@ export default function Billing() {
                     <tbody className="bg-white divide-y divide-gray-200">
                       {invoicesLoading ? (
                         <tr>
-                          <td colSpan="6" className="px-6 py-12 text-center">
+                          <td colSpan={6} className="px-6 py-12 text-center">
                             <div className="animate-pulse">
                               <div className="space-y-3">
                                 {[1, 2, 3].map((i) => (
@@ -438,7 +448,7 @@ export default function Billing() {
                         </tr>
                       ) : invoices.length === 0 ? (
                         <tr>
-                          <td colSpan="6" className="px-6 py-12 text-center">
+                          <td colSpan={6} className="px-6 py-12 text-center">
                             <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                             <h3 className="text-lg font-medium text-gray-900 mb-2">No invoices found</h3>
                             <p className="text-gray-600">Your billing history will appear here</p>
@@ -463,7 +473,7 @@ export default function Billing() {
                               <div className="flex items-center space-x-1">
                                 {getStatusIcon(invoice.status)}
                                 <span className={`px-2 py-1 text-xs rounded-full ${getStatusColor(invoice.status)}`}>
-                                  {invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}
+                                  {(invoice.status ?? "").charAt(0).toUpperCase() + (invoice.status ?? "").slice(1)}
                                 </span>
                               </div>
                             </td>

@@ -1,4 +1,6 @@
 import { useState } from "react"
+import type React from "react"
+import { ApiError, errorMessage } from "../../lib/api/errors"
 import StepBasicInfo from "../../features/hosting/StepBasicInfo"
 import StepConfiguration from "../../features/hosting/StepConfiguration"
 import StepDeployment from "../../features/hosting/StepDeployment"
@@ -37,25 +39,25 @@ export default function CreateWebsite() {
     subdomain: "",
     description: "",
     domainOption: "new", // "new" or "existing"
-    selectedDomainId: null,
+    selectedDomainId: null as string | null,
     
     // Step 2: Website Type
     website_type: "", // "static" or "php"
     
     // Step 3: Configuration
     phpVersion: "8.2",
-    environment_variables: [],
+    environment_variables: [] as { key: string; value: string }[],
     ssl: true,
     
     // Step 4: Files
     deploymentMethod: "upload", // "upload", "git", "zip"
-    files: [],
+    files: [] as File[],
     git_repository: "",
     deployment_branch: "main",
-    zipFile: null
+    zipFile: null as File | null
   })
 
-  const [errors, setErrors] = useState({})
+  const [errors, setErrors] = useState<Record<string, string>>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState("")
 
@@ -66,7 +68,7 @@ export default function CreateWebsite() {
     { id: 4, title: "Deployment", description: "Upload files or connect repository" }
   ]
 
-  const handleInputChange = (field, value) => {
+  const handleInputChange = (field: string, value: unknown) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
@@ -75,7 +77,7 @@ export default function CreateWebsite() {
     if (errors[field]) {
       setErrors(prev => ({
         ...prev,
-        [field]: null
+        [field]: ""
       }))
     }
   }
@@ -87,7 +89,7 @@ export default function CreateWebsite() {
     }))
   }
 
-  const handleEnvironmentVariableChange = (index, field, value) => {
+  const handleEnvironmentVariableChange = (index: number, field: "key" | "value", value: string) => {
     setFormData(prev => ({
       ...prev,
       environment_variables: prev.environment_variables.map((envVar, i) => 
@@ -96,15 +98,15 @@ export default function CreateWebsite() {
     }))
   }
 
-  const handleEnvironmentVariableRemove = (index) => {
+  const handleEnvironmentVariableRemove = (index: number) => {
     setFormData(prev => ({
       ...prev,
       environment_variables: prev.environment_variables.filter((_, i) => i !== index)
     }))
   }
 
-  const validateStep = (step) => {
-    const newErrors = {}
+  const validateStep = (step: number) => {
+    const newErrors: Record<string, string> = {}
     
     switch (step) {
       case 1:
@@ -169,7 +171,7 @@ export default function CreateWebsite() {
     
     try {
       // Prepare website data for API
-      const websiteData = {
+      const websiteData: Record<string, unknown> = {
         name: formData.name,
         description: formData.description,
         website_type: formData.website_type,
@@ -184,7 +186,7 @@ export default function CreateWebsite() {
       // Add environment variables if any
       if (formData.environment_variables.length > 0) {
         // Convert to object format expected by backend
-        const envVars = {}
+        const envVars: Record<string, string> = {}
         formData.environment_variables.forEach(envVar => {
           if (envVar.key.trim() && envVar.value.trim()) {
             envVars[envVar.key.trim()] = envVar.value.trim()
@@ -239,28 +241,26 @@ export default function CreateWebsite() {
       // Navigate to website detail or websites list
       navigate(`/hosting/website/${website.id}`)
     } catch (error) {
-      console.error("Error creating website:", error)
-      if (error.response?.data) {
-        // Handle API validation errors
-        const apiErrors = error.response.data
-        if (typeof apiErrors === 'object') {
-          const errorMessages = Object.entries(apiErrors)
-            .map(([field, messages]) => `${field}: ${Array.isArray(messages) ? messages.join(', ') : messages}`)
-            .join('\n')
-          setSubmitError(errorMessages)
-        } else {
-          setSubmitError(apiErrors.message || "Failed to create website")
-        }
+      // ApiError carries the parsed body, so DRF's per-field messages can be
+      // shown as they were sent. There is no axios envelope to read.
+      const body = error instanceof ApiError ? error.body : null
+      if (body && typeof body === "object") {
+        setSubmitError(
+          Object.entries(body as Record<string, unknown>)
+            .map(([field, messages]) =>
+              `${field}: ${Array.isArray(messages) ? messages.join(", ") : String(messages)}`)
+            .join("\n")
+        )
       } else {
-        setSubmitError(error.message || "An unexpected error occurred. Please try again.")
+        setSubmitError(errorMessage(error, "Could not create that website."))
       }
     } finally {
       setIsSubmitting(false)
     }
   }
 
-  const handleFileUpload = (event) => {
-    const files = Array.from(event.target.files)
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? [])
     
     // Preserve folder structure using webkitRelativePath if available
     const filesWithPaths = files.map(file => {
@@ -275,7 +275,7 @@ export default function CreateWebsite() {
     }))
   }
 
-  const removeFile = (index) => {
+  const removeFile = (index: number) => {
     setFormData(prev => ({
       ...prev,
       files: prev.files.filter((_, i) => i !== index)

@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import type { PlanFeature } from "../utils/hostingApi"
 import {
   hostingApi,
   subscriptionHelpers,
@@ -25,7 +26,7 @@ export interface SubscriptionContextValue {
   canCreateDatabase: (currentDatabases?: unknown[]) => boolean
   getStorageUsage: () => UsageSummary
   getBandwidthUsage: () => UsageSummary
-  hasFeature: (feature: string) => boolean
+  hasFeature: (feature: PlanFeature) => boolean
   getPlanColor: () => string
 }
 
@@ -115,7 +116,7 @@ export const SubscriptionProvider = ({ children }: { children: ReactNode }) => {
         used: subscriptionHelpers.formatStorage(subscription?.bandwidth_used_mb || 0),
         limit: subscriptionHelpers.formatStorage(subscription?.plan?.bandwidth_limit_mb || 0),
       }),
-      hasFeature: (feature: string) => subscriptionHelpers.hasFeature(subscription, feature),
+      hasFeature: (feature: PlanFeature) => subscriptionHelpers.hasFeature(subscription, feature),
       getPlanColor: () => subscriptionHelpers.getPlanColor(subscription?.plan?.name),
     }),
     [subscription, plans, loading, error, fetchSubscriptionData, upgradeSubscription],

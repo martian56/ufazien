@@ -1,4 +1,6 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { hostingApi, type SubscriptionPlan } from "../../utils/hostingApi"
+import { useSubscription } from "../../hooks/useSubscription"
 import { Helmet } from "react-helmet"
 import {
   Crown,
@@ -16,107 +18,102 @@ import {
 } from "lucide-react"
 import HostingSidebar from "../../components/hosting/HostingSidebar"
 
+/** What the page needs to draw one plan card. */
+interface PlanCard {
+  id: string
+  name: string
+  price: number
+  description: string
+  popular: boolean
+  features: {
+    websites: number
+    databases: number
+    storage: string
+    bandwidth: string
+    ssl: boolean
+    support: string
+    domains: number
+    backups: boolean
+  }
+}
+
+const formatSize = (mb?: number) => {
+  if (!mb) return "0 MB"
+  return mb < 1024 ? `${mb} MB` : `${(mb / 1024).toFixed(mb % 1024 === 0 ? 0 : 1)} GB`
+}
+
+/**
+ * Build a card from a plan the server actually offers.
+ *
+ * The page used to carry its own hardcoded list of four plans with invented
+ * prices, feature sets and yearly discounts. It had no connection to
+ * SubscriptionPlan in the database, so the plans on offer here and the plans
+ * that exist could differ without anyone noticing.
+ */
+function toCard(plan: SubscriptionPlan): PlanCard {
+  return {
+    id: plan.name,
+    name: plan.display_name || plan.name,
+    price: Number(plan.price ?? 0),
+    description:
+      Number(plan.price ?? 0) === 0
+        ? "Everything you need to get started"
+        : `${plan.max_websites} websites and ${formatSize(plan.storage_limit_mb)} of storage`,
+    popular: plan.name === "developer",
+    features: {
+      websites: plan.max_websites,
+      databases: plan.max_databases,
+      storage: formatSize(plan.storage_limit_mb),
+      bandwidth: formatSize(plan.bandwidth_limit_mb),
+      ssl: Boolean(plan.ssl_included),
+      support: plan.priority_support ? "Priority" : "Community",
+      domains: plan.custom_domains ? 5 : 1,
+      backups: Boolean(plan.backup_frequency_days),
+    },
+  }
+}
+
 export default function Upgrade() {
-  const [selectedPlan, setSelectedPlan] = useState("developer")
-  const [billingPeriod, setBillingPeriod] = useState("monthly")
+  const { subscription } = useSubscription()
+  const [plans, setPlans] = useState<PlanCard[]>([])
+  const [loadingPlans, setLoadingPlans] = useState(true)
 
-  const plans = [
-    {
-      id: "free",
-      name: "Free",
-      price: 0,
-      yearlyPrice: 0,
-      description: "Perfect for getting started",
-      popular: false,
-      features: {
-        websites: 5,
-        databases: 5,
-        storage: "1 GB",
-        bandwidth: "10 GB",
-        ssl: true,
-        support: "Community",
-        domains: 1,
-        backups: false,
-        analytics: "Basic"
-      },
-      limitations: [
-        "Limited to 5 websites",
-        "Basic analytics only",
-        "Community support",
-        "No automated backups"
-      ]
-    },
-    {
-      id: "developer",
-      name: "Developer",
-      price: 5,
-      yearlyPrice: 50,
-      description: "Great for developers and small projects",
-      popular: true,
-      features: {
-        websites: 10,
-        databases: 10,
-        storage: "10 GB",
-        bandwidth: "100 GB",
-        ssl: true,
-        support: "Email",
-        domains: 3,
-        backups: true,
-        analytics: "Advanced"
-      },
-      benefits: [
-        "Double the websites & databases",
-        "10x more storage",
-        "Email support",
-        "Automated daily backups"
-      ]
-    },
-    {
-      id: "pro",
-      name: "Pro",
-      price: 10,
-      yearlyPrice: 100,
-      description: "For growing businesses and agencies",
-      popular: false,
-      features: {
-        websites: 25,
-        databases: 25,
-        storage: "50 GB",
-        bandwidth: "500 GB",
-        ssl: true,
-        support: "Priority",
-        domains: 10,
-        backups: true,
-        analytics: "Advanced + Custom"
-      },
-      benefits: [
-        "25 websites & databases",
-        "50 GB storage space",
-        "Priority support",
-        "Custom analytics dashboard"
-      ]
+  useEffect(() => {
+    let active = true
+    hostingApi
+      .getSubscriptionPlans()
+      .then((data: SubscriptionPlan[] | { results?: SubscriptionPlan[] }) => {
+        if (!active) return
+        const list = Array.isArray(data) ? data : (data as { results?: SubscriptionPlan[] })?.results ?? []
+        setPlans(list.map(toCard).sort((a, b) => a.price - b.price))
+      })
+      .catch(() => {
+        // The page renders its empty state rather than inventing a price list.
+      })
+      .finally(() => {
+        if (active) setLoadingPlans(false)
+      })
+    return () => {
+      active = false
     }
-  ]
+  }, [])
 
-  const currentPlan = "free" // This would come from user context/API
+  const currentPlan = subscription?.plan?.name ?? "free"
 
-  const getPrice = (plan) => {
+  const getPrice = (plan: PlanCard) => {
     if (plan.price === 0) return "Free"
-    const price = billingPeriod === "yearly" ? plan.yearlyPrice : plan.price
-    const period = billingPeriod === "yearly" ? "year" : "month"
-    return `$${price}/${period}`
+    return `$${plan.price}/month`
   }
 
-  const getSavings = (plan) => {
-    if (plan.price === 0 || billingPeriod === "monthly") return null
-    const monthlyCost = plan.price * 12
-    const savings = monthlyCost - plan.yearlyPrice
-    return savings
-  }
-
-  const handleUpgrade = (planId) => {
-    if (planId === "free") return
-    // Handle upgrade logic here
+  /**
+   * There is no upgrade endpoint and no payment flow: the subscription
+   * viewset only reads the current plan. This button used to be
+   * `// Handle upgrade logic here`, so pressing it did nothing and said
+   * nothing.
+   */
+  const handleUpgrade = (planId: string) => {
+    if (planId === currentPlan) return
+    window.location.href = `/feedback?subject=${encodeURIComponent(`Upgrade to the ${planId} plan`)}`
   }
 
   return (
@@ -155,32 +152,9 @@ export default function Upgrade() {
               )}
             </div>
 
-            {/* Billing Toggle */}
-            <div className="flex items-center justify-center mb-8">
-              <div className="bg-white rounded-lg p-1 border border-gray-200">
-                <button
-                  onClick={() => setBillingPeriod("monthly")}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                    billingPeriod === "monthly"
-                      ? "bg-blue-600 text-white"
-                      : "text-gray-600 hover:text-gray-900"
-                  }`}
-                >
-                  Monthly
-                </button>
-                <button
-                  onClick={() => setBillingPeriod("yearly")}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                    billingPeriod === "yearly"
-                      ? "bg-blue-600 text-white"
-                      : "text-gray-600 hover:text-gray-900"
-                  }`}
-                >
-                  Yearly
-                  <span className="ml-1 text-xs bg-green-100 text-green-800 px-1 rounded">Save 17%</span>
-                </button>
-              </div>
-            </div>
+            {/* A monthly/yearly toggle used to sit here, offering "Save 17%"
+                on a yearly price the server does not have: SubscriptionPlan
+                carries one price and no yearly figure. */}
 
             {/* Plans Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
@@ -222,11 +196,6 @@ export default function Upgrade() {
                         <div className="text-4xl font-bold text-gray-900">
                           {getPrice(plan)}
                         </div>
-                        {billingPeriod === "yearly" && getSavings(plan) && (
-                          <div className="text-sm text-green-600 font-medium">
-                            Save ${getSavings(plan)} per year
-                          </div>
-                        )}
                       </div>
                     </div>
 
@@ -301,34 +270,10 @@ export default function Upgrade() {
                       </div>
                     </div>
 
-                    {/* Benefits/Limitations */}
-                    {plan.benefits && (
-                      <div className="mb-6">
-                        <h4 className="text-sm font-medium text-gray-900 mb-2">Key Benefits:</h4>
-                        <ul className="space-y-1">
-                          {plan.benefits.map((benefit, index) => (
-                            <li key={index} className="flex items-center space-x-2 text-sm text-green-700">
-                              <Check className="h-3 w-3 text-green-500" />
-                              <span>{benefit}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-
-                    {plan.limitations && (
-                      <div className="mb-6">
-                        <h4 className="text-sm font-medium text-gray-900 mb-2">Limitations:</h4>
-                        <ul className="space-y-1">
-                          {plan.limitations.map((limitation, index) => (
-                            <li key={index} className="flex items-center space-x-2 text-sm text-gray-600">
-                              <X className="h-3 w-3 text-gray-400" />
-                              <span>{limitation}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
+                    {/* A "Key Benefits" list and a "Limitations" list used to
+                        sit here, both filled from hardcoded arrays. The server
+                        describes a plan by its limits, which the feature rows
+                        above already show. */}
 
                     {/* Action Button */}
                     <button

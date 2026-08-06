@@ -45,7 +45,8 @@ export const useDashboard = () => {
   }
 
   // Get activity log
-  const fetchActivityLog = () => hostingApi.getActivityLog()
+  const fetchActivityLog = (params: { page_size?: number } = {}) =>
+    hostingApi.getActivityLog(params)
 
   // Get invoices
   const fetchInvoices = () => hostingApi.getInvoices()

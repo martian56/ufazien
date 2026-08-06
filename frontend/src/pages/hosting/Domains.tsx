@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react"
+import type { Domain } from "../../utils/hostingApi"
+import { errorMessage } from "../../lib/api/errors"
 import { Server, Plus, Globe, Shield, Trash2, Edit, ExternalLink, AlertCircle, CheckCircle, Clock, XCircle } from "lucide-react"
 import { Helmet } from "react-helmet"
 import HostingSidebar from "../../components/hosting/HostingSidebar"
@@ -21,10 +23,10 @@ export default function Domains() {
   const [domainName, setDomainName] = useState('')
   const [formError, setFormError] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [deleteConfirm, setDeleteConfirm] = useState(null)
+  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null)
 
   // Status badge component
-  const StatusBadge = ({ status }) => {
+  const StatusBadge = ({ status }: { status?: string }) => {
     const statusConfig = {
       active: { icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-100', text: 'Active' },
       pending: { icon: Clock, color: 'text-yellow-600', bg: 'bg-yellow-100', text: 'Pending' },
@@ -32,7 +34,7 @@ export default function Domains() {
       error: { icon: AlertCircle, color: 'text-red-600', bg: 'bg-red-100', text: 'Error' }
     }
     
-    const config = statusConfig[status] || statusConfig.pending
+    const config = statusConfig[status as keyof typeof statusConfig] || statusConfig.pending
     const Icon = config.icon
     
     return (
@@ -44,7 +46,7 @@ export default function Domains() {
   }
 
   // Domain type badge component
-  const DomainTypeBadge = ({ type }) => {
+  const DomainTypeBadge = ({ type }: { type?: string }) => {
     return (
       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
         type === 'subdomain' 
@@ -110,13 +112,13 @@ export default function Domains() {
       setDomainName('')
       setDomainType('subdomain')
     } catch (err) {
-      setFormError(err.response?.data?.error || 'Failed to create domain')
+      setFormError(errorMessage(err, 'Failed to create domain'))
     } finally {
       setSubmitting(false)
     }
   }
 
-  const handleDeleteDomain = async (domainId) => {
+  const handleDeleteDomain = async (domainId: number) => {
     try {
       await deleteDomain(domainId)
       setDeleteConfirm(null)
@@ -125,7 +127,7 @@ export default function Domains() {
     }
   }
 
-  const getUsageInfo = (domain) => {
+  const getUsageInfo = (domain: Domain) => {
     // Check if domain is being used by a website
     const isUsed = !availableDomains.some(d => d.id === domain.id)
     return isUsed ? 'In use' : 'Available'
@@ -271,7 +273,7 @@ export default function Domains() {
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                            {new Date(domain.created_at).toLocaleDateString()}
+                            {domain.created_at ? new Date(domain.created_at).toLocaleDateString() : "-"}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                             <div className="flex items-center space-x-2">

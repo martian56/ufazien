@@ -31,4 +31,15 @@ export interface User {
   avatar_url?: string | null
   major?: string | null
   year?: string | number | null
+  bio?: string | null
+  phone?: string | null
+  gpa?: string | number | null
+  completed_credits?: number
+  followers_count?: number
+  following_count?: number
+  is_following?: boolean
+  is_staff?: boolean
+  is_active?: boolean
+  /** Only sent to the user themselves, like email. */
+  has_password?: boolean
 }

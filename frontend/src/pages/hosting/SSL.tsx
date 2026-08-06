@@ -1,4 +1,21 @@
 import { useState, useEffect } from "react"
+import { errorMessage } from "../../lib/api/errors"
+
+/** Mirrors SSLCertificateSerializer. */
+interface SslCertificate {
+  id: number
+  /** The domain's name, flattened by the serializer. */
+  domain_name?: string
+  domain?: number | { id?: number; name?: string } | null
+  status?: string
+  issuer?: string
+  issued_at?: string | null
+  expires_at?: string | null
+  auto_renew?: boolean
+  days_until_expiry?: number | null
+  certificate_data?: string
+  private_key?: string
+}
 import { 
   Shield, 
   Plus, 
@@ -27,11 +44,11 @@ import ConfirmationModal from "../../components/ui/ConfirmationModal"
 
 export default function SSL() {
   const [loading, setLoading] = useState(true)
-  const [certificates, setCertificates] = useState([])
-  const [error, setError] = useState(null)
+  const [certificates, setCertificates] = useState<SslCertificate[]>([])
+  const [error, setError] = useState<string | null>(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
-  const [deleteModal, setDeleteModal] = useState({ isOpen: false, certificate: null, loading: false })
-  const [viewModal, setViewModal] = useState({ isOpen: false, certificate: null })
+  const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; certificate: SslCertificate | null; loading: boolean }>({ isOpen: false, certificate: null, loading: false })
+  const [viewModal, setViewModal] = useState<{ isOpen: boolean; certificate: SslCertificate | null }>({ isOpen: false, certificate: null })
   const [createForm, setCreateForm] = useState({
     domain: '',
     type: 'auto', // 'auto' or 'custom'
@@ -53,44 +70,15 @@ export default function SSL() {
         // Get SSL certificates
         const response = await hostingApi.getSSLCertificates()
         
-        // Generate mock data if no real data available
-        const mockCertificates = [
-          {
-            id: 1,
-            domain: { name: 'example.ufazien.com' },
-            status: 'active',
-            issuer: "Let's Encrypt",
-            issued_at: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-            expires_at: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString(),
-            auto_renew: true,
-            certificate_data: '-----BEGIN CERTIFICATE-----\nMIIE... (truncated)\n-----END CERTIFICATE-----'
-          },
-          {
-            id: 2,
-            domain: { name: 'blog.ufazien.com' },
-            status: 'pending',
-            issuer: "Let's Encrypt",
-            issued_at: null,
-            expires_at: null,
-            auto_renew: true,
-            certificate_data: ''
-          },
-          {
-            id: 3,
-            domain: { name: 'shop.ufazien.com' },
-            status: 'active',
-            issuer: 'Custom Certificate',
-            issued_at: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString(),
-            expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-            auto_renew: false,
-            certificate_data: '-----BEGIN CERTIFICATE-----\nMIIE... (custom cert)\n-----END CERTIFICATE-----'
-          }
-        ]
-        
-        setCertificates(response.results || response || mockCertificates)
+        // A hardcoded list of three certificates, complete with a fake
+        // certificate body, used to sit here as a fallback. Someone with no
+        // certificates would have been shown three that do not exist.
+        const list = Array.isArray(response)
+          ? response
+          : (response as { results?: SslCertificate[] })?.results ?? []
+        setCertificates(list)
       } catch (err) {
-        console.error('Failed to fetch SSL certificates:', err)
-        setError(err.message)
+        setError(errorMessage(err, 'Failed to fetch SSL certificates'))
       } finally {
         setLoading(false)
       }
@@ -99,7 +87,7 @@ export default function SSL() {
     fetchCertificates()
   }, [])
 
-  const getStatusIcon = (status) => {
+  const getStatusIcon = (status?: string) => {
     switch (status) {
       case 'active':
         return <CheckCircle className="w-5 h-5 text-green-600" />
@@ -114,7 +102,7 @@ export default function SSL() {
     }
   }
 
-  const getStatusColor = (status) => {
+  const getStatusColor = (status?: string) => {
     switch (status) {
       case 'active':
         return 'text-green-600 bg-green-50'
@@ -129,7 +117,7 @@ export default function SSL() {
     }
   }
 
-  const formatDate = (dateString) => {
+  const formatDate = (dateString?: string | null) => {
     if (!dateString) return 'N/A'
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -138,24 +126,23 @@ export default function SSL() {
     })
   }
 
-  const getDaysUntilExpiry = (expiryDate) => {
+  const getDaysUntilExpiry = (expiryDate?: string | null) => {
     if (!expiryDate) return null
-    const days = Math.floor((new Date(expiryDate) - new Date()) / (1000 * 60 * 60 * 24))
+    const days = Math.floor((new Date(expiryDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
     return days
   }
 
   const handleCreateCertificate = async () => {
     try {
       // Prepare data for API (exclude 'type' field which is frontend-only)
-      const { type, ...apiData } = createForm
-      
-      // Only include certificate_data and private_key for custom certificates
-      if (type === 'auto') {
-        delete apiData.certificate_data
-        delete apiData.private_key
-      }
-      
-      const newCert = await hostingApi.createSSLCertificate(apiData)
+      const { type, certificate_data, private_key, ...rest } = createForm
+
+      // An automatic certificate is issued for you, so there is nothing to
+      // paste in and nothing to send.
+      const apiData =
+        type === 'auto' ? rest : { ...rest, certificate_data, private_key }
+
+      const newCert = (await hostingApi.createSSLCertificate(apiData)) as SslCertificate
       setCertificates(prev => [...prev, newCert])
       setShowCreateModal(false)
       setCreateForm({
@@ -166,54 +153,43 @@ export default function SSL() {
         auto_renew: true
       })
     } catch (err) {
-      console.error('SSL Certificate creation error:', err)
-      const errorMessage = err.response?.data?.detail || 
-                          err.response?.data?.message || 
-                          err.response?.data?.error ||
-                          err.message || 
-                          'Unknown error occurred'
-      alert('Failed to create SSL certificate: ' + errorMessage)
+      // errorMessage already understands the DRF shapes this was picking
+      // through by hand, and there is no axios envelope to look in.
+      alert('Failed to create SSL certificate: ' + errorMessage(err))
     }
   }
 
-  const handleDeleteCertificate = async (certificate) => {
+  const handleDeleteCertificate = async (certificate: SslCertificate) => {
     setDeleteModal({ isOpen: true, certificate, loading: false })
   }
 
   const confirmDeleteCertificate = async () => {
     setDeleteModal(prev => ({ ...prev, loading: true }))
     
+    const target = deleteModal.certificate
+    if (!target) return
+
     try {
-      await hostingApi.deleteSSLCertificate(deleteModal.certificate.id)
-      setCertificates(prev => prev.filter(cert => cert.id !== deleteModal.certificate.id))
+      await hostingApi.deleteSSLCertificate(target.id)
+      setCertificates(prev => prev.filter(cert => cert.id !== target.id))
       setDeleteModal({ isOpen: false, certificate: null, loading: false })
     } catch (err) {
-      console.error('Delete SSL certificate error:', err)
-      const errorMessage = err.response?.data?.detail || 
-                          err.response?.data?.message || 
-                          err.response?.data?.error ||
-                          err.message || 
-                          'Unknown error occurred'
-      alert('Failed to delete certificate: ' + errorMessage)
+      alert('Failed to delete certificate: ' + errorMessage(err))
       setDeleteModal(prev => ({ ...prev, loading: false }))
     }
   }
 
-  const handleRenewCertificate = async (certificateId) => {
+  const handleRenewCertificate = async (certificateId: number) => {
     try {
       await hostingApi.renewSSLCertificate(certificateId)
-      // Refresh the certificates list to get updated status
       const response = await hostingApi.getSSLCertificates()
-      setCertificates(response.results || response)
+      const list = Array.isArray(response)
+        ? response
+        : (response as { results?: SslCertificate[] })?.results ?? []
+      setCertificates(list)
       alert('Certificate renewal initiated!')
     } catch (err) {
-      console.error('Renew SSL certificate error:', err)
-      const errorMessage = err.response?.data?.detail || 
-                          err.response?.data?.message || 
-                          err.response?.data?.error ||
-                          err.message || 
-                          'Unknown error occurred'
-      alert('Failed to renew certificate: ' + errorMessage)
+      alert('Failed to renew certificate: ' + errorMessage(err))
     }
   }
 
@@ -504,8 +480,10 @@ MIIE...
                         Private Key (PEM format)
                       </label>
                       <div className="relative">
+                        {/* A textarea has no type attribute, so the
+                            show/hide toggle never masked anything: the key
+                            was always in plain sight. */}
                         <textarea
-                          type={showPrivateKey ? 'text' : 'password'}
                           value={createForm.private_key}
                           onChange={(e) => setCreateForm(prev => ({ ...prev, private_key: e.target.value }))}
                           rows={8}
@@ -641,7 +619,7 @@ MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC...
           title="Delete SSL Certificate"
           message={
             deleteModal.certificate 
-              ? `Are you sure you want to delete the SSL certificate for "${deleteModal.certificate.domain?.name}"? This will make the website insecure.`
+              ? `Are you sure you want to delete the SSL certificate for "${deleteModal.certificate?.domain_name}"? This will make the website insecure.`
               : 'Are you sure you want to delete this SSL certificate?'
           }
           confirmText="Delete Certificate"
