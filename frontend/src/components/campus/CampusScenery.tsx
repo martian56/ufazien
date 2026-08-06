@@ -14,9 +14,15 @@ import * as THREE from "three"
 const WINDOW_LIT = new THREE.Color("#ffd98a")
 const WINDOW_DARK = new THREE.Color("#2d3f52")
 
+/**
+ * A three-component position. r3f accepts a plain number[] at runtime but its
+ * types want a fixed-length tuple, and a `number[]` silently loses the length.
+ */
+type Vec3 = [number, number, number]
+
 /** Sky, light and fog. Replaces a flat ambient + single directional setup. */
-export function CampusEnvironment({ timeOfDay = "day" }) {
-  const light = useRef()
+export function CampusEnvironment({ timeOfDay = "day" }: { timeOfDay?: string }) {
+  const light = useRef<THREE.DirectionalLight>(null)
 
   const config = useMemo(() => {
     // `bounce` is the ground half of the hemisphere light. It was a dark
@@ -25,13 +31,13 @@ export function CampusEnvironment({ timeOfDay = "day" }) {
     // building in shadow was a silhouette.
     if (timeOfDay === "dusk") {
       return {
-        sun: [30, 8, -60], intensity: 1.1, ambient: 0.85,
+        sun: [30, 8, -60] as Vec3, intensity: 1.1, ambient: 0.85,
         sky: "#9fb6d4", bounce: "#5d5647", tint: "#ffb37a", fog: "#c98a6b",
         fill: 0.25,
       }
     }
     return {
-      sun: [80, 40, 40], intensity: 1.6, ambient: 1.15,
+      sun: [80, 40, 40] as Vec3, intensity: 1.6, ambient: 1.15,
       sky: "#cfe4f7", bounce: "#8a9179", tint: "#fff6e5", fog: "#cfe3f0",
       fill: 0.35,
     }
@@ -106,6 +112,17 @@ export function CampusGround({ size = 300 }) {
  * A building with a facade rather than a painted box: floor bands, a recessed
  * entrance, a roof lip, and instanced windows that light up at dusk.
  */
+interface BuildingProps {
+  position?: Vec3
+  size?: Vec3
+  color?: string
+  name?: string
+  icon?: string
+  timeOfDay?: string
+  onEnter?: () => void
+  canEnter?: boolean
+}
+
 export function Building({
   position = [0, 0, 0],
   size = [14, 12, 10],
@@ -115,14 +132,14 @@ export function Building({
   timeOfDay = "day",
   onEnter,
   canEnter = true,
-}) {
+}: BuildingProps) {
   const [width, height, depth] = size
   const floors = Math.max(2, Math.round(height / 3.2))
 
   // One instanced mesh for every window on the building.
   const windows = useMemo(() => {
     const perRow = Math.max(2, Math.floor(width / 2.6))
-    const items = []
+    const items: { x: number; y: number; z: number; ry: number }[] = []
     for (let floor = 1; floor <= floors; floor++) {
       const y = (height / (floors + 1)) * floor
       for (let i = 0; i < perRow; i++) {
@@ -134,7 +151,7 @@ export function Building({
     return items
   }, [width, height, depth, floors])
 
-  const meshRef = useRef()
+  const meshRef = useRef<THREE.InstancedMesh>(null)
 
   useFrame(() => {
     const mesh = meshRef.current
@@ -233,13 +250,21 @@ export function Building({
 }
 
 /** Trees, lamps and benches as instanced meshes. */
-export function CampusProps({ count = 26, radius = 120, timeOfDay = "day" }) {
-  const trunks = useRef()
-  const canopies = useRef()
+export function CampusProps({
+  count = 26,
+  radius = 120,
+  timeOfDay = "day",
+}: {
+  count?: number
+  radius?: number
+  timeOfDay?: string
+}) {
+  const trunks = useRef<THREE.InstancedMesh>(null)
+  const canopies = useRef<THREE.InstancedMesh>(null)
 
   const layout = useMemo(() => {
     // Deterministic layout: a re-render must not teleport the scenery.
-    const items = []
+    const items: { x: number; z: number; scale: number }[] = []
     for (let i = 0; i < count; i++) {
       const angle = (i / count) * Math.PI * 2 + (i % 3) * 0.35
       const distance = 40 + ((i * 37) % (radius - 40))
@@ -254,10 +279,14 @@ export function CampusProps({ count = 26, radius = 120, timeOfDay = "day" }) {
   }, [count, radius])
 
   useFrame(() => {
-    for (const [ref, yOffset, scaleAxis] of [
+    // Tuples, not a plain array: inference otherwise widens the element type
+    // to the union of a ref and a number, and `yOffset * t.scale` stops
+    // typechecking.
+    const parts: [React.RefObject<THREE.InstancedMesh | null>, number, number][] = [
       [trunks, 1.6, 1],
       [canopies, 4.2, 1],
-    ]) {
+    ]
+    for (const [ref, yOffset, scaleAxis] of parts) {
       const mesh = ref.current
       if (!mesh || mesh.userData.done) continue
       const dummy = new THREE.Object3D()
@@ -351,7 +380,11 @@ function LectureRoomFurniture() {
  * Interior shown when a player enters a building. A simple lit room with a
  * lecture board, so entering leads somewhere rather than being a no-op.
  */
-export function BuildingInterior({ name, onExit, children }) {
+export function BuildingInterior({
+  children,
+}: {
+  children?: React.ReactNode
+}) {
   return (
     <group>
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
@@ -360,12 +393,12 @@ export function BuildingInterior({ name, onExit, children }) {
       </mesh>
 
       {/* Walls */}
-      {[
+      {([
         [0, 5, -20, 0],
         [0, 5, 20, Math.PI],
         [-20, 5, 0, Math.PI / 2],
         [20, 5, 0, -Math.PI / 2],
-      ].map(([x, y, z, ry], i) => (
+      ] as [number, number, number, number][]).map(([x, y, z, ry], i) => (
         <mesh key={i} position={[x, y, z]} rotation={[0, ry, 0]} receiveShadow>
           <planeGeometry args={[40, 10]} />
           <meshStandardMaterial color="#cfc7b8" roughness={0.95} side={THREE.DoubleSide} />
@@ -397,8 +430,16 @@ export function BuildingInterior({ name, onExit, children }) {
 }
 
 /** Better character: capsule torso, head, arms and legs, and it casts a shadow. */
-export function CharacterModel({ color = "#4F46E5", isMoving = false, direction = "down" }) {
-  const legs = useRef()
+export function CharacterModel({
+  color = "#4F46E5",
+  isMoving = false,
+  direction = "down",
+}: {
+  color?: string
+  isMoving?: boolean
+  direction?: string
+}) {
+  const legs = useRef<THREE.Group>(null)
 
   useFrame((state) => {
     if (!legs.current) return
@@ -410,7 +451,8 @@ export function CharacterModel({ color = "#4F46E5", isMoving = false, direction 
     })
   })
 
-  const facing = { down: 0, up: Math.PI, left: Math.PI / 2, right: -Math.PI / 2 }[direction] ?? 0
+  const facing =
+    ({ down: 0, up: Math.PI, left: Math.PI / 2, right: -Math.PI / 2 } as Record<string, number>)[direction] ?? 0
 
   return (
     <group rotation={[0, facing, 0]}>

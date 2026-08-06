@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type {
   ChatMessage,
+  CommunityStats,
   Forum,
   ForumPost,
   Group,
@@ -34,7 +35,7 @@ export const useCommunityData = () => {
   const [forums, setForums] = useState<Forum[]>([]);
   const [posts, setPosts] = useState<ForumPost[]>([]);
   const [chats, setChats] = useState<PrivateChat[]>([]);
-  const [stats, setStats] = useState<Record<string, unknown> | null>(null);
+  const [stats, setStats] = useState<CommunityStats | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
