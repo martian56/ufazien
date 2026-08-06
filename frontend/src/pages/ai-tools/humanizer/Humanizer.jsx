@@ -26,6 +26,8 @@ import {
   Zap,
 } from "lucide-react"
 import aiToolsApi from "../../../lib/api/endpoints/aiTools"
+import { errorMessage } from "../../../lib/api/errors"
+import { copyText } from "../../../lib/clipboard"
 
 export default function Humanizer() {
   const navigate = useNavigate()
@@ -107,8 +109,9 @@ export default function Humanizer() {
       
 
     } catch (error) {
-      console.error("Humanization failed:", error);
-      setApiError(error.message || "Failed to humanize text. Please try again.");
+      // errorMessage understands the DRF error shapes, so a provider outage
+      // now reads as what the server actually said rather than "Task failed".
+      setApiError(errorMessage(error, "Could not humanize that text. Try again in a moment."));
       setIsProcessing(false);
       setIsComplete(false);
       setProcessingProgress(0);
@@ -116,13 +119,12 @@ export default function Humanizer() {
   }
 
   const copyToClipboard = async (text) => {
-    try {
-      await navigator.clipboard.writeText(text)
-      setCopiedOutput(true)
-      setTimeout(() => setCopiedOutput(false), 2000)
-    } catch (err) {
-      console.error("Failed to copy text: ", err)
-    }
+    // The clipboard rejects whenever the document is not focused, and the
+    // previous version treated that as nothing having happened.
+    const copied = await copyText(text)
+    setCopiedOutput(copied)
+    setTimeout(() => setCopiedOutput(false), 2000)
+    if (!copied) setApiError("Could not copy to the clipboard.")
   }
 
   const downloadText = () => {
