@@ -35,10 +35,10 @@ import CreateWebsite from "./pages/hosting/CreateWebsite"
 import Logs from "./pages/hosting/Logs"
 import Billing from "./pages/hosting/Billing"
 import Upgrade from "./pages/hosting/Upgrade"
-import ApiTest from "./components/ApiTest"
 import CreateDatabase from "./pages/hosting/CreateDatabase.jsx"
 import UserSites from "./pages/hosting/UserSites.jsx"
 import Terms from "./pages/Terms.jsx"
+import NotFound from "./pages/NotFound"
 import Privacy from "./pages/Privacy.jsx"
 
 // Wrapper component for hosting routes with subscription context
@@ -91,12 +91,13 @@ function App() {
         <Route path="/ai-tools/summarizer" element={<ProtectedRoute><Summarizer /></ProtectedRoute>} />
         <Route path="/ai-tools/grammar-checker" element={<ProtectedRoute><GrammarAssistant /></ProtectedRoute>} />
         <Route path="/user-sites" element={<ProtectedRoute><UserSites /></ProtectedRoute>} />
-        <Route path="/api-test" element={<ApiTest />} />
         {/* Hosting routes with subscription context */}
         <Route path="/hosting/*" element={<HostingRoutes />} />
         {/* Add more routes as needed */}
         <Route path="/terms" element={<Terms />} />
         <Route path="/privacy" element={<Privacy />} />
+        {/* Anything unmatched rendered a blank white page before this. */}
+        <Route path="*" element={<NotFound />} />
       </Routes>
     </Router>
   )

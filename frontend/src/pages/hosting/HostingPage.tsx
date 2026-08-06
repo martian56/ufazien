@@ -1,7 +1,16 @@
 import { Helmet } from "react-helmet"
 import HostingSidebar from "../../components/hosting/HostingSidebar"
 
-export default function HostingPage({ title, description, icon: Icon, children }) {
+import type React from "react"
+
+interface HostingPageProps {
+  title: string
+  description: string
+  icon: React.ComponentType<{ className?: string }>
+  children: React.ReactNode
+}
+
+export default function HostingPage({ title, description, icon: Icon, children }: HostingPageProps) {
   return (
     <>
       <Helmet>

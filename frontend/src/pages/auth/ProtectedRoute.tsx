@@ -3,7 +3,9 @@ import { Navigate, useLocation } from "react-router-dom"
 import { api } from "../../lib/api/client"
 import { getAccessToken } from "../../lib/api/tokens"
 
-export default function ProtectedRoute({ children }) {
+import type React from "react"
+
+export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const [checked, setChecked] = useState(false)
   const [authenticated, setAuthenticated] = useState(false)
   const location = useLocation()
