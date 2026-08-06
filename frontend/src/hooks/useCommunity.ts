@@ -1,65 +1,72 @@
 import { useState, useEffect, useCallback } from 'react';
+import type {
+  ChatMessage,
+  Forum,
+  ForumPost,
+  Group,
+  PrivateChat,
+} from "../lib/api/endpoints/community"
 import { communityApi as communityAPI } from '../lib/api/endpoints/community';
+import { errorMessage } from '../lib/api/errors';
+
+/** Scalars only: these go into a query string. */
+type QueryParams = Record<string, string | number | boolean | null | undefined>;
 import { communityWS } from '../services/websocket';
 
+/** These endpoints answer with either a page or a plain list. */
+function rows<T>(response: { results?: T[] } | T[] | null | undefined): T[] {
+  if (Array.isArray(response)) return response
+  return response?.results ?? []
+}
+
+interface ChatConnection {
+  send: (message: string) => boolean
+  sendTyping: () => boolean
+  sendStopTyping: () => boolean
+  disconnect: () => void
+  isConnected: () => boolean | undefined
+  /** Private chats only. */
+  markRead?: () => void
+}
+
 export const useCommunityData = () => {
-  const [groups, setGroups] = useState([]);
-  const [forums, setForums] = useState([]);
-  const [posts, setPosts] = useState([]);
-  const [chats, setChats] = useState([]);
-  const [stats, setStats] = useState(null);
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [forums, setForums] = useState<Forum[]>([]);
+  const [posts, setPosts] = useState<ForumPost[]>([]);
+  const [chats, setChats] = useState<PrivateChat[]>([]);
+  const [stats, setStats] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
 
   // Load initial data
-  const loadGroups = useCallback(async (params = {}) => {
+
+  const loadGroups = useCallback(async (params: QueryParams = {}) => {
     try {
       setError(null);
       const response = await communityAPI.getGroups(params);
-      setGroups(response.results || response);
+      setGroups(rows(response));
     } catch (err) {
-      console.error('❌ Error loading groups:', err);
-      console.error('❌ Error details:', {
-        message: err.message,
-        status: err.response?.status,
-        statusText: err.response?.statusText,
-        data: err.response?.data
-      });
-      setError(err.message);
+      setError(errorMessage(err, 'Could not load that right now.'));
     }
   }, []);
 
-  const loadForums = useCallback(async (params = {}) => {
+  const loadForums = useCallback(async (params: QueryParams = {}) => {
     try {
       setError(null);
       const response = await communityAPI.getForums(params);
-      setForums(response.results || response);
+      setForums(rows(response));
     } catch (err) {
-      console.error('❌ Error loading forums:', err);
-      console.error('❌ Error details:', {
-        message: err.message,
-        status: err.response?.status,
-        statusText: err.response?.statusText,
-        data: err.response?.data
-      });
-      setError(err.message);
+      setError(errorMessage(err, 'Could not load that right now.'));
     }
   }, []);
 
-  const loadPosts = useCallback(async (params = {}) => {
+  const loadPosts = useCallback(async (params: QueryParams = {}) => {
     try {
       setError(null);
       const response = await communityAPI.getPosts(params);
-      setPosts(response.results || response);
+      setPosts(rows(response));
     } catch (err) {
-      console.error('❌ Error loading posts:', err);
-      console.error('❌ Error details:', {
-        message: err.message,
-        status: err.response?.status,
-        statusText: err.response?.statusText,
-        data: err.response?.data
-      });
-      setError(err.message);
+      setError(errorMessage(err, 'Could not load that right now.'));
     }
   }, []);
 
@@ -72,7 +79,6 @@ export const useCommunityData = () => {
       
       
       // Load all data in parallel
-      const startTime = Date.now();
       await Promise.all([
         loadGroups(),
         loadForums(), 
@@ -81,12 +87,8 @@ export const useCommunityData = () => {
         loadStats()
       ]);
       
-      const endTime = Date.now();
-      
     } catch (err) {
-      console.error('💥 Critical error in loadAllData:', err);
-      console.error('💥 Error stack:', err.stack);
-      setError(err.message);
+      setError(errorMessage(err, 'Could not load the community right now.'));
       
       // No mock fallback. Showing invented groups and posts hid real API
       // failures from users and from us; the page renders an error state.
@@ -105,7 +107,6 @@ export const useCommunityData = () => {
       const response = await communityAPI.getCommunityStats();
       setStats(response);
     } catch (err) {
-      console.error('Error loading community stats:', err);
     }
   }, []);
 
@@ -113,17 +114,16 @@ export const useCommunityData = () => {
     try {
       setLoading(true);
       const response = await communityAPI.getChats();
-      setChats(response.results || response);
+      setChats(rows(response));
     } catch (err) {
-      setError(err.message);
-      console.error('Error loading chats:', err);
+      setError(errorMessage(err));
     } finally {
       setLoading(false);
     }
   }, []);
 
   // Group operations
-  const joinGroup = useCallback(async (groupId) => {
+  const joinGroup = useCallback(async (groupId: string) => {
     try {
       const updatedGroup = await communityAPI.joinGroup(groupId);
       setGroups(prevGroups => 
@@ -133,12 +133,12 @@ export const useCommunityData = () => {
       );
       return updatedGroup;
     } catch (err) {
-      setError(err.message);
+      setError(errorMessage(err));
       throw err;
     }
   }, []);
 
-  const leaveGroup = useCallback(async (groupId) => {
+  const leaveGroup = useCallback(async (groupId: string) => {
     try {
       const updatedGroup = await communityAPI.leaveGroup(groupId);
       setGroups(prevGroups => 
@@ -148,35 +148,35 @@ export const useCommunityData = () => {
       );
       return updatedGroup;
     } catch (err) {
-      setError(err.message);
+      setError(errorMessage(err));
       throw err;
     }
   }, []);
 
-  const createGroup = useCallback(async (groupData) => {
+  const createGroup = useCallback(async (groupData: Record<string, unknown>) => {
     try {
       const newGroup = await communityAPI.createGroup(groupData);
       setGroups(prevGroups => [newGroup, ...prevGroups]);
       return newGroup;
     } catch (err) {
-      setError(err.message);
+      setError(errorMessage(err));
       throw err;
     }
   }, []);
 
-  const createForum = useCallback(async (forumData) => {
+  const createForum = useCallback(async (forumData: Record<string, unknown>) => {
     try {
       const newForum = await communityAPI.createForum(forumData);
       setForums(prevForums => [newForum, ...prevForums]);
       return newForum;
     } catch (err) {
-      setError(err.message);
+      setError(errorMessage(err));
       throw err;
     }
   }, []);
 
   // Post operations
-  const likePost = useCallback(async (postId) => {
+  const likePost = useCallback(async (postId: string) => {
     try {
       const result = await communityAPI.likePost(postId);
       setPosts(prevPosts => 
@@ -188,12 +188,12 @@ export const useCommunityData = () => {
       );
       return result;
     } catch (err) {
-      setError(err.message);
+      setError(errorMessage(err));
       throw err;
     }
   }, []);
 
-  const bookmarkPost = useCallback(async (postId) => {
+  const bookmarkPost = useCallback(async (postId: string) => {
     try {
       const result = await communityAPI.bookmarkPost(postId);
       setPosts(prevPosts => 
@@ -205,29 +205,29 @@ export const useCommunityData = () => {
       );
       return result;
     } catch (err) {
-      setError(err.message);
+      setError(errorMessage(err));
       throw err;
     }
   }, []);
 
-  const createPost = useCallback(async (postData) => {
+  const createPost = useCallback(async (postData: Record<string, unknown>) => {
     try {
       const newPost = await communityAPI.createPost(postData);
       setPosts(prevPosts => [newPost, ...prevPosts]);
       return newPost;
     } catch (err) {
-      setError(err.message);
+      setError(errorMessage(err));
       throw err;
     }
   }, []);
 
-  const createChat = useCallback(async (chatData) => {
+  const createChat = useCallback(async (chatData: { participant_ids: number[]; name?: string | null; is_group_chat?: boolean }) => {
     try {
       const newChat = await communityAPI.createChat(chatData);
       setChats(prevChats => [newChat, ...prevChats]);
       return newChat;
     } catch (err) {
-      setError(err.message);
+      setError(errorMessage(err));
       throw err;
     }
   }, []);
@@ -273,9 +273,11 @@ export const useCommunityData = () => {
   };
 };
 
-export const useGroupChat = (groupId) => {
-  const [messages, setMessages] = useState([]);
-  const [connection, setConnection] = useState(null);
+export const useGroupChat = (groupId: string | null) => {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // communityWS hands back its own wrapper, not a raw WebSocket.
+  const [connection, setConnection] = useState<ChatConnection | null>(null);
+  const [chatError, setChatError] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [typingUsers, setTypingUsers] = useState(new Set());
 
@@ -286,9 +288,9 @@ export const useGroupChat = (groupId) => {
     const loadMessages = async () => {
       try {
         const response = await communityAPI.getGroupMessages(groupId);
-        setMessages(response.results || response);
+        setMessages(rows(response));
       } catch (error) {
-        console.error('Error loading messages:', error);
+        setChatError(errorMessage(error, 'Could not load those messages.'));
       }
     };
 
@@ -304,22 +306,22 @@ export const useGroupChat = (groupId) => {
         }
       },
       user_joined: (data) => {
-        const systemMessage = {
+        const systemMessage: ChatMessage = {
           id: `system_${Date.now()}`,
-          sender: { username: 'System' },
+          sender: { id: 0, username: 'System', email: null },
           content: `${data.username} joined the chat`,
           message_type: 'system',
-          timestamp: data.timestamp
+          created_at: data.timestamp,
         };
         setMessages(prev => [...prev, systemMessage]);
       },
       user_left: (data) => {
-        const systemMessage = {
+        const systemMessage: ChatMessage = {
           id: `system_${Date.now()}`,
-          sender: { username: 'System' },
+          sender: { id: 0, username: 'System', email: null },
           content: `${data.username} left the chat`,
           message_type: 'system',
-          timestamp: data.timestamp
+          created_at: data.timestamp
         };
         setMessages(prev => [...prev, systemMessage]);
       },
@@ -350,7 +352,7 @@ export const useGroupChat = (groupId) => {
     };
   }, [groupId]);
 
-  const sendMessage = useCallback((content) => {
+  const sendMessage = useCallback((content: string) => {
     if (connection && content.trim()) {
       return connection.send(content.trim());
     }
@@ -379,9 +381,11 @@ export const useGroupChat = (groupId) => {
   };
 };
 
-export const usePrivateChat = (chatId) => {
-  const [messages, setMessages] = useState([]);
-  const [connection, setConnection] = useState(null);
+export const usePrivateChat = (chatId: string | null) => {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // communityWS hands back its own wrapper, not a raw WebSocket.
+  const [connection, setConnection] = useState<ChatConnection | null>(null);
+  const [chatError, setChatError] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [typingUsers, setTypingUsers] = useState(new Set());
 
@@ -392,9 +396,9 @@ export const usePrivateChat = (chatId) => {
     const loadMessages = async () => {
       try {
         const response = await communityAPI.getChatMessages(chatId);
-        setMessages(response.results || response);
+        setMessages(rows(response));
       } catch (error) {
-        console.error('Error loading messages:', error);
+        setChatError(errorMessage(error, 'Could not load those messages.'));
       }
     };
 
@@ -435,7 +439,7 @@ export const usePrivateChat = (chatId) => {
     };
   }, [chatId]);
 
-  const sendMessage = useCallback((content) => {
+  const sendMessage = useCallback((content: string) => {
     if (connection && content.trim()) {
       return connection.send(content.trim());
     }
@@ -455,9 +459,8 @@ export const usePrivateChat = (chatId) => {
   }, [connection]);
 
   const markAsRead = useCallback(() => {
-    if (connection) {
-      connection.markRead();
-    }
+    // Group connections have no markRead; only private chats do.
+    connection?.markRead?.();
   }, [connection]);
 
   return {

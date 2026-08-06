@@ -2,7 +2,7 @@
 // This file handles image loading, error handling, and other dynamic features
 
 // Image loading enhancement
-export const enhanceBlogContent = (contentElement) => {
+export const enhanceBlogContent = (contentElement: HTMLElement | null): void => {
   if (!contentElement) return;
 
   // Handle images
@@ -38,7 +38,7 @@ export const enhanceBlogContent = (contentElement) => {
     loadingDiv.textContent = 'Loading image...';
     
     // Insert loading placeholder before image
-    img.parentNode.insertBefore(loadingDiv, img);
+    img.parentNode?.insertBefore(loadingDiv, img);
     
     // Handle successful load
     img.onload = () => {
@@ -94,8 +94,8 @@ export const enhanceBlogContent = (contentElement) => {
       
       retry.onclick = () => {
         // Retry loading the image
-        const newImg = img.cloneNode(true);
-        errorDiv.parentNode.replaceChild(newImg, errorDiv);
+        const newImg = img.cloneNode(true) as HTMLImageElement;
+        errorDiv.parentNode?.replaceChild(newImg, errorDiv);
         // Re-enhance the new image
         enhanceImage(newImg);
       };
@@ -107,12 +107,14 @@ export const enhanceBlogContent = (contentElement) => {
       if (loadingDiv.parentNode) {
         loadingDiv.remove();
       }
-      img.parentNode.replaceChild(errorDiv, img);
+      img.parentNode?.replaceChild(errorDiv, img);
     };
     
     // If image is already loaded
     if (img.complete) {
-      img.onload();
+      // Calling the handler by hand for an image the browser already loaded,
+      // which fires no event of its own.
+      img.onload?.(new Event('load'));
     }
   });
   
@@ -177,7 +179,7 @@ export const enhanceBlogContent = (contentElement) => {
   });
   
   // Handle external links
-  const links = contentElement.querySelectorAll('a[href^="http"]');
+  const links = contentElement.querySelectorAll<HTMLAnchorElement>('a[href^="http"]');
   links.forEach(link => {
     link.target = '_blank';
     link.rel = 'noopener noreferrer nofollow';
@@ -194,7 +196,7 @@ export const enhanceBlogContent = (contentElement) => {
 };
 
 // Helper function to enhance individual images
-const enhanceImage = (img) => {
+const enhanceImage = (img: HTMLImageElement): void => {
   // Implementation for individual image enhancement
   // This is used when retrying failed images
 };

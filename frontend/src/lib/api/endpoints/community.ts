@@ -160,7 +160,7 @@ export const communityApi = {
   // Private chats
   getChats: () => api.get<Paginated<PrivateChat> | PrivateChat[]>('/community/chats/'),
   getChat: (id: string) => api.get<PrivateChat>(`/community/chats/${id}/`),
-  createChat: (data: { participant_ids: number[]; name?: string; is_group_chat?: boolean }) =>
+  createChat: (data: { participant_ids: number[]; name?: string | null; is_group_chat?: boolean }) =>
     api.post<PrivateChat>('/community/chats/', data),
   getChatMessages: (chatId: string, page = 1) =>
     api.get<Paginated<ChatMessage>>(`/community/chats/${chatId}/messages/`, { params: { page } }),
