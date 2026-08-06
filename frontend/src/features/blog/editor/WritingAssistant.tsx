@@ -1,7 +1,19 @@
 import { Lightbulb, Plus, Sparkles } from "lucide-react"
 
+interface Suggestion {
+  id: number | string
+  text: string
+}
+
+interface WritingAssistantProps {
+  darkMode: boolean
+  suggestions: Suggestion[]
+  onGenerate: () => void
+}
+
+
 /** Writing suggestions panel. The suggestions themselves come from the page. */
-export default function WritingAssistant({ darkMode, suggestions, onGenerate }) {
+export default function WritingAssistant({ darkMode, suggestions, onGenerate }: WritingAssistantProps) {
   return (
     <div className={`rounded-xl shadow-sm border p-6 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
       <div className="flex items-center justify-between mb-4">

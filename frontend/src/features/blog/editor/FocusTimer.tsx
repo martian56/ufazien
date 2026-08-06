@@ -1,6 +1,18 @@
 import { Clock, Pause, Play, RotateCcw, Volume2, VolumeX } from "lucide-react"
 
-const formatTime = (seconds) => {
+interface FocusTimerProps {
+  darkMode: boolean
+  currentTimer: number
+  isBreak: boolean
+  active: boolean
+  onToggle: () => void
+  onReset: () => void
+  soundEnabled: boolean
+  onToggleSound: () => void
+}
+
+
+const formatTime = (seconds: number) => {
   const mins = Math.floor(seconds / 60)
   const secs = seconds % 60
   return `${mins}:${secs.toString().padStart(2, '0')}`
@@ -16,7 +28,7 @@ export default function FocusTimer({
   onReset,
   soundEnabled,
   onToggleSound,
-}) {
+}: FocusTimerProps) {
   return (
     <div className={`rounded-xl shadow-sm border p-6 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
       <div className="flex items-center justify-between mb-4">

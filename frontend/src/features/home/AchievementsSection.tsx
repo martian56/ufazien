@@ -1,4 +1,16 @@
-export default function AchievementsSection({ achievements }) {
+import type React from "react"
+
+interface Achievement {
+  icon: React.ComponentType<{ className?: string }>
+  title: string
+  org: string
+}
+
+interface AchievementsSectionProps {
+  achievements: Achievement[]
+}
+
+export default function AchievementsSection({ achievements }: AchievementsSectionProps) {
   return (
     <>
     {/* Achievements Section */}

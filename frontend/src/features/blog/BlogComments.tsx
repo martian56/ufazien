@@ -1,6 +1,36 @@
 import { ThumbsUp } from "lucide-react"
 import { countComments } from "./countComments"
 
+interface CommentAuthor {
+  first_name?: string
+  last_name?: string
+  avatar_url?: string | null
+}
+
+interface BlogComment {
+  id: number
+  author?: CommentAuthor
+  content: string
+  published_at: string
+  likes_count?: number
+  is_liked?: boolean
+  replies?: BlogComment[]
+}
+
+interface BlogCommentsProps {
+  comments: BlogComment[]
+  commentsLoading: boolean
+  currentUser: { name?: string; avatar?: string | null }
+  darkMode: boolean
+  newComment: string
+  setNewComment: (value: string) => void
+  replyTo: number | null
+  setReplyTo: (id: number | null) => void
+  onSubmitComment: () => void
+  onLikeComment: (commentId: number) => void
+}
+
+
 /**
  * Comments on an article, including replies.
  *
@@ -18,7 +48,7 @@ export default function BlogComments({
   setReplyTo,
   onSubmitComment,
   onLikeComment,
-}) {
+}: BlogCommentsProps) {
   return (
         <div
           className={`mt-12 p-6 rounded-xl border ${
@@ -103,7 +133,16 @@ const MAX_INDENT_DEPTH = 4
  * had no Reply button of its own, so there was no way to start one from the
  * interface.
  */
-function CommentThread({ comment, depth, darkMode, replyTo, setReplyTo, onLikeComment }) {
+interface CommentThreadProps {
+  comment: BlogComment
+  depth: number
+  darkMode: boolean
+  replyTo: number | null
+  setReplyTo: (id: number | null) => void
+  onLikeComment: (commentId: number) => void
+}
+
+function CommentThread({ comment, depth, darkMode, replyTo, setReplyTo, onLikeComment }: CommentThreadProps) {
   const isReply = depth > 0
   const author = `${comment.author?.first_name || ""} ${comment.author?.last_name || ""}`.trim() || "Anonymous"
   const replies = comment.replies || []

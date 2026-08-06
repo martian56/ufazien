@@ -3,6 +3,16 @@ import { X } from "lucide-react"
 import { api } from "../../lib/api/client"
 import { errorMessage } from "../../lib/api/errors"
 
+import type { BlogPost } from "../../lib/api/endpoints/blog"
+
+interface ReportModalProps {
+  darkMode: boolean
+  post: Pick<BlogPost, "id" | "title"> | null
+  onClose: () => void
+  onDone?: (sent: boolean) => void
+}
+
+
 const REASONS = [
   "Spam or misleading content",
   "Inappropriate content",
@@ -21,11 +31,11 @@ const REASONS = [
  * It now posts to the existing feedback endpoint, so a report reaches the same
  * place as everything else users send in.
  */
-export default function ReportModal({ darkMode, post, onClose, onDone }) {
+export default function ReportModal({ darkMode, post, onClose, onDone }: ReportModalProps) {
   const [reason, setReason] = useState(REASONS[0])
   const [details, setDetails] = useState("")
   const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState(null)
+  const [error, setError] = useState<string | null>(null)
 
   const submit = async () => {
     setSubmitting(true)

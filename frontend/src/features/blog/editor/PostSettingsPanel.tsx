@@ -1,4 +1,35 @@
+import type React from "react"
 import { Settings, X } from "lucide-react"
+
+import type { PostVisibility } from "../../../lib/api/endpoints/blog"
+
+interface TagSuggestion {
+  id: number | string
+  name: string
+}
+
+interface PostSettingsPanelProps {
+  darkMode: boolean
+  categories: { id: number; name: string }[]
+  isLoadingCategories: boolean
+  category: string
+  onCategoryChange: (value: string) => void
+  visibility: PostVisibility
+  onVisibilityChange: (value: PostVisibility) => void
+  excerpt: string
+  onExcerptChange: (value: string) => void
+  tags: string[]
+  onRemoveTag: (tag: string) => void
+  onAddTag: (tag: string) => void
+  tagInput: string
+  onTagInputChange: (value: string) => void
+  onTagInputKeyPress: (event: React.KeyboardEvent<HTMLInputElement>) => void
+  tagSuggestions: TagSuggestion[]
+  isLoadingTags: boolean
+  publishDate: string
+  onPublishDateChange: (value: string) => void
+}
+
 
 /**
  * Category, visibility, excerpt, tags and publish date.
@@ -36,7 +67,7 @@ export default function PostSettingsPanel({
   isLoadingTags,
   publishDate,
   onPublishDateChange,
-}) {
+}: PostSettingsPanelProps) {
   const fieldClass = `w-full p-2 border rounded-lg ${
     darkMode ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : 'bg-white border-gray-300 placeholder-gray-500'
   }`
@@ -71,7 +102,7 @@ export default function PostSettingsPanel({
           <select
             id="post-visibility"
             value={visibility}
-            onChange={(e) => onVisibilityChange(e.target.value)}
+            onChange={(e) => onVisibilityChange(e.target.value as PostVisibility)}
             className={fieldClass}
           >
             {VISIBILITY_OPTIONS.map((option) => (
@@ -93,7 +124,7 @@ export default function PostSettingsPanel({
               if (e.target.value.length <= 300) onExcerptChange(e.target.value)
             }}
             rows={3}
-            maxLength="300"
+            maxLength={300}
             className={`${fieldClass} resize-none`}
           />
           <div className="text-xs text-gray-500 mt-1">{excerpt.length}/300 characters</div>

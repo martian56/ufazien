@@ -27,6 +27,8 @@ export interface User {
   last_name?: string
   full_name?: string
   avatar?: string | null
+  /** Absolute URL built by the serializer. */
+  avatar_url?: string | null
   major?: string | null
   year?: string | number | null
 }
