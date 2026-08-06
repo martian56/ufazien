@@ -2,6 +2,9 @@
 
 import { useState, useEffect } from "react"
 import { tabFor, toAverageRows } from "../../../features/gpa/loadCalculation"
+import { api } from "../../../lib/api/client"
+import { errorMessage } from "../../../lib/api/errors"
+import { gpaApi } from "../../../lib/api/endpoints/gpa"
 import AverageRow from "../../../features/gpa/AverageRow"
 import ConversionTableModal from "../../../features/gpa/ConversionTableModal"
 import { useNavigate } from "react-router-dom"
@@ -27,10 +30,7 @@ import {
   X,
 } from "lucide-react"
 import SideBar from "../../../components/ui/SideBar"
-import axios from "axios"
 
-const API_URL = import.meta.env.VITE_API_URL
-const API_BASE_URL = `${API_URL}/api`
 
 export default function GpaCalculator() {
   const navigate = useNavigate()
@@ -70,6 +70,9 @@ export default function GpaCalculator() {
   // Saved calculations and statistics
   const [savedCalculations, setSavedCalculations] = useState([])
   const [statistics, setStatistics] = useState(null)
+  // "history" is a view, not a calculator. This remembers which set of
+  // numbers is on screen so the saved panel knows what it is saving.
+  const [lastCalculatorTab, setLastCalculatorTab] = useState("semester")
   const [userProfile, setUserProfile] = useState(null)
   
   // UI state
@@ -96,28 +99,13 @@ export default function GpaCalculator() {
   }
 
   const apiRequest = async (method, url, data = null) => {
-    const token = getAuthToken()
-    if (!token) {
-      addNotification("Please log in to continue", "error")
-      return null
-    }
-
     try {
-      const config = {
-        method,
-        url: `${API_BASE_URL}${url}`,
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      }
-
-      if (data) config.data = data
-      const response = await axios(config)
-      return response.data
+      if (method === "GET") return await api.get(url)
+      if (method === "POST") return await api.post(url, data ?? undefined)
+      if (method === "DELETE") return await api.delete(url)
+      return await api.patch(url, data ?? undefined)
     } catch (error) {
-      const errorMessage = error.response?.data?.detail || error.response?.data?.error || error.message
-      addNotification(errorMessage, "error")
+      addNotification(errorMessage(error, "Something went wrong."), "error")
       return null
     }
   }
@@ -146,12 +134,59 @@ export default function GpaCalculator() {
    * CourseGrade per period with its name and average, and the list endpoint
    * serializes them, so the inputs were there the whole time.
    */
+  const saveNamedCalculation = async () => {
+    // The Save button lives on the history tab, so activeTab is "history"
+    // here and cannot say which calculator the numbers came from. That is
+    // what lastCalculatorTab is for.
+    const currentAverages = lastCalculatorTab === "yearly" ? yearlyAverages : semesterAverages
+    const filled = currentAverages.filter((avg) => avg.period && avg.average)
+    if (filled.length === 0) {
+      addNotification("Add a period and a mark before saving.", "error")
+      return
+    }
+
+    const name = window.prompt("Name this calculation", `${lastCalculatorTab === "yearly" ? "Yearly" : "Semester"} GPA`)
+    if (!name?.trim()) return
+
+    try {
+      await gpaApi.save(
+        name.trim(),
+        lastCalculatorTab,
+        // CourseGrade.credits is validated as a course's credits and capped
+        // at 10. A period is not a course, and every period here carries the
+        // same weight, so the value does not change the resulting GPA.
+        filled.map((avg) => ({
+          course_name: avg.period,
+          credits: 10,
+          grade_type: "ufaz",
+          ufaz_grade: parseFloat(avg.average),
+        }))
+      )
+      addNotification(`Saved "${name.trim()}".`, "success")
+      loadSavedCalculations()
+    } catch (error) {
+      addNotification(errorMessage(error, "Could not save that calculation."), "error")
+    }
+  }
+
+  const deleteCalculation = async (calc) => {
+    if (!window.confirm(`Delete "${calc.name}"?`)) return
+    try {
+      await gpaApi.remove(calc.id)
+      addNotification(`Deleted "${calc.name}".`, "success")
+      loadSavedCalculations()
+    } catch (error) {
+      addNotification(errorMessage(error, "Could not delete that calculation."), "error")
+    }
+  }
+
   const loadCalculation = (calc) => {
     const rows = toAverageRows(calc)
     const tab = tabFor(calc)
     if (tab === "yearly") setYearlyAverages(rows)
     else setSemesterAverages(rows)
     setActiveTab(tab)
+    setLastCalculatorTab(tab)
     addNotification(`Loaded "${calc.name}".`, "success")
   }
 
@@ -592,7 +627,7 @@ export default function GpaCalculator() {
             {/* Tab Navigation */}
             <div className="flex border-b border-gray-200 mb-6">
               <button
-                onClick={() => setActiveTab("semester")}
+                onClick={() => { setActiveTab("semester"); setLastCalculatorTab("semester") }}
                 className={`px-4 py-2 font-medium transition-colors ${
                   activeTab === "semester" 
                     ? "text-blue-600 border-b-2 border-blue-600" 
@@ -603,7 +638,7 @@ export default function GpaCalculator() {
                 Semester-based
               </button>
               <button
-                onClick={() => setActiveTab("yearly")}
+                onClick={() => { setActiveTab("yearly"); setLastCalculatorTab("yearly") }}
                 className={`px-4 py-2 font-medium transition-colors ${
                   activeTab === "yearly" 
                     ? "text-blue-600 border-b-2 border-blue-600" 
@@ -622,7 +657,7 @@ export default function GpaCalculator() {
                 }`}
               >
                 <BarChart3 className="w-4 h-4 inline mr-2" />
-                Statistics
+                Statistics & Saved
               </button>
             </div>
           </div>
@@ -823,28 +858,49 @@ export default function GpaCalculator() {
 
               {/* Saved Calculations */}
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Saved Calculations</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">Saved Calculations</h3>
+                  <button
+                    onClick={saveNamedCalculation}
+                    className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    Save current
+                  </button>
+                </div>
                 {savedCalculations.length === 0 ? (
-                  <p className="text-gray-500 text-center py-8">No saved calculations yet</p>
+                  <p className="text-gray-500 text-center py-8">
+                    Nothing saved yet. Enter your marks and choose Save current to keep a copy.
+                  </p>
                 ) : (
                   <div className="space-y-3">
                     {savedCalculations.map((calc) => (
-                      <button
+                      <div
                         key={calc.id}
-                        onClick={() => loadCalculation(calc)}
-                        className="w-full text-left flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-colors"
+                        className="flex items-center gap-2 p-4 border border-gray-200 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-colors"
                       >
-                        <div>
-                          <h4 className="font-medium text-gray-900">{calc.name}</h4>
-                          <p className="text-sm text-gray-500">
-                            {calc.calculation_type} • {calc.period_count || calc.course_count || 0} periods
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-2xl font-bold text-blue-600">{calc.overall_gpa}</div>
-                          <div className="text-xs text-gray-500">GPA</div>
-                        </div>
-                      </button>
+                        <button
+                          onClick={() => loadCalculation(calc)}
+                          className="flex-1 text-left flex items-center justify-between"
+                        >
+                          <div>
+                            <h4 className="font-medium text-gray-900">{calc.name}</h4>
+                            <p className="text-sm text-gray-500">
+                              {calc.calculation_type} • {calc.course_count || 0} periods
+                            </p>
+                          </div>
+                          <div className="text-right mr-2">
+                            <div className="text-2xl font-bold text-blue-600">{calc.overall_gpa}</div>
+                            <div className="text-xs text-gray-500">GPA</div>
+                          </div>
+                        </button>
+                        <button
+                          onClick={() => deleteCalculation(calc)}
+                          className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors shrink-0"
+                          aria-label={`Delete ${calc.name}`}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     ))}
                   </div>
                 )}
