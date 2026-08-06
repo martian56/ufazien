@@ -245,6 +245,17 @@ export default function AverageCalculator() {
   }
 
   // Unsave schema
+  const deleteSchema = async (schemaId) => {
+    // /average/delete-schema/ has existed all along and nothing called it, so
+    // the confirmation dialog closed and left the schema exactly where it was.
+    const data = await apiRequest("DELETE", `/average/delete-schema/${schemaId}/`)
+    if (data) {
+      addNotification("Schema deleted.", "success")
+      await loadMySchemas()
+      await loadPublicSchemas()
+    }
+  }
+
   const unsaveSchema = async (schemaId) => {
     const data = await apiRequest("DELETE", `/average/unsave-schema/${schemaId}/`)
     if (data) {
@@ -445,6 +456,7 @@ export default function AverageCalculator() {
               useSchema={useSchema}
               publishSchema={publishSchema}
               unsaveSchema={unsaveSchema}
+              deleteSchema={deleteSchema}
               loadMySchemas={loadMySchemas}
               pagination={mySchemasPagination}
               onPageChange={handleMySchemaPageChange}
@@ -457,6 +469,7 @@ export default function AverageCalculator() {
               useSchema={useSchema}
               saveSchema={saveSchema}
               unsaveSchema={unsaveSchema}
+              deleteSchema={deleteSchema}
               searchTerm={searchTerm}
               setSearchTerm={setSearchTerm}
               pagination={publicSchemasPagination}

@@ -2,38 +2,73 @@ import { useState } from "react"
 import { Play, Share, Trash2, Edit3, Lock, Globe, Users, Calendar, Heart, HeartOff, User } from "lucide-react"
 import Pagination from "../../../components/ui/Pagination"
 
-export default function MySchemasTab({ 
-  schemas, 
-  useSchema, 
-  publishSchema, 
-  loadMySchemas, 
-  unsaveSchema,
-  pagination,
-  onPageChange 
-}) {
-  const [selectedSchema, setSelectedSchema] = useState(null)
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(null)
+/** Mirrors AverageSchemaSerializer. */
+interface Schema {
+  id: number
+  name: string
+  description?: string
+  creator?: number
+  creator_full_name?: string
+  creator_username?: string
+  is_public?: boolean
+  is_saved_by_user?: boolean
+  usage_count?: number
+  fields?: { name: string; weight: number }[]
+  created_at?: string
+  updated_at?: string
+}
 
-  const handleUseSchema = async (schemaId) => {
+interface MySchemasTabProps {
+  schemas: Schema[]
+  useSchema: (schemaId: number) => Promise<void> | void
+  publishSchema: (schemaId: number) => Promise<void> | void
+  loadMySchemas: () => Promise<void> | void
+  unsaveSchema: (schemaId: number) => Promise<void> | void
+  deleteSchema: (schemaId: number) => Promise<void> | void
+  /** The shape AverageCalculator actually builds. */
+  pagination?: {
+    count: number
+    current_page: number
+    total_pages: number
+    next?: string | null
+    previous?: string | null
+  } | null
+  onPageChange: (page: number) => void
+}
+
+
+export default function MySchemasTab({
+  schemas,
+  useSchema,
+  publishSchema,
+  loadMySchemas,
+  unsaveSchema,
+  deleteSchema,
+  pagination,
+  onPageChange,
+}: MySchemasTabProps) {
+  const [selectedSchema, setSelectedSchema] = useState<Schema | null>(null)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<number | null>(null)
+
+  const handleUseSchema = async (schemaId: number) => {
     await useSchema(schemaId)
   }
 
-  const handlePublishSchema = async (schemaId) => {
+  const handlePublishSchema = async (schemaId: number) => {
     await publishSchema(schemaId)
   }
 
-  const handleDeleteSchema = async (schemaId) => {
-    // This would need to be implemented in the parent component
-    // For now, we'll just close the confirmation
+  const handleDeleteSchema = async (schemaId: number) => {
+    await deleteSchema(schemaId)
     setShowDeleteConfirm(null)
   }
 
-  const handleUnsaveSchema = async (schemaId) => {
+  const handleUnsaveSchema = async (schemaId: number) => {
     await unsaveSchema(schemaId)
   }
 
   // Check if schema is owned by current user (can be published/deleted) vs saved from public
-  const isOwnedSchema = (schema) => {
+  const isOwnedSchema = (schema: Schema) => {
     // A schema is owned if it's not saved from someone else
     // We can check if creator_username exists and it's the current user's schema
     return !schema.is_saved_by_user
@@ -71,15 +106,15 @@ export default function MySchemasTab({
                     {isOwnedSchema(schema) ? (
                       <>
                         {schema.is_public ? (
-                          <Globe className="w-4 h-4 text-green-600" title="Public" />
+                          <span title="Public"><Globe className="w-4 h-4 text-green-600" /></span>
                         ) : (
-                          <Lock className="w-4 h-4 text-gray-400" title="Private" />
+                          <span title="Private"><Lock className="w-4 h-4 text-gray-400" /></span>
                         )}
-                        <User className="w-4 h-4 text-blue-600" title="Created by you" />
+                        <span title="Created by you"><User className="w-4 h-4 text-blue-600" /></span>
                       </>
                     ) : (
                       <>
-                        <Heart className="w-4 h-4 text-red-600" title="Saved schema" />
+                        <span title="Saved schema"><Heart className="w-4 h-4 text-red-600" /></span>
                         <span className="text-xs text-gray-500">by {schema.creator_full_name}</span>
                       </>
                     )}
@@ -102,7 +137,7 @@ export default function MySchemasTab({
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-gray-600">Created</span>
                   <span className="font-medium">
-                    {new Date(schema.created_at).toLocaleDateString()}
+                    {schema.created_at ? new Date(schema.created_at).toLocaleDateString() : "-"}
                   </span>
                 </div>
 
@@ -119,7 +154,7 @@ export default function MySchemasTab({
                 <div className="mb-4">
                   <div className="text-xs font-medium text-gray-700 mb-2">Fields:</div>
                   <div className="space-y-1">
-                    {schema.fields.slice(0, 3).map((field, index) => (
+                    {(schema.fields ?? []).slice(0, 3).map((field, index) => (
                       <div key={index} className="flex items-center justify-between text-xs">
                         <span className="text-gray-600 truncate">{field.name}</span>
                         <span className="text-gray-500 ml-2">×{field.weight}</span>

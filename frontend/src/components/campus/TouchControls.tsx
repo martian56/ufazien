@@ -1,6 +1,28 @@
 import { useEffect, useRef, useState } from "react"
 import { DoorOpen, ChevronsUp } from "lucide-react"
 
+import type React from "react"
+
+/**
+ * The shared control state the campus reads each frame.
+ *
+ * look accumulates swipe deltas and is drained by the player controller;
+ * move is the joystick's current offset.
+ */
+export interface TouchState {
+  move: { x: number; y: number }
+  look: { dx: number; dy: number }
+  jump: boolean
+  interact: boolean
+}
+
+interface TouchControlsProps {
+  stateRef: React.MutableRefObject<TouchState>
+  insideBuilding: { name: string } | null
+  canInteract: boolean
+}
+
+
 /**
  * Touch controls for phones and tablets.
  *
@@ -38,15 +60,15 @@ export function useIsTouchDevice() {
  * left the player unable to turn at all. A swipe only counts if it started on
  * the canvas, so the joystick and the HUD buttons keep their own touches.
  */
-function useWorldLook(stateRef) {
+function useWorldLook(stateRef: React.MutableRefObject<TouchState>) {
   useEffect(() => {
     // Track by identifier so a second finger on the stick cannot hijack the
     // one that is turning the camera.
-    let lookId = null
+    let lookId: number | null = null
     let lastX = 0
     let lastY = 0
 
-    const start = (e) => {
+    const start = (e: TouchEvent) => {
       if (lookId !== null) return
       const target = e.target
       if (!(target instanceof Element) || !target.closest("#campus-canvas")) return
@@ -56,9 +78,9 @@ function useWorldLook(stateRef) {
       lastY = t.clientY
     }
 
-    const move = (e) => {
+    const move = (e: TouchEvent) => {
       if (lookId === null) return
-      for (const t of e.changedTouches) {
+      for (const t of Array.from(e.changedTouches)) {
         if (t.identifier !== lookId) continue
         stateRef.current.look.dx += t.clientX - lastX
         stateRef.current.look.dy += t.clientY - lastY
@@ -69,8 +91,8 @@ function useWorldLook(stateRef) {
       }
     }
 
-    const end = (e) => {
-      for (const t of e.changedTouches) {
+    const end = (e: TouchEvent) => {
+      for (const t of Array.from(e.changedTouches)) {
         if (t.identifier === lookId) lookId = null
       }
     }
@@ -88,14 +110,15 @@ function useWorldLook(stateRef) {
   }, [stateRef])
 }
 
-function Joystick({ onChange }) {
-  const base = useRef(null)
+function Joystick({ onChange }: { onChange: (offset: { x: number; y: number }) => void }) {
+  const base = useRef<HTMLDivElement>(null)
   const [knob, setKnob] = useState({ x: 0, y: 0 })
-  const active = useRef(null)
+  const active = useRef<number | null>(null)
   const radius = 46
 
-  const handle = (touch) => {
-    const rect = base.current.getBoundingClientRect()
+  const handle = (touch: React.Touch) => {
+    const rect = base.current?.getBoundingClientRect()
+    if (!rect) return
     const cx = rect.left + rect.width / 2
     const cy = rect.top + rect.height / 2
     let dx = touch.clientX - cx
@@ -126,7 +149,7 @@ function Joystick({ onChange }) {
       }}
       onTouchMove={(e) => {
         e.stopPropagation()
-        for (const touch of e.changedTouches) {
+        for (const touch of Array.from(e.changedTouches)) {
           if (touch.identifier === active.current) handle(touch)
         }
       }}
@@ -146,7 +169,7 @@ function Joystick({ onChange }) {
   )
 }
 
-export default function TouchControls({ stateRef, insideBuilding, canInteract }) {
+export default function TouchControls({ stateRef, insideBuilding, canInteract }: TouchControlsProps) {
   useWorldLook(stateRef)
 
   // Unmounting mid-drag, which is what opening chat does, would otherwise
