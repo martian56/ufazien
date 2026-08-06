@@ -1,4 +1,12 @@
-export default function WeekView({ days, getEventsForDate, onEventClick }) {
+import type { CalendarEvent } from "../../services/calendarApi"
+
+interface WeekViewProps {
+  days: Date[]
+  getEventsForDate: (date: Date) => CalendarEvent[]
+  onEventClick: (event: CalendarEvent) => void
+}
+
+export default function WeekView({ days, getEventsForDate, onEventClick }: WeekViewProps) {
   const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
   const today = new Date()
 

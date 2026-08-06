@@ -31,7 +31,15 @@ const TIME_FORMATS = [
   { value: '12h', label: '6:30 PM' },
 ]
 
-function Choice({ id, label, value, options, onChange }) {
+interface ChoiceProps {
+  id: string
+  label: string
+  value: string
+  options: readonly { value: string; label: string }[]
+  onChange: (value: string) => void
+}
+
+function Choice({ id, label, value, options, onChange }: ChoiceProps) {
   return (
     <div className="space-y-2">
       <Label htmlFor={id} className="text-sm font-semibold text-gray-700">{label}</Label>
@@ -49,7 +57,14 @@ function Choice({ id, label, value, options, onChange }) {
   )
 }
 
-export default function AppearanceTab({ settings, onChange }) {
+import type { AppearanceSettings } from "./settingsMapping"
+
+interface AppearanceTabProps {
+  settings: AppearanceSettings
+  onChange: (field: keyof AppearanceSettings, value: string) => void
+}
+
+export default function AppearanceTab({ settings, onChange }: AppearanceTabProps) {
   return (
     <div className="p-8">
       <div className="flex items-center gap-4 mb-8">

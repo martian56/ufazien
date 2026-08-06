@@ -1,4 +1,22 @@
-export default function MonthView({ days, currentDate, selectedDate, onDateSelect, getEventsForDate, onEventClick }) {
+import type { CalendarEvent } from "../../services/calendarApi"
+
+interface MonthViewProps {
+  days: Date[]
+  currentDate: Date
+  selectedDate: Date
+  onDateSelect: (date: Date) => void
+  getEventsForDate: (date: Date) => CalendarEvent[]
+  onEventClick: (event: CalendarEvent) => void
+}
+
+export default function MonthView({
+  days,
+  currentDate,
+  selectedDate,
+  onDateSelect,
+  getEventsForDate,
+  onEventClick,
+}: MonthViewProps) {
   const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
   const today = new Date()
 

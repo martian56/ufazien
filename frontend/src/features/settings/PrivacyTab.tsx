@@ -16,7 +16,14 @@ const VISIBILITY = [
   { value: 'nobody', label: 'Nobody', hint: 'Others see only your name and picture.' },
 ]
 
-function Toggle({ label, description, checked, onChange }) {
+interface ToggleProps {
+  label: string
+  description: string
+  checked: boolean
+  onChange: (checked: boolean) => void
+}
+
+function Toggle({ label, description, checked, onChange }: ToggleProps) {
   return (
     <div className="flex items-center justify-between p-4 bg-white rounded-xl border border-gray-200">
       <div>
@@ -32,7 +39,15 @@ function Toggle({ label, description, checked, onChange }) {
   )
 }
 
-export default function PrivacyTab({ settings, onChange }) {
+import type { PrivacySettings } from "./settingsMapping"
+import type { ProfileVisibility } from "../../lib/api/endpoints/settings"
+
+interface PrivacyTabProps {
+  settings: PrivacySettings
+  onChange: (field: keyof PrivacySettings, value: PrivacySettings[keyof PrivacySettings]) => void
+}
+
+export default function PrivacyTab({ settings, onChange }: PrivacyTabProps) {
   const selected = VISIBILITY.find((option) => option.value === settings.profileVisibility)
 
   return (
@@ -55,7 +70,7 @@ export default function PrivacyTab({ settings, onChange }) {
           <select
             id="profileVisibility"
             value={settings.profileVisibility}
-            onChange={(e) => onChange("profileVisibility", e.target.value)}
+            onChange={(e) => onChange("profileVisibility", e.target.value as ProfileVisibility)}
             className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           >
             {VISIBILITY.map((option) => (
