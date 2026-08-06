@@ -1,8 +1,15 @@
 import { Eye } from "lucide-react"
 import { formatDate, getLogIcon } from "./websiteFormat"
+import type { Deployment, Website } from "../../utils/hostingApi"
+
+interface WebsiteDeploymentsTabProps {
+  deployments: Deployment[]
+  onDeploy: () => void
+}
+
 
 /** Full deployment history for one website. */
-export default function WebsiteDeploymentsTab({ deployments, onDeploy }) {
+export default function WebsiteDeploymentsTab({ deployments, onDeploy }: WebsiteDeploymentsTabProps) {
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200">
       <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">

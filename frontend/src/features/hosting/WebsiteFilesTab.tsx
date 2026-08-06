@@ -1,5 +1,38 @@
+import type React from "react"
 import { AlertCircle, FileText, Folder, RefreshCw, Upload } from "lucide-react"
 import { formatStorage } from "./websiteFormat"
+
+import type { Website } from "../../utils/hostingApi"
+
+interface HostedFile {
+  name: string
+  size: number
+  modified?: string | null
+}
+
+interface HostedFolder {
+  name: string
+  file_count: number
+  modified?: string | null
+}
+
+/** A folder upload attaches this so nested paths survive; File has no writable name. */
+type PickedFile = File & { relativePath?: string }
+
+interface WebsiteFilesTabProps {
+  website: Website
+  files: HostedFile[]
+  folders: HostedFolder[]
+  selectedFiles: PickedFile[]
+  onSelectFiles: (files: PickedFile[]) => void
+  uploading: boolean
+  onUpload: () => void
+  onDownload: (name: string) => void
+  onDelete: (name: string) => void
+  onRefresh: () => void
+  error?: string | null
+}
+
 
 /**
  * File manager: pick files or a whole folder, upload, then browse what is there.
@@ -20,12 +53,13 @@ export default function WebsiteFilesTab({
   onDelete,
   onRefresh,
   error,
-}) {
-  const handleFolderPick = (event) => {
-    const picked = Array.from(event.target.files)
+}: WebsiteFilesTabProps) {
+  const handleFolderPick = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = Array.from(event.target.files ?? [])
     onSelectFiles(
       picked.map((file) => {
-        const fileWithPath = new File([file], file.name, { type: file.type })
+        // webkitRelativePath is read-only on File, hence the clone.
+        const fileWithPath = new File([file], file.name, { type: file.type }) as PickedFile
         fileWithPath.relativePath = file.webkitRelativePath
         return fileWithPath
       })
@@ -43,13 +77,20 @@ export default function WebsiteFilesTab({
               type="file"
               multiple
               className="hidden"
-              onChange={(e) => onSelectFiles(Array.from(e.target.files))}
+              onChange={(e) => onSelectFiles(Array.from(e.target.files ?? []))}
             />
             Upload Files
           </label>
           <label className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer inline-flex items-center">
             <Folder className="w-4 h-4 mr-2 inline" />
-            <input type="file" multiple webkitdirectory="" className="hidden" onChange={handleFolderPick} />
+            <input
+              type="file"
+              multiple
+              // Real attribute, absent from React's typings.
+              {...{ webkitdirectory: "" }}
+              className="hidden"
+              onChange={handleFolderPick}
+            />
             Upload Folder
           </label>
           <button

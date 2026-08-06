@@ -27,8 +27,28 @@ export interface Website {
   description?: string;
   website_type: 'static' | 'php';
   status?: string;
-  domain?: { id: number; name: string } | null;
+  /** The nested domain carries the SSL state; there is no flag on the site. */
+  domain?: {
+    id: number;
+    name: string;
+    domain_type?: string;
+    status?: string;
+    ssl_enabled?: boolean;
+    ssl_expires_at?: string | null;
+  } | null;
+  database?: { id: string; name: string } | null;
+  git_repository?: string | null;
+  deployment_branch?: string | null;
+  build_command?: string | null;
+  install_command?: string | null;
+  output_directory?: string | null;
+  storage_used_mb?: number | null;
+  last_deployment?: string | null;
+  total_visits?: number | null;
+  environment_variables?: Record<string, string>;
+  url?: string | null;
   created_at: string;
+  updated_at?: string;
 }
 
 export interface HostingDatabase {

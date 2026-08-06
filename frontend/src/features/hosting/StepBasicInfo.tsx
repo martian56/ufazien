@@ -1,4 +1,31 @@
-export default function StepBasicInfo({ formData, errors, handleInputChange, availableDomains }) {
+import type React from "react"
+
+interface WizardFormData {
+  name: string
+  subdomain?: string
+  description?: string
+  website_type?: string
+  domainOption?: string
+  selectedDomainId?: string
+  phpVersion?: string
+  ssl?: boolean
+  git_repository?: string
+  deployment_branch?: string
+  environment_variables?: { key: string; value: string }[]
+  deploymentMethod?: string
+  files?: File[]
+}
+
+type WizardErrors = Record<string, string | undefined>
+
+interface StepBasicInfoProps {
+  formData: WizardFormData
+  errors: WizardErrors
+  handleInputChange: (field: string, value: unknown) => void
+  availableDomains: { id: number; name: string }[]
+}
+
+export default function StepBasicInfo({ formData, errors, handleInputChange, availableDomains }: StepBasicInfoProps) {
   return (
             <div className="space-y-6">
               <div>

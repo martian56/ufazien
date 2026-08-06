@@ -1,6 +1,34 @@
 import { Edit, Terminal, Trash2 } from "lucide-react"
 import { getSSLStatus, getWebsiteUrl } from "./websiteFormat"
 
+import type { Website } from "../../utils/hostingApi"
+
+interface EnvVar {
+  id: string
+  key: string
+  value: string
+}
+
+interface WebsiteSettingsTabProps {
+  website: Website
+  editingSettings: boolean
+  onEditSettings: () => void
+  settingsForm: { name: string; description: string }
+  onSettingsChange: (field: "name" | "description", value: string) => void
+  onSaveSettings: () => void
+  onCancelSettings: () => void
+  envVars: EnvVar[]
+  editingEnvVars: boolean
+  onEditEnvVars: () => void
+  onEnvVarChange: (id: string, field: "key" | "value", value: string) => void
+  onAddEnvVar: () => void
+  onRemoveEnvVar: (id: string) => void
+  onSaveEnvVars: () => void
+  onCancelEnvVars: () => void
+  onDeleteWebsite: () => void
+}
+
+
 /** General settings, environment variables, SSL and the danger zone. */
 export default function WebsiteSettingsTab({
   website,
@@ -19,8 +47,8 @@ export default function WebsiteSettingsTab({
   onSaveEnvVars,
   onCancelEnvVars,
   onDeleteWebsite,
-}) {
-  const inputClass = (editing) =>
+}: WebsiteSettingsTabProps) {
+  const inputClass = (editing: boolean) =>
     `w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
       editing ? '' : 'bg-gray-50 cursor-not-allowed'
     }`

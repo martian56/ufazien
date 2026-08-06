@@ -1,3 +1,32 @@
+import type React from "react"
+
+interface WizardFormData {
+  name: string
+  subdomain?: string
+  description?: string
+  website_type?: string
+  domainOption?: string
+  selectedDomainId?: string
+  phpVersion?: string
+  ssl?: boolean
+  git_repository?: string
+  deployment_branch?: string
+  environment_variables?: { key: string; value: string }[]
+  deploymentMethod?: string
+  files?: File[]
+}
+
+type WizardErrors = Record<string, string | undefined>
+
+interface StepConfigurationProps {
+  formData: WizardFormData
+  errors: WizardErrors
+  handleInputChange: (field: string, value: unknown) => void
+  handleEnvironmentVariableAdd: () => void
+  handleEnvironmentVariableChange: (index: number, field: "key" | "value", value: string) => void
+  handleEnvironmentVariableRemove: (index: number) => void
+}
+
 export default function StepConfiguration({
   formData,
   errors,
@@ -5,7 +34,7 @@ export default function StepConfiguration({
   handleEnvironmentVariableAdd,
   handleEnvironmentVariableChange,
   handleEnvironmentVariableRemove,
-}) {
+}: StepConfigurationProps) {
   return (
             <div className="space-y-6">
               <div>
@@ -46,14 +75,14 @@ export default function StepConfiguration({
                       </button>
                     </div>
 
-                    {formData.environment_variables.length === 0 ? (
+                    {(formData.environment_variables ?? []).length === 0 ? (
                       <div className="text-center py-6 border-2 border-dashed border-gray-300 rounded-lg">
                         <p className="text-gray-500 text-sm">No environment variables added yet</p>
                         <p className="text-gray-400 text-xs mt-1">Click "Add Variable" to add configuration for your website</p>
                       </div>
                     ) : (
                       <div className="space-y-3">
-                        {formData.environment_variables.map((envVar, index) => (
+                        {(formData.environment_variables ?? []).map((envVar, index) => (
                           <div key={index} className="flex items-center space-x-2">
                             <input
                               type="text"
