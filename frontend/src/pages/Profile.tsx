@@ -32,8 +32,6 @@ import { api } from "../lib/api/client"
 import { getAccessToken } from "../lib/api/tokens"
 import { formatYearDisplay, getYearDisplay } from "../utils/majorUtils"
 
-const API_URL = import.meta.env.VITE_API_URL
-
 export default function Profile() {
   const { userId } = useParams()
   const navigate = useNavigate()

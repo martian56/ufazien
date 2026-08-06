@@ -7,7 +7,7 @@ import type { BlogPost } from "../../lib/api/endpoints/blog"
  * author is already a formatted name, and category is the category's name
  * rather than the nested object.
  */
-interface RelatedPostSummary {
+export interface RelatedPostSummary {
   id: number
   title: string
   author: string

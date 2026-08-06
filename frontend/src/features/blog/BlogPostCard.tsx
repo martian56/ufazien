@@ -7,8 +7,13 @@ import type { BlogPost } from "../../lib/api/endpoints/blog"
 
 interface BlogPostCardProps {
   post: BlogPost
-  onLike: () => void
-  onBookmark: () => void
+  /**
+   * These took no argument and were wired straight to onClick, so the page's
+   * handler received a PointerEvent where it expected a post id and posted to
+   * /blog/posts/[object PointerEvent]/like/. Liking from the list never worked.
+   */
+  onLike: (postId: number) => void
+  onBookmark: (postId: number) => void
   onPostClick: (id: number) => void
   onSelect?: (post: BlogPost) => void
   currentUser: { id?: number }
@@ -100,7 +105,7 @@ export default function BlogPostCard({ post, onLike, onBookmark, onPostClick, on
       <div className="flex items-center justify-between pt-4 border-t border-gray-200">
         <div className="flex items-center gap-4">
           <button
-            onClick={onLike}
+            onClick={() => onLike(post.id)}
             className={`flex items-center gap-2 px-3 py-1 rounded-lg transition-colors ${
               post.is_liked
                 ? "text-red-600 bg-red-50 hover:bg-red-100"
@@ -126,7 +131,7 @@ export default function BlogPostCard({ post, onLike, onBookmark, onPostClick, on
         </div>
 
         <button
-          onClick={onBookmark}
+          onClick={() => onBookmark(post.id)}
           className={`p-2 rounded-lg transition-colors ${
             post.is_bookmarked
               ? "text-blue-600 bg-blue-50 hover:bg-blue-100"

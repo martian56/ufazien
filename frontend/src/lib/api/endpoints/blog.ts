@@ -9,6 +9,8 @@ export interface BlogCategory {
 export interface BlogTag {
   id: number
   name: string
+  /** Annotated by the trending view; absent from a plain tag list. */
+  post_count?: number
 }
 
 /**
@@ -70,6 +72,12 @@ export interface BlogPostInput {
   published_at?: string | null
 }
 
+export interface CategoryWithCount {
+  id: number
+  name: string
+  post_count: number
+}
+
 /** Counted from your own posts. Nothing here is estimated or made up. */
 export interface WritingStats {
   streak_days: number
@@ -117,6 +125,18 @@ export const blogApi = {
 
   categories: () => api.get<BlogCategory[] | Paginated<BlogCategory>>('/blog/categories/'),
   tags: () => api.get<BlogTag[] | Paginated<BlogTag>>('/blog/tags/'),
+
+  /**
+   * Sidebar panels. Each has its own view rather than a filter on the list,
+   * because each counts something the list does not.
+   */
+  trendingTags: (limit = 8) => api.get<BlogTag[]>('/blog/tags/trending/', { params: { limit } }),
+  popularPosts: (limit = 5) => api.get<BlogPost[]>('/blog/posts/popular/', { params: { limit } }),
+  categoriesWithCounts: () => api.get<CategoryWithCount[]>('/blog/categories/with-counts/'),
+
+  /** Posts this user has bookmarked. The path takes a user id, or "me". */
+  bookmarks: (userId: number | string = 'me', params: Params = {}) =>
+    api.get<Paginated<BlogPost>>(`/blog/bookmarks/${userId}/`, { params }),
 
   comments: (postId: number | string) => api.get(`/blog/posts/${postId}/comments/`),
   addComment: (postId: number | string, content: string, parent?: number | null) =>

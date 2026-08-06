@@ -44,8 +44,6 @@ import { useWebsites } from "../../hooks/useWebsites"
 import { useDatabases } from "../../hooks/useDatabases"
 import { useDashboard } from "../../hooks/useDashboard"
 
-const API_URL = import.meta.env.VITE_API_URL
-
 export default function Hosting() {
   const navigate = useNavigate()
   const { subscription, getStorageUsage, getBandwidthUsage, loading: subLoading } = useSubscription()

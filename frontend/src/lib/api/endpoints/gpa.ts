@@ -37,6 +37,44 @@ export interface PeriodAverage {
   credits?: number
 }
 
+/** One row of the calculator: a period name and the mark typed against it. */
+export interface AverageRow {
+  id: number
+  period: string
+  average: string
+  gradeType: string
+}
+
+/** What /gpa/input-state/ stores, so a half-typed calculation survives a reload. */
+export interface InputState {
+  active_tab?: string
+  semester_data?: AverageRow[]
+  yearly_data?: AverageRow[]
+  updated_at?: string | null
+}
+
+export interface GpaStatistics {
+  /** Present instead of `statistics` when the user has no records yet. */
+  message?: string
+  statistics?: {
+    highest_gpa?: number
+    lowest_gpa?: number
+    average_gpa?: number
+    total_calculations?: number
+    total_credits?: number
+  }
+  recent_calculations?: SavedCalculation[]
+  semester_progress?: { name: string; gpa: number; credits: number; date: string }[]
+}
+
+export interface UpdateGpaResult {
+  success: boolean
+  overall_gpa: number
+  total_credits: number
+  user_gpa_id: number
+  message: string
+}
+
 export const gpaApi = {
   list: () => api.get<Paginated<SavedCalculation> | SavedCalculation[]>('/gpa/calculations/'),
 
@@ -56,18 +94,18 @@ export const gpaApi = {
 
   remove: (id: number) => api.delete(`/gpa/calculations/${id}/`),
 
-  statistics: () => api.get('/gpa/statistics/'),
+  statistics: () => api.get<GpaStatistics>('/gpa/statistics/'),
 
   /** Autosave: one record per type, overwritten each time. */
   updateUserGpa: (periodType: string, periodAverages: PeriodAverage[]) =>
-    api.post('/gpa/update-user-gpa/', {
+    api.post<UpdateGpaResult>('/gpa/update-user-gpa/', {
       period_type: periodType,
       period_averages: periodAverages,
     }),
 
-  getInputState: () => api.get('/gpa/input-state/'),
+  getInputState: () => api.get<InputState>('/gpa/input-state/'),
 
-  saveInputState: (activeTab: string, semesterData: unknown[], yearlyData: unknown[]) =>
+  saveInputState: (activeTab: string, semesterData: AverageRow[], yearlyData: AverageRow[]) =>
     api.post('/gpa/input-state/', {
       active_tab: activeTab,
       semester_data: semesterData,

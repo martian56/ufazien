@@ -27,8 +27,6 @@ import { Textarea } from "../components/ui/textarea"
 import { useToast, ToastContainer } from "../hooks/useToast"
 import { api as apiClient } from "../lib/api/client"
 
-const API_URL = import.meta.env.VITE_API_URL
-
 interface FeedbackType {
   value: string
   label: string

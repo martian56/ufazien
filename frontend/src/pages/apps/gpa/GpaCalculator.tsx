@@ -5,6 +5,7 @@ import { tabFor, toAverageRows } from "../../../features/gpa/loadCalculation"
 import { api } from "../../../lib/api/client"
 import { errorMessage } from "../../../lib/api/errors"
 import { gpaApi } from "../../../lib/api/endpoints/gpa"
+import { toList } from "../../../lib/api/types"
 import AverageRow from "../../../features/gpa/AverageRow"
 import ConversionTableModal from "../../../features/gpa/ConversionTableModal"
 import { useNavigate } from "react-router-dom"
@@ -30,6 +31,21 @@ import {
   X,
 } from "lucide-react"
 import SideBar from "../../../components/ui/SideBar"
+import type { AverageRow as AverageRowData, GpaStatistics, SavedCalculation } from "../../../lib/api/endpoints/gpa"
+
+interface Toast {
+  id: number
+  message: string
+  type: string
+}
+
+/** Only what this page reads off the profile; never the email address. */
+interface GpaProfile {
+  id?: number
+  username?: string
+  full_name?: string
+  gpa?: number | string | null
+}
 
 
 export default function GpaCalculator() {
@@ -56,34 +72,36 @@ export default function GpaCalculator() {
       }
     `
     document.head.appendChild(style)
-    return () => document.head.removeChild(style)
+    return () => {
+      document.head.removeChild(style)
+    }
   }, [])
   
   // Separate state for semester and yearly averages
-  const [semesterAverages, setSemesterAverages] = useState([
+  const [semesterAverages, setSemesterAverages] = useState<AverageRowData[]>([
     { id: 1, period: "", average: "", gradeType: "ufaz" }
   ])
-  const [yearlyAverages, setYearlyAverages] = useState([
+  const [yearlyAverages, setYearlyAverages] = useState<AverageRowData[]>([
     { id: 1, period: "", average: "", gradeType: "ufaz" }
   ])
   
   // Saved calculations and statistics
-  const [savedCalculations, setSavedCalculations] = useState([])
-  const [statistics, setStatistics] = useState(null)
+  const [savedCalculations, setSavedCalculations] = useState<SavedCalculation[]>([])
+  const [statistics, setStatistics] = useState<GpaStatistics | null>(null)
   // "history" is a view, not a calculator. This remembers which set of
   // numbers is on screen so the saved panel knows what it is saving.
   const [lastCalculatorTab, setLastCalculatorTab] = useState("semester")
-  const [userProfile, setUserProfile] = useState(null)
+  const [userProfile, setUserProfile] = useState<GpaProfile | null>(null)
   
   // UI state
   const [showConversionTable, setShowConversionTable] = useState(false)
-  const [notifications, setNotifications] = useState([])
+  const [notifications, setNotifications] = useState<Toast[]>([])
 
   // Auth and API helpers
   const getAuthToken = () => localStorage.getItem("access")
 
   // Notification system
-  const addNotification = (message, type = 'success') => {
+  const addNotification = (message: string, type = 'success') => {
     const id = Date.now()
     const notification = { id, message, type }
     setNotifications(prev => [...prev, notification])
@@ -94,11 +112,11 @@ export default function GpaCalculator() {
     }, 4000)
   }
 
-  const removeNotification = (id) => {
+  const removeNotification = (id: number) => {
     setNotifications(prev => prev.filter(notif => notif.id !== id))
   }
 
-  const apiRequest = async (method, url, data = null) => {
+  const apiRequest = async (method: string, url: string, data: unknown = null) => {
     try {
       if (method === "GET") return await api.get(url)
       if (method === "POST") return await api.post(url, data ?? undefined)
@@ -121,8 +139,11 @@ export default function GpaCalculator() {
 
   // Load academic structure and user data
   const loadUserData = async () => {
-    const userData = await apiRequest("GET", "/auth/user/")
-    if (userData) setUserProfile(userData)
+    try {
+      setUserProfile(await api.get<GpaProfile>("/auth/user/"))
+    } catch (error) {
+      addNotification(errorMessage(error, "Could not load your profile."), "error")
+    }
   }
 
   /**
@@ -170,7 +191,7 @@ export default function GpaCalculator() {
     }
   }
 
-  const deleteCalculation = async (calc) => {
+  const deleteCalculation = async (calc: SavedCalculation) => {
     if (!window.confirm(`Delete "${calc.name}"?`)) return
     try {
       await gpaApi.remove(calc.id)
@@ -181,7 +202,7 @@ export default function GpaCalculator() {
     }
   }
 
-  const loadCalculation = (calc) => {
+  const loadCalculation = (calc: SavedCalculation) => {
     const rows = toAverageRows(calc)
     const tab = tabFor(calc)
     if (tab === "yearly") setYearlyAverages(rows)
@@ -193,14 +214,20 @@ export default function GpaCalculator() {
 
   // Load saved calculations
   const loadSavedCalculations = async () => {
-    const data = await apiRequest("GET", "/gpa/calculations/")
-    if (data) setSavedCalculations(data.results || data)
+    try {
+      setSavedCalculations(toList(await gpaApi.list()))
+    } catch (error) {
+      addNotification(errorMessage(error, "Could not load your saved calculations."), "error")
+    }
   }
 
   // Load statistics
   const loadStatistics = async () => {
-    const data = await apiRequest("GET", "/gpa/statistics/")
-    if (data) setStatistics(data)
+    try {
+      setStatistics(await gpaApi.statistics())
+    } catch (error) {
+      addNotification(errorMessage(error, "Could not load your statistics."), "error")
+    }
   }
 
   // Save user input state to database
@@ -208,11 +235,7 @@ export default function GpaCalculator() {
     setInputSaving(true)
     try {
       // Always save the current tab and data state
-      await apiRequest("POST", "/gpa/input-state/", {
-        active_tab: activeTab,
-        semester_data: semesterAverages,
-        yearly_data: yearlyAverages
-      })
+      await gpaApi.saveInputState(activeTab, semesterAverages, yearlyAverages)
     } catch (error) {
       console.error("Failed to save input state:", error)
     } finally {
@@ -223,7 +246,7 @@ export default function GpaCalculator() {
   // Load user input state from database
   const loadInputState = async () => {
     try {
-      const data = await apiRequest("GET", "/gpa/input-state/")
+      const data = await gpaApi.getInputState()
       if (data) {
         // Restore active tab
         if (data.active_tab) {
@@ -251,7 +274,7 @@ export default function GpaCalculator() {
   }
 
   // Auto-save GPA calculation and update user profile
-  const autoSaveGPA = async (gpaData) => {
+  const autoSaveGPA = async (gpaData: { totalPeriods: number }) => {
     if (gpaData.totalPeriods === 0) return
 
     const currentAverages = activeTab === "semester" ? semesterAverages : yearlyAverages
@@ -265,13 +288,10 @@ export default function GpaCalculator() {
       }))
 
       // Save using the simplified endpoint
-      const saveData = await apiRequest("POST", "/gpa/update-user-gpa/", {
-        period_type: activeTab,
-        period_averages: periodAverages
-      })
+      const saveData = await gpaApi.updateUserGpa(activeTab, periodAverages)
 
-      if (saveData && saveData.success) {
-        setUserProfile(prev => ({ ...prev, gpa: saveData.overall_gpa }))
+      if (saveData?.success) {
+        setUserProfile(prev => ({ ...(prev ?? {}), gpa: saveData.overall_gpa }))
         addNotification(`GPA updated to ${saveData.overall_gpa}!`, "success")
 
         // Refresh statistics, and the saved list: only statistics was
@@ -374,7 +394,7 @@ export default function GpaCalculator() {
     }])
   }
 
-  const removeAverage = (id) => {
+  const removeAverage = (id: number) => {
     const currentAverages = activeTab === "semester" ? semesterAverages : yearlyAverages
     const setCurrentAverages = activeTab === "semester" ? setSemesterAverages : setYearlyAverages
     
@@ -382,7 +402,7 @@ export default function GpaCalculator() {
     setCurrentAverages(newAverages)
   }
 
-  const updateAverage = (id, field, value) => {
+  const updateAverage = (id: number, field: 'period' | 'average' | 'gradeType', value: string) => {
     const currentAverages = activeTab === "semester" ? semesterAverages : yearlyAverages
     const setCurrentAverages = activeTab === "semester" ? setSemesterAverages : setYearlyAverages
     
@@ -396,7 +416,7 @@ export default function GpaCalculator() {
   }
 
   // Trigger auto-save when GPA changes (with better conditions)
-  const triggerAutoSave = (gpaData) => {
+  const triggerAutoSave = (gpaData: { totalPeriods: number; gpa: number }) => {
     // Only save if we have meaningful data and a valid GPA
     if (gpaData.totalPeriods > 0 && gpaData.gpa > 0) {
       // Debounce auto-save to avoid too many API calls
@@ -423,7 +443,7 @@ export default function GpaCalculator() {
   }
 
   // Get GPA status
-  const getGpaStatus = (gpa) => {
+  const getGpaStatus = (gpa: number) => {
     if (gpa >= 3.7) return { status: "Excellent", color: "text-green-600", bgColor: "bg-green-50" }
     if (gpa >= 3.0) return { status: "Good", color: "text-blue-600", bgColor: "bg-blue-50" }
     if (gpa >= 2.0) return { status: "Satisfactory", color: "text-yellow-600", bgColor: "bg-yellow-50" }
@@ -432,7 +452,7 @@ export default function GpaCalculator() {
   }
 
   // Get letter grade for display
-  const getLetterGrade = (gpa) => {
+  const getLetterGrade = (gpa: number) => {
     if (gpa >= 3.85) return "A+"
     else if (gpa >= 3.7) return "A"
     else if (gpa >= 3.3) return "A-"
@@ -749,7 +769,7 @@ export default function GpaCalculator() {
                             <span className="font-semibold">New GPA: {gpaData.gpa}</span>
                           </div>
                           <div className="text-xs mt-1">
-                            {gpaData.gpa > userProfile.gpa ? "⬆ Improvement!" : "⬇ Lower than current"}
+                            {gpaData.gpa > Number(userProfile.gpa) ? "⬆ Improvement!" : "⬇ Lower than current"}
                           </div>
                         </div>
                       </div>
