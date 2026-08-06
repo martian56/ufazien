@@ -16,7 +16,7 @@ const MAX_WIDTH = 16
 const MAX_HEIGHT = 8.4
 
 /** Screen size that fits the video's aspect inside the wall's budget. */
-function fitScreen(aspect) {
+function fitScreen(aspect: number): [number, number] {
   const width = Math.min(MAX_WIDTH, MAX_HEIGHT * aspect)
   return [width, width / aspect]
 }
@@ -26,7 +26,7 @@ function fitScreen(aspect) {
  * cone: a projector throws the shape of its image, and a cone gives away that
  * the beam is a prop.
  */
-function useBeamGeometry(width, height, apex) {
+function useBeamGeometry(width: number, height: number, apex: [number, number, number]) {
   return useMemo(() => {
     const halfWidth = width / 2
     const halfHeight = height / 2
@@ -53,7 +53,7 @@ function useBeamGeometry(width, height, apex) {
 }
 
 /** Reads the real aspect ratio, which is only known once the video has arrived. */
-function useVideoAspect(video) {
+function useVideoAspect(video: HTMLVideoElement | null) {
   const [aspect, setAspect] = useState(16 / 9)
 
   useEffect(() => {
@@ -75,7 +75,7 @@ function useVideoAspect(video) {
   return aspect
 }
 
-function useVideoTexture(video) {
+function useVideoTexture(video: HTMLVideoElement | null) {
   const texture = useMemo(() => {
     if (!video) return null
     const created = new THREE.VideoTexture(video)
@@ -93,13 +93,18 @@ function useVideoTexture(video) {
 // Hangs clear of the lecture board rather than right against it. The board's
 // face is at z -19.45, and sitting on top of it left no depth to separate the
 // screen from its own frame, which is what made the picture flicker.
-export default function ProjectorScreen({ video, position = [0, 5.2, -19.15] }) {
+interface ProjectorScreenProps {
+  video: HTMLVideoElement | null
+  position?: [number, number, number]
+}
+
+export default function ProjectorScreen({ video, position = [0, 5.2, -19.15] }: ProjectorScreenProps) {
   const aspect = useVideoAspect(video)
   const texture = useVideoTexture(video)
   const [width, height] = fitScreen(aspect)
 
   // Ceiling mount, in front of and above the screen.
-  const lens = useMemo(
+  const lens = useMemo<[number, number, number]>(
     () => [0, 8.7 - position[1], -7 - position[2]],
     [position],
   )

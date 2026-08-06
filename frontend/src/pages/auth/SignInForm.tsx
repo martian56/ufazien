@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import type React from "react"
 import { Eye, EyeOff, Mail, Lock } from "lucide-react"
 import { Button } from "../../components/ui/button"
 import { Input } from "../../components/ui/input"
@@ -11,6 +12,13 @@ import { useNavigate, useSearchParams } from "react-router-dom"
 import { api, ApiError } from "../../lib/api/client"
 import { setTokens } from "../../lib/api/tokens"
 
+/** What /auth/login/ answers with. */
+interface LoginResponse {
+  access?: string
+  refresh?: string
+  user?: { id: number; username: string }
+}
+
 export default function SignInForm() {
   const [formData, setFormData] = useState({
     email: "",
@@ -18,7 +26,7 @@ export default function SignInForm() {
     rememberMe: false,
   })
   const [showPassword, setShowPassword] = useState(false)
-  const [errors, setErrors] = useState({})
+  const [errors, setErrors] = useState<{ email?: string; password?: string }>({})
   const [apiError, setApiError] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [success, setSuccess] = useState(false)
@@ -26,7 +34,7 @@ export default function SignInForm() {
   const [searchParams] = useSearchParams()
 
   const validateForm = () => {
-    const newErrors = {}
+    const newErrors: { email?: string; password?: string } = {}
 
     if (!formData.email) {
       newErrors.email = "Email is required"
@@ -44,7 +52,7 @@ export default function SignInForm() {
     return Object.keys(newErrors).length === 0
   }
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setApiError("")
     setSuccess(false)
@@ -55,7 +63,7 @@ export default function SignInForm() {
     try {
       // anonymous: logging in must not send a stale token, and a 401 here is
       // the answer rather than something to retry after a refresh.
-      const data = await api.post(
+      const data = await api.post<LoginResponse>(
         "/auth/login/",
         { email: formData.email, password: formData.password },
         { anonymous: true },
@@ -87,9 +95,9 @@ export default function SignInForm() {
     }
   }
 
-  const handleInputChange = (field, value) => {
+  const handleInputChange = (field: "email" | "password" | "rememberMe", value: string | boolean) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
-    if (errors[field]) {
+    if (field !== "rememberMe" && errors[field]) {
       setErrors((prev) => ({ ...prev, [field]: "" }))
     }
   }
