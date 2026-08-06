@@ -3,7 +3,7 @@ import { Trash2 } from "lucide-react"
 interface AverageRowProps {
   average: { id: number; period: string; average: string; gradeType: string }
   index: number
-  onUpdate: (id: number, field: string, value: string) => void
+  onUpdate: (id: number, field: 'period' | 'average' | 'gradeType', value: string) => void
   onRemove: (id: number) => void
   canRemove: boolean
   activeTab: string

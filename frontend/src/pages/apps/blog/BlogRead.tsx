@@ -24,12 +24,25 @@ import RelatedReading from "../../../features/blog/RelatedReading"
 import ShareModal from "../../../features/blog/ShareModal"
 import ReportModal from "../../../features/blog/ReportModal"
 import { copyText } from "../../../lib/clipboard"
-import { apiFetch } from "../../../lib/api/compat"
+import { blogApi } from "../../../lib/api/endpoints/blog"
+import type { BlogPost } from "../../../lib/api/endpoints/blog"
+import type { RelatedPostSummary } from "../../../features/blog/RelatedReading"
+import type { BlogComment } from "../../../features/blog/BlogComments"
+import { logger } from "../../../lib/logger"
+import { api } from "../../../lib/api/client"
+import { toList } from "../../../lib/api/types"
+
+/** Just what the header shows. The API never sends another user's email. */
+interface ReaderProfile {
+  id: number | null
+  name: string
+  avatar: string
+  year: string
+  major: string
+}
 import { isAuthenticated } from "../../../lib/api/tokens"
 import { processblogContent, extractPlainText, calculateReadTime } from "../../../utils/contentProcessor"
 import { useToast, ToastContainer } from "../../../hooks/useToast"
-
-const API_URL = import.meta.env.VITE_API_URL
 
 // Helper function to strip HTML tags for text processing
 export default function BlogRead() {
@@ -41,9 +54,9 @@ export default function BlogRead() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
 
   // Core state
-  const [post, setPost] = useState(null)
+  const [post, setPost] = useState<BlogPost | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+  const [error, setError] = useState<string | null>(null)
   const [isLiked, setIsLiked] = useState(false)
   const [isBookmarked, setIsBookmarked] = useState(false)
   const [isFollowing, setIsFollowing] = useState(false)
@@ -51,9 +64,9 @@ export default function BlogRead() {
   const [views, setViews] = useState(0)
 
   // Comments state
-  const [comments, setComments] = useState([])
+  const [comments, setComments] = useState<BlogComment[]>([])
   const [newComment, setNewComment] = useState("")
-  const [replyTo, setReplyTo] = useState(null)
+  const [replyTo, setReplyTo] = useState<number | null>(null)
   const [showComments, setShowComments] = useState(true)
   const [commentsLoading, setCommentsLoading] = useState(false)
 
@@ -61,7 +74,7 @@ export default function BlogRead() {
   const [readingProgress, setReadingProgress] = useState(0)
   const [estimatedReadTime, setEstimatedReadTime] = useState(0)
   const [actualReadTime, setActualReadTime] = useState(0)
-  const [startTime, setStartTime] = useState(null)
+  const [startTime, setStartTime] = useState<number | null>(null)
   const [isReading, setIsReading] = useState(false)
 
   // Customization state
@@ -75,7 +88,7 @@ export default function BlogRead() {
   // Text-to-speech state
   const [isPlaying, setIsPlaying] = useState(false)
   const [speechRate, setSpeechRate] = useState(1)
-  const [speechVoice, setSpeechVoice] = useState(null)
+  const [speechVoice, setSpeechVoice] = useState<SpeechSynthesisVoice | null>(null)
   const [currentPosition, setCurrentPosition] = useState(0)
   const [speechSupported, setSpeechSupported] = useState(false)
 
@@ -84,13 +97,12 @@ export default function BlogRead() {
   const [showReportModal, setShowReportModal] = useState(false)
 
   // Related content
-  const [relatedPosts, setRelatedPosts] = useState([])
-  const [authorPosts, setAuthorPosts] = useState([])
+  const [relatedPosts, setRelatedPosts] = useState<RelatedPostSummary[]>([])
+  const [authorPosts, setAuthorPosts] = useState<RelatedPostSummary[]>([])
   const [authorPostsCount, setAuthorPostsCount] = useState(0)
-  const [similarTags, setSimilarTags] = useState([])
 
   // User state
-  const [currentUser, setCurrentUser] = useState({
+  const [currentUser, setCurrentUser] = useState<ReaderProfile>({
     id: null,
     name: "",
     avatar: "/placeholder.svg?height=40&width=40",
@@ -99,9 +111,9 @@ export default function BlogRead() {
   })
 
   // Refs
-  const contentRef = useRef(null)
-  const speechRef = useRef(null)
-  const progressRef = useRef(null)
+  const contentRef = useRef<HTMLDivElement>(null)
+  const speechRef = useRef<SpeechSynthesisUtterance | null>(null)
+  const progressRef = useRef<HTMLDivElement>(null)
 
   // Enhance blog content after rendering
   useEffect(() => {
@@ -109,7 +121,7 @@ export default function BlogRead() {
       // Content is already enhanced by contentProcessor, 
       // so we just handle any additional dynamic features here
       const images = contentRef.current.querySelectorAll('img');
-      images.forEach(img => {
+      images.forEach((img) => {
         if (!img.complete) {
           img.style.opacity = '0.5';
           img.onload = () => {
@@ -137,15 +149,21 @@ export default function BlogRead() {
       try {
         if (!isAuthenticated()) return
 
-        const res = await apiFetch(`/auth/user/me/`)
-        if (res.ok) {
-          const userData = await res.json()
+        const userData = await api.get<{
+          id: number
+          first_name?: string
+          last_name?: string
+          avatar_url?: string | null
+          year?: string
+          major?: string
+        }>('/auth/user/me/')
+        {
           setCurrentUser({
             id: userData.id,
-            name: `${userData.first_name} ${userData.last_name}`,
+            name: `${userData.first_name ?? ""} ${userData.last_name ?? ""}`.trim(),
             avatar: userData.avatar_url || "/placeholder.svg?height=40&width=40",
-            year: userData.year,
-            major: userData.major,
+            year: userData.year ?? "",
+            major: userData.major ?? "",
           })
         }
       } catch (error) {
@@ -162,13 +180,7 @@ export default function BlogRead() {
       try {
         setLoading(true)
         setError(null)
-        const response = await apiFetch(`/blog/posts/${id}/`)
-
-        if (!response.ok) {
-          throw new Error("Failed to fetch blog post")
-        }
-
-        const data = await response.json()
+        const data = await blogApi.get(id!)
 
         setPost(data)
         setLikes(data.likes_count || 0)
@@ -187,7 +199,7 @@ export default function BlogRead() {
         }
 
         // Set comments from API response
-        setComments(data.comments || [])
+        setComments((data.comments as BlogComment[] | undefined) ?? [])
 
         // Load related posts by tags
         if (data.tags && data.tags.length > 0) {
@@ -219,19 +231,10 @@ export default function BlogRead() {
       try {
         if (!isAuthenticated()) return
 
-        const response = await apiFetch(`/blog/posts/${post.id}/view/`, { method: "POST" })
-
-        if (response.ok) {
-          const data = await response.json()
-          
-          // Update the views count in the UI
+        const data = await blogApi.trackView(post.id) as { views?: number }
+        if (typeof data?.views === "number") {
           setViews(data.views)
-          
-          // Optionally update the post object as well
-          setPost(prevPost => ({
-            ...prevPost,
-            views: data.views
-          }))
+          setPost((prevPost) => (prevPost ? { ...prevPost, views: data.views! } : prevPost))
         }
       } catch (error) {
         console.error("Error tracking post view:", error)
@@ -252,101 +255,72 @@ export default function BlogRead() {
         return
       }
 
-      const response = await apiFetch(`/auth/user/${post.author.id}/follow/`, { method: "POST" })
+      const data = await api.post<{ following: boolean; followers_count: number }>(
+        `/auth/user/${post.author.id}/follow/`
+      )
 
-      if (response.ok) {
-        const data = await response.json()
-        
-        setIsFollowing(data.following)
-        
-        // Update the post object with new followers count
-        setPost(prevPost => ({
-          ...prevPost,
-          author: {
-            ...prevPost.author,
-            followers_count: data.followers_count
-          }
-        }))
-      }
+      setIsFollowing(data.following)
+      setPost((prevPost) =>
+        prevPost
+          ? {
+              ...prevPost,
+              author: { ...prevPost.author, followers_count: data.followers_count },
+            }
+          : prevPost
+      )
     } catch (error) {
       console.error("Error toggling follow:", error)
     }
   }
 
-  // Load related posts by tags
-  const loadRelatedPosts = async (tags, currentPostId) => {
-    try {
-      // Get posts with similar tags
-      const tagQuery = tags[0] // Use first tag for simplicity
-      const response = await apiFetch(`/blog/posts/?tag=${tagQuery}`)
+  /**
+   * A post as the sidebar shows it: the author flattened to a display name,
+   * because RelatedReading renders a string there rather than a user object.
+   */
+  const toSummary = (item: BlogPost): RelatedPostSummary => ({
+    id: item.id,
+    title: item.title,
+    // `a + ' ' + b` left a bare space for an author with no name set.
+    author:
+      `${item.author?.first_name ?? ""} ${item.author?.last_name ?? ""}`.trim() ||
+      item.author?.username ||
+      "Someone",
+    read_time: item.read_time,
+    likes: item.likes_count,
+    category: item.category_name,
+  })
 
-      if (response.ok) {
-        const data = await response.json()
-        const filtered = data.results
-          .filter(post => post.id !== currentPostId)
+  // Load related posts by tags
+  const loadRelatedPosts = async (tags: string[], currentPostId: number) => {
+    try {
+      const data = await blogApi.list({ tag: tags[0] })
+      setRelatedPosts(
+        (data.results ?? [])
+          .filter((item) => item.id !== currentPostId)
           .slice(0, 3)
-          .map(post => ({
-            id: post.id,
-            title: post.title,
-            author: `${post.author.first_name} ${post.author.last_name}`,
-            read_time: post.read_time,
-            likes: post.likes_count,
-            category: post.category_name,
-          }))
-        setRelatedPosts(filtered)
-      }
+          .map(toSummary)
+      )
     } catch (error) {
-      console.error("Error loading related posts:", error)
+      logger.error("Error loading related posts:", error)
     }
   }
 
   // Load author's other posts
-  const loadAuthorPosts = async (authorId, currentPostId) => {
+  const loadAuthorPosts = async (authorId: number, currentPostId: number) => {
     try {
-      const response = await apiFetch(`/blog/posts/?by=${authorId}`)
-
-      if (response.ok) {
-        const data = await response.json()
-        // Store the total count of author's posts
-        setAuthorPostsCount(data.count || 0)
-        
-        const filtered = data.results
-          .filter(post => post.id !== currentPostId)
+      const data = await blogApi.list({ by: authorId })
+      setAuthorPostsCount(data.count ?? 0)
+      setAuthorPosts(
+        (data.results ?? [])
+          .filter((item) => item.id !== currentPostId)
           .slice(0, 3)
-          .map(post => ({
-            id: post.id,
-            title: post.title,
-            author: `${post.author.first_name} ${post.author.last_name}`,
-            read_time: post.read_time,
-            likes: post.likes_count,
-            category: post.category_name,
-          }))
-        setAuthorPosts(filtered)
-      }
+          .map(toSummary)
+      )
     } catch (error) {
-      console.error("Error loading author posts:", error)
+      logger.error("Error loading author posts:", error)
     }
   }
 
-  // Load trending tags
-  const loadSimilarTags = async () => {
-    try {
-      const response = await apiFetch(`/blog/tags/`)
-
-      if (response.ok) {
-        const data = await response.json()
-        const tags = data.results.slice(0, 10).map(tag => tag.name)
-        setSimilarTags(tags)
-      }
-    } catch (error) {
-      console.error("Error loading tags:", error)
-    }
-  }
-
-  // Load trending tags on component mount
-  useEffect(() => {
-    loadSimilarTags()
-  }, [])
 
   // Track reading progress
   useEffect(() => {
@@ -407,34 +381,28 @@ export default function BlogRead() {
   // Social actions
   const handleLike = async () => {
     try {
-      const response = await apiFetch(`/blog/posts/${id}/like/`, { method: "POST" })
-
-      if (response.ok) {
-        setIsLiked(!isLiked)
-        setLikes((prev) => (isLiked ? prev - 1 : prev + 1))
-      }
+      await blogApi.toggleLike(id!)
+      setIsLiked(!isLiked)
+      setLikes((prev) => (isLiked ? prev - 1 : prev + 1))
     } catch (error) {
-      console.error("Error liking post:", error)
+      logger.error("Error liking post:", error)
     }
   }
 
   const handleBookmark = async () => {
     try {
-      const response = await apiFetch(`/blog/posts/${id}/bookmark/`, { method: "POST" })
-
-      if (response.ok) {
-        setIsBookmarked(!isBookmarked)
-      }
+      await blogApi.toggleBookmark(id!)
+      setIsBookmarked(!isBookmarked)
     } catch (error) {
-      console.error("Error bookmarking post:", error)
+      logger.error("Error bookmarking post:", error)
     }
   }
 
-  const handleShare = (platform) => {
+  const handleShare = (platform: string) => {
     const url = window.location.href
     const title = post?.title || "Check out this article"
 
-    const shareUrls = {
+    const shareUrls: Record<string, string> = {
       twitter: `https://twitter.com/intent/tweet?text=${encodeURIComponent(title)}&url=${encodeURIComponent(url)}`,
       facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`,
       linkedin: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`,
@@ -458,23 +426,12 @@ export default function BlogRead() {
 
     try {
       setCommentsLoading(true)
-      const response = await apiFetch(`/blog/posts/${id}/comments/`, { method: "POST", body: {
-          content: newComment,
-          parent: replyTo,
-        } })
+      // A failed post used to fall straight through: the box kept its text,
+      // nothing appeared, and nothing said why. The client throws now.
+      await blogApi.addComment(id!, newComment, replyTo)
 
-      if (!response.ok) {
-        // A failed post used to fall straight through: the box kept its text,
-        // nothing appeared, and nothing said why.
-        toast.error("Your comment could not be posted.")
-        return
-      }
-
-      const postResponse = await apiFetch(`/blog/posts/${id}/`)
-      if (postResponse.ok) {
-        const postData = await postResponse.json()
-        setComments(postData.comments || [])
-      }
+      const postData = await blogApi.get(id!)
+      setComments((postData.comments as BlogComment[] | undefined) ?? [])
 
       setNewComment("")
       setReplyTo(null)
@@ -485,20 +442,14 @@ export default function BlogRead() {
     }
   }
 
-  const handleCommentLike = async (commentId) => {
+  const handleCommentLike = async (commentId: number) => {
     try {
-      const response = await apiFetch(`/blog/comments/${commentId}/like/`, { method: "POST" })
-
-      if (response.ok) {
-        // Refresh comments by fetching the post again
-        const postResponse = await apiFetch(`/blog/posts/${id}/`)
-        if (postResponse.ok) {
-          const postData = await postResponse.json()
-          setComments(postData.comments || [])
-        }
-      }
+      await api.post(`/blog/comments/${commentId}/like/`)
+      // Refresh the comments by fetching the post again.
+      const postData = await blogApi.get(id!)
+      setComments((postData.comments as BlogComment[] | undefined) ?? [])
     } catch (error) {
-      console.error("Error liking comment:", error)
+      logger.error("Error liking comment:", error)
     }
   }
 
@@ -595,7 +546,10 @@ export default function BlogRead() {
                   {post.category_name || "General"}
                 </div>
 
-                {post.featured && (
+                {/* The serializer field is is_featured; `post.featured` is
+                    undefined, so this badge has never appeared on a featured
+                    post. */}
+                {post.is_featured && (
                   <div className="flex items-center space-x-1 px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">
                     <Star className="w-3 h-3" />
                     <span>Featured</span>
@@ -728,7 +682,7 @@ export default function BlogRead() {
                 <div className="flex items-center space-x-4 text-sm text-gray-500">
                   <span className="flex items-center space-x-1">
                     <Calendar className="w-4 h-4" />
-                    <span>{new Date(post.published_at).toLocaleDateString()}</span>
+                    <span>{new Date(post.published_at ?? post.created_at ?? 0).toLocaleDateString()}</span>
                   </span>
                   {post.updated_at && post.updated_at !== post.created_at && (
                     <span className="text-xs">Updated {new Date(post.updated_at).toLocaleDateString()}</span>
@@ -900,7 +854,7 @@ export default function BlogRead() {
                 <div className="flex items-center space-x-4 text-sm text-gray-500">
                   <span>{authorPostsCount || 0} posts</span>
                   <span>{post.author?.followers_count || 0} followers</span>
-                  {post.author?.gpa && post.author.gpa > 0 && (
+                  {Number(post.author?.gpa) > 0 && (
                     <span>GPA: {post.author.gpa}</span>
                   )}
                 </div>

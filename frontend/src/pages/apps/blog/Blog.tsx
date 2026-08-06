@@ -13,9 +13,25 @@ import { formatYearWithOrdinal } from "../../../utils/majorUtils"
 import BlogPostCard from "../../../features/blog/BlogPostCard"
 import { createExcerpt } from "../../../features/blog/createExcerpt"
 import DraftList from "../../../features/blog/DraftList"
-import { apiFetch } from "../../../lib/api/compat"
+import { blogApi } from "../../../lib/api/endpoints/blog"
+import type { BlogCategory, BlogPost, BlogTag, CategoryWithCount } from "../../../lib/api/endpoints/blog"
+import { api } from "../../../lib/api/client"
+import { toList } from "../../../lib/api/types"
+import { errorMessage } from "../../../lib/api/errors"
+import { logger } from "../../../lib/logger"
 
-const API_URL = import.meta.env.VITE_API_URL
+/** The category picker prepends an "All" entry, which has no id on the server. */
+type CategoryOption = { id: number | "all"; name: string }
+
+/** Only what the header renders. The API never sends another user's email. */
+interface BlogUser {
+  id?: number
+  username?: string
+  full_name?: string
+  avatar?: string | null
+  year?: number | string | null
+  major?: string | null
+}
 
 export default function Blog() {
   const navigate = useNavigate()
@@ -26,39 +42,39 @@ export default function Blog() {
   const [selectedCategory, setSelectedCategory] = useState("all")
   const [selectedTag, setSelectedTag] = useState("")
   const [sortBy, setSortBy] = useState("latest") // latest, popular, trending
-  const [blogPosts, setBlogPosts] = useState([])
-  const [user, setUser] = useState({})
+  const [blogPosts, setBlogPosts] = useState<BlogPost[]>([])
+  const [user, setUser] = useState<BlogUser>({})
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
-  const [selectedPost, setSelectedPost] = useState(null)
+  const [error, setError] = useState<string | null>(null)
+  const [selectedPost, setSelectedPost] = useState<BlogPost | null>(null)
   
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
   const [pageSize, setPageSize] = useState(10)
-  const [nextPage, setNextPage] = useState(null)
-  const [previousPage, setPreviousPage] = useState(null)
+  const [nextPage, setNextPage] = useState<string | null>(null)
+  const [previousPage, setPreviousPage] = useState<string | null>(null)
   
   // Categories state
-  const [categories, setCategories] = useState([])
+  const [categories, setCategories] = useState<CategoryOption[]>([])
   const [categoriesLoading, setCategoriesLoading] = useState(false)
   
   // Trending tags state
-  const [trendingTags, setTrendingTags] = useState([])
+  const [trendingTags, setTrendingTags] = useState<BlogTag[]>([])
   const [tagsLoading, setTagsLoading] = useState(false)
 
   // Popular posts state (overall, not filtered)
-  const [popularPosts, setPopularPosts] = useState([])
+  const [popularPosts, setPopularPosts] = useState<BlogPost[]>([])
   const [popularPostsLoading, setPopularPostsLoading] = useState(false)
 
   // Categories with counts state (overall, not filtered)
-  const [categoriesWithCounts, setCategoriesWithCounts] = useState([])
+  const [categoriesWithCounts, setCategoriesWithCounts] = useState<CategoryWithCount[]>([])
   const [categoriesCountsLoading, setCategoriesCountsLoading] = useState(false)
 
   // Share modal state
   const [showShareModal, setShowShareModal] = useState(false)
-  const [selectedPostForShare, setSelectedPostForShare] = useState(null)
+  const [selectedPostForShare, setSelectedPostForShare] = useState<BlogPost | null>(null)
 
   // Debounce search query
   useEffect(() => {
@@ -71,17 +87,10 @@ export default function Blog() {
 
   // Fetch user profile add Authentication Header
   useEffect(() => {
-    apiFetch(`/auth/user/`)
-      .then((res) => {
-        if (!res.ok) throw new Error("Failed to fetch user profile");
-        return res.json();
-      })
-      .then((data) => {
-        setUser(data);
-      })
-      .catch((error) => {
-        console.error("Error fetching user profile:", error);
-      });
+    api
+      .get<BlogUser>('/auth/user/')
+      .then(setUser)
+      .catch((error) => logger.error('Error fetching user profile:', error));
   }, []);
 
   // Fetch categories from API
@@ -89,13 +98,10 @@ export default function Blog() {
     const fetchCategories = async () => {
       try {
         setCategoriesLoading(true)
-        const res = await apiFetch(`/blog/categories/`);
-        if (!res.ok) throw new Error("Failed to fetch categories");
-        
-        const data = await res.json();
-        setCategories([{ id: 'all', name: 'All' }, ...data.results]);
+        const data = toList<BlogCategory>(await blogApi.categories());
+        setCategories([{ id: 'all', name: 'All' }, ...data]);
       } catch (error) {
-        console.error("Error fetching categories:", error);
+        logger.error("Error fetching categories:", error);
       } finally {
         setCategoriesLoading(false);
       }
@@ -109,140 +115,108 @@ export default function Blog() {
       try {
         setLoading(true)
         setError(null)
-        let url = `/blog/posts/?page=${currentPage}&page_size=${pageSize}`;
-        let isBookmarksEndpoint = false;
-        
-        // Add filters based on active tab and selections
-        if (activeTab === "my-posts" && user.id) {
-          url += `&by=${user.id}`;
-        } else if (activeTab === "following") {
-          // For bookmarked posts, use different endpoint but still support search
-          url = `${API_URL}/api/blog/bookmarks/me/?page=${currentPage}&page_size=${pageSize}`;
-          isBookmarksEndpoint = true;
+
+        const params: Record<string, string | number> = {
+          page: currentPage,
+          page_size: pageSize,
         }
-          // Add category filter (only for main posts endpoint)
-        if (!isBookmarksEndpoint && selectedCategory !== "all") {
-          const category = categories.find(cat => cat.name.toLowerCase() === selectedCategory.toLowerCase());
-          if (category && category.id !== 'all') {
-            url += `&category=${category.name}`;
+        if (debouncedSearchQuery.trim()) params.search = debouncedSearchQuery.trim()
+
+        let data
+        if (activeTab === "following") {
+          // Bookmarks live under their own path. This used to be built from
+          // import.meta.env.VITE_API_URL with /api spliced in by hand, which
+          // broke whenever that variable already ended in /api.
+          data = await blogApi.bookmarks('me', params)
+        } else {
+          if (activeTab === "my-posts" && user.id) params.by = user.id
+          if (selectedCategory !== "all") {
+            const category = categories.find(
+              (cat) => cat.name.toLowerCase() === selectedCategory.toLowerCase()
+            )
+            if (category && category.id !== 'all') params.category = category.name
           }
-        }
-        
-        // Add tag filter (only for main posts endpoint)
-        if (!isBookmarksEndpoint && selectedTag.trim()) {
-          url += `&tag=${encodeURIComponent(selectedTag)}`;
+          if (selectedTag.trim()) params.tag = selectedTag.trim()
+          data = await blogApi.list(params)
         }
 
-        // Add search query
-        if (debouncedSearchQuery.trim()) {
-          url += `&search=${encodeURIComponent(debouncedSearchQuery)}`;
-        }
-        
-        
-        const res = await apiFetch(url);
-        if (!res.ok) throw new Error("Failed to fetch blog posts");
-        
-        const data = await res.json();
-        
-        // Handle pagination data
-        setBlogPosts(data.results || data);
-        setTotalCount(data.count || 0);
-        setNextPage(data.next);
-        setPreviousPage(data.previous);
-        
-        // Calculate total pages using current pageSize (user's selection)
-        if (data.total_pages) {
-          setTotalPages(data.total_pages);
-        } else if (data.count) {
-          setTotalPages(Math.ceil(data.count / pageSize));
-        }
-        
+        setBlogPosts(data.results ?? [])
+        setTotalCount(data.count ?? 0)
+        setNextPage(data.next)
+        setPreviousPage(data.previous)
+        setTotalPages(Math.max(1, Math.ceil((data.count ?? 0) / pageSize)))
       } catch (error) {
-        console.error("Error fetching blog posts:", error);
-        setError(error.message);
-        setBlogPosts([]);
+        logger.error("Error fetching blog posts:", error)
+        setError(errorMessage(error, "Could not load posts."))
+        setBlogPosts([])
       } finally {
-        setLoading(false);
+        setLoading(false)
       }
-    };
+    }
 
-    fetchPosts();
-  }, [activeTab, user.id, currentPage, selectedCategory, selectedTag, debouncedSearchQuery, categories, pageSize]); // Re-fetch when dependencies change
+    fetchPosts()
+  }, [activeTab, user.id, currentPage, selectedCategory, selectedTag, debouncedSearchQuery, categories, pageSize])
 
   // Fetch trending tags from API
   useEffect(() => {
     const fetchTrendingTags = async () => {
       try {
         setTagsLoading(true)
-        const res = await apiFetch(`/blog/tags/trending/?limit=8`);
-        if (!res.ok) throw new Error("Failed to fetch trending tags");
-        
-        const data = await res.json();
-        setTrendingTags(data);
+        setTrendingTags(await blogApi.trendingTags(8))
       } catch (error) {
-        console.error("Error fetching trending tags:", error);
-        // Fallback to hardcoded tags if API fails
-        setTrendingTags([
-          { id: 1, name: "study-tips", post_count: 5 },
-          { id: 2, name: "programming", post_count: 4 },
-          { id: 3, name: "exchange", post_count: 3 },
-          { id: 4, name: "research", post_count: 3 },
-          { id: 5, name: "career", post_count: 2 },
-          { id: 6, name: "exams", post_count: 2 },
-        ]);
+        // This used to fall back to six invented tags with invented post
+        // counts, so an API failure looked exactly like a working sidebar.
+        logger.error("Error fetching trending tags:", error)
+        setTrendingTags([])
       } finally {
-        setTagsLoading(false);
+        setTagsLoading(false)
       }
-    };
+    }
 
-    fetchTrendingTags();
-  }, []);
+    fetchTrendingTags()
+  }, [])
 
   // Fetch popular posts (overall, not filtered)
   useEffect(() => {
     const fetchPopularPosts = async () => {
       try {
         setPopularPostsLoading(true)
-        const res = await apiFetch(`/blog/posts/popular/?limit=5`);
-        if (!res.ok) throw new Error("Failed to fetch popular posts");
-        
-        const data = await res.json();
-        setPopularPosts(data || []);
+        setPopularPosts(await blogApi.popularPosts(5))
       } catch (error) {
-        console.error("Error fetching popular posts:", error);
-        setPopularPosts([]);
+        logger.error("Error fetching popular posts:", error)
+        setPopularPosts([])
       } finally {
-        setPopularPostsLoading(false);
+        setPopularPostsLoading(false)
       }
-    };
+    }
 
-    fetchPopularPosts();
-  }, []);
+    fetchPopularPosts()
+  }, [])
 
   // Fetch categories with overall post counts
   useEffect(() => {
     const fetchCategoriesWithCounts = async () => {
       try {
         setCategoriesCountsLoading(true)
-        const res = await apiFetch(`/blog/categories/with-counts/`);
-        if (!res.ok) throw new Error("Failed to fetch categories with counts");
-        
-        const data = await res.json();
-        setCategoriesWithCounts(data || []);
+        setCategoriesWithCounts(await blogApi.categoriesWithCounts())
       } catch (error) {
-        console.error("Error fetching categories with counts:", error);
-        // Fallback to categories without counts
-        setCategoriesWithCounts(categories.slice(1).map(cat => ({ ...cat, post_count: 0 })));
+        logger.error("Error fetching categories with counts:", error)
+        // Names without counts beats no list at all, and a zero here is
+        // visibly "not counted" rather than a number we made up.
+        setCategoriesWithCounts(
+          categories
+            .filter((cat): cat is { id: number; name: string } => cat.id !== 'all')
+            .map((cat) => ({ ...cat, post_count: 0 }))
+        )
       } finally {
-        setCategoriesCountsLoading(false);
+        setCategoriesCountsLoading(false)
       }
-    };
-
-    // Only fetch if categories are loaded
-    if (categories.length > 1) {
-      fetchCategoriesWithCounts();
     }
-  }, [categories]);
+
+    if (categories.length > 1) {
+      fetchCategoriesWithCounts()
+    }
+  }, [categories])
 
   // Since filtering is mostly done server-side, we only need client-side sorting
   const sortedPosts = blogPosts
@@ -255,64 +229,54 @@ export default function Blog() {
           return (b.views || 0) - (a.views || 0)
         case "latest":
         default:
-          return new Date(b.published_at) - new Date(a.published_at)
+          return new Date(b.published_at ?? 0).getTime() - new Date(a.published_at ?? 0).getTime()
       }
     })
 
-  const handleLike = async (postId) => {
+  const handleLike = async (postId: number) => {
     try {
-      const res = await apiFetch(`/blog/posts/${postId}/like/`, { method: "POST" });
-      
-      if (res.ok) {
-        // Update local state optimistically
-        setBlogPosts((posts) =>
-          posts.map((post) =>
-            post.id === postId
-              ? {
-                  ...post,
-                  is_liked: !post.is_liked,
-                  likes_count: post.is_liked ? post.likes_count - 1 : post.likes_count + 1,
-                }
-              : post,
-          ),
-        )
-      }
+      await blogApi.toggleLike(postId)
+      setBlogPosts((posts) =>
+        posts.map((post) =>
+          post.id === postId
+            ? {
+                ...post,
+                is_liked: !post.is_liked,
+                likes_count: (post.likes_count ?? 0) + (post.is_liked ? -1 : 1),
+              }
+            : post,
+        ),
+      )
     } catch (error) {
-      console.error("Error liking post:", error);
+      logger.error("Error liking post:", error)
     }
   }
 
-  const handleBookmark = async (postId) => {
+  const handleBookmark = async (postId: number) => {
     try {
-      const res = await apiFetch(`/blog/posts/${postId}/bookmark/`, { method: "POST" });
-      
-      if (res.ok) {
-        // Update local state optimistically
-        setBlogPosts((posts) =>
-          posts.map((post) => 
-            post.id === postId 
-              ? { ...post, is_bookmarked: !post.is_bookmarked } 
-              : post
-          ),
-        )
-      }
+      await blogApi.toggleBookmark(postId)
+      setBlogPosts((posts) =>
+        posts.map((post) =>
+          post.id === postId ? { ...post, is_bookmarked: !post.is_bookmarked } : post
+        ),
+      )
     } catch (error) {
-      console.error("Error bookmarking post:", error);
+      logger.error("Error bookmarking post:", error);
     }
   }
 
-  const handlePostClick = async (postId) => {
+  const handlePostClick = async (postId: number) => {
     // Navigate to post detail page
     navigate(`/blog/${postId}`);
   }
 
-  const handleShare = (platform) => {
+  const handleShare = (platform: string) => {
     if (!selectedPostForShare) return
     
     const url = `${window.location.origin}/blog/${selectedPostForShare.id}`
     const title = selectedPostForShare.title || "Check out this article"
 
-    const shareUrls = {
+    const shareUrls: Record<string, string> = {
       twitter: `https://twitter.com/intent/tweet?text=${encodeURIComponent(title)}&url=${encodeURIComponent(url)}`,
       facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`,
       linkedin: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`,
@@ -340,13 +304,13 @@ export default function Blog() {
     }, 3000)
   }
 
-  const handleShareClick = (post) => {
+  const handleShareClick = (post: BlogPost) => {
     setSelectedPostForShare(post)
     setShowShareModal(true)
   }
 
   // Pagination handlers
-  const handlePageChange = (page) => {
+  const handlePageChange = (page: number) => {
     setCurrentPage(page)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }

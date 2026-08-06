@@ -7,7 +7,7 @@ interface CommentAuthor {
   avatar_url?: string | null
 }
 
-interface BlogComment {
+export interface BlogComment {
   id: number
   author?: CommentAuthor
   content: string

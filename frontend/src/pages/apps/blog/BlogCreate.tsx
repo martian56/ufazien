@@ -15,6 +15,7 @@ import TemplatePicker from "../../../features/blog/editor/TemplatePicker"
 import WritingAssistant from "../../../features/blog/editor/WritingAssistant"
 import WritingStatsPanel from "../../../features/blog/editor/WritingStatsPanel"
 import { blogApi } from "../../../lib/api/endpoints/blog"
+import type { BlogCategory, BlogTag, PostVisibility } from "../../../lib/api/endpoints/blog"
 import { api } from "../../../lib/api/client"
 import { toList } from "../../../lib/api/types"
 import { logger } from "../../../lib/logger"
@@ -41,16 +42,16 @@ const BlogCreate = () => {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [excerpt, setExcerpt] = useState('');
-  const [tags, setTags] = useState([]);
+  const [tags, setTags] = useState<string[]>([]);
   const [category, setCategory] = useState('');
-  const [visibility, setVisibility] = useState('public');
+  const [visibility, setVisibility] = useState<PostVisibility>('public');
   const [publishDate, setPublishDate] = useState('');
   const [isPreview, setIsPreview] = useState(false);
 
   // API state
-  const [categories, setCategories] = useState([]);
-  const [availableTags, setAvailableTags] = useState([]);
-  const [tagSuggestions, setTagSuggestions] = useState([]);
+  const [categories, setCategories] = useState<BlogCategory[]>([]);
+  const [availableTags, setAvailableTags] = useState<BlogTag[]>([]);
+  const [tagSuggestions, setTagSuggestions] = useState<BlogTag[]>([]);
   const [tagInput, setTagInput] = useState('');
   const [isLoadingCategories, setIsLoadingCategories] = useState(false);
   const [isLoadingTags, setIsLoadingTags] = useState(false);
@@ -60,14 +61,16 @@ const BlogCreate = () => {
   const [wordCount, setWordCount] = useState(0);
   const [readingTime, setReadingTime] = useState(0);
   const [seoScore, setSeoScore] = useState(0);
-  const [aiSuggestions, setAiSuggestions] = useState([]);
+  const [aiSuggestions, setAiSuggestions] = useState<
+    { id: number; text: string; type: string; timestamp: Date }[]
+  >([]);
   const [writingGoal, setWritingGoal] = useState(500);
   const [writingProgress, setWritingProgress] = useState(0);
   const [focusMode, setFocusMode] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const [autoSave, setAutoSave] = useState(true);
   const [isTyping, setIsTyping] = useState(false);
-  const [typingTimer, setTypingTimer] = useState(null);
+  const [typingTimer, setTypingTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
 
   // Editor state
   const [selectedText, setSelectedText] = useState('');
@@ -86,17 +89,17 @@ const BlogCreate = () => {
   // Analytics and insights
 
   // Collaboration features
-  const [suggestions, setSuggestions] = useState([]);
+  const [suggestions, setSuggestions] = useState<{ id: number | string; text: string }[]>([]);
 
   // Templates and snippets
-  const [templates, setTemplates] = useState([]);
-  const [snippets, setSnippets] = useState([]);
+  const [templates, setTemplates] = useState<unknown[]>([]);
+  const [snippets, setSnippets] = useState<unknown[]>([]);
 
   // References
-  const editorRef = useRef(null);
-  const timerRef = useRef(null);
-  const autoSaveRef = useRef(null);
-  const previewRef = useRef(null);
+  const editorRef = useRef<HTMLTextAreaElement>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const autoSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
 
   // Enhancement effect for preview content
   useEffect(() => {
@@ -269,23 +272,23 @@ const BlogCreate = () => {
     }
   };
 
-  const searchTags = async (query) => {
+  const searchTags = async (query: string) => {
     if (!query.trim()) {
       setTagSuggestions([]);
       return;
     }
 
     try {
-      setTagSuggestions(toList(await api.get('/blog/tags/', { params: { search: query } })));
+      setTagSuggestions(toList(await api.get<BlogTag[]>('/blog/tags/', { params: { search: query } })));
     } catch (error) {
       logger.error('Error searching tags:', error);
       setTagSuggestions([]);
     }
   };
 
-  const createTag = async (tagName) => {
+  const createTag = async (tagName: string) => {
     try {
-      return await api.post('/blog/tags/', { name: tagName });
+      return await api.post<BlogTag>('/blog/tags/', { name: tagName });
     } catch (error) {
       logger.error('Error creating tag:', error);
       return null;
@@ -382,7 +385,7 @@ const BlogCreate = () => {
         setContent(post.content || '');
         setExcerpt(post.excerpt || '');
         if (post.category?.id) setCategory(String(post.category.id));
-        if (Array.isArray(post.tags)) setTags(post.tags.map((t) => (typeof t === 'string' ? t : t.name)));
+        if (Array.isArray(post.tags)) setTags(post.tags.map((t: string | BlogTag) => (typeof t === 'string' ? t : t.name)));
       })
       .catch(() => toast.error('Could not open that draft.'));
     return () => {
@@ -499,7 +502,7 @@ const BlogCreate = () => {
     setIsPreview(!isPreview);
   };
 
-  const addTag = (tag) => {
+  const addTag = (tag: string) => {
     if (tag && !tags.includes(tag) && tags.length < 10) {
       setTags([...tags, tag]);
       setTagInput('');
@@ -507,24 +510,25 @@ const BlogCreate = () => {
     }
   };
 
-  const removeTag = (tagToRemove) => {
+  const removeTag = (tagToRemove: string) => {
     setTags(tags.filter(tag => tag !== tagToRemove));
   };
 
-  const handleTagInputChange = (value) => {
+  const handleTagInputChange = (value: string) => {
     setTagInput(value);
     searchTags(value);
   };
 
-  const handleTagInputKeyPress = (e) => {
+  const handleTagInputKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && tagInput.trim()) {
       e.preventDefault();
       addTag(tagInput.trim());
     }
   };
 
-  const insertText = (before, after = '') => {
+  const insertText = (before: string, after = '') => {
     const textarea = editorRef.current;
+    if (!textarea) return;
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
     const selectedText = content.substring(start, end);
@@ -539,8 +543,8 @@ const BlogCreate = () => {
   };
 
 
-  const loadTemplate = (template) => {
-    setContent(template.content);
+  const loadTemplate = (template: { name: string; content?: string }) => {
+    setContent(template.content ?? '');
     setTitle(template.name);
   };
 
@@ -554,7 +558,7 @@ const BlogCreate = () => {
     }]);
   };
 
-  const calculateReadTime = (content) => {
+  const calculateReadTime = (content: string) => {
     const wordsPerMinute = 200;
     // Remove HTML tags for word count calculation
     const textContent = content.replace(/<[^>]*>/g, '').trim();
@@ -668,7 +672,7 @@ const BlogCreate = () => {
                       setTitle(value)
                     }
                   }}
-                  maxLength="200"
+                  maxLength={200}
                   className={`w-full text-3xl font-bold border-none outline-none resize-none bg-transparent placeholder-gray-400 ${
                     darkMode ? 'text-white' : 'text-gray-900'
                   }`}
