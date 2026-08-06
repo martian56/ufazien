@@ -40,17 +40,17 @@ export default function Home() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
 
   // Refs for GSAP animations
-  const heroRef = useRef(null)
-  const heroTitleRef = useRef(null)
-  const heroSubtitleRef = useRef(null)
-  const heroButtonsRef = useRef(null)
-  const statsRef = useRef(null)
-  const featuresRef = useRef(null)
-  const testimonialsRef = useRef(null)
-  const ctaRef = useRef(null)
-  const floatingElementsRef = useRef([])
-  const cursorRef = useRef(null)
-  const progressBarRef = useRef(null)
+  const heroRef = useRef<HTMLDivElement>(null)
+  const heroTitleRef = useRef<HTMLDivElement>(null)
+  const heroSubtitleRef = useRef<HTMLDivElement>(null)
+  const heroButtonsRef = useRef<HTMLDivElement>(null)
+  const statsRef = useRef<HTMLDivElement>(null)
+  const featuresRef = useRef<HTMLDivElement>(null)
+  const testimonialsRef = useRef<HTMLDivElement>(null)
+  const ctaRef = useRef<HTMLDivElement>(null)
+  const floatingElementsRef = useRef<(HTMLDivElement | null)[]>([])
+  const cursorRef = useRef<HTMLDivElement>(null)
+  const progressBarRef = useRef<HTMLDivElement>(null)
 
   // Check authentication status
   useEffect(() => {
@@ -81,7 +81,7 @@ export default function Home() {
           "-=0.8",
         )
         .from(
-          heroButtonsRef.current.children,
+          heroButtonsRef.current!.children,
           {
             y: 30,
             opacity: 0,
@@ -111,7 +111,7 @@ export default function Home() {
         trigger: statsRef.current,
         start: "top 80%",
         onEnter: () => {
-          gsap.fromTo(statsRef.current.children, 
+          gsap.fromTo(statsRef.current!.children, 
             {
               y: 50,
               opacity: 0,
@@ -132,7 +132,7 @@ export default function Home() {
         trigger: featuresRef.current,
         start: "top 80%",
         onEnter: () => {
-          gsap.fromTo(featuresRef.current.querySelectorAll(".feature-card"),
+          gsap.fromTo(featuresRef.current!.querySelectorAll(".feature-card"),
             {
               y: 60,
               opacity: 0,
@@ -153,7 +153,7 @@ export default function Home() {
         trigger: testimonialsRef.current,
         start: "top 80%",
         onEnter: () => {
-          gsap.fromTo(testimonialsRef.current.querySelector(".testimonial-card"),
+          gsap.fromTo(testimonialsRef.current!.querySelector(".testimonial-card"),
             {
               scale: 0.8,
               opacity: 0,
@@ -173,7 +173,7 @@ export default function Home() {
         trigger: ctaRef.current,
         start: "top 80%",
         onEnter: () => {
-          gsap.fromTo(ctaRef.current.children,
+          gsap.fromTo(ctaRef.current!.children,
             {
               y: 40,
               opacity: 0,
@@ -188,7 +188,7 @@ export default function Home() {
           )
         },
       })
-    }, heroRef.current)
+    }, heroRef.current ?? undefined)
 
     return () => ctx.revert()
   }, [])
@@ -218,7 +218,7 @@ export default function Home() {
 
   // Custom cursor effect
   useEffect(() => {
-    const handleMouseMove = (e) => {
+    const handleMouseMove = (e: MouseEvent) => {
       if (cursorRef.current) {
         gsap.to(cursorRef.current, {
           x: e.clientX - 16,
@@ -432,19 +432,19 @@ export default function Home() {
       {/* Floating Background Elements */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
         <div
-          ref={(el) => (floatingElementsRef.current[0] = el)}
+          ref={(el) => { floatingElementsRef.current[0] = el }}
           className="absolute -top-40 -right-40 w-96 h-96 bg-gradient-to-r from-blue-400/10 to-purple-400/10 rounded-full blur-3xl"
         />
         <div
-          ref={(el) => (floatingElementsRef.current[1] = el)}
+          ref={(el) => { floatingElementsRef.current[1] = el }}
           className="absolute -bottom-40 -left-40 w-96 h-96 bg-gradient-to-r from-green-400/10 to-blue-400/10 rounded-full blur-3xl"
         />
         <div
-          ref={(el) => (floatingElementsRef.current[2] = el)}
+          ref={(el) => { floatingElementsRef.current[2] = el }}
           className="absolute top-1/3 right-1/4 w-64 h-64 bg-gradient-to-r from-purple-400/8 to-pink-400/8 rounded-full blur-2xl"
         />
         <div
-          ref={(el) => (floatingElementsRef.current[3] = el)}
+          ref={(el) => { floatingElementsRef.current[3] = el }}
           className="absolute bottom-1/3 left-1/4 w-80 h-80 bg-gradient-to-r from-cyan-400/8 to-blue-400/8 rounded-full blur-2xl"
         />
       </div>

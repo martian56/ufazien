@@ -2,12 +2,30 @@ import { useState, useEffect, useCallback } from "react"
 import { Plus, Trash2, Save, RotateCcw, Info } from "lucide-react"
 
 // Debounce utility function
-const debounce = (func, delay) => {
-  let timeoutId
-  return (...args) => {
+function debounce<A extends unknown[]>(func: (...args: A) => void, delay: number) {
+  let timeoutId: ReturnType<typeof setTimeout>
+  return (...args: A) => {
     clearTimeout(timeoutId)
-    timeoutId = setTimeout(() => func.apply(null, args), delay)
+    timeoutId = setTimeout(() => func(...args), delay)
   }
+}
+
+import type { SchemaField, SchemaGrades } from "../../../lib/api/endpoints/average"
+
+interface AverageTabProps {
+  currentSchema: SchemaGrades | null
+  updateGrade: (fieldGradeId: number, grade: number | null) => Promise<void> | void
+  calculateWeightedAverage: () => number
+  loading: boolean
+  isCreatingSchema: boolean
+  setIsCreatingSchema: (creating: boolean) => void
+  newSchemaName: string
+  setNewSchemaName: (name: string) => void
+  newSchemaDescription: string
+  setNewSchemaDescription: (description: string) => void
+  newSchemaFields: SchemaField[]
+  setNewSchemaFields: (fields: SchemaField[]) => void
+  createSchema: () => Promise<void> | void
 }
 
 export default function AverageTab({
@@ -24,22 +42,22 @@ export default function AverageTab({
   newSchemaFields,
   setNewSchemaFields,
   createSchema,
-}) {
+}: AverageTabProps) {
   // State for managing grade updates with debouncing
-  const [localGrades, setLocalGrades] = useState({})
-  const [pendingUpdates, setPendingUpdates] = useState({})
+  const [localGrades, setLocalGrades] = useState<Record<string, string>>({})
+  const [pendingUpdates, setPendingUpdates] = useState<Record<string, boolean>>({})
 
   // Initialize local grades when schema changes
   useEffect(() => {
     if (currentSchema?.field_grades) {
-      const grades = {}
+      const grades: Record<string, string> = {}
       currentSchema.field_grades.forEach(fg => {
         // Explicitly handle zero values - only convert null/undefined to empty string
         if (fg.grade === null || fg.grade === undefined) {
           grades[fg.id] = ''
         } else {
           // Keep the actual value, including 0
-          grades[fg.id] = fg.grade
+          grades[fg.id] = String(fg.grade)
         }
       })
       setLocalGrades(grades)
@@ -48,7 +66,7 @@ export default function AverageTab({
 
   // Debounced update function
   const debouncedUpdateGrade = useCallback(
-    debounce((fieldGradeId, grade) => {
+    debounce((fieldGradeId: number, grade: number | null) => {
       updateGrade(fieldGradeId, grade)
       setPendingUpdates(prev => {
         const updated = { ...prev }
@@ -60,7 +78,7 @@ export default function AverageTab({
   )
 
   // Handle grade input change
-  const handleGradeChange = (fieldGradeId, value) => {
+  const handleGradeChange = (fieldGradeId: number, value: string) => {
     // Update local state immediately for responsive UI
     setLocalGrades(prev => ({
       ...prev,
@@ -74,7 +92,7 @@ export default function AverageTab({
     }))
 
     // Parse the grade value, allowing zero but converting empty string to null
-    let grade = null
+    let grade: number | null = null
     if (value !== '' && value !== null && value !== undefined) {
       const parsed = parseFloat(value)
       if (!isNaN(parsed)) {
@@ -92,16 +110,17 @@ export default function AverageTab({
   }
 
   // Remove field from new schema
-  const removeNewField = (index) => {
+  const removeNewField = (index: number) => {
     if (newSchemaFields.length > 1) {
       setNewSchemaFields(newSchemaFields.filter((_, i) => i !== index))
     }
   }
 
   // Update new field
-  const updateNewField = (index, field, value) => {
-    const updated = [...newSchemaFields]
-    updated[index][field] = value
+  const updateNewField = (index: number, field: "name" | "weight", value: string | number) => {
+    const updated = newSchemaFields.map((existing, i) =>
+      i === index ? { ...existing, [field]: value } : existing
+    )
     setNewSchemaFields(updated)
   }
 
@@ -255,7 +274,7 @@ export default function AverageTab({
                         <span>Weight: {fieldGrade.field_weight}</span>
                         {localGrades[fieldGrade.id] !== '' && localGrades[fieldGrade.id] !== null && localGrades[fieldGrade.id] !== undefined && (
                           <span className="text-blue-600">
-                            • Contribution: {(localGrades[fieldGrade.id] * fieldGrade.field_weight).toFixed(2)}
+                            • Contribution: {(Number(localGrades[fieldGrade.id]) * (fieldGrade.field_weight ?? 0)).toFixed(2)}
                           </span>
                         )}
                       </div>
@@ -333,41 +352,41 @@ export default function AverageTab({
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Progress</span>
-                  <span className="font-medium">{currentSchema.field_grades?.length > 0 ? Math.round(((currentSchema.field_grades?.filter(fg => fg.grade !== null && fg.grade !== undefined).length || 0) / currentSchema.field_grades.length) * 100) : 0}%</span>
+                  <span className="font-medium">{(currentSchema.field_grades?.length ?? 0) > 0 ? Math.round(((currentSchema.field_grades?.filter(fg => fg.grade !== null && fg.grade !== undefined).length || 0) / (currentSchema.field_grades ?? []).length) * 100) : 0}%</span>
                 </div>
               </div>
             </div>
 
             {/* Statistics */}
-            {currentSchema.field_grades?.filter(fg => fg.grade !== null && fg.grade !== undefined).length > 0 && (
+            {(currentSchema.field_grades?.filter(fg => fg.grade !== null && fg.grade !== undefined).length ?? 0) > 0 && (
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Statistics</h3>
                 <div className="space-y-3 text-sm">
                   <div className="flex justify-between">
                     <span className="text-gray-600">Highest Score</span>
                     <span className="font-medium text-green-600">
-                      {Math.max(...currentSchema.field_grades
+                      {Math.max(...(currentSchema.field_grades ?? [])
                         .filter(fg => fg.grade !== null && fg.grade !== undefined)
-                        .map(fg => fg.grade)
+                        .map(fg => Number(fg.grade))
                       ).toFixed(1)}
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Lowest Score</span>
                     <span className="font-medium">
-                      {Math.min(...currentSchema.field_grades
+                      {Math.min(...(currentSchema.field_grades ?? [])
                         .filter(fg => fg.grade !== null && fg.grade !== undefined)
-                        .map(fg => fg.grade)
+                        .map(fg => Number(fg.grade))
                       ).toFixed(1)}
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Average Score</span>
                     <span className="font-medium">
-                      {(currentSchema.field_grades
+                      {((currentSchema.field_grades ?? [])
                         .filter(fg => fg.grade !== null && fg.grade !== undefined)
-                        .reduce((sum, fg) => sum + fg.grade, 0) / 
-                        currentSchema.field_grades.filter(fg => fg.grade !== null && fg.grade !== undefined).length
+                        .reduce((sum, fg) => sum + Number(fg.grade), 0) / 
+                        (currentSchema.field_grades ?? []).filter(fg => fg.grade !== null && fg.grade !== undefined).length
                       ).toFixed(1)}
                     </span>
                   </div>

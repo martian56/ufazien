@@ -32,24 +32,40 @@ import SideBar from "../../../components/ui/SideBar"
 import AverageTab from "./AverageTab"
 import MySchemasTab from "./MySchemasTab"
 import PublicSchemasTab from "./PublicSchemasTab"
-import axios from "axios"
+import averageApi, { type Schema, type SchemaGrades } from "../../../lib/api/endpoints/average"
+import { ApiError } from "../../../lib/api/errors"
 
-const API_URL = import.meta.env.VITE_API_URL
-const API_BASE_URL = `${API_URL}/api`
+/** Page number to page of results, for the two schema lists. */
+interface PageInfo {
+  count: number
+  current_page: number
+  total_pages: number
+  next?: string | null
+  previous?: string | null
+}
+
+interface Toast {
+  id: number
+  message: string
+  type: string
+}
+
+/** Matches SchemaPagination.page_size in average/views.py. */
+const PAGE_SIZE = 20
 
 export default function AverageCalculator() {
   const navigate = useNavigate()
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [activeTab, setActiveTab] = useState("average") // average, my-schemas, public-schemas
-  const [currentSchema, setCurrentSchema] = useState(null)
-  const [mySchemas, setMySchemas] = useState([])
-  const [publicSchemas, setPublicSchemas] = useState([])
+  const [currentSchema, setCurrentSchema] = useState<SchemaGrades | null>(null)
+  const [mySchemas, setMySchemas] = useState<Schema[]>([])
+  const [publicSchemas, setPublicSchemas] = useState<Schema[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [loading, setLoading] = useState(false)
   
   // Pagination states
-  const [mySchemasPagination, setMySchemasPagination] = useState(null)
-  const [publicSchemasPagination, setPublicSchemasPagination] = useState(null)
+  const [mySchemasPagination, setMySchemasPagination] = useState<PageInfo | null>(null)
+  const [publicSchemasPagination, setPublicSchemasPagination] = useState<PageInfo | null>(null)
   const [currentMyPage, setCurrentMyPage] = useState(1)
   const [currentPublicPage, setCurrentPublicPage] = useState(1)
   
@@ -62,7 +78,7 @@ export default function AverageCalculator() {
   ])
   
   // Notification states (replacing error and success states)
-  const [notifications, setNotifications] = useState([])
+  const [notifications, setNotifications] = useState<Toast[]>([])
 
   // Add CSS animation for toast notifications
   useEffect(() => {
@@ -80,11 +96,13 @@ export default function AverageCalculator() {
       }
     `
     document.head.appendChild(style)
-    return () => document.head.removeChild(style)
+    return () => {
+      document.head.removeChild(style)
+    }
   }, [])
 
   // Notification system
-  const addNotification = (message, type = 'success') => {
+  const addNotification = (message: string, type: string = "success") => {
     const id = Date.now()
     const notification = { id, message, type }
     setNotifications(prev => [...prev, notification])
@@ -95,116 +113,85 @@ export default function AverageCalculator() {
     }, 4000)
   }
 
-  const removeNotification = (id) => {
+  const removeNotification = (id: number) => {
     setNotifications(prev => prev.filter(notif => notif.id !== id))
   }
 
-  // Auth token from localStorage
-  const getAuthToken = () => {
-    return localStorage.getItem("access")
+  /**
+   * Every call reports its own failure and returns nothing, so the handlers
+   * below stay flat. The shared client already refreshes an expired token and
+   * only reaches here once that has failed too.
+   */
+  const report = (error: unknown, fallback: string) => {
+    addNotification(error instanceof ApiError ? error.userMessage : fallback, "error")
   }
 
-  // API request helper
-  const apiRequest = async (method, url, data = null) => {
-    const token = getAuthToken()
-    if (!token) {
-      addNotification("Please log in to continue", "error")
-      return null
-    }
-
-    try {
-      const config = {
-        method,
-        url: `${API_BASE_URL}${url}`,
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json"
-        }
-      }
-      
-      if (data) {
-        config.data = data
-      }
-
-      const response = await axios(config)
-      return response.data
-    } catch (error) {
-      const message = error.response?.data?.detail || error.response?.data?.error || error.message
-      addNotification(message, "error")
-      return null
-    }
-  }
-
-  // Load current schema
   const loadCurrentSchema = async () => {
     setLoading(true)
-    const data = await apiRequest("GET", "/average/current-schema/")
-    if (data) {
-      setCurrentSchema(data)
+    try {
+      setCurrentSchema(await averageApi.current())
+    } catch (error) {
+      // Having picked no schema yet is the normal first visit, not a failure.
+      if (error instanceof ApiError && error.isNotFound) {
+        setCurrentSchema(null)
+      } else {
+        report(error, "Could not load your schema")
+      }
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
-  // Load user's schemas
   const loadMySchemas = async (page = 1) => {
-    const data = await apiRequest("GET", `/average/my-schemas/?page=${page}`)
-    if (data) {
-      setMySchemas(data.results || data)
-      if (data.results) {
-        // Handle paginated response
-        setMySchemasPagination({
-          count: data.count,
-          current_page: page,
-          total_pages: Math.ceil(data.count / 20),
-          next: data.next,
-          previous: data.previous
-        })
-      }
+    try {
+      const data = await averageApi.mySchemas(page)
+      setMySchemas(data.results ?? [])
+      setMySchemasPagination({
+        count: data.count,
+        current_page: page,
+        total_pages: Math.max(1, Math.ceil(data.count / PAGE_SIZE)),
+        next: data.next,
+        previous: data.previous,
+      })
+    } catch (error) {
+      report(error, "Could not load your schemas")
     }
   }
 
-  // Load public schemas
   const loadPublicSchemas = async (page = 1) => {
-    const params = new URLSearchParams({
-      page: page.toString(),
-      ...(searchTerm && { search: searchTerm })
-    })
-    const data = await apiRequest("GET", `/average/public-schemas/?${params}`)
-    if (data) {
-      setPublicSchemas(data.results || data)
-      if (data.results) {
-        // Handle paginated response
-        setPublicSchemasPagination({
-          count: data.count,
-          current_page: page,
-          total_pages: Math.ceil(data.count / 20),
-          next: data.next,
-          previous: data.previous
-        })
-      }
+    try {
+      const data = await averageApi.publicSchemas(page, searchTerm)
+      setPublicSchemas(data.results ?? [])
+      setPublicSchemasPagination({
+        count: data.count,
+        current_page: page,
+        total_pages: Math.max(1, Math.ceil(data.count / PAGE_SIZE)),
+        next: data.next,
+        previous: data.previous,
+      })
+    } catch (error) {
+      report(error, "Could not load public schemas")
     }
   }
 
-  // Create new schema
   const createSchema = async () => {
     if (!newSchemaName.trim()) {
       addNotification("Schema name is required", "error")
       return
     }
 
-    const validFields = newSchemaFields.filter(f => f.name.trim() && f.weight > 0)
+    const validFields = newSchemaFields.filter(f => f.name.trim() && Number(f.weight) > 0)
     if (validFields.length === 0) {
       addNotification("At least one valid field is required", "error")
       return
     }
 
-    const data = await apiRequest("POST", "/average/create-schema/", {
-      name: newSchemaName,
-      description: newSchemaDescription,
-      fields: validFields
-    })
-
-    if (data) {
+    try {
+      await averageApi.create({
+        name: newSchemaName,
+        description: newSchemaDescription,
+        fields: validFields.map(f => ({ name: f.name, weight: String(f.weight) })),
+      })
       addNotification("Schema created successfully!", "success")
       setIsCreatingSchema(false)
       setNewSchemaName("")
@@ -212,93 +199,110 @@ export default function AverageCalculator() {
       setNewSchemaFields([{ name: "", weight: 1 }])
       await loadCurrentSchema()
       await loadMySchemas()
+    } catch (error) {
+      report(error, "Could not create the schema")
     }
   }
 
-  // Use a schema
-  const useSchema = async (schemaId) => {
-    const data = await apiRequest("POST", `/average/use-schema/${schemaId}/`)
-    if (data) {
-      setCurrentSchema(data)
+  const useSchema = async (schemaId: number) => {
+    try {
+      setCurrentSchema(await averageApi.use(schemaId))
       addNotification("Schema loaded successfully!", "success")
       setActiveTab("average")
+    } catch (error) {
+      report(error, "Could not load that schema")
     }
   }
 
-  // Publish schema
-  const publishSchema = async (schemaId) => {
-    const data = await apiRequest("POST", `/average/publish-schema/${schemaId}/`)
-    if (data) {
+  const publishSchema = async (schemaId: number) => {
+    try {
+      await averageApi.publish(schemaId)
       addNotification("Schema published successfully!", "success")
       await loadMySchemas()
+    } catch (error) {
+      report(error, "Could not publish the schema")
     }
   }
 
-  // Save schema
-  const saveSchema = async (schemaId) => {
-    const data = await apiRequest("POST", `/average/save-schema/${schemaId}/`)
-    if (data) {
+  const saveSchema = async (schemaId: number) => {
+    try {
+      await averageApi.save(schemaId)
       addNotification("Schema saved successfully!", "success")
       await loadMySchemas()
       await loadPublicSchemas()
+    } catch (error) {
+      report(error, "Could not save the schema")
     }
   }
 
-  // Unsave schema
-  const deleteSchema = async (schemaId) => {
+  const deleteSchema = async (schemaId: number) => {
     // /average/delete-schema/ has existed all along and nothing called it, so
     // the confirmation dialog closed and left the schema exactly where it was.
-    const data = await apiRequest("DELETE", `/average/delete-schema/${schemaId}/`)
-    if (data) {
+    try {
+      await averageApi.remove(schemaId)
       addNotification("Schema deleted.", "success")
+      // The deleted schema may have been the active one, in which case the
+      // calculator was still showing its fields.
+      await loadCurrentSchema()
       await loadMySchemas()
       await loadPublicSchemas()
+    } catch (error) {
+      report(error, "Could not delete the schema")
     }
   }
 
-  const unsaveSchema = async (schemaId) => {
-    const data = await apiRequest("DELETE", `/average/unsave-schema/${schemaId}/`)
-    if (data) {
+  const unsaveSchema = async (schemaId: number) => {
+    try {
+      await averageApi.unsave(schemaId)
       addNotification("Schema removed from saved schemas!", "success")
       await loadMySchemas()
       await loadPublicSchemas()
+    } catch (error) {
+      report(error, "Could not remove the schema")
     }
   }
 
-  // Update grade
-  const updateGrade = async (fieldGradeId, grade) => {
-    const data = await apiRequest("PUT", `/average/update-grade/${fieldGradeId}/`, { grade })
-    if (data) {
-      // Update current schema in state
-      setCurrentSchema(prev => ({
-        ...prev,
-        field_grades: prev.field_grades.map(fg => 
-          fg.id === fieldGradeId ? { ...fg, grade: data.grade } : fg
-        )
-      }))
+  const updateGrade = async (fieldGradeId: number, grade: number | string | null) => {
+    try {
+      const saved = await averageApi.updateGrade(fieldGradeId, grade)
+      setCurrentSchema(prev =>
+        prev
+          ? {
+              ...prev,
+              field_grades: (prev.field_grades ?? []).map(fg =>
+                fg.id === fieldGradeId ? { ...fg, grade: saved.grade } : fg
+              ),
+            }
+          : prev
+      )
+    } catch (error) {
+      report(error, "Could not save that grade")
     }
   }
 
-  // Calculate weighted average
-  const calculateWeightedAverage = () => {
-    if (!currentSchema?.field_grades) return 0
+  /**
+   * Grades arrive as strings from DRF's DecimalField, so `sum + fg.grade` was
+   * string concatenation: three marks of 15 averaged to "151515".
+   */
+  const calculateWeightedAverage = (): number => {
+    const graded = (currentSchema?.field_grades ?? []).filter(
+      fg => fg.grade !== null && fg.grade !== undefined && fg.grade !== ""
+    )
+    if (graded.length === 0) return 0
 
-    const validGrades = currentSchema.field_grades.filter(fg => fg.grade !== null && fg.grade !== undefined)
-    if (validGrades.length === 0) return 0
+    const weighted = graded.reduce((sum, fg) => sum + Number(fg.grade) * Number(fg.field_weight ?? 0), 0)
+    const totalWeight = graded.reduce((sum, fg) => sum + Number(fg.field_weight ?? 0), 0)
 
-    const totalWeightedScore = validGrades.reduce((sum, fg) => sum + (fg.grade * fg.field_weight), 0)
-    const totalWeight = validGrades.reduce((sum, fg) => sum + fg.field_weight, 0)
-
-    return totalWeight > 0 ? (totalWeightedScore / totalWeight).toFixed(2) : 0
+    return totalWeight > 0 ? Number((weighted / totalWeight).toFixed(2)) : 0
   }
 
   // Pagination handlers
-  const handleMySchemaPageChange = (page) => {
+  const handleMySchemaPageChange = (page: number) => {
     setCurrentMyPage(page)
     loadMySchemas(page)
   }
 
-  const handlePublicSchemaPageChange = (page) => {
+  const handlePublicSchemaPageChange = (page: number) => {
     setCurrentPublicPage(page)
     loadPublicSchemas(page)
   }
@@ -469,7 +473,6 @@ export default function AverageCalculator() {
               useSchema={useSchema}
               saveSchema={saveSchema}
               unsaveSchema={unsaveSchema}
-              deleteSchema={deleteSchema}
               searchTerm={searchTerm}
               setSearchTerm={setSearchTerm}
               pagination={publicSchemasPagination}

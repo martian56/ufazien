@@ -8,7 +8,6 @@ interface Feature {
   description: string
   link: string
   color: string
-  category: string
   featured?: boolean
   stats?: string
   badge?: string

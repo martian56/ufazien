@@ -2,21 +2,7 @@ import { useState } from "react"
 import { Play, Share, Trash2, Edit3, Lock, Globe, Users, Calendar, Heart, HeartOff, User } from "lucide-react"
 import Pagination from "../../../components/ui/Pagination"
 
-/** Mirrors AverageSchemaSerializer. */
-interface Schema {
-  id: number
-  name: string
-  description?: string
-  creator?: number
-  creator_full_name?: string
-  creator_username?: string
-  is_public?: boolean
-  is_saved_by_user?: boolean
-  usage_count?: number
-  fields?: { name: string; weight: number }[]
-  created_at?: string
-  updated_at?: string
-}
+import type { Schema } from "../../../lib/api/endpoints/average"
 
 interface MySchemasTabProps {
   schemas: Schema[]
