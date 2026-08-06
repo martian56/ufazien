@@ -1,6 +1,30 @@
 import { X } from "lucide-react"
+import type { CalendarEvent } from "../../services/calendarApi"
 
-export default function EventModal({ event, onChange, onSave, onClose, categories, priorities, isEditing }) {
+interface Option {
+  id: string
+  name: string
+}
+
+interface EventModalProps {
+  event: Partial<CalendarEvent>
+  onChange: (event: Partial<CalendarEvent>) => void
+  onSave: () => void
+  onClose: () => void
+  categories: Option[]
+  priorities: Option[]
+  isEditing: boolean
+}
+
+export default function EventModal({
+  event,
+  onChange,
+  onSave,
+  onClose,
+  categories,
+  priorities,
+  isEditing,
+}: EventModalProps) {
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -113,23 +137,11 @@ export default function EventModal({ event, onChange, onSave, onClose, categorie
             </div>
           </div>
 
-          {/* Reminder and Recurring */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Reminder</label>
-              <select
-                value={event.reminder}
-                onChange={(e) => onChange({ ...event, reminder: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="none">No reminder</option>
-                <option value="5">5 minutes before</option>
-                <option value="15">15 minutes before</option>
-                <option value="30">30 minutes before</option>
-                <option value="60">1 hour before</option>
-                <option value="1440">1 day before</option>
-              </select>
-            </div>
+          {/* A Reminder select used to sit beside this. CalendarEvent has no
+              reminder field, in the model or the serializer, so the choice was
+              dropped on save; and with nothing scheduling future work there is
+              no way to deliver one. Recurring is real and stays. */}
+          <div className="grid grid-cols-1 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Recurring</label>
               <select

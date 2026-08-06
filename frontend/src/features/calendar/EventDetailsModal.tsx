@@ -1,6 +1,22 @@
 import { AlertCircle, BookOpen, Calendar as CalendarIcon, Clock, Edit, MapPin, Trash2, User, X } from "lucide-react"
+import type React from "react"
+import type { CalendarEvent } from "../../services/calendarApi"
 
-export default function EventDetailsModal({ event, onClose, onDelete, categories }) {
+interface Category {
+  id: string
+  name: string
+  /** Categories carry their own icon in the calendar page's list. */
+  icon?: React.ComponentType<{ className?: string }>
+}
+
+interface EventDetailsModalProps {
+  event: CalendarEvent
+  onClose: () => void
+  onDelete: (id: number) => void
+  categories: Category[]
+}
+
+export default function EventDetailsModal({ event, onClose, onDelete, categories }: EventDetailsModalProps) {
   const category = categories.find((cat) => cat.id === event.category)
   const CategoryIcon = category?.icon || CalendarIcon
 
@@ -30,7 +46,7 @@ export default function EventDetailsModal({ event, onClose, onDelete, categories
             <Clock className="w-5 h-5 text-gray-400" />
             <div>
               <div className="font-medium text-gray-900">
-                {new Date(event.date).toLocaleDateString("en-US", {
+                {new Date(event.date ?? Date.now()).toLocaleDateString("en-US", {
                   weekday: "long",
                   month: "long",
                   day: "numeric",

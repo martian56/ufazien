@@ -3,16 +3,40 @@ import { toList, type Paginated } from '../lib/api/types'
 
 const EVENTS = '/calendar/events/'
 
+/**
+ * What the calendar endpoint actually returns.
+ *
+ * The serializer exposes three fields under both spellings, because the UI
+ * was written in camelCase and the model is snake_case: startTime and
+ * start_time are the same value, as are endTime/end_time and
+ * courseCode/course_code. The previous version of this type declared neither
+ * the camelCase spellings the components read, nor date, category or
+ * priority, and did declare event_type and all_day, which the serializer does
+ * not send at all.
+ */
 export interface CalendarEvent {
   id: number
   title: string
   description?: string
-  start_time: string
-  end_time: string
+  date?: string
+  start_time?: string
+  end_time?: string
+  /** Same value as start_time. */
+  startTime?: string
+  /** Same value as end_time. */
+  endTime?: string
   location?: string
-  event_type?: string
+  category?: string
+  priority?: string
+  recurring?: string
+  professor?: string
+  course_code?: string
+  /** Same value as course_code. */
+  courseCode?: string
+  participants?: unknown[]
   color?: string
-  all_day?: boolean
+  created_at?: string
+  updated_at?: string
 }
 
 export interface EventRange {

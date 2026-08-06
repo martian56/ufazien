@@ -1,6 +1,13 @@
 import { MapPin } from "lucide-react"
+import type { CalendarEvent } from "../../services/calendarApi"
 
-export default function DayView({ date, events, onEventClick }) {
+interface DayViewProps {
+  date: Date
+  events: CalendarEvent[]
+  onEventClick: (event: CalendarEvent) => void
+}
+
+export default function DayView({ date, events, onEventClick }: DayViewProps) {
   const hours = Array.from({ length: 24 }, (_, i) => i)
 
   return (
@@ -17,6 +24,7 @@ export default function DayView({ date, events, onEventClick }) {
       <div className="max-h-96 overflow-y-auto">
         {hours.map((hour) => {
           const hourEvents = events.filter((event) => {
+            if (!event.startTime) return false
             const eventHour = Number.parseInt(event.startTime.split(":")[0])
             return eventHour === hour
           })
