@@ -92,7 +92,13 @@ class CourseGrade(models.Model):
     
     user_gpa = models.ForeignKey(UserGPA, on_delete=models.CASCADE, related_name='course_grades')
     course_name = models.CharField(max_length=100)
-    credits = models.FloatField(validators=[MinValueValidator(0.5), MaxValueValidator(10)])
+    # A row here is either one course or a whole period, because the
+    # semester and yearly calculators store each period as a "course". A UFAZ
+    # semester is 30 ECTS and a year is 60, so the old cap of 10 was the
+    # single-course figure and update_user_gpa wrote 30 straight past it
+    # through the ORM, which skips validation. Widened to fit what is actually
+    # stored; Course.credits keeps the 10 that is right for one course.
+    credits = models.FloatField(validators=[MinValueValidator(0.5), MaxValueValidator(60)])
     grade_type = models.CharField(max_length=15, choices=GRADE_TYPE_CHOICES, default='ufaz')
     
     # Grade values based on type
