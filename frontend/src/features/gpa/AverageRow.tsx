@@ -1,4 +1,5 @@
 import { Trash2 } from "lucide-react"
+import Select from "../../components/ui/Select"
 
 interface AverageRowProps {
   average: { id: number; period: string; average: string; gradeType: string }
@@ -24,22 +25,23 @@ export default function AverageRow({ average, index, onUpdate, onRemove, canRemo
             placeholder={activeTab === "semester" ? "e.g., Semester 1" : "e.g., Year 1"}
             value={average.period}
             onChange={(e) => onUpdate(average.id, "period", e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
           />
         </div>
 
         {/* Grade Type */}
         <div>
           <label className="block text-xs font-medium text-gray-700 mb-1">Grade System</label>
-          <select
+          <Select
             value={average.gradeType}
-            onChange={(e) => onUpdate(average.id, "gradeType", e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            <option value="ufaz">UFAZ (20-point)</option>
-            <option value="azerbaijan">Azerbaijan (100-point)</option>
-            <option value="gpa">Direct GPA (4.0)</option>
-          </select>
+            onChange={(value) => onUpdate(average.id, "gradeType", value)}
+            options={[
+              { value: "ufaz", label: "UFAZ (20-point)" },
+              { value: "azerbaijan", label: "Azerbaijan (100-point)" },
+              { value: "gpa", label: "Direct GPA (4.0)" },
+            ]}
+            aria-label="Grade system"
+          />
         </div>
 
         {/* Average Input */}
@@ -67,7 +69,7 @@ export default function AverageRow({ average, index, onUpdate, onRemove, canRemo
             step={average.gradeType === "ufaz" ? "0.1" : average.gradeType === "gpa" ? "0.01" : "1"}
             value={average.average}
             onChange={(e) => onUpdate(average.id, "average", e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
           />
         </div>
       </div>

@@ -17,7 +17,7 @@ export default function NotFound() {
       <Helmet>
         <title>Page not found | Ufazien</title>
       </Helmet>
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+      <div className="min-h-screen bg-white flex items-center justify-center px-4">
         <div className="max-w-lg text-center">
           <div className="w-16 h-16 rounded-2xl bg-blue-100 flex items-center justify-center mx-auto mb-6">
             <Compass className="w-8 h-8 text-blue-600" />

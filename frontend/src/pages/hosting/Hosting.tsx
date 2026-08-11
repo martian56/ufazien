@@ -222,7 +222,7 @@ export default function Hosting() {
           <title>Hosting Dashboard | Ufazien</title>
           <meta name="description" content="Manage your websites and hosting services on Ufazien" />
         </Helmet>
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen bg-white">
           <HostingSidebar />
           <div className="ml-64">
             <div className="flex items-center justify-center h-64">
@@ -240,7 +240,7 @@ export default function Hosting() {
         <title>Hosting Dashboard | Ufazien</title>
         <meta name="description" content="Manage your websites and hosting services on Ufazien" />
       </Helmet>
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-white">
         <HostingSidebar />
         
         <div className="lg:ml-64">
@@ -267,7 +267,7 @@ export default function Hosting() {
 
             {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <div className="bg-white rounded-lg border border-gray-200 p-6">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
                     <Server className="w-8 h-8 text-blue-600" />
@@ -279,7 +279,7 @@ export default function Hosting() {
                 </div>
               </div>
 
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <div className="bg-white rounded-lg border border-gray-200 p-6">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
                     <Activity className="w-8 h-8 text-green-600" />
@@ -291,7 +291,7 @@ export default function Hosting() {
                 </div>
               </div>
 
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <div className="bg-white rounded-lg border border-gray-200 p-6">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
                     <Eye className="w-8 h-8 text-purple-600" />
@@ -303,7 +303,7 @@ export default function Hosting() {
                 </div>
               </div>
 
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <div className="bg-white rounded-lg border border-gray-200 p-6">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
                     <HardDrive className="w-8 h-8 text-yellow-600" />
@@ -318,29 +318,29 @@ export default function Hosting() {
             </div>
 
             {/* Subscription Overview */}
-            <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg shadow-lg p-6 mb-8 text-white">
-              <div className="flex items-center justify-between">
+            <div className="bg-white rounded-lg border border-gray-200 p-6 mb-8">
+              <div className="flex items-center justify-between gap-4">
                 <div>
                   <div className="flex items-center gap-2 mb-2">
-                    <Crown className="w-5 h-5" />
-                    <h3 className="text-lg font-semibold">Current Plan: {subscription?.plan?.display_name || 'Free'}</h3>
+                    <Crown className="w-5 h-5 text-gray-400" />
+                    <h3 className="text-lg font-semibold text-gray-900">Current Plan: {subscription?.plan?.display_name || 'Free'}</h3>
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-4">
                     <div>
-                      <p className="text-blue-100 text-sm">Websites</p>
-                      <p className="text-xl font-bold">{websites.length} / {subscription?.plan?.max_websites || 5}</p>
+                      <p className="text-gray-500 text-sm">Websites</p>
+                      <p className="text-xl font-bold text-gray-900">{websites.length} / {subscription?.plan?.max_websites || 5}</p>
                     </div>
                     <div>
-                      <p className="text-blue-100 text-sm">Databases</p>
-                      <p className="text-xl font-bold">{databases?.length || 0} / {subscription?.plan?.max_databases || 5}</p>
+                      <p className="text-gray-500 text-sm">Databases</p>
+                      <p className="text-xl font-bold text-gray-900">{databases?.length || 0} / {subscription?.plan?.max_databases || 5}</p>
                     </div>
                     <div>
-                      <p className="text-blue-100 text-sm">Storage</p>
-                      <p className="text-xl font-bold">{getStorageUsage().used} / {getStorageUsage().limit}</p>
+                      <p className="text-gray-500 text-sm">Storage</p>
+                      <p className="text-xl font-bold text-gray-900">{getStorageUsage().used} / {getStorageUsage().limit}</p>
                     </div>
                     <div>
-                      <p className="text-blue-100 text-sm">Price</p>
-                      <p className="text-xl font-bold">${subscription?.plan?.price || 0}/mo</p>
+                      <p className="text-gray-500 text-sm">Price</p>
+                      <p className="text-xl font-bold text-gray-900">${subscription?.plan?.price || 0}/mo</p>
                     </div>
                   </div>
                 </div>
@@ -348,7 +348,7 @@ export default function Hosting() {
                   <div className="text-right">
                     <button
                       onClick={() => navigate('/hosting/upgrade')}
-                      className="bg-white text-blue-600 px-4 py-2 rounded-lg font-medium hover:bg-blue-50 transition-colors"
+                      className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors whitespace-nowrap"
                     >
                       Upgrade Plan
                     </button>
@@ -390,7 +390,7 @@ export default function Hosting() {
             {activeTab === 'overview' && (
               <div className="space-y-6">
                 {/* Quick Actions */}
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <div className="bg-white rounded-lg border border-gray-200 p-6">
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     <button 
@@ -440,7 +440,7 @@ export default function Hosting() {
                 </div>
 
                 {/* Recent Activity */}
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <div className="bg-white rounded-lg border border-gray-200 p-6">
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Activity</h3>
                   <div className="space-y-4">
                     {activityLoading ? (
@@ -488,7 +488,7 @@ export default function Hosting() {
 
             {activeTab === 'websites' && (
               <div className="space-y-6">
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                   <div className="px-6 py-4 border-b border-gray-200">
                     <h3 className="text-lg font-semibold text-gray-900">Your Websites</h3>
                   </div>
@@ -606,7 +606,7 @@ export default function Hosting() {
 
             {activeTab === 'databases' && (
               <div className="space-y-6">
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <div className="bg-white rounded-lg border border-gray-200 p-6">
                   <div className="flex items-center justify-between mb-6">
                     <h3 className="text-lg font-semibold text-gray-900">Database Management</h3>
                     <button 
@@ -703,7 +703,7 @@ export default function Hosting() {
 
             {activeTab === 'analytics' && (
               <div className="space-y-6">
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <div className="bg-white rounded-lg border border-gray-200 p-6">
                   <h3 className="text-lg font-semibold text-gray-900 mb-6">Website Analytics</h3>
                   
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

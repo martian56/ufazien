@@ -28,11 +28,12 @@ import {
   Heart,
   Star,
 } from "lucide-react"
-import SideBar from "../../../components/ui/SideBar"
 import { toLocalDateKey, todayKey } from "../../../lib/localDate"
+import { useAppShell } from "../../../components/layout/appShellContext"
+import { SidebarPanel } from "../../../components/layout/AppShell"
 
 export default function Calendar() {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const { isSidebarOpen, setIsSidebarOpen } = useAppShell()
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [viewMode, setViewMode] = useState("month") // month, week, day
@@ -259,51 +260,51 @@ export default function Calendar() {
         <title>Ufazien | Calendar</title>
         <meta name="description" content="Manage your academic schedule with Ufazien's calendar." />
       </Helmet>
-      <div className="min-h-screen bg-gray-50 flex">
+      <SidebarPanel>
+        <div className="mt-8 px-3">
+          <div className="bg-gray-50 rounded-lg p-4">
+            <h3 className="font-medium text-gray-900 mb-3">Quick Navigation</h3>
+            <button
+              onClick={goToToday}
+              className="w-full px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors mb-3"
+            >
+              Go to Today
+            </button>
+            <div className="space-y-2">
+              {categories.slice(1, 5).map((category) => (
+                <button
+                  key={category.id}
+                  onClick={() => setFilterCategory(category.id)}
+                  className={`flex items-center gap-2 w-full px-2 py-1 text-sm rounded transition-colors ${
+                    filterCategory === category.id ? "bg-white" : "hover:bg-white"
+                  }`}
+                >
+                  <div className={`w-3 h-3 rounded-full ${category.color}`} />
+                  <span className="text-gray-700">{category.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </SidebarPanel>
+      <div className="flex-1 flex flex-col min-w-0">
         {eventsError && (
-          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[60] bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded-lg shadow-sm">
+          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[60] bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded-lg">
             Could not sync your calendar: {eventsError}
           </div>
         )}
         {eventsLoading && (
-          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[60] bg-white border border-gray-200 text-gray-600 px-4 py-2 rounded-lg shadow-sm">
+          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[60] bg-white border border-gray-200 text-gray-600 px-4 py-2 rounded-lg">
             Loading your events...
           </div>
         )}
         {/* Sidebar */}
-        <SideBar isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen} pageTitle="Calendar">
-          {/* Quick Navigation */}
-          <div className="mt-8 px-3">
-            <div className="bg-gray-50 rounded-lg p-4">
-              <h3 className="font-medium text-gray-900 mb-3">Quick Navigation</h3>
-              <button
-                onClick={goToToday}
-                className="w-full px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors mb-3"
-              >
-                Go to Today
-              </button>
-              <div className="space-y-2">
-                {categories.slice(1, 5).map((category) => (
-                  <button
-                    key={category.id}
-                    onClick={() => setFilterCategory(category.id)}
-                    className={`flex items-center gap-2 w-full px-2 py-1 text-sm rounded transition-colors ${
-                      filterCategory === category.id ? "bg-white shadow-sm" : "hover:bg-white"
-                    }`}
-                  >
-                    <div className={`w-3 h-3 rounded-full ${category.color}`} />
-                    <span className="text-gray-700">{category.name}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </SideBar>
+        
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
-        <header className="bg-white shadow-sm border-b border-gray-200">
+        <header className="bg-white border-b border-gray-200">
           <div className="flex items-center justify-between h-16 px-4 sm:px-6 lg:px-8">
             <div className="flex items-center gap-2 sm:gap-4 min-w-0">
               <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden p-2 rounded-md hover:bg-gray-100">
@@ -326,7 +327,7 @@ export default function Calendar() {
                   placeholder="Search events..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                 />
               </div>
 
@@ -509,11 +510,6 @@ export default function Calendar() {
           onDelete={handleDeleteEvent}
           categories={categories}
         />
-      )}
-
-      {/* Mobile Sidebar Overlay */}
-      {isSidebarOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden" onClick={() => setIsSidebarOpen(false)} />
       )}
     </div>
   </>

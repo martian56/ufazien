@@ -122,7 +122,7 @@ export default function Upgrade() {
         <title>Upgrade Plan | Ufazien Hosting</title>
         <meta name="description" content="Upgrade your hosting plan for more websites, storage, and features" />
       </Helmet>
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-white">
         <HostingSidebar />
         
         <div className="lg:ml-64">
@@ -130,12 +130,12 @@ export default function Upgrade() {
             {/* Header */}
             <div className="text-center mb-8">
               <div className="flex items-center justify-center space-x-3 mb-4">
-                <div className="bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg p-3">
+                <div className="bg-blue-600 rounded-lg p-3">
                   <Crown className="h-8 w-8 text-white" />
                 </div>
                 <div>
                   <h1 className="text-3xl font-bold text-gray-900">Upgrade Your Plan</h1>
-                  <p className="mt-2 text-gray-600">Choose the perfect plan for your hosting needs</p>
+                  <p className="mt-2 text-gray-600">Compare what each plan gives you</p>
                 </div>
               </div>
               
@@ -161,9 +161,9 @@ export default function Upgrade() {
               {plans.map((plan) => (
                 <div
                   key={plan.id}
-                  className={`relative bg-white rounded-2xl shadow-sm border-2 transition-all duration-200 ${
+                  className={`relative bg-white rounded-2xl border-2 transition-all duration-200 ${
                     plan.popular
-                      ? "border-blue-500 shadow-lg scale-105"
+                      ? "border-blue-500"
                       : currentPlan === plan.id
                       ? "border-green-500"
                       : "border-gray-200 hover:border-gray-300"
@@ -171,7 +171,7 @@ export default function Upgrade() {
                 >
                   {plan.popular && (
                     <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
-                      <div className="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-4 py-1 rounded-full text-sm font-medium flex items-center space-x-1">
+                      <div className="bg-gray-900 text-white px-4 py-1 rounded-full text-sm font-medium flex items-center space-x-1">
                         <Star className="h-4 w-4" />
                         <span>Most Popular</span>
                       </div>
@@ -203,7 +203,7 @@ export default function Upgrade() {
                     <div className="space-y-3 mb-6">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-2">
-                          <Globe className="h-4 w-4 text-blue-600" />
+                          <Globe className="h-4 w-4 text-gray-400" />
                           <span className="text-sm text-gray-600">Websites</span>
                         </div>
                         <span className="font-medium">{plan.features.websites}</span>
@@ -211,7 +211,7 @@ export default function Upgrade() {
                       
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-2">
-                          <Database className="h-4 w-4 text-green-600" />
+                          <Database className="h-4 w-4 text-gray-400" />
                           <span className="text-sm text-gray-600">Databases</span>
                         </div>
                         <span className="font-medium">{plan.features.databases}</span>
@@ -219,7 +219,7 @@ export default function Upgrade() {
                       
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-2">
-                          <HardDrive className="h-4 w-4 text-purple-600" />
+                          <HardDrive className="h-4 w-4 text-gray-400" />
                           <span className="text-sm text-gray-600">Storage</span>
                         </div>
                         <span className="font-medium">{plan.features.storage}</span>
@@ -227,7 +227,7 @@ export default function Upgrade() {
                       
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-2">
-                          <ArrowRight className="h-4 w-4 text-orange-600" />
+                          <ArrowRight className="h-4 w-4 text-gray-400" />
                           <span className="text-sm text-gray-600">Bandwidth</span>
                         </div>
                         <span className="font-medium">{plan.features.bandwidth}</span>
@@ -235,21 +235,21 @@ export default function Upgrade() {
                       
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-2">
-                          <Shield className="h-4 w-4 text-indigo-600" />
+                          <Shield className="h-4 w-4 text-gray-400" />
                           <span className="text-sm text-gray-600">SSL Certificates</span>
                         </div>
                         <span className="font-medium">
                           {plan.features.ssl ? (
-                            <Check className="h-4 w-4 text-green-500" />
+                            <Check className="h-4 w-4 text-green-600" />
                           ) : (
-                            <X className="h-4 w-4 text-red-500" />
+                            <X className="h-4 w-4 text-gray-300" />
                           )}
                         </span>
                       </div>
                       
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-2">
-                          <Users className="h-4 w-4 text-cyan-600" />
+                          <Users className="h-4 w-4 text-gray-400" />
                           <span className="text-sm text-gray-600">Support</span>
                         </div>
                         <span className="font-medium text-sm">{plan.features.support}</span>
@@ -262,9 +262,9 @@ export default function Upgrade() {
                         </div>
                         <span className="font-medium">
                           {plan.features.backups ? (
-                            <Check className="h-4 w-4 text-green-500" />
+                            <Check className="h-4 w-4 text-green-600" />
                           ) : (
-                            <X className="h-4 w-4 text-red-500" />
+                            <X className="h-4 w-4 text-gray-300" />
                           )}
                         </span>
                       </div>
@@ -283,7 +283,7 @@ export default function Upgrade() {
                         currentPlan === plan.id
                           ? "bg-gray-100 text-gray-500 cursor-not-allowed"
                           : plan.popular
-                          ? "bg-gradient-to-r from-blue-500 to-purple-600 text-white hover:from-blue-600 hover:to-purple-700"
+                          ? "bg-blue-600 text-white hover:bg-blue-700"
                           : plan.id === "free"
                           ? "bg-gray-200 text-gray-600 cursor-not-allowed"
                           : "bg-blue-600 text-white hover:bg-blue-700"

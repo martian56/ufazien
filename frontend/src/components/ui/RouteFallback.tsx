@@ -2,7 +2,7 @@
 export default function RouteFallback() {
   return (
     <div
-      className="min-h-screen bg-gray-50 flex items-center justify-center"
+      className="min-h-screen bg-white flex items-center justify-center"
       role="status"
       aria-live="polite"
     >

@@ -83,7 +83,7 @@ export default function MySchemasTab({
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {schemas.map((schema) => (
-            <div key={schema.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow flex flex-col h-full">
+            <div key={schema.id} className="bg-white rounded-xl border border-gray-200 p-6 hover:border-gray-300 transition-colors flex flex-col h-full">
               {/* Schema Header */}
               <div className="flex items-start justify-between mb-4">
                 <div className="flex-1">

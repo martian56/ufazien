@@ -29,7 +29,7 @@ export default function WebsiteAnalyticsTab({ website, analytics }: WebsiteAnaly
         <div className="space-y-6">
           {/* Analytics Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div className="bg-white rounded-lg border border-gray-200 p-6">
               <div className="flex items-center">
                 <div className="p-2 bg-blue-100 rounded-lg">
                   <Users className="h-6 w-6 text-blue-600" />
@@ -44,7 +44,7 @@ export default function WebsiteAnalyticsTab({ website, analytics }: WebsiteAnaly
               </div>
             </div>
 
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div className="bg-white rounded-lg border border-gray-200 p-6">
               <div className="flex items-center">
                 <div className="p-2 bg-green-100 rounded-lg">
                   <Eye className="h-6 w-6 text-green-600" />
@@ -59,7 +59,7 @@ export default function WebsiteAnalyticsTab({ website, analytics }: WebsiteAnaly
               </div>
             </div>
 
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div className="bg-white rounded-lg border border-gray-200 p-6">
               <div className="flex items-center">
                 <div className="p-2 bg-yellow-100 rounded-lg">
                   <TrendingUp className="h-6 w-6 text-yellow-600" />
@@ -74,7 +74,7 @@ export default function WebsiteAnalyticsTab({ website, analytics }: WebsiteAnaly
               </div>
             </div>
 
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div className="bg-white rounded-lg border border-gray-200 p-6">
               <div className="flex items-center">
                 <div className="p-2 bg-purple-100 rounded-lg">
                   <Clock className="h-6 w-6 text-purple-600" />
@@ -93,7 +93,7 @@ export default function WebsiteAnalyticsTab({ website, analytics }: WebsiteAnaly
           {/* Charts Row */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Traffic Trend Chart */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div className="bg-white rounded-lg border border-gray-200 p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-gray-900">Traffic Trend (Last 7 Days)</h3>
                 <div className="flex items-center space-x-4 text-sm">
@@ -183,7 +183,7 @@ export default function WebsiteAnalyticsTab({ website, analytics }: WebsiteAnaly
             </div>
 
             {/* Top Pages */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div className="bg-white rounded-lg border border-gray-200 p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Pages</h3>
               <div className="space-y-4">
                 {[
@@ -213,7 +213,7 @@ export default function WebsiteAnalyticsTab({ website, analytics }: WebsiteAnaly
           {/* Bottom Row - Referrers and Device Types */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Traffic Sources */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div className="bg-white rounded-lg border border-gray-200 p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Traffic Sources</h3>
               <div className="space-y-3">
                 {[
@@ -237,7 +237,7 @@ export default function WebsiteAnalyticsTab({ website, analytics }: WebsiteAnaly
             </div>
 
             {/* Device Breakdown */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div className="bg-white rounded-lg border border-gray-200 p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Device Types</h3>
               <div className="space-y-4">
                 {[
@@ -263,7 +263,7 @@ export default function WebsiteAnalyticsTab({ website, analytics }: WebsiteAnaly
           </div>
 
           {/* Real-time Activity */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="bg-white rounded-lg border border-gray-200 p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-gray-900">Real-time Activity</h3>
               <div className="flex items-center text-sm text-gray-600">

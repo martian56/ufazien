@@ -4,6 +4,7 @@ import { api } from "../../lib/api/client"
 import { errorMessage } from "../../lib/api/errors"
 
 import type { BlogPost } from "../../lib/api/endpoints/blog"
+import Radio from "../../components/ui/Radio"
 
 interface ReportModalProps {
   darkMode: boolean
@@ -82,13 +83,11 @@ export default function ReportModal({ darkMode, post, onClose, onDone }: ReportM
           <div className="space-y-2">
             {REASONS.map((option) => (
               <label key={option} className="flex items-center space-x-3 cursor-pointer">
-                <input
-                  type="radio"
+                <Radio
                   name="report-reason"
                   value={option}
                   checked={reason === option}
-                  onChange={() => setReason(option)}
-                  className="text-blue-600"
+                  onSelect={() => setReason(option)}
                 />
                 <span>{option}</span>
               </label>

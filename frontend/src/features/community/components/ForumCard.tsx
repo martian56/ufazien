@@ -24,7 +24,7 @@ export default function ForumCard({ forum, onSelect }: ForumCardProps) {
   return (
     <div
       onClick={onSelect}
-      className="p-4 bg-white rounded-lg border border-gray-200 hover:shadow-md cursor-pointer transition-all"
+      className="p-4 bg-white rounded-lg border border-gray-200 hover:border-gray-300 cursor-pointer transition-colors"
     >
       <div className="flex items-center gap-3 mb-3">
         <div className={`w-10 h-10 ${forum.color_class || 'bg-blue-500'} rounded-lg flex items-center justify-center`}>

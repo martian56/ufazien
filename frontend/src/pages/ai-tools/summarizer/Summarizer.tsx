@@ -20,7 +20,6 @@ export default function Summarizer() {
       title="Text Summarizer"
       tagline="Turn something long into its essentials"
       icon={FileText}
-      accent="from-green-500 to-emerald-500"
       inputLabel="Text to summarize"
       outputLabel="Summary"
       placeholder="Paste an article, a chapter, or your lecture notes..."

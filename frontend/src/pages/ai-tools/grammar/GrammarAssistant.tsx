@@ -20,7 +20,6 @@ export default function GrammarAssistant() {
       title="Grammar Assistant"
       tagline="Fix grammar, spelling and awkward phrasing"
       icon={Sparkles}
-      accent="from-orange-500 to-red-500"
       inputLabel="Text to check"
       outputLabel="Corrected text"
       placeholder="Paste the text you want checked..."

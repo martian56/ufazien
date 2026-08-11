@@ -1,3 +1,4 @@
+import { Lock } from "lucide-react"
 import { Checkbox } from "../../components/ui/checkbox"
 import { Label } from "../../components/ui/label"
 
@@ -41,6 +42,7 @@ function Toggle({ label, description, checked, onChange }: ToggleProps) {
 
 import type { PrivacySettings } from "./settingsMapping"
 import type { ProfileVisibility } from "../../lib/api/endpoints/settings"
+import Select from "../../components/ui/Select"
 
 interface PrivacyTabProps {
   settings: PrivacySettings
@@ -53,8 +55,8 @@ export default function PrivacyTab({ settings, onChange }: PrivacyTabProps) {
   return (
     <div className="p-8">
       <div className="flex items-center gap-4 mb-8">
-        <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-600 rounded-xl flex items-center justify-center">
-          <span className="text-white text-xl">🔒</span>
+        <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
+          <Lock className="w-5 h-5 text-gray-700" aria-hidden="true" />
         </div>
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Privacy Settings</h2>
@@ -67,16 +69,12 @@ export default function PrivacyTab({ settings, onChange }: PrivacyTabProps) {
           <Label htmlFor="profileVisibility" className="text-sm font-semibold text-gray-700">
             Who can see your profile
           </Label>
-          <select
+          <Select
             id="profileVisibility"
             value={settings.profileVisibility}
-            onChange={(e) => onChange("profileVisibility", e.target.value as ProfileVisibility)}
-            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          >
-            {VISIBILITY.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-            ))}
-          </select>
+            onChange={(value) => onChange("profileVisibility", value as ProfileVisibility)}
+            options={VISIBILITY.map((o) => ({ value: o.value, label: o.label }))}
+          />
           {selected && <p className="text-sm text-gray-500">{selected.hint}</p>}
         </div>
 

@@ -4,7 +4,6 @@ import { useState, useRef, useEffect } from "react"
 import { Helmet } from "react-helmet"
 import { useNavigate } from "react-router-dom"
 import {
-  PenTool,
   Copy,
   Download,
   RefreshCw,
@@ -13,17 +12,9 @@ import {
   FileText,
   CheckCircle,
   AlertCircle,
-  Menu,
   ArrowLeft,
   Sparkles,
-  Users,
-  Clock,
   RotateCcw,
-  Save,
-  Share2,
-  Volume2,
-  Eye,
-  Zap,
 } from "lucide-react"
 import aiToolsApi from "../../../lib/api/endpoints/aiTools"
 import { errorMessage } from "../../../lib/api/errors"
@@ -56,7 +47,7 @@ export default function Humanizer() {
   ]
 
   useEffect(() => {
-    const words = inputText.trim().split(/\\s+/).filter(word => word.length > 0).length
+    const words = inputText.trim().split(/\s+/).filter(word => word.length > 0).length
     setWordCount(inputText.trim() === "" ? 0 : words)
     setCharCount(inputText.length)
   }, [inputText])
@@ -150,58 +141,52 @@ export default function Humanizer() {
         <title>Ufazien | Text Humanizer</title>
         <meta name="description" content="Transform AI-generated text into natural, human-like content with Ufazien's Text Humanizer." />
       </Helmet>
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-indigo-900">
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Header */}
-          <header className="bg-black bg-opacity-50 backdrop-blur-sm border-b border-gray-700 px-4 py-4 flex items-center justify-between">
-            <div className="flex items-center gap-4">
-            <button
-              onClick={() => navigate("/ai-tools")}
-              className="flex items-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors text-gray-300 hover:text-white"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              <span className="hidden sm:inline">Back to AI Tools</span>
-            </button>
-
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-lg">
-                <PenTool className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-white">Text Humanizer</h1>
-                <p className="text-sm text-gray-400">Transform AI text to natural language</p>
+      <div className="min-h-screen bg-white flex flex-col">
+        <header className="bg-white border-b border-gray-200">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <button
+                onClick={() => navigate("/ai-tools")}
+                className="p-2 -ml-2 rounded-md text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors shrink-0"
+                aria-label="Back to AI Tools"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              <div className="min-w-0">
+                <h1 className="text-xl font-bold text-gray-900 truncate">Text Humanizer</h1>
+                <p className="hidden sm:block text-sm text-gray-500">Rewrite AI text so it reads naturally</p>
               </div>
             </div>
-          </div>
 
-          <div className="flex items-center gap-3">
             <button
               onClick={() => setShowSettings(!showSettings)}
-              className="p-2 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors"
+              aria-expanded={showSettings}
+              className="flex items-center gap-2 px-3 py-2 rounded-md border border-gray-200 text-sm text-gray-700 hover:border-gray-300 transition-colors"
             >
-              <Settings className="w-5 h-5 text-gray-300" />
+              <Settings className="w-4 h-4" />
+              <span className="hidden sm:inline">Style</span>
             </button>
           </div>
         </header>
 
-        {/* Settings Panel */}
         {showSettings && (
-          <div className="bg-gray-800 bg-opacity-90 backdrop-blur-sm border-b border-gray-700 p-4">
-            <div className="max-w-7xl mx-auto">
-              <h3 className="text-lg font-semibold text-white mb-4">Writing Style</h3>
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <div className="bg-gray-50 border-b border-gray-200">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+              <h2 className="text-sm font-medium text-gray-700 mb-3">Writing style</h2>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
                 {writingStyles.map((style) => (
                   <button
                     key={style.id}
                     onClick={() => setCurrentStyle(style.id)}
-                    className={`p-3 rounded-lg border text-left transition-all ${
+                    aria-pressed={currentStyle === style.id}
+                    className={`p-3 rounded-md border text-left transition-colors ${
                       currentStyle === style.id
-                        ? "bg-blue-600 border-blue-500 text-white"
-                        : "bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600"
+                        ? "bg-white border-blue-500 text-gray-900"
+                        : "bg-white border-gray-200 text-gray-600 hover:border-gray-300"
                     }`}
                   >
-                    <div className="font-medium">{style.name}</div>
-                    <div className="text-xs opacity-75">{style.description}</div>
+                    <div className="text-sm font-medium">{style.name}</div>
+                    <div className="text-xs text-gray-500">{style.description}</div>
                   </button>
                 ))}
               </div>
@@ -209,121 +194,89 @@ export default function Humanizer() {
           </div>
         )}
 
-        {/* Main Content */}
-        <div className="flex-1 overflow-auto p-4">
-          <div className="max-w-7xl mx-auto">
-            {/* Stats Bar */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-              <div className="bg-gray-800 bg-opacity-50 backdrop-blur-sm border border-gray-700 rounded-lg p-4 text-center">
-                <div className="text-2xl font-bold text-blue-400">{wordCount}</div>
-                <div className="text-sm text-gray-400">Words</div>
-              </div>
-              <div className="bg-gray-800 bg-opacity-50 backdrop-blur-sm border border-gray-700 rounded-lg p-4 text-center">
-                <div className="text-2xl font-bold text-green-400">{charCount}</div>
-                <div className="text-sm text-gray-400">Characters</div>
-              </div>
-              <div className="bg-gray-800 bg-opacity-50 backdrop-blur-sm border border-gray-700 rounded-lg p-4 text-center">
-                <div className="text-2xl font-bold text-purple-400">{currentStyle}</div>
-                <div className="text-sm text-gray-400">Style</div>
-              </div>
-              <div className="bg-gray-800 bg-opacity-50 backdrop-blur-sm border border-gray-700 rounded-lg p-4 text-center">
-                <div className="flex items-center justify-center gap-1 text-2xl font-bold text-yellow-400">
-                  {isComplete ? <CheckCircle className="w-6 h-6" /> : <Clock className="w-6 h-6" />}
-                </div>
-                <div className="text-sm text-gray-400">Status</div>
-              </div>
-            </div>
-
-            {/* Error Display */}
+        <main className="flex-1">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
             {apiError && (
-              <div className="mb-6 bg-red-900/20 border border-red-500/30 rounded-lg p-4">
-                <div className="flex items-center gap-2 text-red-400 mb-2">
-                  <AlertCircle className="w-5 h-5" />
-                  <span className="font-semibold">Error</span>
+              <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+                <div className="flex items-center gap-2 text-red-700 mb-1">
+                  <AlertCircle className="w-4 h-4" />
+                  <span className="text-sm font-medium">Something went wrong</span>
                 </div>
-                <p className="text-sm text-red-300">
-                  {apiError}
-                </p>
+                <p className="text-sm text-red-700">{apiError}</p>
                 <button
                   onClick={() => setApiError(null)}
-                  className="mt-2 text-xs text-red-400 hover:text-red-300 underline"
+                  className="mt-2 text-xs text-red-700 underline"
                 >
                   Dismiss
                 </button>
               </div>
             )}
 
-            {/* Main Editor */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Input Section */}
-              <div className="space-y-4">
+              <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-                    <FileText className="w-5 h-5" />
-                    Input Text
-                  </h3>
+                  <h2 className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-gray-400" />
+                    Your text
+                  </h2>
                   <button
                     onClick={clearAll}
-                    className="text-sm text-gray-400 hover:text-red-400 transition-colors flex items-center gap-1"
+                    className="text-sm text-gray-500 hover:text-gray-900 transition-colors flex items-center gap-1"
                   >
                     <RotateCcw className="w-4 h-4" />
                     Clear
                   </button>
                 </div>
-                
-                <div className="relative">
-                  <textarea
-                    ref={textareaRef}
-                    value={inputText}
-                    onChange={(e) => setInputText(e.target.value)}
-                    placeholder="Paste your AI-generated text here to humanize it..."
-                    className="w-full h-80 bg-gray-800 bg-opacity-50 backdrop-blur-sm border border-gray-700 rounded-lg p-4 text-white placeholder-gray-400 resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                  />
-                  {inputText && (
-                    <div className="absolute bottom-4 right-4 text-xs text-gray-400">
-                      {wordCount} words • {charCount} characters
-                    </div>
-                  )}
-                </div>
+
+                <textarea
+                  ref={textareaRef}
+                  value={inputText}
+                  onChange={(e) => setInputText(e.target.value)}
+                  placeholder="Paste the text you want to rewrite."
+                  className="w-full h-80 bg-white border border-gray-300 rounded-lg p-4 text-gray-900 placeholder-gray-400 resize-none"
+                />
+
+                <p className="text-xs text-gray-500">
+                  {wordCount} words, {charCount} characters, {currentStyle} style
+                </p>
 
                 <button
                   onClick={simulateProcessing}
                   disabled={!inputText.trim() || isProcessing}
-                  className="w-full bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 disabled:from-gray-600 disabled:to-gray-700 text-white font-semibold py-3 px-4 rounded-lg transition-all duration-300 transform hover:scale-105 disabled:transform-none disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
                 >
                   {isProcessing ? (
                     <>
                       <RefreshCw className="w-5 h-5 animate-spin" />
-                      Humanizing... {processingProgress}%
+                      Rewriting, {processingProgress}%
                     </>
                   ) : (
                     <>
                       <Wand2 className="w-5 h-5" />
-                      Humanize Text
+                      Humanize text
                     </>
                   )}
                 </button>
               </div>
 
-              {/* Output Section */}
-              <div className="space-y-4">
+              <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-                    <Sparkles className="w-5 h-5" />
-                    Humanized Text
-                  </h3>
+                  <h2 className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-gray-400" />
+                    Result
+                  </h2>
                   {outputText && (
-                    <div className="flex gap-2">
+                    <div className="flex gap-3">
                       <button
                         onClick={() => copyToClipboard(outputText)}
-                        className="text-sm text-gray-400 hover:text-green-400 transition-colors flex items-center gap-1"
+                        className="text-sm text-gray-500 hover:text-gray-900 transition-colors flex items-center gap-1"
                       >
                         {copiedOutput ? <CheckCircle className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                        {copiedOutput ? "Copied!" : "Copy"}
+                        {copiedOutput ? "Copied" : "Copy"}
                       </button>
                       <button
                         onClick={downloadText}
-                        className="text-sm text-gray-400 hover:text-blue-400 transition-colors flex items-center gap-1"
+                        className="text-sm text-gray-500 hover:text-gray-900 transition-colors flex items-center gap-1"
                       >
                         <Download className="w-4 h-4" />
                         Download
@@ -331,57 +284,41 @@ export default function Humanizer() {
                     </div>
                   )}
                 </div>
-                
-                <div className="relative">
-                  <div
-                    ref={outputRef}
-                    className={`w-full h-80 bg-gray-800 bg-opacity-50 backdrop-blur-sm border border-gray-700 rounded-lg p-4 text-white overflow-y-auto transition-all ${
-                      isComplete ? "border-green-500/50" : ""
-                    }`}
-                  >
-                    {isProcessing ? (
-                      <div className="flex flex-col items-center justify-center h-full">
-                        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-                        <p className="text-gray-400">Processing your text...</p>
-                        <div className="w-full bg-gray-700 rounded-full h-2 mt-4">
-                          <div 
-                            className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                            style={{ width: `${processingProgress}%` }}
-                          ></div>
-                        </div>
+
+                <div
+                  ref={outputRef}
+                  className="w-full h-80 bg-white border border-gray-200 rounded-lg p-4 text-gray-900 overflow-y-auto"
+                >
+                  {isProcessing ? (
+                    <div className="flex flex-col items-center justify-center h-full">
+                      <p className="text-sm text-gray-500 mb-3">Working on it</p>
+                      <div className="w-full max-w-xs bg-gray-200 rounded-full h-1.5">
+                        <div
+                          className="bg-blue-600 h-1.5 rounded-full transition-all duration-300"
+                          style={{ width: `${processingProgress}%` }}
+                        />
                       </div>
-                    ) : outputText ? (
-                      <div className="space-y-2">
-                        <div className="whitespace-pre-wrap">{outputText}</div>
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-center h-full text-gray-400">
-                        <div className="text-center">
-                          <Zap className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                          <p>Your humanized text will appear here</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                    </div>
+                  ) : outputText ? (
+                    <div className="whitespace-pre-wrap">{outputText}</div>
+                  ) : (
+                    <div className="flex items-center justify-center h-full">
+                      <p className="text-sm text-gray-500">The rewritten text will appear here.</p>
+                    </div>
+                  )}
                 </div>
 
                 {isComplete && (
-                  <div className="bg-green-900/20 border border-green-500/30 rounded-lg p-4">
-                    <div className="flex items-center gap-2 text-green-400 mb-2">
-                      <CheckCircle className="w-5 h-5" />
-                      <span className="font-semibold">Humanization Complete!</span>
-                    </div>
-                    <p className="text-sm text-green-300">
-                      Your text has been successfully transformed to sound more natural and human-like.
-                    </p>
-                  </div>
+                  <p className="text-sm text-gray-500 flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-green-600" />
+                    Done. Read it through before you use it.
+                  </p>
                 )}
               </div>
             </div>
           </div>
-        </div>
+        </main>
       </div>
-    </div>
     </>
   )
 }

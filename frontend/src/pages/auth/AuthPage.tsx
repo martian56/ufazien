@@ -16,7 +16,7 @@ export default function AuthPage() {
         <title>Ufazien | Auth</title>
         <meta name="description" content="User authentication page for sign in and sign up." />
       </Helmet>
-      <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-blue-50 via-white to-indigo-50">
+      <div className="min-h-screen flex items-center justify-center p-4 bg-white">
         <div className="w-full max-w-md">
           {/* Header */}
           <div className="text-center mb-8">
@@ -26,7 +26,7 @@ export default function AuthPage() {
         </div>
 
         {/* Auth Card */}
-        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
           {/* Tab Navigation */}
           <div className="flex border-b border-gray-200">
             <button

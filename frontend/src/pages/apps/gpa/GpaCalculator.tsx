@@ -29,9 +29,12 @@ import {
   CheckCircle,
   Users,
   X,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react"
-import SideBar from "../../../components/ui/SideBar"
 import type { AverageRow as AverageRowData, GpaStatistics, SavedCalculation } from "../../../lib/api/endpoints/gpa"
+import { useDialogs } from "../../../components/ui/Dialogs"
+import { useAppShell } from "../../../components/layout/appShellContext"
 
 interface Toast {
   id: number
@@ -49,8 +52,9 @@ interface GpaProfile {
 
 
 export default function GpaCalculator() {
+  const { confirm, promptText } = useDialogs()
   const navigate = useNavigate()
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const { isSidebarOpen, setIsSidebarOpen } = useAppShell()
   const [activeTab, setActiveTab] = useState("semester")
   const [loading, setLoading] = useState(false)
   const [inputSaving, setInputSaving] = useState(false)
@@ -166,7 +170,11 @@ export default function GpaCalculator() {
       return
     }
 
-    const name = window.prompt("Name this calculation", `${lastCalculatorTab === "yearly" ? "Yearly" : "Semester"} GPA`)
+    const name = await promptText({
+      title: "Save this calculation",
+      label: "Name",
+      defaultValue: `${lastCalculatorTab === "yearly" ? "Yearly" : "Semester"} GPA`,
+    })
     if (!name?.trim()) return
 
     try {
@@ -192,7 +200,12 @@ export default function GpaCalculator() {
   }
 
   const deleteCalculation = async (calc: SavedCalculation) => {
-    if (!window.confirm(`Delete "${calc.name}"?`)) return
+    const ok = await confirm({
+      title: `Delete "${calc.name}"?`,
+      message: "This saved calculation is removed for good.",
+      confirmText: "Delete",
+    })
+    if (!ok) return
     try {
       await gpaApi.remove(calc.id)
       addNotification(`Deleted "${calc.name}".`, "success")
@@ -528,18 +541,14 @@ export default function GpaCalculator() {
         <title>Ufazien | GPA Calculator</title>
         <meta name="description" content="Calculate and track your GPA with Ufazien's GPA Calculator." />
       </Helmet>
-      <div className="min-h-screen bg-gray-50 flex">
+      <div className="flex-1 flex flex-col min-w-0">
         {/* Sidebar */}
-        <SideBar
-          isSidebarOpen={isSidebarOpen}
-          setIsSidebarOpen={setIsSidebarOpen}
-        pageTitle="GPA Calculator"
-      />
+        
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
-        <header className="bg-white shadow-sm border-b border-gray-200">
+        <header className="bg-white border-b border-gray-200">
           <div className="flex items-center justify-between h-16 px-4 sm:px-6 lg:px-8">
             <div className="flex items-center gap-4">
               <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden p-2 rounded-md hover:bg-gray-100">
@@ -688,7 +697,7 @@ export default function GpaCalculator() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               {/* Average Input */}
               <div className="lg:col-span-2">
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <div className="bg-white rounded-xl border border-gray-200 p-6">
                   <div className="flex items-center justify-between mb-6">
                     <h2 className="text-xl font-semibold text-gray-900">
                       {activeTab === "semester" ? "Semester Averages" : "Yearly Averages"}
@@ -744,7 +753,7 @@ export default function GpaCalculator() {
               {/* Results Section */}
               <div className="space-y-6">
                 {/* GPA Display */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <div className="bg-white rounded-xl border border-gray-200 p-6">
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">GPA Results</h3>
 
                   <div className="text-center mb-6">
@@ -768,8 +777,20 @@ export default function GpaCalculator() {
                             <span>→</span>
                             <span className="font-semibold">New GPA: {gpaData.gpa}</span>
                           </div>
-                          <div className="text-xs mt-1">
-                            {gpaData.gpa > Number(userProfile.gpa) ? "⬆ Improvement!" : "⬇ Lower than current"}
+                          <div className="text-xs mt-1 flex items-center justify-center gap-1">
+                            {gpaData.gpa === Number(userProfile.gpa) ? (
+                              "Same as your current GPA"
+                            ) : gpaData.gpa > Number(userProfile.gpa) ? (
+                              <>
+                                <ArrowUp className="w-3 h-3" aria-hidden="true" />
+                                Higher than your current GPA
+                              </>
+                            ) : (
+                              <>
+                                <ArrowDown className="w-3 h-3" aria-hidden="true" />
+                                Lower than your current GPA
+                              </>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -798,7 +819,7 @@ export default function GpaCalculator() {
 
                 {/* Quick Stats */}
                 {statistics && (
-                  <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                  <div className="bg-white rounded-xl border border-gray-200 p-6">
                     <h3 className="text-lg font-semibold text-gray-900 mb-4">Your Statistics</h3>
                     <div className="space-y-3 text-sm">
                       <div className="flex justify-between">
@@ -818,7 +839,7 @@ export default function GpaCalculator() {
                 )}
 
                 {/* UFAZ Grade Scale */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <div className="bg-white rounded-xl border border-gray-200 p-6">
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">UFAZ Grade Scale</h3>
                   <div className="space-y-2 text-sm">
                     {ufazConversionTable.map((range, index) => (
@@ -845,7 +866,7 @@ export default function GpaCalculator() {
             <div className="space-y-6">
               {statistics && (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                  <div className="bg-white rounded-xl border border-gray-200 p-6">
                     <div className="flex items-center gap-3">
                       <Award className="w-8 h-8 text-green-600" />
                       <div>
@@ -855,7 +876,7 @@ export default function GpaCalculator() {
                     </div>
                   </div>
 
-                  <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                  <div className="bg-white rounded-xl border border-gray-200 p-6">
                     <div className="flex items-center gap-3">
                       <BarChart3 className="w-8 h-8 text-blue-600" />
                       <div>
@@ -865,7 +886,7 @@ export default function GpaCalculator() {
                     </div>
                   </div>
 
-                  <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                  <div className="bg-white rounded-xl border border-gray-200 p-6">
                     <div className="flex items-center gap-3">
                       <Calculator className="w-8 h-8 text-purple-600" />
                       <div>
@@ -878,7 +899,7 @@ export default function GpaCalculator() {
               )}
 
               {/* Saved Calculations */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <div className="bg-white rounded-xl border border-gray-200 p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold text-gray-900">Saved Calculations</h3>
                   <button

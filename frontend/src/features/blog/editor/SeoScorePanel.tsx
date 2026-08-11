@@ -1,3 +1,4 @@
+import { Check as CheckIcon, Minus } from "lucide-react"
 import type React from "react"
 import { TrendingUp } from "lucide-react"
 
@@ -26,8 +27,12 @@ const TONES = {
 
 function Check({ passed, children }: { passed: boolean; children: React.ReactNode }) {
   return (
-    <div className={passed ? 'text-green-500' : ''}>
-      {passed ? '✓ ' : '· '}
+    <div className={`flex items-center gap-1.5 ${passed ? 'text-green-600' : ''}`}>
+      {passed ? (
+        <CheckIcon className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+      ) : (
+        <Minus className="w-3.5 h-3.5 shrink-0 text-gray-400" aria-hidden="true" />
+      )}
       {children}
     </div>
   )
@@ -37,7 +42,7 @@ export default function SeoScorePanel({ darkMode, seoScore, title, excerpt, word
   const tone = seoScore >= 80 ? TONES.good : seoScore >= 60 ? TONES.fair : TONES.poor
 
   return (
-    <div className={`rounded-xl shadow-sm border p-6 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+    <div className={`rounded-xl border p-6 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
       <h3 className="font-semibold flex items-center mb-4">
         <TrendingUp className="w-4 h-4 mr-2" />
         SEO Score

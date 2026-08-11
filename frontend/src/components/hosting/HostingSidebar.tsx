@@ -105,7 +105,7 @@ const HostingSidebar = () => {
       <div className="lg:hidden fixed top-4 left-4 z-50">
         <button
           onClick={toggleMobileMenu}
-          className="bg-white p-2 rounded-lg shadow-lg border border-gray-200"
+          className="bg-white p-2 rounded-lg border border-gray-200"
         >
           <Menu className="h-6 w-6 text-gray-600" />
         </button>
@@ -120,7 +120,7 @@ const HostingSidebar = () => {
       )}
 
       {/* Sidebar */}
-      <div className={`bg-white h-screen w-64 shadow-lg flex flex-col fixed left-0 top-0 z-50 transform transition-transform duration-300 ease-in-out ${
+      <div className={`bg-white h-screen w-64 border-r border-gray-200 flex flex-col fixed left-0 top-0 z-50 transform transition-transform duration-300 ease-in-out ${
         isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
       } lg:translate-x-0 lg:z-30`}>
         {/* Header with back button */}

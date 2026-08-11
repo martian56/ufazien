@@ -46,7 +46,7 @@ export default function RelatedReading({ relatedPosts, authorPosts, post, darkMo
               <div
                 key={relatedPost.id}
                 onClick={() => onOpenPost(relatedPost.id)}
-                className={`p-5 rounded-lg border cursor-pointer hover:shadow-lg transition-all duration-200 ${
+                className={`p-5 rounded-lg border cursor-pointer transition-colors ${
                   darkMode 
                     ? "border-gray-600 hover:border-gray-500 hover:bg-gray-750" 
                     : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
@@ -141,7 +141,7 @@ export default function RelatedReading({ relatedPosts, authorPosts, post, darkMo
                 <div
                   key={authorPost.id}
                   onClick={() => onOpenPost(authorPost.id)}
-                  className={`p-4 rounded-lg border cursor-pointer hover:shadow-md transition-all ${
+                  className={`p-4 rounded-lg border cursor-pointer transition-colors ${
                     darkMode 
                       ? "border-gray-600 hover:border-gray-500 hover:bg-gray-750" 
                       : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"

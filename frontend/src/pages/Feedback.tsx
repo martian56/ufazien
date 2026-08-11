@@ -19,13 +19,13 @@ import {
   ChevronRight,
   RefreshCw
 } from "lucide-react"
-import SideBar from "../components/ui/SideBar"
 import { Button } from "../components/ui/button"
 import { Input } from "../components/ui/input"
 import { Label } from "../components/ui/label"
 import { Textarea } from "../components/ui/textarea"
 import { useToast, ToastContainer } from "../hooks/useToast"
 import { api as apiClient } from "../lib/api/client"
+import { useAppShell } from "../components/layout/appShellContext"
 
 interface FeedbackType {
   value: string
@@ -51,7 +51,7 @@ interface FeedbackEntry {
 export default function Feedback() {
   const navigate = useNavigate()
   const { notifications, toast, removeNotification } = useToast()
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const { isSidebarOpen, setIsSidebarOpen } = useAppShell()
   const [loading, setLoading] = useState(false)
   const [canSubmit, setCanSubmit] = useState(true)
   const [rateLimitInfo, setRateLimitInfo] = useState<RateLimitStatus | null>(null)
@@ -294,13 +294,9 @@ export default function Feedback() {
         <meta name="description" content="Send feedback, report bugs, or request features" />
       </Helmet>
 
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 flex">
+      <div className="flex-1 flex flex-col min-w-0">
         {/* Sidebar */}
-        <SideBar
-          isSidebarOpen={isSidebarOpen}
-          setIsSidebarOpen={setIsSidebarOpen}
-          pageTitle="Feedback"
-        />
+        
         <ToastContainer notifications={notifications} removeNotification={removeNotification} />
 
         {/* Main Content */}
@@ -343,13 +339,13 @@ export default function Feedback() {
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Feedback Form */}
             <div className="lg:col-span-2">
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-blue-600 to-indigo-600">
-                  <div className="flex items-center gap-3 text-white">
-                    <MessageSquare className="w-6 h-6" />
+              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <div className="p-6 border-b border-gray-200">
+                  <div className="flex items-center gap-3">
+                    <MessageSquare className="w-5 h-5 text-gray-400" />
                     <div>
-                      <h2 className="text-xl font-semibold">Submit Feedback</h2>
-                      <p className="text-sm text-blue-100">We value your input and suggestions</p>
+                      <h2 className="text-xl font-semibold text-gray-900">Submit Feedback</h2>
+                      <p className="text-sm text-gray-500">Tell us what is working and what is not</p>
                     </div>
                   </div>
                 </div>
@@ -443,7 +439,7 @@ export default function Feedback() {
                   <Button
                     type="submit"
                     disabled={loading || !canSubmit}
-                    className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-medium py-3 rounded-lg transition-all duration-200 transform hover:scale-[1.02] disabled:transform-none disabled:opacity-70"
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 rounded-lg transition-colors disabled:opacity-60"
                   >
                     {loading ? (
                       <div className="flex items-center justify-center gap-2">
@@ -464,7 +460,7 @@ export default function Feedback() {
             {/* Sidebar Info */}
             <div className="space-y-6">
               {/* Guidelines */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <div className="bg-white rounded-xl border border-gray-200 p-6">
                 <h3 className="font-semibold text-gray-900 mb-4">Feedback Guidelines</h3>
                 <ul className="space-y-3 text-sm text-gray-600">
                   <li className="flex items-start gap-2">
@@ -487,22 +483,22 @@ export default function Feedback() {
               </div>
 
               {/* Quick Stats */}
-              <div className="bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl shadow-sm p-6 text-white">
-                <h3 className="font-semibold mb-4">Your Feedback</h3>
+              <div className="bg-white rounded-lg border border-gray-200 p-6">
+                <h3 className="font-semibold text-gray-900 mb-4">Your Feedback</h3>
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-blue-100">Total Submitted</span>
-                    <span className="text-2xl font-bold">{userFeedbacks.length}</span>
+                    <span className="text-sm text-gray-500">Total submitted</span>
+                    <span className="text-lg font-semibold text-gray-900">{userFeedbacks.length}</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-blue-100">Pending</span>
-                    <span className="text-lg font-semibold">
+                    <span className="text-sm text-gray-500">Pending</span>
+                    <span className="text-lg font-semibold text-gray-900">
                       {userFeedbacks.filter((f) => f.status === "pending").length}
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-blue-100">Resolved</span>
-                    <span className="text-lg font-semibold">
+                    <span className="text-sm text-gray-500">Resolved</span>
+                    <span className="text-lg font-semibold text-gray-900">
                       {userFeedbacks.filter((f) => f.status === "resolved").length}
                     </span>
                   </div>
@@ -513,7 +509,7 @@ export default function Feedback() {
 
           {/* Feedback History */}
           <div className="mt-8">
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
               <div className="p-6 border-b border-gray-200">
                 <h2 className="text-lg font-semibold text-gray-900">Your Feedback History</h2>
                 <p className="text-sm text-gray-600 mt-1">Track the status of your submissions</p>
