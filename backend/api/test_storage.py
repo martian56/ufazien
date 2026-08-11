@@ -7,6 +7,8 @@ from the container filesystem, so knowing the path was enough to read a
 private conversation's files.
 """
 
+import os
+
 from django.core.files.storage import storages
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.core.management import call_command
@@ -73,6 +75,84 @@ class ObjectStorageConfigTests(SimpleTestCase):
 
         self.assertIsNone(PublicMediaStorage().default_acl)
         self.assertIsNone(PrivateMediaStorage().default_acl)
+
+
+class ProductionRequiresObjectStorageTests(SimpleTestCase):
+    """
+    Production must refuse to boot without object storage.
+
+    The container no longer bind-mounts a media directory, so a missing
+    AWS_S3_ENDPOINT_URL would silently route uploads to the container's own
+    disk, where they vanish at the next redeploy. Nothing logs, nothing errors,
+    and the user sees a successful upload.
+    """
+
+    def _load_settings(self, env):
+        """Import the settings module fresh under a given environment."""
+        import importlib
+        import sys
+
+        from django.core.exceptions import ImproperlyConfigured
+
+        saved = {k: os.environ.get(k) for k in env}
+        os.environ.update({k: v for k, v in env.items() if v is not None})
+        for k, v in env.items():
+            if v is None:
+                os.environ.pop(k, None)
+        try:
+            module = sys.modules["ufazien.settings"]
+            return importlib.reload(module), ImproperlyConfigured
+        finally:
+            for k, v in saved.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+
+    def tearDown(self):
+        """Reload under the suite's own environment so later tests see it."""
+        self._load_settings({})
+
+    def test_production_refuses_to_start_when_either_variable_is_missing(self):
+        """
+        Each variable is tested on its own. Dropping both at once would pass
+        even if the guard only fired when neither was set, which is the case
+        that never happens in practice: a half-configured environment is.
+        """
+        from django.core.exceptions import ImproperlyConfigured
+
+        cases = {
+            "endpoint missing": {"AWS_S3_ENDPOINT_URL": None, "AWS_ACCESS_KEY_ID": "key"},
+            "access key missing": {
+                "AWS_S3_ENDPOINT_URL": "https://media.example.com",
+                "AWS_ACCESS_KEY_ID": None,
+            },
+            "both missing": {"AWS_S3_ENDPOINT_URL": None, "AWS_ACCESS_KEY_ID": None},
+        }
+        for label, env in cases.items():
+            with self.subTest(label):
+                with self.assertRaises(ImproperlyConfigured) as caught:
+                    self._load_settings({"ENVIRONMENT": "production", **env})
+                self.assertIn("lost on redeploy", str(caught.exception))
+
+    def test_production_starts_when_both_are_present(self):
+        """The guard must not block a correctly configured deployment."""
+        module, _ = self._load_settings(
+            {
+                "ENVIRONMENT": "production",
+                "AWS_S3_ENDPOINT_URL": "https://media.example.com",
+                "AWS_ACCESS_KEY_ID": "key",
+            }
+        )
+        self.assertTrue(module.USE_OBJECT_STORAGE)
+
+    def test_local_development_without_object_storage_is_fine(self):
+        """Requiring MinIO to run the app on a laptop would be friction."""
+        module, _ = self._load_settings(
+            {"ENVIRONMENT": None, "AWS_S3_ENDPOINT_URL": None, "AWS_ACCESS_KEY_ID": None}
+        )
+        self.assertFalse(module.USE_OBJECT_STORAGE)
+        self.assertIn("FileSystemStorage", module.STORAGES["default"]["BACKEND"])
 
 
 class EnsureBucketsCommandTests(TestCase):

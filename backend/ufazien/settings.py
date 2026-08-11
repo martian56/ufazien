@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 from pathlib import Path
 from urllib.parse import urlparse, parse_qsl
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 import os
 
@@ -310,6 +311,16 @@ if USE_OBJECT_STORAGE:
     STORAGES["default"] = {"BACKEND": "api.storages.PublicMediaStorage"}
     STORAGES["private"] = {"BACKEND": "api.storages.PrivateMediaStorage"}
     MEDIA_URL = f"{AWS_S3_ENDPOINT_URL}/{AWS_PUBLIC_BUCKET_NAME}/"
+elif os.getenv("ENVIRONMENT") == "production":
+    # Falling back to the filesystem in production is silent data loss: the
+    # container no longer bind-mounts a media directory, so uploads would land
+    # on the container's own disk and disappear at the next redeploy, with
+    # nothing logged and no error for the user. Refuse to boot instead.
+    raise ImproperlyConfigured(
+        "Object storage is not configured but ENVIRONMENT=production. "
+        "Set AWS_S3_ENDPOINT_URL and AWS_ACCESS_KEY_ID, or uploads will be "
+        "written to the container filesystem and lost on redeploy."
+    )
 
 # File upload settings
 FILE_UPLOAD_MAX_MEMORY_SIZE = 5242880  # 5MB

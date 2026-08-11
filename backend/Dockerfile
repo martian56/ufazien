@@ -27,8 +27,8 @@ RUN pip install --upgrade pip \
 # Copy project
 COPY . /app/
 
-# Create directories for static files and media
-RUN mkdir -p /app/static /app/media
+# Static files only. Uploads go to object storage, not the container's disk.
+RUN mkdir -p /app/static
 
 # Create hosting directory and set permissions
 RUN mkdir -p /srv/hosting \
