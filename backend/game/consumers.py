@@ -411,6 +411,15 @@ class LobbyConsumer(AsyncWebsocketConsumer):
                 # the seat.
                 position_data['activity'] = PlayerPosition.SITTING
 
+            # The seat goes on the broadcast payload as well, read from the row
+            # and never from the frame — it is not in `allowed`, so a client
+            # cannot put one there. Peers keep their own map of who is sitting
+            # where, and a frame that carried no seat at all read as "nobody",
+            # so a seated player's chair dropped out of it the moment they
+            # waved. The chair was then offered to the next person to walk up,
+            # who pressed the key and had the claim refused.
+            position_data['seat'] = position.seat if position else None
+
             # Reuse the row rather than letting update_or_create fetch it a
             # second time. Position frames arrive ten times a second per
             # player, so this is the hot path.

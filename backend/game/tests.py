@@ -317,6 +317,25 @@ class LobbyConsumerTests(TestCase):
 
         return read()
 
+    @staticmethod
+    async def _next_position(communicator, tries=5):
+        """
+        The next `position_update` a socket receives, or None.
+
+        Skips whatever else is queued: a seat claim and a chat message land on
+        the same socket, and taking the first frame off it asserts against
+        whichever happened to arrive first.
+        """
+        import json
+
+        for _ in range(tries):
+            if await communicator.receive_nothing(timeout=1):
+                continue
+            payload = json.loads(await communicator.receive_from(timeout=2))
+            if payload.get('type') == 'position_update':
+                return payload
+        return None
+
     def test_a_seat_holds_one_person(self):
         """Two people in one chair. The database decides, not the browser."""
         from asgiref.sync import async_to_sync
@@ -503,6 +522,102 @@ class LobbyConsumerTests(TestCase):
         self.assertEqual(payload['position']['activity'], 'hand_raised')
         # ...and the seat is still held, because only leave_seat releases it.
         self.assertEqual(seating[self.host.id][0], 'lecture-1-3')
+
+    def test_a_position_frame_carries_the_seat_the_server_holds(self):
+        """
+        Peers keep their own record of who is sitting where, and the position
+        frame is most of what feeds it.
+
+        The frame used to carry no seat at all, which reads as "sitting
+        nowhere": a seated player's chair dropped out of every other client's
+        map the moment they did anything that sent a frame, waving included.
+        The chair was then offered to the next person to walk up to it, whose
+        claim the server refused — which in a browser looks like the key not
+        working.
+        """
+        from asgiref.sync import async_to_sync
+
+        async def scenario():
+            import json
+
+            a, _ = await self._connect(self.host)
+            b, _ = await self._connect(self.player)
+            try:
+                await self._drain(a, b)
+                await a.send_json_to({'type': 'take_seat', 'seat': 'lecture-1-4'})
+                await a.receive_from(timeout=2)
+                await self._drain(b)
+
+                # Waving from the chair: exactly the frame that used to erase
+                # the seat everywhere.
+                await a.send_json_to({
+                    'type': 'player_position',
+                    'x': 1.0, 'y': 2.0, 'activity': 'waving', 'is_moving': False,
+                })
+                seated = await self._next_position(b)
+
+                await a.send_json_to({'type': 'leave_seat'})
+                await a.receive_from(timeout=2)
+                await self._drain(b)
+                await a.send_json_to({
+                    'type': 'player_position',
+                    'x': 3.0, 'y': 4.0, 'activity': 'standing', 'is_moving': True,
+                })
+                stood = await self._next_position(b)
+                return seated, stood
+            finally:
+                await a.disconnect()
+                await b.disconnect()
+
+        seated, stood = async_to_sync(scenario)()
+        self.assertIsNotNone(seated, 'other player never received a position_update')
+        self.assertEqual(seated['position']['seat'], 'lecture-1-4')
+        # And standing up has to reach the wire too, or the chair is never
+        # offered to anybody again for as long as the page stays open.
+        self.assertIsNotNone(stood)
+        self.assertIsNone(stood['position']['seat'])
+
+    def test_a_spoofed_seat_never_reaches_the_wire(self):
+        """
+        The seat on the wire is read from the row, never from the frame.
+
+        Now that it is broadcast, it looks like something a client could set.
+        The row is already guarded — `test_a_position_frame_cannot_claim_a_seat`
+        covers that — but the peers' own map of who is sitting where is built
+        from these frames, so a seat echoed back off a frame would let a
+        modified client take an occupied chair everywhere but the database.
+        Same reasoning as the LiveKit grants: the answer comes from what the
+        server holds, not from what the client said.
+        """
+        from asgiref.sync import async_to_sync
+
+        async def scenario():
+            a, _ = await self._connect(self.host)
+            b, _ = await self._connect(self.player)
+            try:
+                await self._drain(a, b)
+                # B takes the chair honestly.
+                await b.send_json_to({'type': 'take_seat', 'seat': 'lecture-1-5'})
+                await b.receive_from(timeout=2)
+                await self._drain(a)
+
+                # A tries to take it by asserting it in a position frame.
+                await a.send_json_to({
+                    'type': 'player_position',
+                    'x': 1.0, 'y': 2.0, 'activity': 'sitting', 'is_moving': False,
+                    'seat': 'lecture-1-5',
+                })
+                announced = await self._next_position(b)
+                return announced, await self._seating(self.lobby.id)
+            finally:
+                await a.disconnect()
+                await b.disconnect()
+
+        announced, seating = async_to_sync(scenario)()
+        self.assertIsNotNone(announced)
+        self.assertIsNone(announced['position']['seat'])
+        self.assertIsNone(seating[self.host.id][0])
+        self.assertEqual(seating[self.player.id][0], 'lecture-1-5')
 
     def test_an_empty_seat_string_is_not_a_seat(self):
         """

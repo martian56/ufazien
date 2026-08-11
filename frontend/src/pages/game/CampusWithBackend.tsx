@@ -51,6 +51,7 @@ import {
   type Seat,
 } from '../../components/campus/interiorPhysics'
 import { EMOTE_SECONDS, type Activity } from '../../components/campus/avatarPose'
+import { takenSeatIds } from '../../components/campus/seatState'
 import { INTERIOR_SPECS, interiorHalfExtent } from '../../components/campus/interiorSpecs'
 import {
   CAMPUS_BUILDINGS,
@@ -654,20 +655,19 @@ function SeatController({
 }) {
   const { camera } = useThree()
   const [, get] = useKeyboardControls()
-  const { takeSeat, leaveSeat, playerPositions } = campusHook
+  const { takeSeat, leaveSeat, seatedPlayers } = campusHook
   const held = useRef({ sit: false, emote: '' })
   const candidate = useRef<Seat | null>(null)
   const emoteUntil = useRef(0)
 
   // Seats other people are in. Offering an occupied chair and having the
   // server refuse it reads as the key not working.
-  const taken = useMemo(() => {
-    const ids = new Set<string>()
-    for (const position of playerPositions.values()) {
-      if (position.seat) ids.add(position.seat)
-    }
-    return ids
-  }, [playerPositions])
+  //
+  // Read from the hook's seating map rather than scanned out of the position
+  // frames: a frame is a snapshot of where somebody is, not a record of what
+  // they hold, and building the set from frames lost a chair every time its
+  // occupant did anything that sent one.
+  const taken = useMemo(() => takenSeatIds(seatedPlayers), [seatedPlayers])
 
   useFrame((state) => {
     const typing = isTypingInField()

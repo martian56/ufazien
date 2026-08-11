@@ -7,6 +7,14 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import campusWebSocket from '../services/campusWebSocket';
 import campusApi from '../services/campusApi';
 import { errorMessage } from '../lib/api/errors';
+import {
+    NO_SEATS,
+    seatAfterDenial,
+    seatsFromSnapshot,
+    withSeat,
+    withoutPlayer,
+    type SeatMap,
+} from '../components/campus/seatState';
 
 /**
  * Decode JWT token to get user ID
@@ -162,6 +170,16 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
      * the player in a chair somebody else is already in.
      */
     const [ownSeat, setOwnSeat] = useState<string | null>(null);
+    /**
+     * Where everybody else is sitting.
+     *
+     * Held apart from `playerPositions` because the two have different
+     * lifetimes: a seat lasts until it is released, a position frame lasts
+     * until the next one. Folding seating into the frames meant somebody who
+     * sat down and then waved lost their chair from this map, and the next
+     * person to walk up was offered it.
+     */
+    const [seatedPlayers, setSeatedPlayers] = useState<SeatMap>(NO_SEATS);
     const [studyRooms, setStudyRooms] = useState<any[]>([]);
 
     // Chat state
@@ -281,6 +299,7 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
                 }
             });
             setPlayerPositions(positionsMap);
+            setSeatedPlayers(seatsFromSnapshot(data.positions || [], currentUserId));
         });
 
         // User joined lobby
@@ -307,6 +326,9 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
                 newPositions.delete(data.user_id);
                 return newPositions;
             });
+            // Their chair is free again. The server releases it on disconnect;
+            // this is the same fact reaching the people still in the room.
+            setSeatedPlayers(prev => withoutPlayer(prev, data.user_id));
         });
 
         // Position update received
@@ -322,6 +344,10 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
                 newPositions.set(data.user_id, playerPositionFromUpdate(data));
                 return newPositions;
             });
+            // The frame carries the seat the server row holds, not one the
+            // sender chose. Kept in step here so a player who sat down before
+            // we ever saw them still occupies their chair in this map.
+            setSeatedPlayers(prev => withSeat(prev, data.user_id, data.position?.seat));
         });
 
         // Somebody sat down or stood up. Carried separately from position
@@ -331,7 +357,14 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
                 setOwnSeat(data.seat ?? null);
                 return;
             }
+            // Unconditionally, and before the pose: this is the record of who
+            // holds which chair, and it has to be right even for a player we
+            // have no position for yet.
+            setSeatedPlayers(prev => withSeat(prev, data.user_id, data.seat));
             setPlayerPositions(prev => {
+                // Only the pose. Somebody with no position frame yet has
+                // nowhere to be drawn, and inventing coordinates for them
+                // would stand an avatar in the middle of the quad.
                 const existing = prev.get(data.user_id);
                 if (!existing) return prev;
                 const next = new Map(prev);
@@ -345,8 +378,8 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
         });
 
         // Somebody else got the chair first.
-        campusWebSocket.on('seatDenied', () => {
-            setOwnSeat(null);
+        campusWebSocket.on('seatDenied', (data: any) => {
+            setOwnSeat(prev => seatAfterDenial(prev, data?.seat));
         });
 
         // Chat message received
@@ -528,6 +561,8 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
                 wsEverConnectedRef.current = false;
                 setLobbyMembers([]);
                 setPlayerPositions(new Map());
+                setSeatedPlayers(NO_SEATS);
+                setOwnSeat(null);
                 setChatMessages([]);
                 
                 // Disconnect WebSocket
@@ -565,6 +600,8 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
         wsEverConnectedRef.current = false;
         setLobbyMembers([]);
         setPlayerPositions(new Map());
+        setSeatedPlayers(NO_SEATS);
+        setOwnSeat(null);
         setChatMessages([]);
         setError(null);
     }, []);
@@ -695,6 +732,7 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
         joinStudyRoom,
         leaveStudyRoom,
         ownSeat,
+        seatedPlayers,
         takeSeat,
         leaveSeat,
         getNearbyPlayers,
