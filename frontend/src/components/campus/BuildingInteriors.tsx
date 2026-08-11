@@ -752,7 +752,7 @@ function LabInterior({ spec }: { spec: InteriorSpec }) {
 /* Amphitheatre                                                         */
 /* ------------------------------------------------------------------ */
 
-function LectureInterior({ spec }: { spec: InteriorSpec }) {
+function LectureInterior({ spec, whiteboard }: { spec: InteriorSpec; whiteboard?: React.ReactNode }) {
   const half = spec.halfExtent
 
   return (
@@ -817,10 +817,12 @@ function LectureInterior({ spec }: { spec: InteriorSpec }) {
 
       {/* A whiteboard one side, today's real timetable the other. The board
           used to be a second blank rectangle. */}
-      <mesh castShadow position={[-13, 4.4, -half + 0.5]}>
-        <boxGeometry args={[7.5, 4, 0.2]} />
-        <meshStandardMaterial color="#f4f6f4" roughness={0.25} />
-      </mesh>
+      {whiteboard ?? (
+        <mesh castShadow position={[-13, 4.4, -half + 0.5]}>
+          <boxGeometry args={[7.5, 4, 0.2]} />
+          <meshStandardMaterial color="#f4f6f4" roughness={0.25} />
+        </mesh>
+      )}
       <ScheduleBoard position={[13, 4.4, -half + 0.65]} />
 
       {/* A dark band behind the screen, so a projected image has contrast */}
@@ -1178,7 +1180,13 @@ function SportsInterior({ spec }: { spec: InteriorSpec }) {
 
 /* ------------------------------------------------------------------ */
 
-const CONTENTS: Record<InteriorKind, (props: { spec: InteriorSpec }) => React.ReactElement> = {
+interface InteriorProps {
+  spec: InteriorSpec
+  /** The shared whiteboard, for the room that has one. */
+  whiteboard?: React.ReactNode
+}
+
+const CONTENTS: Record<InteriorKind, (props: InteriorProps) => React.ReactElement> = {
   ufaz: UfazHall,
   library: LibraryInterior,
   lab: LabInterior,
@@ -1197,16 +1205,19 @@ const CONTENTS: Record<InteriorKind, (props: { spec: InteriorSpec }) => React.Re
 export function BuildingInterior({
   kind = 'lecture',
   children,
+  whiteboard,
 }: {
   kind?: InteriorKind
   children?: React.ReactNode
+  /** Mounted by the page, which owns the socket the strokes travel over. */
+  whiteboard?: React.ReactNode
 }) {
   const spec = INTERIOR_SPECS[kind] ?? INTERIOR_SPECS.lecture
   const Contents = CONTENTS[kind] ?? LectureInterior
 
   return (
     <RoomShell spec={spec}>
-      <Contents spec={spec} />
+      <Contents spec={spec} whiteboard={whiteboard} />
       {children}
     </RoomShell>
   )

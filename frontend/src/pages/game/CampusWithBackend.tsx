@@ -33,6 +33,8 @@ import {
   statusFor,
 } from '../../components/campus/playerStatus'
 import { BuildingInterior } from '../../components/campus/BuildingInteriors'
+import Whiteboard from '../../components/campus/Whiteboard'
+import { isDrawableChat } from '../../components/campus/whiteboardStrokes'
 import {
   SOLID_CAMPUS,
   blockingPlatforms,
@@ -230,10 +232,16 @@ function ChatSystem({
   }, [chatMessages.length, isOpen, activeTab])
 
   // The badge counted every message ever received, so it sat on "9+" forever.
+  // Whiteboard strokes travel on the same channel and are not messages, so
+  // counting them would ring the chat badge every time somebody drew a line.
+  const spokenCount = useMemo(
+    () => chatMessages.reduce((total, msg) => total + (isDrawableChat(msg.message) ? 1 : 0), 0),
+    [chatMessages],
+  )
   useEffect(() => {
-    if (isOpen) seenCountRef.current = chatMessages.length
-  }, [isOpen, chatMessages.length])
-  const unread = Math.max(0, chatMessages.length - seenCountRef.current)
+    if (isOpen) seenCountRef.current = spokenCount
+  }, [isOpen, spokenCount])
+  const unread = Math.max(0, spokenCount - seenCountRef.current)
 
   // In backend units, and the campus is ten of those to the world unit. 400
   // covers the quad and the buildings around it, which is what "nearby" means
@@ -247,8 +255,10 @@ function ChatSystem({
     }
   }
 
-  // Filter messages by channel
+  // Filter messages by channel. Whiteboard strokes ride the same channel and
+  // are not things anybody said, so they never reach the panel.
   const filteredMessages = chatMessages.filter(msg => {
+    if (!isDrawableChat(msg.message)) return false
     if (activeTab === "global") return msg.channel === "global" || !msg.channel
     if (activeTab === "nearby") return nearbyUsers.some(user => user.userId === msg.user_id)
     return msg.channel === activeTab
@@ -920,6 +930,14 @@ const CampusWithBackend = () => {
    * late is invisible, and re-deriving every avatar's bubble sixty times a
    * second is the sort of thing this page has already been fixed for once.
    */
+  /**
+   * Whether the pointer is captured.
+   *
+   * The whiteboard needs a cursor, and the campus is played with the pointer
+   * locked — which is also the only state in which the player could not aim at
+   * the board anyway. So drawing is live exactly when looking around is not.
+   */
+  const [pointerLocked, setPointerLocked] = useState(false)
   const [bubbleClock, setBubbleClock] = useState(() => Date.now())
   useEffect(() => {
     const timer = setInterval(() => setBubbleClock(Date.now()), 1000)
@@ -1449,7 +1467,21 @@ const CampusWithBackend = () => {
 
           <Suspense fallback={null}>
             {insideBuilding && interiorSpec ? (
-              <BuildingInterior kind={insideBuilding.interior}>
+              <BuildingInterior
+                kind={insideBuilding.interior}
+                whiteboard={
+                  insideBuilding.interior === 'lecture' ? (
+                    <Whiteboard
+                      board="lecture"
+                      position={[-13, 4.4, -INTERIOR_SPECS.lecture.halfExtent + 0.65]}
+                      size={[7.5, 4]}
+                      messages={campusHook.chatMessages}
+                      onStroke={(encoded) => campusHook.sendChatMessage(encoded, 'global')}
+                      enabled={!pointerLocked}
+                    />
+                  ) : undefined
+                }
+              >
                 {/* No name plate in the scene: the page header already says
                     which building you are inside, and the way out is the
                     overlay button, because a marker behind the spawn point
@@ -1542,7 +1574,13 @@ const CampusWithBackend = () => {
 
             {/* Without a selector drei binds the lock handler to document, so every
                 HUD click grabbed the pointer and the next click never landed. */}
-            {!isTouchDevice && <PointerLockControls selector="#campus-canvas" />}
+            {!isTouchDevice && (
+              <PointerLockControls
+                selector="#campus-canvas"
+                onLock={() => setPointerLocked(true)}
+                onUnlock={() => setPointerLocked(false)}
+              />
+            )}
           </Suspense>
         </Canvas>
       </KeyboardControls>
