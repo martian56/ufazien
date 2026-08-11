@@ -653,6 +653,102 @@ export function nameTagTexture(name: string, accent = '#8fd0ff'): THREE.Texture 
   return texture
 }
 
+/* ------------------------------------------------------------------ */
+
+const MAX_BUBBLES = 32
+const bubbles = new Map<string, THREE.Texture>()
+
+/**
+ * A speech bubble, wrapped to fit.
+ *
+ * Bounded and least-recently-used like the name tags: a busy lobby generates a
+ * new texture per message, and an unbounded cache is a canvas leak that grows
+ * for as long as anyone keeps talking.
+ */
+export function chatBubbleTexture(text: string): THREE.Texture | null {
+  const key = `bubble:${text}`
+  const hit = bubbles.get(key)
+  if (hit) {
+    bubbles.delete(key)
+    bubbles.set(key, hit)
+    return hit
+  }
+
+  if (typeof document === 'undefined') return null
+  const canvas = document.createElement('canvas')
+  canvas.width = 512
+  canvas.height = 256
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return null
+
+  const font = '500 38px system-ui, -apple-system, "Segoe UI", sans-serif'
+  ctx.font = font
+  const lines = wrapText(ctx, text, 440)
+  const lineHeight = 46
+  const boxHeight = lines.length * lineHeight + 34
+  const boxTop = 246 - boxHeight - 18
+
+  ctx.clearRect(0, 0, 512, 256)
+  ctx.fillStyle = 'rgba(12,16,24,0.86)'
+  roundRect(ctx, 24, boxTop, 464, boxHeight, 20)
+  ctx.fill()
+  ctx.strokeStyle = 'rgba(160,200,255,0.55)'
+  ctx.lineWidth = 3
+  roundRect(ctx, 24, boxTop, 464, boxHeight, 20)
+  ctx.stroke()
+
+  // The tail, so it reads as speech rather than as a label.
+  ctx.fillStyle = 'rgba(12,16,24,0.86)'
+  ctx.beginPath()
+  ctx.moveTo(240, boxTop + boxHeight - 1)
+  ctx.lineTo(256, boxTop + boxHeight + 22)
+  ctx.lineTo(272, boxTop + boxHeight - 1)
+  ctx.closePath()
+  ctx.fill()
+
+  ctx.font = font
+  ctx.fillStyle = '#eef4ff'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  lines.forEach((line, i) => {
+    ctx.fillText(line, 256, boxTop + 24 + i * lineHeight, 440)
+  })
+
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.colorSpace = THREE.SRGBColorSpace
+  texture.anisotropy = 4
+
+  if (bubbles.size >= MAX_BUBBLES) {
+    const oldest = bubbles.keys().next().value
+    if (oldest !== undefined) {
+      bubbles.get(oldest)?.dispose()
+      bubbles.delete(oldest)
+    }
+  }
+  bubbles.set(key, texture)
+  return texture
+}
+
+/** Greedy wrap, capped at three lines so a bubble cannot fill the sky. */
+function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
+  const words = text.split(/\s+/)
+  const lines: string[] = []
+  let line = ''
+
+  for (const word of words) {
+    const candidate = line ? `${line} ${word}` : word
+    if (ctx.measureText(candidate).width > maxWidth && line) {
+      lines.push(line)
+      line = word
+      if (lines.length === 3) break
+    } else {
+      line = candidate
+    }
+  }
+  if (lines.length < 3 && line) lines.push(line)
+  return lines.length ? lines : ['…']
+}
+
 function roundRect(
   ctx: CanvasRenderingContext2D,
   x: number,

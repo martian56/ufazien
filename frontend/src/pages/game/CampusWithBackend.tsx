@@ -20,9 +20,18 @@ import {
   CampusProps,
   CampusBuildings,
   CampusSkyline,
+  ChatBubble,
   CharacterModel,
   NameTag,
+  SpeakingRing,
 } from '../../components/campus/CampusScenery'
+import {
+  BUBBLE_MS,
+  bubbleFor,
+  isSameParticipant,
+  isSpeaking,
+  statusFor,
+} from '../../components/campus/playerStatus'
 import { BuildingInterior } from '../../components/campus/BuildingInteriors'
 import {
   SOLID_CAMPUS,
@@ -382,12 +391,21 @@ function PlayerAvatar({
   position,
   userData,
   seed,
+  bubble,
+  speaking,
+  isPresenting,
 }: {
   position: { x: number; z: number }
   /** Loose: the same component renders both a socket payload and local state. */
   userData: Record<string, unknown>
   /** The player's user id, which decides everything about how they look. */
   seed: string | number
+  /** Their most recent chat message, while it is still fresh. */
+  bubble?: string | null
+  /** Whether proximity voice currently hears them. */
+  speaking?: boolean
+  /** Whether they are the one sharing a screen. */
+  isPresenting?: boolean
 }) {
   const meshRef = useRef<Group>(null)
   // Allocated once. The old version constructed a Vector3 every frame for every
@@ -417,7 +435,17 @@ function PlayerAvatar({
         speed={Boolean(userData.is_moving) ? 5.5 : 0}
         seed={seed}
       />
-      <NameTag name={name} accent={String(userData.color ?? "#8fd0ff")} />
+      <NameTag
+        name={name}
+        accent={String(userData.color ?? "#8fd0ff")}
+        status={statusFor({
+          activity: userData.activity as string | undefined,
+          currentRoom: userData.current_room as string | null | undefined,
+          isPresenting,
+        })}
+      />
+      {bubble && <ChatBubble text={bubble} />}
+      {speaking && <SpeakingRing accent={String(userData.color ?? "#6ee7a8")} />}
     </group>
   )
 }
@@ -885,6 +913,18 @@ const CampusWithBackend = () => {
   /** The chair within reach, for the prompt. Not the one being sat in. */
   const [seatCandidate, setSeatCandidate] = useState<Seat | null>(null)
   const [emote, setEmote] = useState<Activity | null>(null)
+  /**
+   * A clock for expiring chat bubbles.
+   *
+   * Ticks once a second rather than per frame: a bubble that vanishes a second
+   * late is invisible, and re-deriving every avatar's bubble sixty times a
+   * second is the sort of thing this page has already been fixed for once.
+   */
+  const [bubbleClock, setBubbleClock] = useState(() => Date.now())
+  useEffect(() => {
+    const timer = setInterval(() => setBubbleClock(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [])
   const isTouchDevice = useIsTouchDevice()
   const touchState = useRef(createTouchState())
   const [isMenuOpen, setIsMenuOpen] = useState(false)
@@ -1468,6 +1508,9 @@ const CampusWithBackend = () => {
                     position={avatar.position}
                     userData={avatar.userData}
                     seed={avatar.id}
+                    bubble={bubbleFor(avatar.id, campusHook.chatMessages, bubbleClock)}
+                    speaking={isSpeaking(avatar.id, voice.participants)}
+                    isPresenting={isSameParticipant(voice.screenShare?.identity, avatar.id)}
                   />
                 ))}
               </>

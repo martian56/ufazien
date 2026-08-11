@@ -27,6 +27,7 @@ import {
   courtTexture,
   facadeTexture,
   grassTexture,
+  chatBubbleTexture,
   nameTagTexture,
   pathTexture,
   stoneTexture,
@@ -865,18 +866,78 @@ export function NameTag({
   name,
   accent,
   position = [0, 2.25, 0],
+  status,
 }: {
   name: string
   accent?: string
   position?: Vec3
+  /** What they are doing, under the name. Omitted when there is nothing to say. */
+  status?: string | null
 }) {
   const texture = nameTagTexture(name, accent)
+  const statusTexture = nameTagTexture(status ? `· ${status} ·` : '', '#7f8ea3')
   if (!texture) return null
 
   return (
-    <sprite position={position} scale={[1.6, 0.4, 1]}>
+    <group position={position}>
+      <sprite scale={[1.6, 0.4, 1]}>
+        <spriteMaterial map={texture} transparent depthTest depthWrite={false} toneMapped={false} />
+      </sprite>
+      {status && statusTexture && (
+        <sprite position={[0, -0.28, 0]} scale={[1.15, 0.29, 1]}>
+          <spriteMaterial
+            map={statusTexture}
+            transparent
+            opacity={0.85}
+            depthTest
+            depthWrite={false}
+            toneMapped={false}
+          />
+        </sprite>
+      )}
+    </group>
+  )
+}
+
+/**
+ * A chat message over its author's head.
+ *
+ * Chat was a DOM panel with no connection to the world, so a room full of
+ * people talking looked completely silent.
+ */
+export function ChatBubble({ text, position = [0, 2.95, 0] }: { text: string; position?: Vec3 }) {
+  const texture = chatBubbleTexture(text)
+  if (!texture) return null
+
+  return (
+    <sprite position={position} scale={[2.6, 1.3, 1]}>
       <spriteMaterial map={texture} transparent depthTest depthWrite={false} toneMapped={false} />
     </sprite>
+  )
+}
+
+/**
+ * A ring on the floor under whoever is talking.
+ *
+ * Proximity voice had no visible sign at all: you could hear somebody perfectly
+ * well and have no idea which of the twenty students in the quad it was.
+ */
+export function SpeakingRing({ accent = '#6ee7a8' }: { accent?: string }) {
+  const ring = useRef<THREE.Mesh>(null)
+
+  useFrame((state) => {
+    const mesh = ring.current
+    if (!mesh) return
+    // A slow pulse, so it reads as live rather than as a painted marker.
+    const pulse = 1 + Math.sin(state.clock.elapsedTime * 5) * 0.08
+    mesh.scale.set(pulse, pulse, 1)
+  })
+
+  return (
+    <mesh ref={ring} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]}>
+      <ringGeometry args={[0.52, 0.68, 32]} />
+      <meshBasicMaterial color={accent} transparent opacity={0.75} toneMapped={false} />
+    </mesh>
   )
 }
 
