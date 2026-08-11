@@ -12,6 +12,8 @@ import VoicePanel, { ScreenShareStage } from '../../components/campus/VoicePanel
 import ProjectorScreen from '../../components/campus/ProjectorScreen'
 import { api } from '../../lib/api/client'
 import { isAuthenticated } from '../../lib/api/tokens'
+import { errorMessage } from '../../lib/api/errors'
+import gpaApi from '../../lib/api/endpoints/gpa'
 import TouchControls, { createTouchState, useIsTouchDevice } from '../../components/campus/TouchControls'
 import type { TouchState } from '../../components/campus/TouchControls'
 import {
@@ -63,6 +65,13 @@ import {
   type PropSpec,
 } from '../../components/campus/campusProps'
 import CampusPropObjects from '../../components/campus/CampusPropObjects'
+import {
+  type TerminalStatistics,
+  LibraryTerminalDesk,
+  LibraryTerminalKey,
+  LibraryTerminalPanel,
+  LibraryTerminalSensor,
+} from '../../components/campus/LibraryTerminal'
 import { INTERIOR_SPECS, interiorHalfExtent } from '../../components/campus/interiorSpecs'
 import {
   CAMPUS_BUILDINGS,
@@ -572,11 +581,19 @@ function ProximityInteraction({
   onEnter,
   onExit,
   touch,
+  suppressed = false,
 }: {
   insideBuilding: CampusBuilding | null
   onEnter: (building: CampusBuilding) => void
   onExit: () => void
   touch?: React.RefObject<TouchState | null>
+  /**
+   * Something nearer has claimed the key.
+   *
+   * E is the one interact key, so standing at the library terminal would
+   * otherwise both open it and walk the player out of the building.
+   */
+  suppressed?: boolean
 }) {
   const { camera } = useThree()
   const [, get] = useKeyboardControls()
@@ -586,7 +603,7 @@ function ProximityInteraction({
     const pressed = (Boolean(get().interact) && !isTypingInField()) || Boolean(touch?.current?.interact)
     if (touch?.current?.interact) touch.current.interact = false
     // Edge trigger: holding E must not toggle every frame.
-    if (pressed && !wasPressed.current) {
+    if (pressed && !wasPressed.current && !suppressed) {
       if (insideBuilding) {
         onExit()
       } else {
@@ -1144,6 +1161,12 @@ const CampusWithBackend = () => {
   const [throwCharge, setThrowCharge] = useState(0)
   /** Whoever the player is walking after, if anybody. */
   const [followingId, setFollowingId] = useState<string | number | null>(null)
+  /** The library's calculator terminal: standing at it, and using it. */
+  const [atTerminal, setAtTerminal] = useState(false)
+  const [terminalOpen, setTerminalOpen] = useState(false)
+  const [terminalStats, setTerminalStats] = useState<TerminalStatistics | null>(null)
+  const [terminalLoading, setTerminalLoading] = useState(false)
+  const [terminalError, setTerminalError] = useState<string | null>(null)
   /**
    * A clock for expiring chat bubbles.
    *
@@ -1485,6 +1508,29 @@ const CampusWithBackend = () => {
     if (followingId !== null && !followTarget) setFollowingId(null)
   }, [followingId, followTarget])
 
+  // Read on first opening rather than on entering the library: a student who
+  // walks past the desk should not be charged a request for it.
+  useEffect(() => {
+    if (!terminalOpen || terminalStats || terminalLoading) return
+    let cancelled = false
+    setTerminalLoading(true)
+    setTerminalError(null)
+    gpaApi
+      .statistics()
+      .then((stats) => {
+        if (!cancelled) setTerminalStats(stats)
+      })
+      .catch((err) => {
+        if (!cancelled) setTerminalError(errorMessage(err, 'Could not read your record.'))
+      })
+      .finally(() => {
+        if (!cancelled) setTerminalLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [terminalOpen, terminalStats, terminalLoading])
+
   /** Whether the room the player is standing in has its lights on. */
   const roomLit = useMemo(
     () => (myRoom ? (campusHook.roomLights.get(myRoom) ?? true) : true),
@@ -1767,6 +1813,25 @@ const CampusWithBackend = () => {
         </div>
       )}
 
+      {/* The library terminal. */}
+      {atTerminal && !terminalOpen && !games.active && (
+        <div className="absolute left-1/2 -translate-x-1/2 bottom-44 sm:bottom-28 z-30 pointer-events-none">
+          <div className="bg-black/80 backdrop-blur-sm border border-sky-500/30 rounded-xl px-4 py-2 text-white text-center">
+            <div className="text-xs text-sky-300">Press E to use the terminal</div>
+          </div>
+        </div>
+      )}
+
+      {terminalOpen && (
+        <LibraryTerminalPanel
+          statistics={terminalStats}
+          loading={terminalLoading}
+          error={terminalError}
+          onClose={() => setTerminalOpen(false)}
+          onOpenCalculator={() => navigate('/gpa-calculator')}
+        />
+      )}
+
       {/* Standing in a study area offers to join it. Also DOM rather than a
           panel in the scene, for the same pointer-lock reason as the doors. */}
       {nearArea && !games.active && !nearBuilding && (
@@ -1918,7 +1983,15 @@ const CampusWithBackend = () => {
                   <TitrationStation games={games} action={actionInput} position={[0, 0, 8]} />
                 )}
                 {insideBuilding.interior === 'library' && (
-                  <ShelfStation games={games} action={actionInput} position={[0, 0, 14]} />
+                  <>
+                    <ShelfStation games={games} action={actionInput} position={[0, 0, 14]} />
+                    <LibraryTerminalDesk awake={atTerminal} />
+                    <LibraryTerminalSensor active onNear={setAtTerminal} />
+                    <LibraryTerminalKey
+                      enabled={atTerminal && !terminalOpen && !games.active}
+                      onOpen={() => setTerminalOpen(true)}
+                    />
+                  </>
                 )}
                 {insideBuilding.interior === 'sports' && (
                   <BasketballStation
@@ -1997,6 +2070,7 @@ const CampusWithBackend = () => {
               onEnter={setInsideBuilding}
               onExit={() => setInsideBuilding(null)}
               touch={touchState}
+              suppressed={atTerminal || terminalOpen}
             />
             <ActionKeyBridge action={actionInput} />
             <Player
