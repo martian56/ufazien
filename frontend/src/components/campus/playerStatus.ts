@@ -134,6 +134,26 @@ export function isSameParticipant(
   return String(identity).replace(/^user-/, '') === String(userId)
 }
 
+/**
+ * Whether two players are in the same place, and so can see each other.
+ *
+ * `current_room` is a building id, or null for the open campus. The two are
+ * compared as strings because the id travels as a number from the socket and
+ * as a string from everywhere else.
+ */
+export function inSameRoom(
+  a: string | number | null | undefined,
+  b: string | number | null | undefined,
+): boolean {
+  return normaliseRoom(a) === normaliseRoom(b)
+}
+
+/** An id, or null. Empty string is not a room — it is a missing one. */
+function normaliseRoom(room: string | number | null | undefined): string | null {
+  if (room === null || room === undefined || room === '') return null
+  return String(room)
+}
+
 export function isSpeaking(
   userId: string | number,
   participants: readonly { identity: string; speaking: boolean }[],

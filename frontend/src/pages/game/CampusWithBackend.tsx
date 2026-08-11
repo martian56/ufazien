@@ -28,6 +28,7 @@ import {
 import {
   BUBBLE_MS,
   bubbleFor,
+  inSameRoom,
   isSameParticipant,
   isSpeaking,
   statusFor,
@@ -981,6 +982,17 @@ const CampusWithBackend = () => {
   const campusHook = useCampusSimulator(lobbyId)
 
   /**
+   * The room this player is in, in the form it travels in.
+   *
+   * The same value that goes out on every position frame, so that comparing it
+   * against another player's `current_room` is comparing like with like.
+   */
+  const myRoom = useMemo(
+    () => (insideBuilding ? String(insideBuilding.id) : null),
+    [insideBuilding],
+  )
+
+  /**
    * The seat the player is actually in.
    *
    * Resolved from the id the server handed back rather than from the chair they
@@ -1142,9 +1154,19 @@ const CampusWithBackend = () => {
 
   // Convert backend player positions to 3D world coordinates
   // Filter out current user's position since they control their own camera (first-person view)
+  /**
+   * Everyone else, and the room each of them is standing in.
+   *
+   * The room matters because a position means different things in different
+   * places. Indoors the camera is in room space — every interior is built at
+   * the origin — and that is what gets sent. Drawn without checking the room,
+   * somebody sitting in the library appeared to everyone outdoors as an avatar
+   * wandering around the middle of the quad.
+   */
   const playerAvatars = useMemo(() => {
     const avatars: {
       id: string | number
+      room: string | null
       position: { x: number; z: number }
       userData: Record<string, unknown>
     }[] = []
@@ -1157,6 +1179,7 @@ const CampusWithBackend = () => {
       const worldPos = coordsTo3D(position.x, position.y)
       avatars.push({
         id: userId,
+        room: position.current_room ?? null,
         position: { x: worldPos.x, z: worldPos.z },
         userData: {
           username: position.username,
@@ -1176,6 +1199,19 @@ const CampusWithBackend = () => {
     })
     return avatars
   }, [playerPositions, coordsTo3D, currentUser?.id])
+
+  /**
+   * The ones you can actually see from where you are standing.
+   *
+   * A room is a shared place now, not a local view of one: walk into the
+   * cafeteria with somebody and you are both in it. Outdoors this hides
+   * everybody who is indoors, whose coordinates would otherwise land them on
+   * the quad.
+   */
+  const visibleAvatars = useMemo(
+    () => playerAvatars.filter((avatar) => inSameRoom(avatar.room, myRoom)),
+    [playerAvatars, myRoom],
+  )
 
   if (isLoading) {
     return (
@@ -1537,6 +1573,22 @@ const CampusWithBackend = () => {
                     range={24}
                   />
                 )}
+                {/* The people in the room with you. A room used to be a local
+                    view that nobody else appeared in, so walking into the
+                    cafeteria with a friend put you both somewhere empty. The
+                    coordinates need no conversion: inside, everyone's camera
+                    is already in this room's space. */}
+                {visibleAvatars.map((avatar) => (
+                  <PlayerAvatar
+                    key={avatar.id}
+                    position={avatar.position}
+                    userData={avatar.userData}
+                    seed={avatar.id}
+                    bubble={bubbleFor(avatar.id, spokenMessages, bubbleClock)}
+                    speaking={isSpeaking(avatar.id, voice.participants)}
+                    isPresenting={isSameParticipant(voice.screenShare?.identity, avatar.id)}
+                  />
+                ))}
               </BuildingInterior>
             ) : (
               <>
@@ -1562,9 +1614,10 @@ const CampusWithBackend = () => {
                 />
                 <DashCourse games={games} />
 
-                {/* Other Players. Only drawn outdoors: the interiors are a
-                    local view of a room, not a shared copy of the world. */}
-                {playerAvatars.map((avatar) => (
+                {/* Everybody else who is also outdoors. Anyone inside a
+                    building is sending room coordinates, which drawn out here
+                    put them in the middle of the quad. */}
+                {visibleAvatars.map((avatar) => (
                   <PlayerAvatar
                     key={avatar.id}
                     position={avatar.position}
