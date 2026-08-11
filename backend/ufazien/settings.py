@@ -160,11 +160,27 @@ CACHES = {
 }
 
 # Channel Layers Configuration
-CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels.layers.InMemoryChannelLayer',
-    },
-}
+#
+# InMemoryChannelLayer only reaches consumers inside one process, so group
+# sends never cross workers: two students on different uvicorn workers cannot
+# see each other's chat messages or campus movement. It survives here only as
+# the fallback for local development and the test suite, where a single
+# process is the whole world and requiring Redis would be friction.
+REDIS_URL = os.getenv("REDIS_URL", "")
+
+if REDIS_URL:
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels_redis.core.RedisChannelLayer',
+            'CONFIG': {'hosts': [REDIS_URL]},
+        },
+    }
+else:
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels.layers.InMemoryChannelLayer',
+        },
+    }
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
@@ -256,10 +272,44 @@ STORAGES = {
             "location": MEDIA_ROOT,
         },
     },
+    "private": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+        "OPTIONS": {
+            "location": MEDIA_ROOT / "private",
+        },
+    },
     "staticfiles": {
         "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
     },
 }
+
+# Object storage. Everything above is the local-disk fallback used by the test
+# suite and by anyone running the app without MinIO; setting the endpoint is
+# what moves uploads off the container's filesystem.
+#
+# The endpoint is the public domain, not the internal container address. A
+# presigned URL carries a signature bound to the host it was signed for, so
+# signing against an internal hostname yields URLs that fail as soon as a
+# browser requests them from the public domain.
+AWS_S3_ENDPOINT_URL = os.getenv("AWS_S3_ENDPOINT_URL", "").rstrip("/")
+AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID", "")
+AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY", "")
+AWS_PUBLIC_BUCKET_NAME = os.getenv("AWS_PUBLIC_BUCKET_NAME", "ufazien-public")
+AWS_PRIVATE_BUCKET_NAME = os.getenv("AWS_PRIVATE_BUCKET_NAME", "ufazien-private")
+AWS_PRIVATE_URL_EXPIRY_SECONDS = int(os.getenv("AWS_PRIVATE_URL_EXPIRY_SECONDS", "3600"))
+AWS_S3_REGION_NAME = os.getenv("AWS_S3_REGION_NAME", "us-east-1")
+# MinIO serves many buckets from one hostname, so the bucket stays in the path
+# rather than becoming a subdomain.
+AWS_S3_ADDRESSING_STYLE = "path"
+AWS_S3_FILE_OVERWRITE = False
+AWS_DEFAULT_ACL = None
+
+USE_OBJECT_STORAGE = bool(AWS_S3_ENDPOINT_URL and AWS_ACCESS_KEY_ID)
+
+if USE_OBJECT_STORAGE:
+    STORAGES["default"] = {"BACKEND": "api.storages.PublicMediaStorage"}
+    STORAGES["private"] = {"BACKEND": "api.storages.PrivateMediaStorage"}
+    MEDIA_URL = f"{AWS_S3_ENDPOINT_URL}/{AWS_PUBLIC_BUCKET_NAME}/"
 
 # File upload settings
 FILE_UPLOAD_MAX_MEMORY_SIZE = 5242880  # 5MB
