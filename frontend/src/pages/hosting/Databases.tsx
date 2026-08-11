@@ -277,8 +277,8 @@ export default function Databases() {
                 <div key={database.id} className="bg-white rounded-lg border border-gray-200 p-6">
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-center space-x-3">
-                      <div className="bg-green-100 rounded-lg p-2">
-                        <Database className="h-5 w-5 text-green-600" />
+                      <div className="bg-gray-100 rounded-lg p-2">
+                        <Database className="h-5 w-5 text-gray-700" />
                       </div>
                       <div>
                         <h3 className="font-semibold text-gray-900">{database.name}</h3>

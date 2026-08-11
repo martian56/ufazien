@@ -291,9 +291,9 @@ export default function Community() {
         <meta name="description" content="Connect with peers and join study groups on Ufazien's community page." />
       </Helmet>
       <SidebarPanel>
-        <div className="mt-8 px-3">
-          <div className="bg-gray-50 rounded-lg p-4">
-            <h3 className="font-medium text-gray-900 mb-3">Your Activity</h3>
+        <div className="mt-3 px-3">
+          <div className="bg-gray-50 rounded-lg p-3">
+            <h3 className="text-sm font-medium text-gray-900 mb-2">Your Activity</h3>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-gray-600">Groups Joined</span>

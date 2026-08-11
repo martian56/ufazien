@@ -25,8 +25,8 @@ export default function HostingPage({ title, description, icon: Icon, children }
             <div className="mb-8">
               <div className="flex items-center space-x-3 mb-4">
                 {Icon && (
-                  <div className="bg-blue-100 rounded-lg p-2">
-                    <Icon className="h-6 w-6 text-blue-600" />
+                  <div className="bg-gray-100 rounded-lg p-2">
+                    <Icon className="h-6 w-6 text-gray-700" />
                   </div>
                 )}
                 <div>
