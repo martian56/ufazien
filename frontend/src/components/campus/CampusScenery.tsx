@@ -31,6 +31,9 @@ import {
   stoneTexture,
 } from './campusTextures'
 import CampusWindows from './CampusWindows'
+import { CharacterModel } from './CharacterModel'
+
+export { CharacterModel }
 
 /**
  * Procedural campus scenery.
@@ -883,98 +886,6 @@ export function NameTag({
     <sprite position={position} scale={[1.6, 0.4, 1]}>
       <spriteMaterial map={texture} transparent depthTest depthWrite={false} toneMapped={false} />
     </sprite>
-  )
-}
-
-/** A student: capsule torso, head, arms, legs, and a walk cycle. */
-export function CharacterModel({
-  color = '#4F46E5',
-  isMoving = false,
-  direction = 'down',
-}: {
-  color?: string
-  isMoving?: boolean
-  direction?: string
-}) {
-  const legs = useRef<THREE.Group>(null)
-  const arms = useRef<THREE.Group>(null)
-  const body = useRef<THREE.Group>(null)
-
-  useFrame((state) => {
-    const t = state.clock.elapsedTime * 9
-    const swing = isMoving ? Math.sin(t) * 0.55 : 0
-
-    if (legs.current) {
-      legs.current.children.forEach((leg, i) => {
-        leg.rotation.x = i === 0 ? swing : -swing
-      })
-    }
-    if (arms.current) {
-      arms.current.children.forEach((arm, i) => {
-        arm.rotation.x = i === 0 ? -swing * 0.7 : swing * 0.7
-      })
-    }
-    if (body.current) {
-      // A small bob in time with the stride, and a breath when standing still.
-      body.current.position.y = isMoving
-        ? Math.abs(Math.sin(t)) * 0.05
-        : Math.sin(state.clock.elapsedTime * 1.6) * 0.015
-    }
-  })
-
-  const facing =
-    ({ down: 0, up: Math.PI, left: Math.PI / 2, right: -Math.PI / 2 } as Record<string, number>)[direction] ?? 0
-
-  return (
-    <group rotation={[0, facing, 0]}>
-      <group ref={body}>
-        <mesh castShadow position={[0, 1.05, 0]}>
-          <capsuleGeometry args={[0.28, 0.5, 4, 12]} />
-          <meshStandardMaterial color={color} roughness={0.7} />
-        </mesh>
-
-        {/* Collar, so the torso is not one undifferentiated pill */}
-        <mesh castShadow position={[0, 1.38, 0]}>
-          <cylinderGeometry args={[0.2, 0.28, 0.12, 12]} />
-          <meshStandardMaterial color="#f0f2f5" roughness={0.85} />
-        </mesh>
-
-        <mesh castShadow position={[0, 1.6, 0]}>
-          <sphereGeometry args={[0.23, 20, 16]} />
-          <meshStandardMaterial color="#f2c4a8" roughness={0.8} />
-        </mesh>
-
-        {/* Hair, so heads are not featureless spheres */}
-        <mesh position={[0, 1.7, -0.02]}>
-          <sphereGeometry args={[0.238, 20, 16, 0, Math.PI * 2, 0, Math.PI / 2]} />
-          <meshStandardMaterial color="#3a2b23" roughness={1} />
-        </mesh>
-
-        {/* Backpack: everyone on a campus has one, and it reads at a distance */}
-        <mesh castShadow position={[0, 1.08, -0.3]}>
-          <boxGeometry args={[0.4, 0.5, 0.2]} />
-          <meshStandardMaterial color="#2f3a4a" roughness={0.9} />
-        </mesh>
-
-        <group ref={arms}>
-          {[-0.36, 0.36].map((x) => (
-            <mesh key={x} castShadow position={[x, 1.05, 0]} rotation={[0, 0, x > 0 ? -0.15 : 0.15]}>
-              <capsuleGeometry args={[0.09, 0.42, 4, 8]} />
-              <meshStandardMaterial color={color} roughness={0.7} />
-            </mesh>
-          ))}
-        </group>
-      </group>
-
-      <group ref={legs} position={[0, 0.62, 0]}>
-        {[-0.14, 0.14].map((x) => (
-          <mesh key={x} castShadow position={[x, -0.3, 0]}>
-            <capsuleGeometry args={[0.11, 0.4, 4, 8]} />
-            <meshStandardMaterial color="#2f3a4a" roughness={0.85} />
-          </mesh>
-        ))}
-      </group>
-    </group>
   )
 }
 

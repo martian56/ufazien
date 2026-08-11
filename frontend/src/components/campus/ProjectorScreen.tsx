@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import * as THREE from "three"
+import { fitProjector } from './projectorFit'
 
 /**
  * A projector screen that lives in the room.
@@ -11,15 +12,6 @@ import * as THREE from "three"
  * perspective, is occluded by whatever stands in front of it, and you have to
  * walk up to it to read small text, the way a projector actually behaves.
  */
-
-const MAX_WIDTH = 16
-const MAX_HEIGHT = 8.4
-
-/** Screen size that fits the video's aspect inside the wall's budget. */
-function fitScreen(aspect: number): [number, number] {
-  const width = Math.min(MAX_WIDTH, MAX_HEIGHT * aspect)
-  return [width, width / aspect]
-}
 
 /**
  * The light between lens and screen, as a rectangular pyramid rather than a
@@ -96,17 +88,27 @@ function useVideoTexture(video: HTMLVideoElement | null) {
 interface ProjectorScreenProps {
   video: HTMLVideoElement | null
   position?: [number, number, number]
+  /**
+   * The room's ceiling height. Defaults to 10, which is what the interiors
+   * were before they each got their own dimensions.
+   */
+  ceiling?: number
 }
 
-export default function ProjectorScreen({ video, position = [0, 5.2, -19.15] }: ProjectorScreenProps) {
+export default function ProjectorScreen({
+  video,
+  position = [0, 5.2, -19.15],
+  ceiling = 10,
+}: ProjectorScreenProps) {
   const aspect = useVideoAspect(video)
   const texture = useVideoTexture(video)
-  const [width, height] = fitScreen(aspect)
+  const { width, height, mount } = fitProjector(aspect, position[1], ceiling)
 
-  // Ceiling mount, in front of and above the screen.
+  // Ceiling mount, in front of and above the screen. In the screen's local
+  // space, so it has to undo the group's own offset.
   const lens = useMemo<[number, number, number]>(
-    () => [0, 8.7 - position[1], -7 - position[2]],
-    [position],
+    () => [0, mount - position[1], -7 - position[2]],
+    [position, mount],
   )
   const beam = useBeamGeometry(width, height, lens)
 

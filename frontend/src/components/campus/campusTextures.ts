@@ -374,6 +374,77 @@ export function lettersTexture(text: string, color = '#6b5b40') {
   return texture
 }
 
+/**
+ * A face, drawn on a transparent canvas and mapped onto a small plane in front
+ * of the head.
+ *
+ * Modelling eyes as geometry is four more meshes per student, and at twenty
+ * students that is eighty draw calls spent on something two metres of distance
+ * makes illegible anyway. One plane carries the whole expression, and because
+ * it is a texture the expression can vary per person for free.
+ */
+export function faceTexture(variant: 0 | 1 | 2) {
+  const key = `face:${variant}`
+  const hit = cache.get(key)
+  if (hit) return hit
+  if (typeof document === 'undefined') return null
+
+  const canvas = document.createElement('canvas')
+  canvas.width = 128
+  canvas.height = 128
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return null
+
+  ctx.clearRect(0, 0, 128, 128)
+
+  // Eyes. The whites are deliberately small; large ones read as cartoon.
+  const eyeY = 56
+  for (const x of [44, 84]) {
+    ctx.fillStyle = '#fbfbfa'
+    ctx.beginPath()
+    ctx.ellipse(x, eyeY, 11, variant === 2 ? 7 : 9, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.fillStyle = '#2a1f18'
+    ctx.beginPath()
+    ctx.arc(x + (variant === 2 ? 1.5 : 0), eyeY, 5, 0, Math.PI * 2)
+    ctx.fill()
+  }
+
+  // Brows, which carry more expression than the eyes do.
+  ctx.strokeStyle = 'rgba(40,28,20,0.85)'
+  ctx.lineWidth = 4.5
+  ctx.lineCap = 'round'
+  for (const [x, tilt] of [
+    [44, variant === 2 ? 4 : -2],
+    [84, variant === 2 ? -4 : 2],
+  ] as [number, number][]) {
+    ctx.beginPath()
+    ctx.moveTo(x - 11, eyeY - 17 + tilt)
+    ctx.lineTo(x + 11, eyeY - 17 - tilt)
+    ctx.stroke()
+  }
+
+  // Mouth.
+  ctx.strokeStyle = 'rgba(122,64,54,0.95)'
+  ctx.lineWidth = 5.5
+  ctx.beginPath()
+  if (variant === 1) {
+    ctx.arc(64, 78, 15, 0.25 * Math.PI, 0.75 * Math.PI)
+  } else if (variant === 2) {
+    ctx.moveTo(53, 92)
+    ctx.lineTo(75, 92)
+  } else {
+    ctx.arc(64, 82, 12, 0.15 * Math.PI, 0.85 * Math.PI)
+  }
+  ctx.stroke()
+
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.colorSpace = THREE.SRGBColorSpace
+  texture.anisotropy = 4
+  cache.set(key, texture)
+  return texture
+}
+
 /** The board over a building's door. */
 export function buildingSignTexture(name: string, icon: string) {
   const key = `sign:${name}:${icon}`

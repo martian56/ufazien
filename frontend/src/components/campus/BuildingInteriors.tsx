@@ -4,6 +4,7 @@ import * as THREE from 'three'
 import type { InteriorKind, Vec3 } from './campusLayout'
 import { mulberry32 } from './campusLayout'
 import { INTERIOR_SPECS, type FloorKind, type InteriorSpec } from './interiorSpecs'
+import { LECTURE_ROWS, LECTURE_SEATING } from './lectureSeating'
 import {
   carpetTexture,
   ceilingTexture,
@@ -724,21 +725,20 @@ function LabInterior({ spec }: { spec: InteriorSpec }) {
 
 function LectureInterior({ spec }: { spec: InteriorSpec }) {
   const half = spec.halfExtent
-  const rows = [0, 1, 2, 3, 4, 5]
 
   return (
     <group>
       {/* Raked seating: each row on its own step, rising towards the back.
           The old room put flat desks on a flat floor, which is not what an
           amphitheatre is. */}
-      {rows.map((row) => {
-        const z = -4 + row * 4.6
-        const y = row * 0.75
+      {LECTURE_ROWS.map((row) => {
+        const z = LECTURE_SEATING.frontZ + row * LECTURE_SEATING.rowDepth
+        const y = row * LECTURE_SEATING.riser
         return (
           <group key={row} position={[0, y, z]}>
             {/* The step itself */}
-            <mesh castShadow receiveShadow position={[0, -0.375, 0]}>
-              <boxGeometry args={[half * 1.85, 0.75, 4.6]} />
+            <mesh castShadow receiveShadow position={[0, -LECTURE_SEATING.riser / 2, 0]}>
+              <boxGeometry args={[half * 1.85, LECTURE_SEATING.riser, LECTURE_SEATING.rowDepth]} />
               <meshStandardMaterial color="#8f8a7c" roughness={0.95} />
             </mesh>
             {/* Continuous desk */}

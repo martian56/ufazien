@@ -70,6 +70,36 @@ export interface PlayerPosition {
   last_updated?: string
 }
 
+/**
+ * Turns one `position_update` frame into the entry we keep for that player.
+ *
+ * Pulled out of the socket handler so it can be tested, because what it does
+ * or does not copy across matters more than it looks. `current_room` was
+ * missing here while the consumer had been sending it all along: the lobby
+ * snapshot set a player's room, and then the very first step they took
+ * replaced their entry with one that had no room on it at all. Since a
+ * presenter's room is what decides whose projector a screen share appears on,
+ * sharing worked right up until the presenter moved, and then went blank for
+ * everyone watching.
+ */
+export function playerPositionFromUpdate(data: {
+  position: PlayerPosition
+  username?: string
+  full_name?: string
+}): PlayerPosition {
+  return {
+    x: data.position.x,
+    y: data.position.y,
+    direction: data.position.direction || 'down',
+    is_moving: data.position.is_moving || false,
+    current_room: data.position.current_room ?? null,
+    last_updated: new Date().toISOString(),
+    username: data.username,
+    // Use full_name, fallback to username
+    full_name: data.full_name || data.username,
+  }
+}
+
 export const useCampusSimulator = (lobbyId: string | null = null) => {
     // Defensive: ignore string values that may come from route params like 'null' or 'undefined'
     if (typeof lobbyId === 'string' && (lobbyId === 'null' || lobbyId === 'undefined')) {
@@ -241,15 +271,7 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
             
             setPlayerPositions(prev => {
                 const newPositions = new Map(prev);
-                newPositions.set(data.user_id, {
-                    x: data.position.x,
-                    y: data.position.y,
-                    direction: data.position.direction || 'down',
-                    is_moving: data.position.is_moving || false,
-                    last_updated: new Date().toISOString(),
-                    username: data.username,
-                    full_name: data.full_name || data.username  // Use full_name, fallback to username
-                });
+                newPositions.set(data.user_id, playerPositionFromUpdate(data));
                 return newPositions;
             });
         });

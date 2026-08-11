@@ -352,10 +352,13 @@ function ChatSystem({
 function PlayerAvatar({
   position,
   userData,
+  seed,
 }: {
   position: { x: number; z: number }
   /** Loose: the same component renders both a socket payload and local state. */
   userData: Record<string, unknown>
+  /** The player's user id, which decides everything about how they look. */
+  seed: string | number
 }) {
   const meshRef = useRef<Group>(null)
   // Allocated once. The old version constructed a Vector3 every frame for every
@@ -376,6 +379,7 @@ function PlayerAvatar({
         color={String(userData.color ?? "#4F46E5")}
         isMoving={Boolean(userData.is_moving)}
         direction={String(userData.direction ?? "down")}
+        seed={seed}
       />
       <NameTag name={name} accent={String(userData.color ?? "#8fd0ff")} />
     </group>
@@ -396,10 +400,16 @@ function InteriorCameraPlacement({ insideBuilding }: { insideBuilding: CampusBui
   useEffect(() => {
     if (insideBuilding) {
       outsidePosition.current = camera.position.clone()
-      const spawn = INTERIOR_SPECS[insideBuilding.interior].spawn
+      const spec = INTERIOR_SPECS[insideBuilding.interior]
       // Just inside the entrance, facing into the room.
-      camera.position.set(spawn[0], spawn[1], spawn[2])
-      camera.rotation.set(0, 0, 0)
+      camera.position.set(spec.spawn[0], spec.spawn[1], spec.spawn[2])
+      if (spec.spawnLookAt) {
+        // lookAt leaves roll at zero, so the pointer-lock controls pick this
+        // up as an ordinary heading and pitch.
+        camera.lookAt(spec.spawnLookAt[0], spec.spawnLookAt[1], spec.spawnLookAt[2])
+      } else {
+        camera.rotation.set(0, 0, 0)
+      }
     } else if (outsidePosition.current) {
       camera.position.copy(outsidePosition.current)
       outsidePosition.current = null
@@ -1156,6 +1166,7 @@ const CampusWithBackend = () => {
                 <ProjectorScreen
                   video={shareIsInThisRoom ? voice.screenShare?.element || null : null}
                   position={interiorSpec.projector}
+                  ceiling={interiorSpec.ceiling}
                 />
 
                 {/* Whichever mini-game lives in this building. */}
@@ -1205,6 +1216,7 @@ const CampusWithBackend = () => {
                     key={avatar.id}
                     position={avatar.position}
                     userData={avatar.userData}
+                    seed={avatar.id}
                   />
                 ))}
               </>

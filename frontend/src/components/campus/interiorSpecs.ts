@@ -20,8 +20,15 @@ export interface InteriorSpec {
   floor: FloorKind
   /** Where the projector screen hangs, so a screen share lands on a wall. */
   projector: Vec3
-  /** Where the player stands on entering, and which way they face. */
+  /** Where the player stands on entering. */
   spawn: Vec3
+  /**
+   * What they are looking at. Rooms default to facing the projector wall,
+   * which is right when the room is arranged around it. The amphitheatre is
+   * not: entering there on the axis puts a fifteen-metre blank screen across
+   * the whole view, and you cannot see the hall you just walked into.
+   */
+  spawnLookAt?: Vec3
   /** Light colour and strength, which is most of a room's character. */
   lightColor: string
   lightIntensity: number
@@ -47,7 +54,8 @@ export const INTERIOR_SPECS: Record<InteriorKind, InteriorSpec> = {
   },
   lecture: {
     halfExtent: 22, ceiling: 12, wall: '#d8d2c4', accent: '#3f4a5c', floor: 'carpet',
-    projector: [0, 6.2, -21.2], spawn: [0, 1.7, 17], lightColor: '#fff6e8', lightIntensity: 0.9,
+    projector: [0, 6.2, -21.2], spawn: [-11, 1.7, -10], spawnLookAt: [3, 4.5, -19],
+    lightColor: '#fff6e8', lightIntensity: 0.9,
   },
   'student-center': {
     halfExtent: 22, ceiling: 10, wall: '#e6ebee', accent: '#3f8f7f', floor: 'carpet',
