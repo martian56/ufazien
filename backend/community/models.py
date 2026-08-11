@@ -4,6 +4,8 @@ from django.core.validators import MinLengthValidator, MaxLengthValidator
 from django.utils import timezone
 import uuid
 
+from api.attachments import private_attachment_storage
+
 User = get_user_model()
 
 
@@ -122,8 +124,14 @@ class GroupMessage(TimeStampedModel):
     message_type = models.CharField(max_length=10, choices=MESSAGE_TYPES, default='text')
     
     # File attachments
-    file_attachment = models.FileField(upload_to='groups/files/', blank=True, null=True)
-    image_attachment = models.ImageField(upload_to='groups/images/', blank=True, null=True)
+    file_attachment = models.FileField(
+        upload_to='groups/files/', blank=True, null=True,
+        storage=private_attachment_storage,
+    )
+    image_attachment = models.ImageField(
+        upload_to='groups/images/', blank=True, null=True,
+        storage=private_attachment_storage,
+    )
     
     # Message status
     is_edited = models.BooleanField(default=False)
@@ -329,8 +337,14 @@ class PrivateMessage(TimeStampedModel):
     message_type = models.CharField(max_length=10, choices=MESSAGE_TYPES, default='text')
     
     # File attachments
-    file_attachment = models.FileField(upload_to='private_chats/files/', blank=True, null=True)
-    image_attachment = models.ImageField(upload_to='private_chats/images/', blank=True, null=True)
+    file_attachment = models.FileField(
+        upload_to='private_chats/files/', blank=True, null=True,
+        storage=private_attachment_storage,
+    )
+    image_attachment = models.ImageField(
+        upload_to='private_chats/images/', blank=True, null=True,
+        storage=private_attachment_storage,
+    )
     
     # Message status
     is_read = models.BooleanField(default=False)

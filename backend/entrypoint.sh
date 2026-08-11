@@ -34,4 +34,10 @@ else
     echo "RUN_MIGRATIONS is not 'true', skipping migrations."
 fi
 
+# Provisions the media buckets and reasserts their read policies. A no-op when
+# object storage is unconfigured. Deliberately not fatal: object storage being
+# briefly unreachable should not stop the site from serving.
+python manage.py ensure_media_buckets || \
+    echo "ensure_media_buckets failed; uploads may not work until this is resolved." >&2
+
 exec "$@"
