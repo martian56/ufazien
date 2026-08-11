@@ -425,6 +425,100 @@ class LobbyConsumerTests(TestCase):
         seating = async_to_sync(scenario)()
         self.assertEqual(seating[self.host.id], ('lecture-2-3', PlayerPosition.SITTING))
 
+    def test_a_seated_player_is_announced_as_seated(self):
+        """
+        The correction has to reach the wire, not just the row.
+
+        Remote clients read `activity` straight off the position frame, so
+        storing the player as sitting while telling every peer they are
+        standing takes the avatar out of the chair everywhere and leaves the
+        server still holding the seat — the same shape of fault as the
+        `current_room` one, correct in the database and wrong on the wire.
+        """
+        from asgiref.sync import async_to_sync
+
+        async def scenario():
+            import json
+
+            a, _ = await self._connect(self.host)
+            b, _ = await self._connect(self.player)
+            try:
+                await self._drain(a, b)
+                await a.send_json_to({'type': 'take_seat', 'seat': 'lecture-1-2'})
+                await a.receive_from(timeout=2)
+                await self._drain(b)
+
+                await a.send_json_to({
+                    'type': 'player_position',
+                    'x': 1.0, 'y': 2.0, 'activity': 'standing', 'is_moving': True,
+                })
+                for _ in range(5):
+                    if await b.receive_nothing(timeout=1):
+                        continue
+                    payload = json.loads(await b.receive_from(timeout=2))
+                    if payload.get('type') == 'position_update':
+                        return payload
+                return None
+            finally:
+                await a.disconnect()
+                await b.disconnect()
+
+        payload = async_to_sync(scenario)()
+        self.assertIsNotNone(payload, 'other player never received a position_update')
+        self.assertEqual(payload['position']['activity'], 'sitting')
+
+    def test_a_seated_player_can_still_emote(self):
+        """Raising a hand from a chair is the point of having both."""
+        from asgiref.sync import async_to_sync
+
+        async def scenario():
+            import json
+
+            a, _ = await self._connect(self.host)
+            b, _ = await self._connect(self.player)
+            try:
+                await self._drain(a, b)
+                await a.send_json_to({'type': 'take_seat', 'seat': 'lecture-1-3'})
+                await a.receive_from(timeout=2)
+                await self._drain(b)
+
+                await a.send_json_to({
+                    'type': 'player_position',
+                    'x': 1.0, 'y': 2.0, 'activity': 'hand_raised', 'is_moving': False,
+                })
+                for _ in range(5):
+                    if await b.receive_nothing(timeout=1):
+                        continue
+                    payload = json.loads(await b.receive_from(timeout=2))
+                    if payload.get('type') == 'position_update':
+                        return payload, await self._seating(self.lobby.id)
+                return None, None
+            finally:
+                await a.disconnect()
+                await b.disconnect()
+
+        payload, seating = async_to_sync(scenario)()
+        self.assertIsNotNone(payload)
+        # Only 'standing' is overridden, so the emote survives...
+        self.assertEqual(payload['position']['activity'], 'hand_raised')
+        # ...and the seat is still held, because only leave_seat releases it.
+        self.assertEqual(seating[self.host.id][0], 'lecture-1-3')
+
+    def test_an_empty_seat_string_is_not_a_seat(self):
+        """
+        The one-per-chair rule excludes NULL, not ''.
+
+        Two players each holding an empty string would be a real conflict in
+        one lobby, and `default=None` does not stop a write of ''.
+        """
+        from django.db.utils import IntegrityError
+        from .models import PlayerPosition
+
+        with self.assertRaises(IntegrityError):
+            PlayerPosition.objects.create(
+                lobby=self.lobby, user=self.host, x=0, y=0, seat='',
+            )
+
     def test_a_position_frame_cannot_claim_a_seat(self):
         """The occupancy check lives in take_seat; nothing may route around it."""
         from asgiref.sync import async_to_sync
