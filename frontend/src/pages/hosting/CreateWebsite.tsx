@@ -288,7 +288,7 @@ export default function CreateWebsite() {
         <title>Create New Website | Ufazien Hosting</title>
         <meta name="description" content="Create a new website on Ufazien hosting platform" />
       </Helmet>
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-white">
         <HostingSidebar />
         
         <div className="lg:ml-64">
@@ -355,7 +355,7 @@ export default function CreateWebsite() {
 
             {/* Form Content */}
             <div className="max-w-2xl mx-auto">
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <div className="bg-white rounded-lg border border-gray-200 p-6">
                 
                 {/* Error Display */}
                 {submitError && (

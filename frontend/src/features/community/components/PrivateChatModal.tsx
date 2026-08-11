@@ -4,6 +4,7 @@ import { X } from "lucide-react"
 import { communityApi as communityAPI } from "../../../lib/api/endpoints/community"
 import { getYearDisplay } from "../../../utils/majorUtils"
 import type { UserSearchResult } from "../../../lib/api/endpoints/community"
+import { Checkbox } from "../../../components/ui/checkbox"
 
 interface NewChat {
   participant_ids: number[]
@@ -91,12 +92,10 @@ export default function PrivateChatModal({ onClose, onCreateChat }: PrivateChatM
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Group Chat Toggle */}
             <div className="flex items-center gap-3">
-              <input
-                type="checkbox"
+              <Checkbox
                 id="group-chat"
                 checked={isGroupChat}
-                onChange={(e) => setIsGroupChat(e.target.checked)}
-                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                onCheckedChange={(checked) => setIsGroupChat(checked)}
               />
               <label htmlFor="group-chat" className="text-sm font-medium text-gray-700">
                 Group Chat
@@ -114,7 +113,7 @@ export default function PrivateChatModal({ onClose, onCreateChat }: PrivateChatM
                   value={chatName}
                   onChange={(e) => setChatName(e.target.value)}
                   placeholder="Enter chat name"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                   required={isGroupChat}
                 />
               </div>
@@ -130,7 +129,7 @@ export default function PrivateChatModal({ onClose, onCreateChat }: PrivateChatM
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search by first or last name"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
               />
               {isSearching && (
                 <div className="text-sm text-gray-500 mt-1">Searching...</div>

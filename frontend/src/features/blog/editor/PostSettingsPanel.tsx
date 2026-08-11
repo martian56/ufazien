@@ -2,6 +2,7 @@ import type React from "react"
 import { Settings, X } from "lucide-react"
 
 import type { PostVisibility } from "../../../lib/api/endpoints/blog"
+import Select from "../../../components/ui/Select"
 
 interface TagSuggestion {
   id: number | string
@@ -41,10 +42,10 @@ interface PostSettingsPanelProps {
  */
 
 const VISIBILITY_OPTIONS = [
-  { value: 'public', label: '🌍 Public', hint: 'Anyone can find and read it.' },
-  { value: 'unlisted', label: '🔗 Unlisted', hint: 'Only people with the link. Not listed anywhere.' },
-  { value: 'followers', label: '👥 Followers only', hint: 'Only people who follow you.' },
-  { value: 'private', label: '🔒 Private', hint: 'Only you.' },
+  { value: 'public', label: 'Public', hint: 'Anyone can find and read it.' },
+  { value: 'unlisted', label: 'Unlisted', hint: 'Only people with the link. Not listed anywhere.' },
+  { value: 'followers', label: 'Followers only', hint: 'Only people who follow you.' },
+  { value: 'private', label: 'Private', hint: 'Only you.' },
 ]
 
 export default function PostSettingsPanel({
@@ -74,7 +75,7 @@ export default function PostSettingsPanel({
   const selectedVisibility = VISIBILITY_OPTIONS.find((o) => o.value === visibility)
 
   return (
-    <div className={`rounded-xl shadow-sm border p-6 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+    <div className={`rounded-xl border p-6 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
       <h3 className="font-semibold flex items-center mb-4">
         <Settings className="w-4 h-4 mr-2" />
         Post Settings
@@ -83,32 +84,24 @@ export default function PostSettingsPanel({
       <div className="space-y-4">
         <div>
           <label className="block text-sm font-medium mb-2" htmlFor="post-category">Category</label>
-          <select
+          <Select
             id="post-category"
             value={category}
-            onChange={(e) => onCategoryChange(e.target.value)}
-            className={fieldClass}
+            onChange={onCategoryChange}
             disabled={isLoadingCategories}
-          >
-            <option value="">{isLoadingCategories ? 'Loading categories...' : 'Select a category'}</option>
-            {categories.map((cat) => (
-              <option key={cat.id} value={cat.id}>{cat.name}</option>
-            ))}
-          </select>
+            options={categories.map((cat) => ({ value: String(cat.id), label: cat.name }))}
+            placeholder={isLoadingCategories ? "Loading categories..." : "Select a category"}
+          />
         </div>
 
         <div>
           <label className="block text-sm font-medium mb-2" htmlFor="post-visibility">Visibility</label>
-          <select
+          <Select
             id="post-visibility"
             value={visibility}
-            onChange={(e) => onVisibilityChange(e.target.value as PostVisibility)}
-            className={fieldClass}
-          >
-            {VISIBILITY_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-            ))}
-          </select>
+            onChange={(value) => onVisibilityChange(value as PostVisibility)}
+            options={VISIBILITY_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+          />
           {selectedVisibility && (
             <div className="text-xs text-gray-500 mt-1">{selectedVisibility.hint}</div>
           )}

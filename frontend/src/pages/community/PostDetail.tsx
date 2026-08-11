@@ -79,7 +79,7 @@ export default function PostDetail() {
         <title>{`${post.title} | Ufazien Community`}</title>
       </Helmet>
 
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-white">
         <div className="max-w-3xl mx-auto px-4 py-6">
           <Link
             to="/community"

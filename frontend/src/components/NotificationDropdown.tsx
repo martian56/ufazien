@@ -4,6 +4,8 @@ import notificationsAPI from '../lib/api/endpoints/notifications';
 import pushNotificationService from '../services/pushNotificationService';
 import { useToast, ToastContainer } from '../hooks/useToast';
 import type { Notification, NotificationPreferences } from '../lib/api/endpoints/notifications';
+import Switch from "./ui/Switch"
+import NotificationIcon from "../features/notifications/NotificationIcon"
 
 interface NotificationDropdownProps {
   unreadCount: number
@@ -96,22 +98,6 @@ export default function NotificationDropdown({ unreadCount, onCountUpdate }: Not
     }
   };
 
-  const getNotificationIcon = (type: string) => {
-    switch (type) {
-      case 'follow':
-        return '👤';
-      case 'like_post':
-      case 'like_comment':
-        return '❤️';
-      case 'comment':
-        return '💬';
-      case 'new_post':
-        return '📝';
-      default:
-        return '🔔';
-    }
-  };
-
   const getTimeAgo = (dateString: string) => {
     const diffInSeconds = Math.floor((Date.now() - new Date(dateString).getTime()) / 1000);
 
@@ -185,18 +171,11 @@ export default function NotificationDropdown({ unreadCount, onCountUpdate }: Not
                 <h4 className="text-sm font-medium text-gray-900 mb-3">Notification Settings</h4>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-700">Push Notifications</span>
-                  <button
-                    onClick={togglePushNotifications}
-                    className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-                      pushEnabled ? 'bg-blue-600' : 'bg-gray-200'
-                    }`}
-                  >
-                    <span
-                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                        pushEnabled ? 'translate-x-5' : 'translate-x-0'
-                      }`}
-                    />
-                  </button>
+                  <Switch
+                    checked={pushEnabled}
+                    onCheckedChange={togglePushNotifications}
+                    aria-label="Push notifications"
+                  />
                 </div>
               </div>
             )}
@@ -225,9 +204,7 @@ export default function NotificationDropdown({ unreadCount, onCountUpdate }: Not
                     >
                       <div className="flex items-start gap-3">
                         {/* Notification Icon */}
-                        <div className="flex-shrink-0 text-lg">
-                          {getNotificationIcon(notification.notification_type)}
-                        </div>
+                        <NotificationIcon type={notification.notification_type} size="sm" />
 
                         {/* Notification Content */}
                         <div className="flex-1 min-w-0">

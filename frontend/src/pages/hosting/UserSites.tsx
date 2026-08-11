@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react'
 import { toLocalDateKey } from '../../lib/localDate'
 import { Helmet } from 'react-helmet'
 import { ExternalLink, Globe, Search, X, Tag, Menu, ChevronDown } from 'lucide-react'
-import SideBar from '../../components/ui/SideBar'
 import { api } from '../../lib/api/client'
+import Select from "../../components/ui/Select"
+import { useAppShell } from "../../components/layout/appShellContext"
 
 /** Mirrors PublicWebsiteSerializer. */
 interface PublicSite {
@@ -23,7 +24,7 @@ interface PublicSite {
 type SitesResponse = PublicSite[] | { results: PublicSite[]; count?: number } | string
 
 export default function UserSites() {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const { isSidebarOpen, setIsSidebarOpen } = useAppShell()
   const [sites, setSites] = useState<PublicSite[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -145,11 +146,11 @@ export default function UserSites() {
         {/* <div className="mb-4 text-sm text-gray-500">Searching: <span className="font-medium">{lastQuery}</span> — Results: <span className="font-medium">{totalCount}</span></div> */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {sites.map(site => (
-            <div key={site.id} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
+            <div key={site.id} className="bg-white rounded-lg border border-gray-200 overflow-hidden hover:border-gray-300 transition-colors">
               <div className="p-4">
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-3">
-                    <div className="bg-blue-100 rounded-lg p-2"><Globe className="h-5 w-5 text-blue-600" /></div>
+                    <div className="bg-gray-100 rounded-lg p-2"><Globe className="h-5 w-5 text-gray-700" /></div>
                     <div>
                       <div className="font-semibold text-gray-900">{site.name}</div>
                       <div className="text-sm text-gray-500">{site.domain || `${(site.name || '').toLowerCase()}.ufazien.com`}</div>
@@ -218,13 +219,13 @@ export default function UserSites() {
         <meta name="description" content="Browse websites on the platform" />
       </Helmet>
 
-      <div className="min-h-screen bg-gray-50 flex">
+      <div className="flex-1 flex flex-col min-w-0">
         {/* Sidebar */}
-        <SideBar isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen} pageTitle="User Sites" />
+        
 
         {/* Main area */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          <header className="bg-white shadow-sm border-b border-gray-200">
+          <header className="bg-white border-b border-gray-200">
             <div className="flex items-center justify-between h-16 px-4 sm:px-6 lg:px-8">
               <div className="flex items-center gap-4">
                 <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden p-2 rounded-md hover:bg-gray-100">
@@ -253,7 +254,7 @@ export default function UserSites() {
                       }
                     }}
                     placeholder="Search sites..."
-                    className="pl-10 pr-10 py-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="pl-10 pr-10 py-2 w-full border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                   />
                   {searchTerm && (
                     <button onClick={() => setSearchTerm('')} className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600">
@@ -265,23 +266,23 @@ export default function UserSites() {
                 {/* Sort Dropdown */}
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-gray-600">Sort by:</span>
-                  <div className="relative">
-                    <select
+                  <div className="w-48">
+                    <Select
                       value={sortBy}
-                      onChange={(e) => {
-                        setSortBy(e.target.value)
-                        setCurrentPage(1) // Reset to first page when sorting changes
+                      onChange={(value) => {
+                        setSortBy(value)
+                        setCurrentPage(1)
                       }}
-                      className="appearance-none bg-white border border-gray-300 rounded-lg px-4 py-2 pr-8 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="-total_visits">Most Visited</option>
-                      <option value="total_visits">Least Visited</option>
-                      <option value="-created_at">Newest First</option>
-                      <option value="created_at">Oldest First</option>
-                      <option value="name">Name A-Z</option>
-                      <option value="-name">Name Z-A</option>
-                    </select>
-                    <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4 pointer-events-none" />
+                      options={[
+                        { value: "-total_visits", label: "Most Visited" },
+                        { value: "total_visits", label: "Least Visited" },
+                        { value: "-created_at", label: "Newest First" },
+                        { value: "created_at", label: "Oldest First" },
+                        { value: "name", label: "Name A-Z" },
+                        { value: "-name", label: "Name Z-A" },
+                      ]}
+                      aria-label="Sort user sites"
+                    />
                   </div>
                 </div>
               </div>

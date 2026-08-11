@@ -22,7 +22,7 @@ export default function GroupCard({ group, onJoin, onLeave, onSelect }: GroupCar
   const CategoryIcon = categoryIcons[group.category] || Users
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
+    <div className="bg-white rounded-xl border border-gray-200 p-6 hover:border-gray-300 transition-colors">
       {/* Header */}
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-3">

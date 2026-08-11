@@ -8,7 +8,17 @@ import { Button } from "../components/ui/button"
 import { Input } from "../components/ui/input"
 import { Label } from "../components/ui/label"
 import { Checkbox } from "../components/ui/checkbox"
-import SideBar from "../components/ui/SideBar"
+import Select from "../components/ui/Select"
+import {
+  Bell,
+  Check,
+  GraduationCap,
+  KeyRound,
+  Lock,
+  Palette,
+  ShieldCheck,
+  User,
+} from "lucide-react"
 import { majorOptions, getMajorDisplayName } from "../utils/majorUtils"
 import { useToast, ToastContainer } from "../hooks/useToast"
 import { settingsApi } from "../lib/api/endpoints/settings"
@@ -18,12 +28,14 @@ import AppearanceTab from "../features/settings/AppearanceTab"
 import { api } from "../lib/api/client"
 import { errorMessage } from "../lib/api/errors"
 import { Helmet } from "react-helmet"
+import Radio from "../components/ui/Radio"
+import { useAppShell } from "../components/layout/appShellContext"
 
 
 const Settings = () => {
   const navigate = useNavigate()
   const { notifications, toast, removeNotification } = useToast()
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const { isSidebarOpen, setIsSidebarOpen } = useAppShell()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
@@ -278,18 +290,18 @@ const Settings = () => {
 
   // Tab Navigation
   const tabs = [
-    { id: "profile", name: "Profile", icon: "👤" },
-    { id: "academic", name: "Academic", icon: "🎓" },
-    { id: "notifications", name: "Notifications", icon: "🔔" },
-    { id: "privacy", name: "Privacy", icon: "🔒" },
-    { id: "appearance", name: "Appearance", icon: "🎨" },
-    { id: "security", name: "Security", icon: "🛡️" },
+    { id: "profile", name: "Profile", Icon: User },
+    { id: "academic", name: "Academic", Icon: GraduationCap },
+    { id: "notifications", name: "Notifications", Icon: Bell },
+    { id: "privacy", name: "Privacy", Icon: Lock },
+    { id: "appearance", name: "Appearance", Icon: Palette },
+    { id: "security", name: "Security", Icon: ShieldCheck },
   ]
 
   // Add loading state
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading settings...</p>
@@ -304,18 +316,14 @@ const Settings = () => {
       <title>Ufazien | Settings</title>
       <meta name="description" content="User settings for managing account preferences." />
     </Helmet>
-    <div className="min-h-screen bg-gray-50 flex">
+    <div className="flex-1 flex flex-col min-w-0">
       {/* Sidebar */}
-      <SideBar
-        isSidebarOpen={isSidebarOpen}
-        setIsSidebarOpen={setIsSidebarOpen}
-        pageTitle="Settings"
-      />
+      
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="bg-white shadow-sm border-b border-gray-200">
+        <div className="bg-white border-b border-gray-200">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-center justify-between h-16">
               <div className="flex items-center gap-4">
@@ -346,7 +354,7 @@ const Settings = () => {
                       : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
                   }`}
                 >
-                  <span className="text-lg">{tab.icon}</span>
+                  <tab.Icon className="w-4 h-4" aria-hidden="true" />
                   <span>{tab.name}</span>
                 </button>
               ))}
@@ -357,14 +365,14 @@ const Settings = () => {
         {/* Settings Content */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
           <div className="max-w-4xl mx-auto">
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
               
               {/* Profile Settings */}
               {activeTab === "profile" && (
                 <div className="p-8">
                   <div className="flex items-center gap-4 mb-8">
-                    <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
-                      <span className="text-white text-xl">👤</span>
+                    <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center">
+                      <User className="w-5 h-5 text-blue-600" aria-hidden="true" />
                     </div>
                     <div>
                       <h2 className="text-2xl font-bold text-gray-900">Profile Information</h2>
@@ -373,10 +381,10 @@ const Settings = () => {
                   </div>
 
                   {/* Avatar Section */}
-                  <div className="mb-8 p-6 bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl border border-blue-100">
+                  <div className="mb-8 p-6 bg-gray-50 rounded-xl border border-gray-200">
                     <Label className="block text-sm font-semibold text-gray-700 mb-4">Profile Picture</Label>
                     <div className="flex items-center gap-6">
-                      <div className="w-24 h-24 rounded-full bg-gradient-to-r from-blue-400 to-purple-500 flex items-center justify-center overflow-hidden shadow-lg">
+                      <div className="w-20 h-20 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center overflow-hidden">
                         {profileData.avatar_url ? (
                           <img
                             src={profileData.avatar_url}
@@ -384,7 +392,7 @@ const Settings = () => {
                             className="w-full h-full object-cover"
                           />
                         ) : (
-                          <span className="text-3xl text-white">👤</span>
+                          <User className="w-8 h-8 text-gray-400" aria-hidden="true" />
                         )}
                       </div>
                       <div>
@@ -397,7 +405,7 @@ const Settings = () => {
                         />
                         <label 
                           htmlFor="avatar-upload" 
-                          className="inline-block cursor-pointer mb-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-medium rounded-lg transition-all duration-200 shadow-md hover:shadow-lg"
+                          className="inline-block cursor-pointer mb-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors duration-200"
                         >
                           Upload Photo
                         </label>
@@ -457,35 +465,34 @@ const Settings = () => {
                       <Label htmlFor="major" className="text-sm font-semibold text-gray-700">
                         Major
                       </Label>
-                      <select
+                      <Select
                         id="major"
                         value={profileData.major}
-                        onChange={(e) => handleProfileChange("major", e.target.value)}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      >
-                        {majorOptions.map((major) => (
-                          <option key={major.code} value={major.code}>
-                            {major.display}
-                          </option>
-                        ))}
-                      </select>
+                        onChange={(value) => handleProfileChange("major", value)}
+                        options={majorOptions.map((major) => ({
+                          value: String(major.code),
+                          label: major.display,
+                        }))}
+                        placeholder="Choose a major"
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="year" className="text-sm font-semibold text-gray-700">
                         Academic Year
                       </Label>
-                      <select
+                      <Select
                         id="year"
-                        value={profileData.year}
-                        onChange={(e) => handleProfileChange("year", e.target.value)}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      >
-                        <option value="1">1st Year</option>
-                        <option value="2">2nd Year</option>
-                        <option value="3">3rd Year</option>
-                        <option value="4">4th Year</option>
-                        <option value="5">Graduate</option>
-                      </select>
+                        value={String(profileData.year ?? "")}
+                        onChange={(value) => handleProfileChange("year", value)}
+                        options={[
+                          { value: "1", label: "1st Year" },
+                          { value: "2", label: "2nd Year" },
+                          { value: "3", label: "3rd Year" },
+                          { value: "4", label: "4th Year" },
+                          { value: "5", label: "Graduate" },
+                        ]}
+                        placeholder="Choose a year"
+                      />
                     </div>
                     <div className="md:col-span-2 space-y-2">
                       <Label htmlFor="phone" className="text-sm font-semibold text-gray-700">
@@ -523,9 +530,9 @@ const Settings = () => {
                       <h3 className="text-sm font-semibold text-green-800 mb-1">Credits Completed</h3>
                       <p className="text-2xl font-bold text-green-900">{profileData.completed_credits}</p>
                     </div>
-                    <div className="p-4 bg-purple-50 rounded-xl border border-purple-200">
-                      <h3 className="text-sm font-semibold text-purple-800 mb-1">Followers</h3>
-                      <p className="text-2xl font-bold text-purple-900">{profileData.followers_count}</p>
+                    <div className="p-4 bg-gray-50 rounded-xl border border-gray-200">
+                      <h3 className="text-sm font-medium text-gray-600 mb-1">Followers</h3>
+                      <p className="text-2xl font-semibold text-gray-900">{profileData.followers_count}</p>
                     </div>
                   </div>
                 </div>
@@ -535,8 +542,8 @@ const Settings = () => {
               {activeTab === "academic" && (
                 <div className="p-8">
                   <div className="flex items-center gap-4 mb-8">
-                    <div className="w-12 h-12 bg-gradient-to-r from-green-500 to-blue-600 rounded-xl flex items-center justify-center">
-                      <span className="text-white text-xl">🎓</span>
+                    <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
+                      <GraduationCap className="w-5 h-5 text-gray-700" aria-hidden="true" />
                     </div>
                     <div>
                       <h2 className="text-2xl font-bold text-gray-900">Academic Preferences</h2>
@@ -546,28 +553,26 @@ const Settings = () => {
 
                   <div className="space-y-8">
                     {/* Grade System */}
-                    <div className="p-6 bg-gradient-to-r from-green-50 to-blue-50 rounded-xl border border-green-100">
+                    <div className="p-6 bg-gray-50 rounded-xl border border-gray-200">
                       <Label className="block text-sm font-semibold text-gray-700 mb-4">Grade System</Label>
                       <div className="space-y-3">
                         <label className="flex items-center p-3 rounded-lg border border-gray-200 hover:bg-white cursor-pointer transition-colors">
-                          <input
-                            type="radio"
+                          <Radio
                             name="gradeSystem"
                             value="ufaz"
                             checked={settings.academic.gradeSystem === "ufaz"}
-                            onChange={(e) => handleAcademicChange("gradeSystem", e.target.value)}
-                            className="mr-3 text-blue-600"
+                            onSelect={(value) => handleAcademicChange("gradeSystem", value)}
+                            className="mr-3"
                           />
                           <span className="font-medium">UFAZ 20-point system</span>
                         </label>
                         <label className="flex items-center p-3 rounded-lg border border-gray-200 hover:bg-white cursor-pointer transition-colors">
-                          <input
-                            type="radio"
+                          <Radio
                             name="gradeSystem"
                             value="standard"
                             checked={settings.academic.gradeSystem === "standard"}
-                            onChange={(e) => handleAcademicChange("gradeSystem", e.target.value)}
-                            className="mr-3 text-blue-600"
+                            onSelect={(value) => handleAcademicChange("gradeSystem", value)}
+                            className="mr-3"
                           />
                           <span className="font-medium">Standard 100-point system</span>
                         </label>
@@ -655,8 +660,8 @@ const Settings = () => {
               {activeTab === "notifications" && (
                 <div className="p-8">
                   <div className="flex items-center gap-4 mb-8">
-                    <div className="w-12 h-12 bg-gradient-to-r from-yellow-500 to-orange-600 rounded-xl flex items-center justify-center">
-                      <span className="text-white text-xl">🔔</span>
+                    <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
+                      <Bell className="w-5 h-5 text-gray-700" aria-hidden="true" />
                     </div>
                     <div>
                       <h2 className="text-2xl font-bold text-gray-900">Notification Preferences</h2>
@@ -764,8 +769,8 @@ const Settings = () => {
               {activeTab === "security" && (
                 <div className="p-8">
                   <div className="flex items-center gap-4 mb-8">
-                    <div className="w-12 h-12 bg-gradient-to-r from-red-500 to-orange-600 rounded-xl flex items-center justify-center">
-                      <span className="text-white text-xl">🛡️</span>
+                    <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
+                      <ShieldCheck className="w-5 h-5 text-gray-700" aria-hidden="true" />
                     </div>
                     <div>
                       <h2 className="text-2xl font-bold text-gray-900">Security Settings</h2>
@@ -776,10 +781,10 @@ const Settings = () => {
                   <div className="space-y-8">
                     {/* Password Setup for OAuth Users */}
                     {!hasPassword && (
-                      <div className="p-6 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-xl border-2 border-yellow-200">
+                      <div className="p-6 bg-amber-50 rounded-xl border border-amber-200">
                         <div className="flex items-start gap-4 mb-4">
-                          <div className="w-10 h-10 bg-yellow-500 rounded-lg flex items-center justify-center flex-shrink-0">
-                            <span className="text-white text-xl">🔑</span>
+                          <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                            <KeyRound className="w-5 h-5 text-amber-700" aria-hidden="true" />
                           </div>
                           <div className="flex-1">
                             <h3 className="text-lg font-bold text-gray-900 mb-2">
@@ -820,7 +825,7 @@ const Settings = () => {
                               <Button
                                 onClick={handleSetPassword}
                                 disabled={settingPassword || !passwordData.password || !passwordData.password_confirm}
-                                className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white border-0 shadow-lg"
+                                className="w-full bg-blue-600 hover:bg-blue-700 text-white border-0"
                               >
                                 {settingPassword ? "Setting Password..." : "Set Password"}
                               </Button>
@@ -832,10 +837,10 @@ const Settings = () => {
 
                     {/* Password Status */}
                     {hasPassword && (
-                      <div className="p-6 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl border border-green-200">
+                      <div className="p-6 bg-emerald-50 rounded-xl border border-emerald-200">
                         <div className="flex items-center gap-4">
-                          <div className="w-10 h-10 bg-green-500 rounded-lg flex items-center justify-center">
-                            <span className="text-white text-xl">✓</span>
+                          <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center">
+                            <Check className="w-5 h-5 text-emerald-700" aria-hidden="true" />
                           </div>
                           <div>
                             <h3 className="text-lg font-bold text-gray-900 mb-1">
@@ -874,7 +879,7 @@ const Settings = () => {
                   <Button
                     onClick={saveSettings}
                     disabled={saving}
-                    className="min-w-[140px] bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white border-0 shadow-lg"
+                    className="min-w-[140px] bg-blue-600 hover:bg-blue-700 text-white border-0"
                   >
                     {saving ? "Saving..." : "Save Changes"}
                   </Button>
@@ -884,11 +889,6 @@ const Settings = () => {
           </div>
         </div>
       </div>
-
-      {/* Mobile Sidebar Overlay */}
-      {isSidebarOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden" onClick={() => setIsSidebarOpen(false)} />
-      )}
     </div>
     <ToastContainer 
       notifications={notifications} 

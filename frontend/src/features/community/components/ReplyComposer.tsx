@@ -50,7 +50,7 @@ export default function ReplyComposer({
         autoFocus={autoFocus}
         rows={3}
         maxLength={2000}
-        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-y focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-y focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
       />
 
       {error && <p className="text-xs text-red-600">{error}</p>}

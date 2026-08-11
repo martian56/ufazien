@@ -27,15 +27,15 @@ import {
   Shield,
   Ban
 } from "lucide-react"
-import SideBar from "../components/ui/SideBar"
 import { api } from "../lib/api/client"
 import { getAccessToken } from "../lib/api/tokens"
 import { formatYearDisplay, getYearDisplay } from "../utils/majorUtils"
+import { useAppShell } from "../components/layout/appShellContext"
 
 export default function Profile() {
   const { userId } = useParams()
   const navigate = useNavigate()
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const { isSidebarOpen, setIsSidebarOpen } = useAppShell()
   const [user, setUser] = useState<ApiUser | null>(null)
   const [userPosts, setUserPosts] = useState<BlogPost[]>([])
   const [currentUser, setCurrentUser] = useState<ApiUser | null>(null)
@@ -183,12 +183,8 @@ export default function Profile() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex">
-        <SideBar 
-          isSidebarOpen={isSidebarOpen} 
-          setIsSidebarOpen={setIsSidebarOpen}
-          pageTitle="Profile"
-        />
+      <div className="flex-1 flex flex-col min-w-0">
+        
         <div className="flex-1 lg:ml-64">
           <div className="flex items-center justify-center h-64">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
@@ -200,12 +196,8 @@ export default function Profile() {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-gray-50 flex">
-        <SideBar 
-          isSidebarOpen={isSidebarOpen} 
-          setIsSidebarOpen={setIsSidebarOpen}
-          pageTitle="Profile"
-        />
+      <div className="flex-1 flex flex-col min-w-0">
+        
         <div className="flex-1 lg:ml-64">
           <div className="flex items-center justify-center h-64">
             <div className="text-center">
@@ -224,18 +216,14 @@ export default function Profile() {
         <title>Ufazien | Profile : {user.first_name} {user.last_name}</title>
         <meta name="description" content={`Profile page of ${user.first_name} ${user.last_name}`} />
       </Helmet>
-      <div className="min-h-screen bg-gray-50 flex">
-        <SideBar
-          isSidebarOpen={isSidebarOpen}
-          setIsSidebarOpen={setIsSidebarOpen}
-          pageTitle="Profile"
-        />
+      <div className="flex-1 flex flex-col min-w-0">
+        
       
       <div className={`flex-1 transition-all duration-300 ${
         isSidebarOpen ? 'lg:ml-64' : ''
       }`}>
         {/* Mobile header */}
-        <div className="lg:hidden bg-white shadow-sm border-b border-gray-200 px-4 py-3 flex items-center justify-between">
+        <div className="lg:hidden bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
           <button
             onClick={() => setIsSidebarOpen(true)}
             className="p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100"
@@ -248,16 +236,16 @@ export default function Profile() {
 
         <div className="w-full max-w-6xl mx-auto px-4 py-8">
           {/* Profile Header */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
             {/* Cover Photo Area */}
-            <div className="h-32 bg-gradient-to-r from-blue-600 to-indigo-600"></div>
+            <div className="h-32 bg-blue-600"></div>
             
             {/* Profile Info */}
             <div className="px-6 py-6">
               <div className="flex flex-col sm:flex-row sm:items-end sm:space-x-6">
                 {/* Avatar */}
                 <div className="relative -mt-16 sm:-mt-16 mb-4 sm:mb-0">
-                  <div className="w-24 h-24 bg-white rounded-full border-4 border-white shadow-lg flex items-center justify-center">
+                  <div className="w-24 h-24 bg-white rounded-full border-4 border-white flex items-center justify-center">
                     {user.avatar_url ? (
                       <img 
                         src={user.avatar_url} 
@@ -412,7 +400,7 @@ export default function Profile() {
                     <>
                       <div className="space-y-6">
                         {userPosts.map((post) => (
-                          <div key={post.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                          <div key={post.id} className="bg-white rounded-lg border border-gray-200 p-6">
                             <div className="flex items-start justify-between">
                               <div className="flex-1">
                                 <h3 
@@ -603,7 +591,7 @@ export default function Profile() {
               )}
 
               {activeTab === 'about' && (
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <div className="bg-white rounded-lg border border-gray-200 p-6">
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">About</h3>
                   <div className="space-y-4">
                     {user.bio && (

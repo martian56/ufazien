@@ -19,6 +19,8 @@ import {
 } from "lucide-react"
 import HostingSidebar from "../../components/hosting/HostingSidebar"
 import { useLogs } from "../../hooks/useLogs"
+import Select from "../../components/ui/Select"
+import { Checkbox } from "../../components/ui/checkbox"
 
 export default function Logs() {
   const { loading, error, logs, refreshLogs, loadMoreActivity, pagination } = useLogs()
@@ -140,7 +142,7 @@ export default function Logs() {
           <title>Logs | Ufazien Hosting</title>
           <meta name="description" content="View system and application logs" />
         </Helmet>
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen bg-white">
           <HostingSidebar />
           <div className="ml-64">
             <div className="flex items-center justify-center h-64">
@@ -162,7 +164,7 @@ export default function Logs() {
           <title>Logs | Ufazien Hosting</title>
           <meta name="description" content="View system and application logs" />
         </Helmet>
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen bg-white">
           <HostingSidebar />
           <div className="ml-64">
             <div className="flex items-center justify-center h-64">
@@ -191,7 +193,7 @@ export default function Logs() {
         <title>Logs | Ufazien Hosting</title>
         <meta name="description" content="View system and application logs" />
       </Helmet>
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-white">
         <HostingSidebar />
         
         <div className="lg:ml-64">
@@ -201,8 +203,8 @@ export default function Logs() {
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <div className="flex items-center space-x-3 mb-4">
-                    <div className="bg-blue-100 rounded-lg p-2">
-                      <FileText className="h-6 w-6 text-blue-600" />
+                    <div className="bg-gray-100 rounded-lg p-2">
+                      <FileText className="h-6 w-6 text-gray-700" />
                     </div>
                     <div>
                       <h1 className="text-3xl font-bold text-gray-900">Logs</h1>
@@ -229,11 +231,9 @@ export default function Logs() {
                   </button>
                   <div className="flex items-center space-x-2">
                     <label className="inline-flex items-center">
-                      <input
-                        type="checkbox"
+                      <Checkbox
                         checked={autoRefresh}
-                        onChange={(e) => setAutoRefresh(e.target.checked)}
-                        className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
+                        onCheckedChange={(checked) => setAutoRefresh(checked)}
                       />
                       <span className="ml-2 text-sm text-gray-700">Auto-refresh</span>
                     </label>
@@ -251,37 +251,37 @@ export default function Logs() {
                   placeholder="Search logs..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                 />
               </div>
               
               <div className="flex items-center gap-2">
                 <Filter className="h-4 w-4 text-gray-400" />
-                <select
-                  value={typeFilter}
-                  onChange={(e) => setTypeFilter(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent flex-1"
-                >
-                  <option value="all">All Types</option>
-                  <option value="website">Website</option>
-                  <option value="database">Database</option>
-                  <option value="ssl">SSL</option>
-                  <option value="system">System</option>
-                </select>
+                <Select
+        value={typeFilter}
+        onChange={(value) => setTypeFilter(value)}
+        options={[
+          { value: "all", label: "All Types" },
+          { value: "website", label: "Website" },
+          { value: "database", label: "Database" },
+          { value: "ssl", label: "SSL" },
+          { value: "system", label: "System" },
+        ]}
+      />
               </div>
 
               <div className="flex items-center gap-2">
                 <AlertCircle className="h-4 w-4 text-gray-400" />
-                <select
-                  value={levelFilter}
-                  onChange={(e) => setLevelFilter(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent flex-1"
-                >
-                  <option value="all">All Levels</option>
-                  <option value="info">Info</option>
-                  <option value="warning">Warning</option>
-                  <option value="error">Error</option>
-                </select>
+                <Select
+        value={levelFilter}
+        onChange={(value) => setLevelFilter(value)}
+        options={[
+          { value: "all", label: "All Levels" },
+          { value: "info", label: "Info" },
+          { value: "warning", label: "Warning" },
+          { value: "error", label: "Error" },
+        ]}
+      />
               </div>
 
               <div className="flex items-center gap-2">
@@ -377,7 +377,7 @@ export default function Logs() {
 
             {/* Log Statistics */}
             <div className="mt-8 grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+              <div className="bg-white rounded-lg border border-gray-200 p-4">
                 <div className="flex items-center space-x-2">
                   <CheckCircle className="h-5 w-5 text-green-500" />
                   <div>
@@ -387,7 +387,7 @@ export default function Logs() {
                 </div>
               </div>
               
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+              <div className="bg-white rounded-lg border border-gray-200 p-4">
                 <div className="flex items-center space-x-2">
                   <AlertCircle className="h-5 w-5 text-yellow-500" />
                   <div>
@@ -397,7 +397,7 @@ export default function Logs() {
                 </div>
               </div>
               
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+              <div className="bg-white rounded-lg border border-gray-200 p-4">
                 <div className="flex items-center space-x-2">
                   <XCircle className="h-5 w-5 text-red-500" />
                   <div>
@@ -407,7 +407,7 @@ export default function Logs() {
                 </div>
               </div>
               
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+              <div className="bg-white rounded-lg border border-gray-200 p-4">
                 <div className="flex items-center space-x-2">
                   <FileText className="h-5 w-5 text-blue-500" />
                   <div>

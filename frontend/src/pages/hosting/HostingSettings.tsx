@@ -22,15 +22,15 @@ export default function HostingSettings() {
         <title>Settings | Ufazien Hosting</title>
         <meta name="description" content="Configure your hosting preferences" />
       </Helmet>
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-white">
         <HostingSidebar />
 
         <div className="lg:ml-64">
           <div className="p-4 lg:p-6 pt-16 lg:pt-6">
             <div className="mb-8">
               <div className="flex items-center space-x-3 mb-4">
-                <div className="bg-blue-100 rounded-lg p-2">
-                  <Settings className="h-6 w-6 text-blue-600" />
+                <div className="bg-gray-100 rounded-lg p-2">
+                  <Settings className="h-6 w-6 text-gray-700" />
                 </div>
                 <div>
                   <h1 className="text-3xl font-bold text-gray-900">Settings</h1>

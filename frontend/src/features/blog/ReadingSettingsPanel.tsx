@@ -1,4 +1,5 @@
 import { Minus, Plus, Type, Volume2 } from "lucide-react"
+import Select from "../../components/ui/Select"
 
 interface ReadingSettingsPanelProps {
   darkMode: boolean
@@ -58,37 +59,33 @@ export default function ReadingSettingsPanel({
           </div>
 
           {/* Font Family */}
-          <select
-            value={fontFamily}
-            onChange={(e) => setFontFamily(e.target.value)}
-            className={`px-3 py-1 rounded border text-sm ${
-              darkMode
-                ? "bg-gray-700 border-gray-600 text-white placeholder-gray-400"
-                : "bg-white border-gray-300"
-            }`}
-          >
-            <option value="Inter">Inter</option>
-            <option value="Georgia">Georgia</option>
-            <option value="Times New Roman">Times</option>
-            <option value="Arial">Arial</option>
-            <option value="Helvetica">Helvetica</option>
-          </select>
+          <Select
+        value={fontFamily}
+        onChange={(value) => setFontFamily(value)}
+        options={[
+          { value: "Inter", label: "Inter" },
+          { value: "Georgia", label: "Georgia" },
+          { value: "Times New Roman", label: "Times" },
+          { value: "Arial", label: "Arial" },
+          { value: "Helvetica", label: "Helvetica" },
+        ]}
+      />
 
           {/* Line Height */}
           <div className="flex items-center space-x-2">
             <span className="text-sm text-gray-500">Line Height:</span>
-            <select
-              value={lineHeight}
-              onChange={(e) => setLineHeight(Number.parseFloat(e.target.value))}
-              className={`px-2 py-1 rounded border text-sm ${
-                darkMode ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300"
-              }`}
-            >
-              <option value={1.4}>Tight</option>
-              <option value={1.6}>Normal</option>
-              <option value={1.8}>Relaxed</option>
-              <option value={2.0}>Loose</option>
-            </select>
+            <Select
+              value={String(lineHeight)}
+              onChange={(value) => setLineHeight(Number.parseFloat(value))}
+              className="w-32"
+              aria-label="Line height"
+              options={[
+                { value: "1.4", label: "Tight" },
+                { value: "1.6", label: "Normal" },
+                { value: "1.8", label: "Relaxed" },
+                { value: "2", label: "Loose" },
+              ]}
+            />
           </div>
         </div>
 
@@ -97,20 +94,20 @@ export default function ReadingSettingsPanel({
           <div className="flex items-center space-x-2">
             <Volume2 className="w-4 h-4 text-gray-500" />
             <span className="text-sm text-gray-500">Speed:</span>
-            <select
-              value={speechRate}
-              onChange={(e) => setSpeechRate(Number.parseFloat(e.target.value))}
-              className={`px-2 py-1 rounded border text-sm ${
-                darkMode ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300"
-              }`}
-            >
-              <option value={0.5}>0.5x</option>
-              <option value={0.75}>0.75x</option>
-              <option value={1}>1x</option>
-              <option value={1.25}>1.25x</option>
-              <option value={1.5}>1.5x</option>
-              <option value={2}>2x</option>
-            </select>
+            <Select
+              value={String(speechRate)}
+              onChange={(value) => setSpeechRate(Number.parseFloat(value))}
+              className="w-28"
+              aria-label="Speech rate"
+              options={[
+                { value: "0.5", label: "0.5x" },
+                { value: "0.75", label: "0.75x" },
+                { value: "1", label: "1x" },
+                { value: "1.25", label: "1.25x" },
+                { value: "1.5", label: "1.5x" },
+                { value: "2", label: "2x" },
+              ]}
+            />
           </div>
         )}
       </div>

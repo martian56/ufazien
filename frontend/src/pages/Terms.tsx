@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { BookOpen, Shield, Users, Calendar, Calculator, TrendingUp, PenTool, Brain, MessageCircle, Globe, ChevronRight } from 'lucide-react'
+import { BookOpen, Shield, Users, Calendar, Calculator, TrendingUp, PenTool, Brain, MessageCircle, Globe, ChevronRight, Check } from 'lucide-react'
 
 export default function Terms() {
   useEffect(() => {
@@ -7,14 +7,14 @@ export default function Terms() {
   }, [])
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
+    <div className="min-h-screen bg-white">
       {/* Header */}
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <div className="text-center">
             <div className="flex items-center justify-center gap-3 mb-6">
-              <div className="w-12 h-12 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center">
-                <Shield className="w-6 h-6 text-white" />
+              <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
+                <Shield className="w-6 h-6 text-gray-700" />
               </div>
               <h1 className="text-3xl font-bold text-gray-900">Terms of Service</h1>
             </div>
@@ -30,7 +30,7 @@ export default function Terms() {
 
       {/* Content */}
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="bg-white rounded-2xl shadow-xl p-8 md:p-12">
+        <div className="bg-white rounded-lg border border-gray-200 p-8 md:p-12">
           
           {/* 1. Acceptance of Terms */}
           <section className="mb-12">
@@ -128,7 +128,7 @@ export default function Terms() {
                       <div className="flex justify-between"><span>Databases:</span> <strong>5</strong></div>
                       <div className="flex justify-between"><span>Storage:</span> <strong>1 GB</strong></div>
                       <div className="flex justify-between"><span>Bandwidth:</span> <strong>10 GB</strong></div>
-                      <div className="flex justify-between"><span>SSL:</span> <strong>✓</strong></div>
+                      <div className="flex justify-between"><span>SSL:</span> <Check className="w-4 h-4 text-green-600" aria-hidden="true" /></div>
                       <div className="flex justify-between"><span>Support:</span> <strong>Community</strong></div>
                       <div className="flex justify-between"><span>Backups:</span> <strong>Manual only</strong></div>
                     </div>
@@ -144,7 +144,7 @@ export default function Terms() {
                       <div className="flex justify-between"><span>Databases:</span> <strong>10</strong></div>
                       <div className="flex justify-between"><span>Storage:</span> <strong>10 GB</strong></div>
                       <div className="flex justify-between"><span>Bandwidth:</span> <strong>100 GB</strong></div>
-                      <div className="flex justify-between"><span>SSL:</span> <strong>✓</strong></div>
+                      <div className="flex justify-between"><span>SSL:</span> <Check className="w-4 h-4 text-green-600" aria-hidden="true" /></div>
                       <div className="flex justify-between"><span>Support:</span> <strong>Email</strong></div>
                       <div className="flex justify-between"><span>Backups:</span> <strong>Daily automated</strong></div>
                     </div>
@@ -157,7 +157,7 @@ export default function Terms() {
                       <div className="flex justify-between"><span>Databases:</span> <strong>25</strong></div>
                       <div className="flex justify-between"><span>Storage:</span> <strong>50 GB</strong></div>
                       <div className="flex justify-between"><span>Bandwidth:</span> <strong>500 GB</strong></div>
-                      <div className="flex justify-between"><span>SSL:</span> <strong>✓</strong></div>
+                      <div className="flex justify-between"><span>SSL:</span> <Check className="w-4 h-4 text-green-600" aria-hidden="true" /></div>
                       <div className="flex justify-between"><span>Support:</span> <strong>Priority</strong></div>
                       <div className="flex justify-between"><span>Backups:</span> <strong>Daily automated</strong></div>
                     </div>

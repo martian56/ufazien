@@ -13,7 +13,7 @@ interface WebsiteOverviewTabProps {
 export default function WebsiteOverviewTab({ website, deployments, onDeploy, onViewLogs }: WebsiteOverviewTabProps) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      <div className="bg-white rounded-lg border border-gray-200 p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Deployment Status</h3>
         <div className="space-y-4">
           <div className="flex items-center justify-between">
@@ -57,7 +57,7 @@ export default function WebsiteOverviewTab({ website, deployments, onDeploy, onV
         </div>
       </div>
 
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      <div className="bg-white rounded-lg border border-gray-200 p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Activity</h3>
         <div className="space-y-4">
           {deployments.slice(0, 4).map((deployment) => (

@@ -235,16 +235,18 @@ import {
 } from 'lucide-react'
 import type { Editor } from '@tiptap/react'
 import type { ToastApi } from '../hooks/useToast'
+import { useDialogs } from "./ui/Dialogs"
 
 interface MenuBarProps {
   editor: Editor | null
   darkMode?: boolean
-  /** Reports upload and link problems; falls back to alert() when absent. */
+  /** Reports upload problems. Silent when absent. */
   toast?: ToastApi
 }
 
 const MenuBar = ({ editor, darkMode, toast }: MenuBarProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const { promptText } = useDialogs()
 
   const addImage = useCallback(() => {
     fileInputRef.current?.click()
@@ -302,10 +304,16 @@ const MenuBar = ({ editor, darkMode, toast }: MenuBarProps) => {
     event.target.value = ''
   }, [editor])
 
-  const setLink = useCallback(() => {
+  const setLink = useCallback(async () => {
     if (!editor) return
     const previousUrl = editor.getAttributes('link').href
-    let url = window.prompt('URL', previousUrl)
+    let url = await promptText({
+      title: 'Link',
+      label: 'URL',
+      defaultValue: previousUrl ?? '',
+      placeholder: 'https://example.com',
+      confirmText: 'Apply',
+    })
 
     if (url === null) {
       return
@@ -630,7 +638,7 @@ const MenuBar = ({ editor, darkMode, toast }: MenuBarProps) => {
                 <button
                   key={color}
                   onClick={() => editor.chain().focus().setColor(color).run()}
-                  className="w-6 h-6 rounded border border-gray-300 hover:scale-110 transition-transform"
+                  className="w-6 h-6 rounded border border-gray-300 hover:border-gray-500 transition-colors"
                   style={{ backgroundColor: color }}
                   title={color}
                 />
@@ -672,10 +680,10 @@ const MenuBar = ({ editor, darkMode, toast }: MenuBarProps) => {
  * These call sites read `toast?.error(...) || alert(...)`, but `toast` was
  * never defined in this file, so the optional chaining did not save them: the
  * bare identifier threw ReferenceError and the user saw nothing at all.
+ * The alert() fallback is gone; callers pass the app toast.
  */
 function reportUploadProblem(message: string, toast?: ToastApi) {
-  if (toast) toast.error(message)
-  else alert(message)
+  toast?.error(message)
 }
 
 interface RichTextEditorProps {

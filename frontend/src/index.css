@@ -13,6 +13,67 @@
   --font-display: "Lexend", "Inter", ui-sans-serif, system-ui, sans-serif;
 }
 
+@layer base {
+  *,
+  ::before,
+  ::after {
+    border-color: var(--color-gray-200);
+  }
+
+  button,
+  [role="button"],
+  [role="option"],
+  [role="tab"],
+  [role="switch"],
+  summary,
+  label[for],
+  select {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  select:disabled,
+  [aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+
+  :where(input, select, textarea):focus {
+    outline: none;
+    border-color: var(--color-blue-500);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-blue-500) 18%, transparent);
+  }
+
+  :where(button, a, [role="button"], [role="tab"], [role="switch"], [role="option"], summary, [tabindex]):focus-visible {
+    outline: 2px solid var(--color-blue-600);
+    outline-offset: 2px;
+    border-radius: 0.375rem;
+  }
+}
+
+.ufz-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 1rem;
+  width: 1rem;
+  border-radius: 9999px;
+  background: #fff;
+  border: 2px solid var(--color-blue-600);
+  cursor: pointer;
+}
+
+.ufz-range::-moz-range-thumb {
+  height: 1rem;
+  width: 1rem;
+  border-radius: 9999px;
+  background: #fff;
+  border: 2px solid var(--color-blue-600);
+  cursor: pointer;
+}
+
+.ufz-range::-moz-range-track {
+  background: transparent;
+}
+
 h1, h2, h3, h4 {
   font-family: var(--font-display);
   letter-spacing: -0.02em;

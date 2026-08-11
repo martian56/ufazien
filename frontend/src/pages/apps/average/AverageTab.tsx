@@ -152,7 +152,7 @@ export default function AverageTab({
       )}
 
       {isCreatingSchema && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
           <h2 className="text-xl font-semibold text-gray-900 mb-6">Create New Schema</h2>
           
           <div className="space-y-4">
@@ -163,7 +163,7 @@ export default function AverageTab({
                 value={newSchemaName}
                 onChange={(e) => setNewSchemaName(e.target.value)}
                 placeholder="e.g., L2 Computer Science Semester 1"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
               />
             </div>
 
@@ -174,7 +174,7 @@ export default function AverageTab({
                 onChange={(e) => setNewSchemaDescription(e.target.value)}
                 placeholder="Describe this schema..."
                 rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
               />
             </div>
 
@@ -189,7 +189,7 @@ export default function AverageTab({
                         value={field.name}
                         onChange={(e) => updateNewField(index, "name", e.target.value)}
                         placeholder="Field name (e.g., Math Midterm Exam)"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                       />
                     </div>
                     <div className="w-24">
@@ -200,7 +200,7 @@ export default function AverageTab({
                         placeholder="Weight"
                         min="0.1"
                         step="0.1"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                       />
                     </div>
                     {newSchemaFields.length > 1 && (
@@ -246,7 +246,7 @@ export default function AverageTab({
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Input Section */}
           <div className="lg:col-span-2">
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
               <div className="flex items-center justify-between mb-6">
                 <div>
                   <h2 className="text-xl font-semibold text-gray-900">{currentSchema.schema?.name}</h2>
@@ -289,7 +289,7 @@ export default function AverageTab({
                           min="0"
                           max="20"
                           step="0.1"
-                          className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
+                          className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all ${
                             pendingUpdates[fieldGrade.id] ? 'bg-yellow-50 border-yellow-300' : ''
                           }`}
                         />
@@ -312,7 +312,7 @@ export default function AverageTab({
           {/* Results Section */}
           <div className="space-y-6">
             {/* Average Display */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Your Average</h3>
               <div className="text-center mb-6">
                 <div className="text-4xl font-bold text-blue-600 mb-2">
@@ -359,7 +359,7 @@ export default function AverageTab({
 
             {/* Statistics */}
             {(currentSchema.field_grades?.filter(fg => fg.grade !== null && fg.grade !== undefined).length ?? 0) > 0 && (
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <div className="bg-white rounded-xl border border-gray-200 p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Statistics</h3>
                 <div className="space-y-3 text-sm">
                   <div className="flex justify-between">
@@ -395,7 +395,7 @@ export default function AverageTab({
             )}
 
             {/* UFAZ Grade Scale */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">UFAZ Grade Scale</h3>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between items-center">

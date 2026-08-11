@@ -10,15 +10,16 @@ import type { Forum, ForumPost, Group, NewForumPost } from "../../../lib/api/end
 import { communityApi as communityAPI } from "../../../lib/api/endpoints/community"
 import { logger } from "../../../lib/logger"
 import { copyText } from "../../../lib/clipboard"
-import SideBar from "../../../components/ui/SideBar"
 import GroupsView from "../../../features/community/components/GroupsView"
 import ForumsView from "../../../features/community/components/ForumsView"
 import ChatView from "../../../features/community/components/ChatView"
 import CreateModal from "../../../features/community/components/CreateModal"
 import PrivateChatModal from "../../../features/community/components/PrivateChatModal"
+import { useAppShell } from "../../../components/layout/appShellContext"
+import { SidebarPanel } from "../../../components/layout/AppShell"
 
 export default function Community() {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const { isSidebarOpen, setIsSidebarOpen } = useAppShell()
   const [activeTab, setActiveTab] = useState("groups") // groups, forums, chat
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null)
   // Only the setter is used; ForumsView reports the selection but nothing
@@ -85,7 +86,7 @@ export default function Community() {
       .then(() => {
       })
       .catch((err) => {
-        console.error('💥 loadAllData failed:', err);
+        console.error('loadAllData failed:', err);
       })
       .finally(() => {
         clearTimeout(timeoutId);
@@ -255,7 +256,7 @@ export default function Community() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
           <p className="mt-2 text-gray-600">Loading community...</p>
@@ -268,7 +269,7 @@ export default function Community() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="text-center">
           <p className="text-red-600">Error loading community: {error}</p>
           <button 
@@ -289,34 +290,34 @@ export default function Community() {
         <title>Ufazien | Community</title>
         <meta name="description" content="Connect with peers and join study groups on Ufazien's community page." />
       </Helmet>
-      <div className="min-h-screen bg-gray-50 flex">
-        <SideBar isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen} pageTitle="Community">
-          {/* Quick Stats */}
-          <div className="mt-8 px-3">
-            <div className="bg-gray-50 rounded-lg p-4">
-              <h3 className="font-medium text-gray-900 mb-3">Your Activity</h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Groups Joined</span>
-                  <span className="font-medium">{stats?.user_stats?.groups_joined ?? 0}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Posts Liked</span>
-                  <span className="font-medium">{stats?.user_stats?.posts_liked ?? 0}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Bookmarked</span>
-                  <span className="font-medium">{stats?.user_stats?.posts_bookmarked ?? 0}</span>
-                </div>
+      <SidebarPanel>
+        <div className="mt-3 px-3">
+          <div className="bg-gray-50 rounded-lg p-3">
+            <h3 className="text-sm font-medium text-gray-900 mb-2">Your Activity</h3>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-600">Groups Joined</span>
+                <span className="font-medium">{stats?.user_stats?.groups_joined ?? 0}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Posts Liked</span>
+                <span className="font-medium">{stats?.user_stats?.posts_liked ?? 0}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Bookmarked</span>
+                <span className="font-medium">{stats?.user_stats?.posts_bookmarked ?? 0}</span>
               </div>
             </div>
           </div>
-        </SideBar>
+        </div>
+      </SidebarPanel>
+      <div className="flex-1 flex flex-col min-w-0">
+        
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
-        <header className="bg-white shadow-sm border-b border-gray-200">
+        <header className="bg-white border-b border-gray-200">
           <div className="flex items-center justify-between h-16 px-4 sm:px-6 lg:px-8">
             <div className="flex items-center gap-2 sm:gap-4 min-w-0">
               <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden p-2 rounded-md hover:bg-gray-100">
@@ -337,7 +338,7 @@ export default function Community() {
                   placeholder="Search groups, forums, posts..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                 />
               </div>
 
@@ -485,11 +486,6 @@ export default function Community() {
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg bg-gray-900 text-white text-sm shadow-lg">
           {shareNotice}
         </div>
-      )}
-
-      {/* Mobile Sidebar Overlay */}
-      {isSidebarOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden" onClick={() => setIsSidebarOpen(false)} />
       )}
 
       {/* Create Modals */}

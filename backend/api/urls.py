@@ -1,9 +1,11 @@
 from django.urls import path
 from . import views
+from . import search
 
 urlpatterns = [
     path('', views.ApiStatus.as_view(), name='api_status'),
     path('stats/', views.PlatformStatsView.as_view(), name='platform-stats'),
+    path('search/', search.search, name='search'),
     
     # Notification endpoints
     path('notifications/', views.NotificationListView.as_view(), name='notification-list'),

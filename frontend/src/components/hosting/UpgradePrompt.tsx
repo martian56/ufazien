@@ -29,7 +29,7 @@ export default function UpgradePrompt({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 relative">
+      <div className="bg-white rounded-lg border border-gray-200 shadow-lg max-w-md w-full p-6 relative">
         <button
           onClick={onClose}
           className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
@@ -38,8 +38,8 @@ export default function UpgradePrompt({
         </button>
 
         <div className="text-center mb-6">
-          <div className="bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full p-3 w-16 h-16 mx-auto mb-4">
-            <Crown className="h-10 w-10 text-white" />
+          <div className="bg-amber-100 rounded-full p-3 w-16 h-16 mx-auto mb-4 flex items-center justify-center">
+            <Crown className="h-7 w-7 text-amber-700" />
           </div>
           <h3 className="text-xl font-bold text-gray-900 mb-2">{title}</h3>
           <p className="text-gray-600">{description}</p>
@@ -97,7 +97,7 @@ export default function UpgradePrompt({
         <div className="space-y-3">
           <button
             onClick={() => navigate('/hosting/upgrade')}
-            className="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white py-3 px-4 rounded-lg font-medium hover:from-blue-600 hover:to-purple-700 transition-colors flex items-center justify-center space-x-2"
+            className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2"
           >
             <Crown className="h-4 w-4" />
             <span>Upgrade Now</span>

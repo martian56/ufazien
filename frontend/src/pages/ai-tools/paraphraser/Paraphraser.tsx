@@ -20,7 +20,6 @@ export default function Paraphraser() {
       title="AI Paraphraser"
       tagline="Rephrase text while keeping what it means"
       icon={MessageSquare}
-      accent="from-purple-500 to-pink-500"
       inputLabel="Text to paraphrase"
       outputLabel="Paraphrased text"
       placeholder="Paste the text you want rewritten..."

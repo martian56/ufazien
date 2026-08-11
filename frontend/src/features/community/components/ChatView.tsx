@@ -395,7 +395,7 @@ export default function ChatView({
               value={newMessage}
               onChange={(e) => onMessageChange(e.target.value)}
               onKeyPress={(e) => e.key === "Enter" && currentChat && onSendMessage(currentChat.id)}
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
             />
             <button
               onClick={() => currentChat && onSendMessage(currentChat.id)}

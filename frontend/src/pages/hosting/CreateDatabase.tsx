@@ -161,13 +161,13 @@ export default function CreateDatabase() {
         <Helmet>
           <title>Database Created | Ufazien Hosting</title>
         </Helmet>
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen bg-white">
           <HostingSidebar />
           
           <div className="lg:ml-64">
             <div className="p-4 lg:p-6 pt-16 lg:pt-6">
               <div className="max-w-2xl mx-auto">
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center">
+                <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
                   <div className="mb-6">
                     <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-green-100 mb-4">
                       <CheckCircle className="h-8 w-8 text-green-600" />
@@ -278,7 +278,7 @@ export default function CreateDatabase() {
         <title>Create Database | Ufazien Hosting</title>
         <meta name="description" content="Create a new MySQL or PostgreSQL database" />
       </Helmet>
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-white">
         <HostingSidebar />
         
         <div className="lg:ml-64">
@@ -308,7 +308,7 @@ export default function CreateDatabase() {
             <div className="max-w-3xl">
               <form onSubmit={handleSubmit} className="space-y-8">
                 {/* Database Type Selection */}
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <div className="bg-white rounded-lg border border-gray-200 p-6">
                   <h2 className="text-xl font-semibold text-gray-900 mb-4">Database Type</h2>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -365,7 +365,7 @@ export default function CreateDatabase() {
                 </div>
 
                 {/* Database Configuration */}
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <div className="bg-white rounded-lg border border-gray-200 p-6">
                   <h2 className="text-xl font-semibold text-gray-900 mb-4">Database Configuration</h2>
                   
                   <div className="space-y-6">
@@ -380,7 +380,7 @@ export default function CreateDatabase() {
                         value={formData.name}
                         onChange={handleInputChange}
                         placeholder="my_database"
-                        className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                        className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
                           errors.name ? 'border-red-500' : ''
                         }`}
                       />
@@ -403,20 +403,20 @@ export default function CreateDatabase() {
                         onChange={handleInputChange}
                         rows={3}
                         placeholder="Brief description of what this database will be used for..."
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                       />
                     </div>
                   </div>
                 </div>
 
                 {/* Features & Security Info */}
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <div className="bg-white rounded-lg border border-gray-200 p-6">
                   <h2 className="text-xl font-semibold text-gray-900 mb-4">What You Get</h2>
                   
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="flex items-start space-x-3">
-                      <div className="bg-green-100 rounded-lg p-2">
-                        <Zap className="h-5 w-5 text-green-600" />
+                      <div className="bg-gray-100 rounded-lg p-2">
+                        <Zap className="h-5 w-5 text-gray-700" />
                       </div>
                       <div>
                         <h3 className="font-medium text-gray-900">High Performance</h3>
@@ -425,8 +425,8 @@ export default function CreateDatabase() {
                     </div>
                     
                     <div className="flex items-start space-x-3">
-                      <div className="bg-blue-100 rounded-lg p-2">
-                        <Shield className="h-5 w-5 text-blue-600" />
+                      <div className="bg-gray-100 rounded-lg p-2">
+                        <Shield className="h-5 w-5 text-gray-700" />
                       </div>
                       <div>
                         <h3 className="font-medium text-gray-900">Secure by Default</h3>
@@ -435,8 +435,8 @@ export default function CreateDatabase() {
                     </div>
                     
                     <div className="flex items-start space-x-3">
-                      <div className="bg-purple-100 rounded-lg p-2">
-                        <Database className="h-5 w-5 text-purple-600" />
+                      <div className="bg-gray-100 rounded-lg p-2">
+                        <Database className="h-5 w-5 text-gray-700" />
                       </div>
                       <div>
                         <h3 className="font-medium text-gray-900">Auto Backups</h3>

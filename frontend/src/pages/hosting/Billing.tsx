@@ -33,8 +33,10 @@ import { useSubscription } from "../../hooks/useSubscription"
 import { useWebsites } from "../../hooks/useWebsites.js"
 import { useDatabases } from "../../hooks/useDatabases.js"
 import { hostingApi } from "../../utils/hostingApi"
+import { useDialogs } from "../../components/ui/Dialogs"
 
 export default function Billing() {
+  const { toast, confirm } = useDialogs()
   const navigate = useNavigate()
   const { subscription, getStorageUsage, getBandwidthUsage, loading: subLoading } = useSubscription()
   const { websites, loading: websitesLoading } = useWebsites()
@@ -137,10 +139,10 @@ export default function Billing() {
     try {
       // This would call the API to download the invoice
       // await hostingApi.downloadInvoice(invoiceId)
-      alert('Invoice download feature coming soon!')
+      toast.info('Invoice downloads are not built yet.')
     } catch (err) {
       console.error('Failed to download invoice:', err)
-      alert('Failed to download invoice')
+      toast.error('Could not download that invoice.')
     }
   }
 
@@ -153,7 +155,7 @@ export default function Billing() {
           <title>Billing | Ufazien Hosting</title>
           <meta name="description" content="Manage your billing and subscriptions" />
         </Helmet>
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen bg-white">
           <HostingSidebar />
           <div className="lg:ml-64">
             <div className="p-4 lg:p-6 pt-16 lg:pt-6">
@@ -179,7 +181,7 @@ export default function Billing() {
           <title>Billing | Ufazien Hosting</title>
           <meta name="description" content="Manage your billing and subscriptions" />
         </Helmet>
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen bg-white">
           <HostingSidebar />
           <div className="lg:ml-64">
             <div className="p-4 lg:p-6 pt-16 lg:pt-6">
@@ -207,7 +209,7 @@ export default function Billing() {
         <title>Billing | Ufazien Hosting</title>
         <meta name="description" content="Manage your billing and subscriptions" />
       </Helmet>
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-white">
         <HostingSidebar />
         
         <div className="lg:ml-64">
@@ -215,8 +217,8 @@ export default function Billing() {
             {/* Header */}
             <div className="mb-8">
               <div className="flex items-center space-x-3 mb-4">
-                <div className="bg-blue-100 rounded-lg p-2">
-                  <CreditCard className="h-6 w-6 text-blue-600" />
+                <div className="bg-gray-100 rounded-lg p-2">
+                  <CreditCard className="h-6 w-6 text-gray-700" />
                 </div>
                 <div>
                   <h1 className="text-3xl font-bold text-gray-900">Billing</h1>
@@ -227,24 +229,24 @@ export default function Billing() {
 
             {/* Subscription Overview */}
             {subscription?.plan?.name !== 'free' && (
-              <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg shadow-lg p-6 mb-8 text-white">
-                <div className="flex items-center justify-between">
+              <div className="bg-white rounded-lg border border-gray-200 p-6 mb-8">
+                <div className="flex items-center justify-between gap-4">
                   <div>
                     <div className="flex items-center gap-2 mb-2">
-                      <Crown className="w-5 h-5" />
-                      <h3 className="text-lg font-semibold">Active Subscription</h3>
+                      <Crown className="w-5 h-5 text-gray-400" />
+                      <h3 className="text-lg font-semibold text-gray-900">Active Subscription</h3>
                     </div>
-                    <p className="text-blue-100">
+                    <p className="text-gray-600">
                       You're currently on the <strong>{subscription?.plan?.display_name || subscription?.plan?.name}</strong> plan
                     </p>
-                    <p className="text-sm text-blue-100 mt-1">
+                    <p className="text-sm text-gray-500 mt-1">
                       Next billing: {formatDate(getNextBillingDate())} • ${subscription?.plan?.price || 0}/month
                     </p>
                   </div>
                   <div className="text-right">
                     <button
                       onClick={() => navigate('/hosting/upgrade')}
-                      className="bg-white text-blue-600 px-4 py-2 rounded-lg font-medium hover:bg-blue-50 transition-colors"
+                      className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors whitespace-nowrap"
                     >
                       Manage Plan
                     </button>
@@ -254,21 +256,21 @@ export default function Billing() {
             )}
 
             {subscription?.plan?.name === 'free' && (
-              <div className="bg-gradient-to-r from-amber-500 to-orange-500 rounded-lg shadow-lg p-6 mb-8 text-white">
-                <div className="flex items-center justify-between">
+              <div className="bg-amber-50 rounded-lg border border-amber-200 p-6 mb-8">
+                <div className="flex items-center justify-between gap-4">
                   <div>
-                    <h3 className="text-lg font-semibold mb-2">Free Plan</h3>
-                    <p className="text-amber-100">
+                    <h3 className="text-lg font-semibold text-amber-900 mb-2">Free Plan</h3>
+                    <p className="text-amber-800">
                       You're using our free hosting plan with basic features
                     </p>
-                    <p className="text-sm text-amber-100 mt-1">
+                    <p className="text-sm text-amber-700 mt-1">
                       Upgrade to unlock more websites, databases, and storage
                     </p>
                   </div>
                   <div className="text-right">
                     <button
                       onClick={() => navigate('/hosting/upgrade')}
-                      className="bg-white text-orange-600 px-4 py-2 rounded-lg font-medium hover:bg-orange-50 transition-colors flex items-center gap-2"
+                      className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center gap-2 whitespace-nowrap"
                     >
                       <Crown className="w-4 h-4" />
                       Upgrade Now
@@ -280,7 +282,7 @@ export default function Billing() {
 
             {/* Current Plan & Usage */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <div className="bg-white rounded-lg border border-gray-200 p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold text-gray-900">Current Plan</h3>
                   {subscription?.plan?.name !== 'free' && (
@@ -338,7 +340,7 @@ export default function Billing() {
                 </div>
               </div>
 
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <div className="bg-white rounded-lg border border-gray-200 p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Usage</h3>
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
@@ -401,7 +403,7 @@ export default function Billing() {
                 </button>
               </div>
               
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
@@ -497,7 +499,7 @@ export default function Billing() {
 
             {/* Billing Summary Cards */}
             <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+              <div className="bg-white rounded-lg border border-gray-200 p-4">
                 <div className="flex items-center space-x-2">
                   <DollarSign className="h-5 w-5 text-green-500" />
                   <div>
@@ -507,7 +509,7 @@ export default function Billing() {
                 </div>
               </div>
               
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+              <div className="bg-white rounded-lg border border-gray-200 p-4">
                 <div className="flex items-center space-x-2">
                   <TrendingUp className="h-5 w-5 text-blue-500" />
                   <div>
@@ -517,7 +519,7 @@ export default function Billing() {
                 </div>
               </div>
               
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+              <div className="bg-white rounded-lg border border-gray-200 p-4">
                 <div className="flex items-center space-x-2">
                   <Calendar className="h-5 w-5 text-purple-500" />
                   <div>

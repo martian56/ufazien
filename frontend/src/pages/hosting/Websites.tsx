@@ -25,8 +25,11 @@ import HostingSidebar from "../../components/hosting/HostingSidebar"
 import UpgradePrompt from "../../components/hosting/UpgradePrompt"
 import { useSubscription } from "../../hooks/useSubscription"
 import { useWebsites } from "../../hooks/useWebsites"
+import Select from "../../components/ui/Select"
+import { useDialogs } from "../../components/ui/Dialogs"
 
 export default function Websites() {
+  const { toast, confirm } = useDialogs()
   const navigate = useNavigate()
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
@@ -44,12 +47,16 @@ export default function Websites() {
   }
 
   const handleDeleteWebsite = async (websiteId: string) => {
-    if (confirm('Are you sure you want to delete this website? This action cannot be undone.')) {
-      try {
-        await deleteWebsite(websiteId)
-      } catch (error) {
-        alert('Failed to delete website: ' + errorMessage(error))
-      }
+    const ok = await confirm({
+      title: 'Delete this website?',
+      message: 'The site and its files are removed for good.',
+      confirmText: 'Delete website',
+    })
+    if (!ok) return
+    try {
+      await deleteWebsite(websiteId)
+    } catch (error) {
+      toast.error('Could not delete the website. ' + errorMessage(error))
     }
   }
 
@@ -57,7 +64,7 @@ export default function Websites() {
     try {
       await deployWebsite(websiteId)
     } catch (error) {
-      alert('Failed to deploy website: ' + errorMessage(error))
+      toast.error('Could not deploy the website. ' + errorMessage(error))
     }
   }
 
@@ -101,7 +108,7 @@ export default function Websites() {
           <title>Websites | Ufazien Hosting</title>
           <meta name="description" content="Manage all your hosted websites" />
         </Helmet>
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen bg-white">
           <HostingSidebar />
           <div className="ml-64">
             <div className="flex items-center justify-center h-64">
@@ -120,7 +127,7 @@ export default function Websites() {
           <title>Websites | Ufazien Hosting</title>
           <meta name="description" content="Manage all your hosted websites" />
         </Helmet>
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen bg-white">
           <HostingSidebar />
           <div className="ml-64">
             <div className="flex items-center justify-center h-64">
@@ -142,7 +149,7 @@ export default function Websites() {
         <title>Websites | Ufazien Hosting</title>
         <meta name="description" content="Manage all your hosted websites" />
       </Helmet>
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-white">
         <HostingSidebar />
         
         <div className="lg:ml-64">
@@ -187,33 +194,33 @@ export default function Websites() {
                   placeholder="Search websites..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                 />
               </div>
               <div className="flex items-center gap-2">
                 <Filter className="h-4 w-4 text-gray-400" />
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="all">All Status</option>
-                  <option value="active">Active</option>
-                  <option value="building">Building</option>
-                  <option value="stopped">Stopped</option>
-                </select>
+                <Select
+        value={statusFilter}
+        onChange={(value) => setStatusFilter(value)}
+        options={[
+          { value: "all", label: "All Status" },
+          { value: "active", label: "Active" },
+          { value: "building", label: "Building" },
+          { value: "stopped", label: "Stopped" },
+        ]}
+      />
               </div>
             </div>
 
             {/* Websites Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredWebsites.map((website) => (
-                <div key={website.id} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
+                <div key={website.id} className="bg-white rounded-lg border border-gray-200 overflow-hidden hover:border-gray-300 transition-colors">
                   <div className="p-6">
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex items-center space-x-3">
-                        <div className="bg-blue-100 rounded-lg p-2">
-                          <Globe className="h-5 w-5 text-blue-600" />
+                        <div className="bg-gray-100 rounded-lg p-2">
+                          <Globe className="h-5 w-5 text-gray-700" />
                         </div>
                         <div>
                           <h3 className="font-semibold text-gray-900">{website.name}</h3>

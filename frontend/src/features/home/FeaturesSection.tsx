@@ -48,7 +48,7 @@ export default function FeaturesSection({ features, technologies, featuresRef, n
               key={feature.title}
               type="button"
               onClick={() => navigate(feature.link)}
-              className="feature-card cursor-pointer text-left bg-white rounded-xl p-6 border border-gray-200 hover:border-gray-300 hover:shadow-sm transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+              className="feature-card cursor-pointer text-left bg-white rounded-xl p-6 border border-gray-200 hover:border-gray-300 hover: transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
             >
               <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-blue-50 mb-4">
                 <feature.icon className="w-5 h-5 text-blue-600" aria-hidden="true" />

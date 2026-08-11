@@ -15,6 +15,7 @@ import {
   Menu,
   X
 } from 'lucide-react';
+import UfazienMark from '../ui/UfazienMark';
 
 const HostingSidebar = () => {
   const navigate = useNavigate();
@@ -105,7 +106,7 @@ const HostingSidebar = () => {
       <div className="lg:hidden fixed top-4 left-4 z-50">
         <button
           onClick={toggleMobileMenu}
-          className="bg-white p-2 rounded-lg shadow-lg border border-gray-200"
+          className="bg-white p-2 rounded-lg border border-gray-200"
         >
           <Menu className="h-6 w-6 text-gray-600" />
         </button>
@@ -120,7 +121,7 @@ const HostingSidebar = () => {
       )}
 
       {/* Sidebar */}
-      <div className={`bg-white h-screen w-64 shadow-lg flex flex-col fixed left-0 top-0 z-50 transform transition-transform duration-300 ease-in-out ${
+      <div className={`bg-white h-screen w-64 border-r border-gray-200 flex flex-col fixed left-0 top-0 z-50 transform transition-transform duration-300 ease-in-out ${
         isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
       } lg:translate-x-0 lg:z-30`}>
         {/* Header with back button */}
@@ -142,12 +143,10 @@ const HostingSidebar = () => {
             <ArrowLeft className="h-4 w-4" />
             <span className="text-sm font-medium">Back to Main App</span>
           </button>
-          <div className="flex items-center space-x-3">
-            <div className="bg-blue-600 rounded-lg p-2">
-              <Server className="h-6 w-6 text-white" />
-            </div>
+          <div className="flex items-center gap-2.5">
+            <UfazienMark className="w-8 h-8" />
             <div>
-              <h1 className="text-xl font-bold text-gray-900">Hosting</h1>
+              <h1 className="text-xl font-semibold tracking-tight text-gray-900">Hosting</h1>
               <p className="text-sm text-gray-500">Manage your websites</p>
             </div>
           </div>

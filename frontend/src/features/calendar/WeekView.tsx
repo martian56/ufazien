@@ -11,7 +11,7 @@ export default function WeekView({ days, getEventsForDate, onEventClick }: WeekV
   const today = new Date()
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
       {/* Day Headers */}
       <div className="grid grid-cols-7 border-b border-gray-200">
         {days.map((day, index) => {
