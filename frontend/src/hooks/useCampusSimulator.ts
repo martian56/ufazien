@@ -63,6 +63,12 @@ export interface PlayerPosition {
   x: number
   y: number
   direction?: string
+  /** Real facing angle in radians. `direction` is the four-way fallback. */
+  heading?: number
+  /** What the player is doing: sitting, waving, a hand up. */
+  activity?: string
+  /** The seat they hold, if any. Assigned by the server, never the client. */
+  seat?: string | null
   is_moving?: boolean
   current_room?: string | null
   username?: string
@@ -93,6 +99,11 @@ export function playerPositionFromUpdate(data: {
     x: data.position.x,
     y: data.position.y,
     direction: data.position.direction || 'down',
+    // Nullish rather than `||`: a heading of exactly zero is due north, and
+    // `0 || fallback` throws it away. Same reasoning as `current_room`.
+    heading: data.position.heading ?? 0,
+    activity: data.position.activity || 'standing',
+    seat: data.position.seat ?? null,
     is_moving: data.position.is_moving || false,
     current_room: data.position.current_room ?? null,
     last_updated: data.last_updated ?? new Date().toISOString(),
@@ -116,6 +127,15 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
     const [currentLobby, setCurrentLobby] = useState<any>(null);
     const [lobbyMembers, setLobbyMembers] = useState<LobbyMember[]>([]);
     const [playerPositions, setPlayerPositions] = useState<Map<string | number, PlayerPosition>>(new Map());
+    /**
+     * The seat this player holds, as the server sees it.
+     *
+     * Set only from a `seat_update` addressed to us, never optimistically: the
+     * whole reason the server owns seating is that two clients can both believe
+     * a chair is free, and a client that sat down before hearing back would put
+     * the player in a chair somebody else is already in.
+     */
+    const [ownSeat, setOwnSeat] = useState<string | null>(null);
     const [studyRooms, setStudyRooms] = useState<any[]>([]);
 
     // Chat state
@@ -275,6 +295,31 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
             });
         });
 
+        // Somebody sat down or stood up. Carried separately from position
+        // because the server owns it: a seat is claimed, not announced.
+        campusWebSocket.on('seatUpdate', (data: any) => {
+            if (data.user_id === currentUserIdRef.current) {
+                setOwnSeat(data.seat ?? null);
+                return;
+            }
+            setPlayerPositions(prev => {
+                const existing = prev.get(data.user_id);
+                if (!existing) return prev;
+                const next = new Map(prev);
+                next.set(data.user_id, {
+                    ...existing,
+                    seat: data.seat ?? null,
+                    activity: data.activity || 'standing',
+                });
+                return next;
+            });
+        });
+
+        // Somebody else got the chair first.
+        campusWebSocket.on('seatDenied', () => {
+            setOwnSeat(null);
+        });
+
         // Chat message received
         campusWebSocket.on('chatMessage', (data: any) => {
             setChatMessages(prev => [...prev, {
@@ -391,6 +436,16 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
     /**
      * Join study room
      */
+    /** Ask for a seat. The answer arrives as `seat_update` or `seat_denied`. */
+    const takeSeat = useCallback((seat: string) => {
+        campusWebSocket.takeSeat(seat);
+    }, []);
+
+    const leaveSeat = useCallback(() => {
+        campusWebSocket.leaveSeat();
+        setOwnSeat(null);
+    }, []);
+
     const joinStudyRoom = useCallback((roomId: string) => {
         if (campusWebSocket.getConnectionStatus()) {
             campusWebSocket.joinStudyRoom(roomId);
@@ -591,6 +646,9 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
         sendChatMessage,
         joinStudyRoom,
         leaveStudyRoom,
+        ownSeat,
+        takeSeat,
+        leaveSeat,
         getNearbyPlayers,
 
         // Utilities

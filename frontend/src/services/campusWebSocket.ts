@@ -164,6 +164,12 @@ class CampusWebSocketService {
             case 'position_update':
                 this.emit('positionUpdate', data);
                 break;
+            case 'seat_update':
+                this.emit('seatUpdate', data);
+                break;
+            case 'seat_denied':
+                this.emit('seatDenied', data);
+                break;
             case 'chat_message':
                 this.emit('chatMessage', data);
                 break;
@@ -197,9 +203,31 @@ class CampusWebSocketService {
             x: position.x,
             y: position.y,
             direction: position.direction || 'down',
+            // The real facing angle. `direction` is four cardinal values, which
+            // draws anyone walking diagonally as facing north.
+            heading: position.heading ?? 0,
+            activity: position.activity || 'standing',
             is_moving: position.is_moving || false,
             current_room: position.current_room || null
         });
+    }
+
+    /**
+     * Ask for a seat.
+     *
+     * The server decides. Two players can press the key in the same tick and
+     * both see an empty chair, so a client that granted itself the seat would
+     * put them both in it.
+     */
+    takeSeat(seat: string) {
+        if (!this.isConnected) return;
+        this.send({ type: 'take_seat', seat });
+    }
+
+    /** Stand up, releasing the seat for whoever wants it next. */
+    leaveSeat() {
+        if (!this.isConnected) return;
+        this.send({ type: 'leave_seat' });
     }
 
     /**
