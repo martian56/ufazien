@@ -7,6 +7,8 @@ from the container filesystem, so knowing the path was enough to read a
 private conversation's files.
 """
 
+import os
+
 from django.core.files.storage import storages
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.core.management import call_command
@@ -73,6 +75,62 @@ class ObjectStorageConfigTests(SimpleTestCase):
 
         self.assertIsNone(PublicMediaStorage().default_acl)
         self.assertIsNone(PrivateMediaStorage().default_acl)
+
+
+class ProductionRequiresObjectStorageTests(SimpleTestCase):
+    """
+    Production must refuse to boot without object storage.
+
+    The container no longer bind-mounts a media directory, so a missing
+    AWS_S3_ENDPOINT_URL would silently route uploads to the container's own
+    disk, where they vanish at the next redeploy. Nothing logs, nothing errors,
+    and the user sees a successful upload.
+    """
+
+    def _load_settings(self, env):
+        """Import the settings module fresh under a given environment."""
+        import importlib
+        import sys
+
+        from django.core.exceptions import ImproperlyConfigured
+
+        saved = {k: os.environ.get(k) for k in env}
+        os.environ.update({k: v for k, v in env.items() if v is not None})
+        for k, v in env.items():
+            if v is None:
+                os.environ.pop(k, None)
+        try:
+            module = sys.modules["ufazien.settings"]
+            return importlib.reload(module), ImproperlyConfigured
+        finally:
+            for k, v in saved.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+
+    def test_production_without_object_storage_refuses_to_start(self):
+        from django.core.exceptions import ImproperlyConfigured
+
+        with self.assertRaises(ImproperlyConfigured) as caught:
+            self._load_settings(
+                {
+                    "ENVIRONMENT": "production",
+                    "AWS_S3_ENDPOINT_URL": None,
+                    "AWS_ACCESS_KEY_ID": None,
+                }
+            )
+        self.assertIn("lost on redeploy", str(caught.exception))
+        # Leave the module in the state the rest of the suite expects.
+        self._load_settings({"ENVIRONMENT": None})
+
+    def test_local_development_without_object_storage_is_fine(self):
+        """Requiring MinIO to run the app on a laptop would be friction."""
+        module, _ = self._load_settings(
+            {"ENVIRONMENT": None, "AWS_S3_ENDPOINT_URL": None, "AWS_ACCESS_KEY_ID": None}
+        )
+        self.assertFalse(module.USE_OBJECT_STORAGE)
+        self.assertIn("FileSystemStorage", module.STORAGES["default"]["BACKEND"])
 
 
 class EnsureBucketsCommandTests(TestCase):
