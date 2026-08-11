@@ -318,13 +318,18 @@ class LobbyConsumerTests(TestCase):
         return read()
 
     @staticmethod
-    async def _next_position(communicator, tries=5):
+    async def _next_frame(communicator, kind, tries=6):
         """
-        The next `position_update` a socket receives, or None.
+        The next frame of a given type, or None.
 
         Skips whatever else is queued: a seat claim and a chat message land on
         the same socket, and taking the first frame off it asserts against
         whichever happened to arrive first.
+
+        Waiting for the frame is also what makes a test that then reads the
+        database deterministic. `send_json_to` only queues, so a fixed pause
+        afterwards is a race — and `receive_nothing` returns the instant
+        anything is already waiting, which on a busy socket is no pause at all.
         """
         import json
 
@@ -332,9 +337,13 @@ class LobbyConsumerTests(TestCase):
             if await communicator.receive_nothing(timeout=1):
                 continue
             payload = json.loads(await communicator.receive_from(timeout=2))
-            if payload.get('type') == 'position_update':
+            if payload.get('type') == kind:
                 return payload
         return None
+
+    @classmethod
+    async def _next_position(cls, communicator, tries=6):
+        return await cls._next_frame(communicator, 'position_update', tries)
 
     def test_a_seat_holds_one_person(self):
         """Two people in one chair. The database decides, not the browser."""
@@ -618,6 +627,250 @@ class LobbyConsumerTests(TestCase):
         self.assertIsNone(announced['position']['seat'])
         self.assertIsNone(seating[self.host.id][0])
         self.assertEqual(seating[self.player.id][0], 'lecture-1-5')
+
+    @staticmethod
+    def _props(lobby_id):
+        """Where the loose objects are, read while the sockets are still open."""
+        from asgiref.sync import sync_to_async
+        from .models import CampusProp
+
+        @sync_to_async
+        def read():
+            return {
+                p.prop: (p.x, p.y, p.room)
+                for p in CampusProp.objects.filter(lobby_id=lobby_id)
+            }
+
+        return read()
+
+    @staticmethod
+    def _holding(lobby_id):
+        from asgiref.sync import sync_to_async
+        from .models import PlayerPosition
+
+        @sync_to_async
+        def read():
+            return {
+                p.user_id: p.holding
+                for p in PlayerPosition.objects.filter(lobby_id=lobby_id)
+            }
+
+        return read()
+
+    def test_an_object_is_held_by_one_pair_of_hands(self):
+        """
+        The same rule as a chair, for the same reason.
+
+        A ball two clients each believe they are holding is two balls, and only
+        one of them lands where the other expects it to.
+        """
+        from asgiref.sync import async_to_sync
+
+        async def scenario():
+            import json
+
+            a, _ = await self._connect(self.host)
+            b, _ = await self._connect(self.player)
+            try:
+                await self._drain(a, b)
+                await a.send_json_to({'type': 'take_prop', 'prop': 'ball-court'})
+                await b.send_json_to({'type': 'take_prop', 'prop': 'ball-court'})
+
+                denials = 0
+                for socket in (a, b):
+                    for _ in range(4):
+                        if await socket.receive_nothing(timeout=1):
+                            continue
+                        payload = json.loads(await socket.receive_from(timeout=2))
+                        if payload.get('type') == 'prop_denied':
+                            denials += 1
+                return denials, await self._holding(self.lobby.id)
+            finally:
+                await a.disconnect()
+                await b.disconnect()
+
+        denials, holding = async_to_sync(scenario)()
+        held_by = [user for user, prop in holding.items() if prop == 'ball-court']
+        self.assertEqual(len(held_by), 1, 'two people ended up holding one ball')
+        self.assertEqual(denials, 1)
+
+    def test_dropping_records_where_the_object_landed(self):
+        """
+        A prop that is only as real as the broadcast that moved it is not a
+        prop. Somebody who joins after the throw has to find the ball where it
+        actually is, not back on its shelf.
+        """
+        from asgiref.sync import async_to_sync
+
+        async def scenario():
+            a, _ = await self._connect(self.host)
+            try:
+                await self._drain(a)
+                await a.send_json_to({
+                    'type': 'player_position', 'x': 400.0, 'y': 300.0, 'is_moving': False,
+                })
+                await self._next_frame(a, 'position_update')
+                await a.send_json_to({'type': 'take_prop', 'prop': 'ball-court'})
+                await self._next_frame(a, 'prop_update')
+                await a.send_json_to({
+                    'type': 'drop_prop', 'prop': 'ball-court', 'x': 450.0, 'y': 320.0,
+                })
+                await self._next_frame(a, 'prop_update')
+                return await self._props(self.lobby.id), await self._holding(self.lobby.id)
+            finally:
+                await a.disconnect()
+
+        props, holding = async_to_sync(scenario)()
+        self.assertIn('ball-court', props)
+        x, y, _room = props['ball-court']
+        self.assertAlmostEqual(x, 450.0)
+        self.assertAlmostEqual(y, 320.0)
+        # And their hands are empty again, or they can never pick anything up.
+        self.assertIsNone(holding[self.host.id])
+
+    def test_a_throw_is_clamped_to_a_throwable_distance(self):
+        """
+        The landing place comes from the client, which simulated the arc. The
+        distance does not: unbounded, "I dropped it here" names any point on
+        the campus, and an object becomes something you can post into a room
+        you are not standing in.
+        """
+        from asgiref.sync import async_to_sync
+
+        async def scenario():
+            a, _ = await self._connect(self.host)
+            try:
+                await self._drain(a)
+                await a.send_json_to({
+                    'type': 'player_position', 'x': 400.0, 'y': 300.0, 'is_moving': False,
+                })
+                await self._next_frame(a, 'position_update')
+                await a.send_json_to({'type': 'take_prop', 'prop': 'ball-court'})
+                await self._next_frame(a, 'prop_update')
+                # Half the campus away.
+                await a.send_json_to({
+                    'type': 'drop_prop', 'prop': 'ball-court', 'x': 5000.0, 'y': 300.0,
+                })
+                await self._next_frame(a, 'prop_update')
+                return await self._props(self.lobby.id)
+            finally:
+                await a.disconnect()
+
+        props = async_to_sync(scenario)()
+        x, y, _room = props['ball-court']
+        # Clamped along the same line, so a long throw is a shorter throw in
+        # the direction it was aimed rather than a throw that does not happen.
+        self.assertAlmostEqual(x, 650.0)
+        self.assertAlmostEqual(y, 300.0)
+
+    def test_a_nonsense_landing_place_is_refused(self):
+        """NaN reaches a float column and breaks every client that reads it."""
+        from asgiref.sync import async_to_sync
+
+        async def scenario():
+            a, _ = await self._connect(self.host)
+            try:
+                await self._drain(a)
+                await a.send_json_to({'type': 'take_prop', 'prop': 'ball-court'})
+                await self._next_frame(a, 'prop_update')
+                await a.send_json_to({
+                    'type': 'drop_prop', 'prop': 'ball-court', 'x': 'over there', 'y': None,
+                })
+                await self._next_frame(a, 'prop_denied')
+                return await self._props(self.lobby.id), await self._holding(self.lobby.id)
+            finally:
+                await a.disconnect()
+
+        props, holding = async_to_sync(scenario)()
+        self.assertEqual(props, {})
+        # Still holding it: a refused drop must not quietly empty their hands.
+        self.assertEqual(holding[self.host.id], 'ball-court')
+
+    def test_closing_the_tab_puts_the_object_down(self):
+        """
+        Otherwise it is held forever. The constraint that makes the object
+        theirs does not care that they have gone, so nobody can ever pick it
+        up again for the life of the lobby.
+        """
+        from asgiref.sync import async_to_sync
+
+        async def scenario():
+            a, _ = await self._connect(self.host)
+            await self._drain(a)
+            await a.send_json_to({
+                'type': 'player_position', 'x': 410.0, 'y': 290.0, 'is_moving': False,
+            })
+            await self._next_frame(a, 'position_update')
+            await a.send_json_to({'type': 'take_prop', 'prop': 'ball-court'})
+            await self._next_frame(a, 'prop_update')
+            await a.disconnect()
+            return await self._props(self.lobby.id), await self._holding(self.lobby.id)
+
+        props, holding = async_to_sync(scenario)()
+        self.assertIsNone(holding[self.host.id])
+        # Left where they were standing, rather than back on its shelf.
+        self.assertIn('ball-court', props)
+        self.assertAlmostEqual(props['ball-court'][0], 410.0)
+
+    def test_a_light_switch_reaches_the_rest_of_the_room(self):
+        """A switch that dims the room for whoever flicked it is a decoration."""
+        from asgiref.sync import async_to_sync
+
+        async def scenario():
+            import json
+
+            a, _ = await self._connect(self.host)
+            b, _ = await self._connect(self.player)
+            try:
+                await self._drain(a, b)
+                await a.send_json_to({'type': 'set_light', 'room': '3', 'on': False})
+                for _ in range(4):
+                    if await b.receive_nothing(timeout=1):
+                        continue
+                    payload = json.loads(await b.receive_from(timeout=2))
+                    if payload.get('type') == 'light_update':
+                        return payload
+                return None
+            finally:
+                await a.disconnect()
+                await b.disconnect()
+
+        payload = async_to_sync(scenario)()
+        self.assertIsNotNone(payload, 'the other player never heard the switch')
+        self.assertEqual(payload['room'], '3')
+        self.assertIs(payload['on'], False)
+
+    def test_the_lights_are_still_off_when_the_next_person_arrives(self):
+        """
+        Which is the whole point of a switch. Broadcast and forgotten, it would
+        be lit again for anybody who walked in a minute later.
+        """
+        from asgiref.sync import async_to_sync
+
+        async def scenario():
+            import json
+
+            a, _ = await self._connect(self.host)
+            await self._drain(a)
+            await a.send_json_to({'type': 'set_light', 'room': '3', 'on': False})
+            await self._next_frame(a, 'light_update')
+            await a.disconnect()
+
+            b, _ = await self._connect(self.player)
+            try:
+                for _ in range(4):
+                    if await b.receive_nothing(timeout=1):
+                        continue
+                    payload = json.loads(await b.receive_from(timeout=2))
+                    if payload.get('type') == 'lobby_state':
+                        return payload
+                return None
+            finally:
+                await b.disconnect()
+
+        payload = async_to_sync(scenario)()
+        self.assertIsNotNone(payload)
+        self.assertEqual(payload['lights'], [{'room': '3', 'on': False}])
 
     def test_an_empty_seat_string_is_not_a_seat(self):
         """
