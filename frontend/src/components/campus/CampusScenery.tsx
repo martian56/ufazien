@@ -1,53 +1,125 @@
-import { useMemo, useRef } from "react"
-import { useFrame } from "@react-three/fiber"
-import { Html, Sky } from "@react-three/drei"
-import * as THREE from "three"
+import { useLayoutEffect, useMemo, useRef } from 'react'
+import { useFrame } from '@react-three/fiber'
+import { Sky } from '@react-three/drei'
+import * as THREE from 'three'
+
+import {
+  CAMPUS_BUILDINGS,
+  GROUND_SIZE,
+  KEEP_CLEAR,
+  PAVEMENTS,
+  QUAD_CENTRE,
+  QUAD_RADIUS,
+  SCENERY_BLOCKS,
+  daylight,
+  scatterProps,
+  type BuildingStyle,
+  type DaylightConfig,
+  type SceneryBlock,
+  type TimeOfDay,
+  type Vec3,
+} from './campusLayout'
+import UfazBuilding from './UfazBuilding'
+import {
+  asphaltTexture,
+  buildingSignTexture,
+  courtTexture,
+  facadeTexture,
+  grassTexture,
+  nameTagTexture,
+  pathTexture,
+  stoneTexture,
+} from './campusTextures'
+import CampusWindows from './CampusWindows'
+import { CharacterModel } from './CharacterModel'
+
+export { CharacterModel }
 
 /**
  * Procedural campus scenery.
  *
  * Everything here is generated rather than loaded, so it costs no download and
  * stays editable in code. Repeated geometry (windows, trees, lamps) is drawn
- * with instanced meshes: a building with 60 windows is one draw call, not 60.
+ * with instanced meshes: a building with 120 windows is one draw call, not 120.
+ *
+ * Two rules this file follows, because breaking them is what made the old
+ * campus stutter:
+ *
+ * 1. Nothing allocates inside `useFrame`. A `new Vector3()` per frame per
+ *    player is a garbage collection pause every few seconds.
+ * 2. Nothing that only needs doing once is done in `useFrame`. Instance
+ *    matrices are written in a layout effect and then left alone.
  */
 
-const WINDOW_LIT = new THREE.Color("#ffd98a")
-const WINDOW_DARK = new THREE.Color("#2d3f52")
+/** Scratch objects, shared by every instancing pass. Never rendered. */
+const dummy = new THREE.Object3D()
 
 /**
- * A three-component position. r3f accepts a plain number[] at runtime but its
- * types want a fixed-length tuple, and a `number[]` silently loses the length.
+ * The sun, and a shadow frustum that follows the player.
+ *
+ * A single fixed shadow camera cannot cover a 370-metre campus: stretched wide
+ * enough to reach the far dorms, every shadow near you is a blurry smear, and
+ * that is exactly what the old ±140 frustum did. Keeping a tight box centred on
+ * the player instead gives roughly twenty shadow texels per metre wherever you
+ * happen to be standing.
+ *
+ * The centre is snapped to a 4-unit grid. Following the camera exactly makes
+ * the shadow map re-rasterise every frame, and edges visibly crawl as you walk.
  */
-type Vec3 = [number, number, number]
-
-/** Sky, light and fog. Replaces a flat ambient + single directional setup. */
-export function CampusEnvironment({ timeOfDay = "day" }: { timeOfDay?: string }) {
+function Sunlight({ config }: { config: DaylightConfig }) {
   const light = useRef<THREE.DirectionalLight>(null)
+  const target = useRef<THREE.Object3D>(null)
 
-  const config = useMemo(() => {
-    // `bounce` is the ground half of the hemisphere light. It was a dark
-    // olive at low intensity, so anything facing away from the sun received
-    // almost nothing and read as black rather than as its own colour: a brick
-    // building in shadow was a silhouette.
-    if (timeOfDay === "dusk") {
-      return {
-        sun: [30, 8, -60] as Vec3, intensity: 1.1, ambient: 0.85,
-        sky: "#9fb6d4", bounce: "#5d5647", tint: "#ffb37a", fog: "#c98a6b",
-        fill: 0.25,
-      }
-    }
-    return {
-      sun: [80, 40, 40] as Vec3, intensity: 1.6, ambient: 1.15,
-      sky: "#cfe4f7", bounce: "#8a9179", tint: "#fff6e5", fog: "#cfe3f0",
-      fill: 0.35,
-    }
-  }, [timeOfDay])
+  useLayoutEffect(() => {
+    if (light.current && target.current) light.current.target = target.current
+  }, [])
+
+  useFrame(({ camera }) => {
+    if (!light.current || !target.current) return
+    const gx = Math.round(camera.position.x / 4) * 4
+    const gz = Math.round(camera.position.z / 4) * 4
+    target.current.position.set(gx, 0, gz)
+    target.current.updateMatrixWorld()
+    light.current.position.set(gx + config.sun[0] * 0.6, config.sun[1], gz + config.sun[2] * 0.6)
+  })
 
   return (
     <>
-      <Sky sunPosition={config.sun} turbidity={6} rayleigh={1.2} />
-      {/* Depth cue so distant buildings recede instead of popping. */}
-      <fog attach="fog" args={[config.fog, 60, 260]} />
+      <object3D ref={target} />
+      <directionalLight
+        ref={light}
+        intensity={config.intensity}
+        color={config.tint}
+        castShadow
+        shadow-mapSize={[2048, 2048]}
+        shadow-bias={-0.0006}
+        shadow-normalBias={0.05}
+        shadow-camera-left={-70}
+        shadow-camera-right={70}
+        shadow-camera-top={70}
+        shadow-camera-bottom={-70}
+        shadow-camera-near={1}
+        shadow-camera-far={300}
+      />
+    </>
+  )
+}
+
+/** Sky, light and fog. */
+export function CampusEnvironment({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay | string }) {
+  const config = daylight(timeOfDay)
+
+  return (
+    <>
+      <Sky
+        sunPosition={config.sun}
+        turbidity={timeOfDay === 'dusk' ? 10 : 5}
+        rayleigh={timeOfDay === 'dusk' ? 3 : 1.1}
+        mieCoefficient={0.006}
+        mieDirectionalG={0.8}
+      />
+      {/* Depth cue, so the far side of the campus recedes instead of popping. */}
+      <fog attach="fog" args={[config.fog, config.fogNear, config.fogFar]} />
 
       {/* Sky/ground bounce, which a single ambient term cannot express. */}
       <hemisphereLight args={[config.sky, config.bounce, config.ambient]} />
@@ -60,433 +132,803 @@ export function CampusEnvironment({ timeOfDay = "day" }: { timeOfDay?: string })
         color="#cfe0f2"
       />
 
-      <directionalLight
-        ref={light}
-        position={config.sun}
-        intensity={config.intensity}
-        color={config.tint}
-        castShadow
-        shadow-mapSize={[2048, 2048]}
-        shadow-bias={-0.0004}
-        // Default shadow frustum is tiny; without this the campus has no shadows.
-        shadow-camera-left={-140}
-        shadow-camera-right={140}
-        shadow-camera-top={140}
-        shadow-camera-bottom={-140}
-        shadow-camera-near={1}
-        shadow-camera-far={400}
-      />
+      <Sunlight config={config} />
     </>
   )
 }
 
-/** Ground with paths, rather than one flat green plane. */
-export function CampusGround({ size = 300 }) {
+/** A flat, textured slab lying on the ground at a given height. */
+function Slab({
+  position,
+  size,
+  texture,
+  color,
+  height,
+  rotation = 0,
+}: {
+  position: [number, number]
+  size: [number, number]
+  texture: THREE.Texture | null
+  color: string
+  height: number
+  rotation?: number
+}) {
+  // Repeat has to follow the slab's real size or a 400-metre street shows four
+  // enormous stones. Cloning is cheap; the underlying image is shared.
+  const mapped = useMemo(() => {
+    if (!texture) return null
+    const clone = texture.clone()
+    clone.needsUpdate = true
+    clone.repeat.set((size[0] / 100) * texture.repeat.x, (size[1] / 100) * texture.repeat.y)
+    return clone
+  }, [texture, size])
+
+  useLayoutEffect(() => () => mapped?.dispose(), [mapped])
+
+  return (
+    <mesh
+      rotation={[-Math.PI / 2, 0, rotation]}
+      position={[position[0], height, position[1]]}
+      receiveShadow
+    >
+      <planeGeometry args={size} />
+      <meshStandardMaterial map={mapped ?? undefined} color={mapped ? '#ffffff' : color} roughness={0.95} />
+    </mesh>
+  )
+}
+
+/** Ground: lawn, streets, pavements, paths, the quad and the court. */
+export function CampusGround() {
+  const grass = grassTexture()
+  const asphalt = asphaltTexture()
+  const stone = stoneTexture()
+  const path = pathTexture()
+  const court = courtTexture()
+
+  const surfaces = { asphalt, stone, path, court }
+  const fallbacks = { asphalt: '#3a3d42', stone: '#8f8778', path: '#b4a88f', court: '#1f6f5c' }
+  // Stacked in a fixed order so coplanar surfaces never fight in the depth
+  // buffer. Streets sit lowest, the quad highest.
+  const heights = { asphalt: 0.01, stone: 0.02, path: 0.03, court: 0.04 }
+
   return (
     <group>
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <planeGeometry args={[size, size]} />
-        <meshStandardMaterial color="#3f6b3a" roughness={1} />
+        <planeGeometry args={[GROUND_SIZE, GROUND_SIZE]} />
+        <meshStandardMaterial map={grass ?? undefined} color={grass ? '#ffffff' : '#4a7a3f'} roughness={1} />
       </mesh>
 
-      {/* Two crossing paths so the space reads as a campus, not a field. */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]} receiveShadow>
-        <planeGeometry args={[14, size]} />
-        <meshStandardMaterial color="#b9ae97" roughness={0.95} />
-      </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, Math.PI / 2]} position={[0, 0.02, 0]} receiveShadow>
-        <planeGeometry args={[14, size]} />
-        <meshStandardMaterial color="#b9ae97" roughness={0.95} />
+      {PAVEMENTS.map((pavement, i) => (
+        <Slab
+          key={i}
+          position={pavement.position}
+          size={pavement.size}
+          texture={surfaces[pavement.kind]}
+          color={fallbacks[pavement.kind]}
+          height={heights[pavement.kind]}
+          rotation={pavement.rotation}
+        />
+      ))}
+
+      {/* The quad: a stone ring with a lawn inside it, rather than one more
+          rectangle. It is what the two axes cross on. */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[QUAD_CENTRE[0], 0.05, QUAD_CENTRE[1]]} receiveShadow>
+        <ringGeometry args={[QUAD_RADIUS - 5, QUAD_RADIUS, 64]} />
+        <meshStandardMaterial map={stone ?? undefined} color={stone ? '#ffffff' : '#8f8778'} roughness={0.95} />
       </mesh>
 
-      {/* Central quad. */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]} receiveShadow>
-        <circleGeometry args={[16, 48]} />
-        <meshStandardMaterial color="#a8b98a" roughness={0.9} />
-      </mesh>
+      <Fountain position={[QUAD_CENTRE[0], 0, QUAD_CENTRE[1]]} />
+
+      {/* Court markings, drawn as geometry: painted lines have to stay put
+          while the acrylic beneath them tiles. */}
+      <CourtMarkings />
     </group>
   )
 }
 
-/**
- * A building with a facade rather than a painted box: floor bands, a recessed
- * entrance, a roof lip, and instanced windows that light up at dusk.
- */
-interface BuildingProps {
-  position?: Vec3
-  size?: Vec3
-  color?: string
-  name?: string
-  icon?: string
-  timeOfDay?: string
-  onEnter?: () => void
-  canEnter?: boolean
-}
+function Fountain({ position }: { position: Vec3 }) {
+  const water = useRef<THREE.Mesh>(null)
 
-export function Building({
-  position = [0, 0, 0],
-  size = [14, 12, 10],
-  color = "#9aa4b1",
-  name,
-  icon,
-  timeOfDay = "day",
-  onEnter,
-  canEnter = true,
-}: BuildingProps) {
-  const [width, height, depth] = size
-  const floors = Math.max(2, Math.round(height / 3.2))
-
-  // One instanced mesh for every window on the building.
-  const windows = useMemo(() => {
-    const perRow = Math.max(2, Math.floor(width / 2.6))
-    const items: { x: number; y: number; z: number; ry: number }[] = []
-    for (let floor = 1; floor <= floors; floor++) {
-      const y = (height / (floors + 1)) * floor
-      for (let i = 0; i < perRow; i++) {
-        const x = -width / 2 + (width / (perRow + 1)) * (i + 1)
-        items.push({ x, y, z: depth / 2 + 0.06, ry: 0 })
-        items.push({ x, y, z: -depth / 2 - 0.06, ry: Math.PI })
-      }
-    }
-    return items
-  }, [width, height, depth, floors])
-
-  const meshRef = useRef<THREE.InstancedMesh>(null)
-
-  useFrame(() => {
-    const mesh = meshRef.current
-    if (!mesh || mesh.userData.done) return
-    const dummy = new THREE.Object3D()
-    windows.forEach((w, i) => {
-      dummy.position.set(w.x, w.y, w.z)
-      dummy.rotation.set(0, w.ry, 0)
-      dummy.updateMatrix()
-      mesh.setMatrixAt(i, dummy.matrix)
-      // Deterministic per-window so lit windows don't flicker between frames.
-      const lit = timeOfDay === "dusk" && (i * 2654435761) % 3 !== 0
-      mesh.setColorAt(i, lit ? WINDOW_LIT : WINDOW_DARK)
-    })
-    mesh.instanceMatrix.needsUpdate = true
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
-    mesh.userData.done = true
+  useFrame(({ clock }) => {
+    if (!water.current) return
+    // A slow breathe, so the quad is not completely static.
+    water.current.position.y = 0.92 + Math.sin(clock.elapsedTime * 0.8) * 0.03
   })
 
   return (
     <group position={position}>
-      {/* Main mass */}
+      <mesh castShadow receiveShadow position={[0, 0.45, 0]}>
+        <cylinderGeometry args={[7, 7.4, 0.9, 32]} />
+        <meshStandardMaterial color="#a89c86" roughness={0.9} />
+      </mesh>
+      <mesh ref={water} position={[0, 0.92, 0]}>
+        <cylinderGeometry args={[6.5, 6.5, 0.1, 32]} />
+        <meshStandardMaterial
+          color="#4d90b8"
+          roughness={0.08}
+          metalness={0.35}
+          transparent
+          opacity={0.85}
+        />
+      </mesh>
+      <mesh castShadow position={[0, 1.9, 0]}>
+        <cylinderGeometry args={[0.4, 0.9, 2.4, 16]} />
+        <meshStandardMaterial color="#b3a894" roughness={0.85} />
+      </mesh>
+      <mesh castShadow position={[0, 3.3, 0]}>
+        <sphereGeometry args={[0.85, 20, 16]} />
+        <meshStandardMaterial color="#8fc6e0" roughness={0.15} metalness={0.2} transparent opacity={0.75} />
+      </mesh>
+    </group>
+  )
+}
+
+/** White lines on the outdoor court, at the court slab's height. */
+function CourtMarkings() {
+  const court = PAVEMENTS.find((p) => p.kind === 'court')
+  if (!court) return null
+  const [cx, cz] = court.position
+  const [w, d] = court.size
+  const line = { color: '#f2f4f2', roughness: 0.9 }
+
+  return (
+    <group position={[cx, 0.05, cz]}>
+      {/* Perimeter, plus the halfway line */}
+      {([
+        [0, -d / 2 + 0.2, w, 0.35],
+        [0, d / 2 - 0.2, w, 0.35],
+        [-w / 2 + 0.2, 0, 0.35, d],
+        [w / 2 - 0.2, 0, 0.35, d],
+        [0, 0, w, 0.3],
+      ] as [number, number, number, number][]).map(([x, z, sw, sd], i) => (
+        <mesh key={i} rotation={[-Math.PI / 2, 0, 0]} position={[x, 0, z]}>
+          <planeGeometry args={[sw, sd]} />
+          <meshStandardMaterial {...line} />
+        </mesh>
+      ))}
+      {/* Centre circle */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[2.6, 2.9, 40]} />
+        <meshStandardMaterial {...line} />
+      </mesh>
+    </group>
+  )
+}
+
+/** Which window shape a facade style uses. */
+function windowKind(style: BuildingStyle): 'arched' | 'square' | 'strip' {
+  if (style === 'heritage') return 'arched'
+  if (style === 'glass') return 'strip'
+  return 'square'
+}
+
+function windowSize(style: BuildingStyle): [number, number] {
+  if (style === 'heritage') return [1.5, 2.5]
+  if (style === 'glass') return [2.2, 2.0]
+  return [1.6, 1.9]
+}
+
+interface FacadeLayout {
+  windows: { x: number; y: number; z: number; ry: number }[]
+  floors: number
+  floorHeight: number
+}
+
+/** Where every window on a building goes. */
+function useFacadeLayout(width: number, height: number, depth: number, style: BuildingStyle): FacadeLayout {
+  return useMemo(() => {
+    // Heritage floors are tall; a modern block packs them tighter.
+    const floorHeight = style === 'heritage' ? 4.1 : 3.4
+    // Floor, not round. Rounding up fits one more storey than the wall has
+    // room for, and the same count drives the string courses: a 21-metre
+    // terrace got its top course at y 22.1, inside the crowning cornice.
+    const floors = Math.max(1, Math.floor((height - 1.6) / floorHeight))
+    const spacing = style === 'glass' ? 3.0 : 3.6
+    const perFront = Math.max(2, Math.floor(width / spacing) - 1)
+    const perSide = Math.max(1, Math.floor(depth / spacing) - 1)
+
+    const windows: FacadeLayout['windows'] = []
+    for (let floor = 0; floor < floors; floor++) {
+      // Sit windows in the middle of their floor band, above the plinth.
+      const y = 1.6 + floor * floorHeight + floorHeight / 2
+
+      for (let i = 0; i < perFront; i++) {
+        const x = -width / 2 + (width / (perFront + 1)) * (i + 1)
+        // The ground-floor centre is the doorway; skip it.
+        const isDoorway = floor === 0 && Math.abs(x) < 3.6
+        if (isDoorway) continue
+        windows.push({ x, y, z: depth / 2 + 0.08, ry: 0 })
+        windows.push({ x, y, z: -depth / 2 - 0.08, ry: Math.PI })
+      }
+
+      for (let i = 0; i < perSide; i++) {
+        const z = -depth / 2 + (depth / (perSide + 1)) * (i + 1)
+        windows.push({ x: width / 2 + 0.08, y, z, ry: Math.PI / 2 })
+        windows.push({ x: -width / 2 - 0.08, y, z, ry: -Math.PI / 2 })
+      }
+    }
+    return { windows, floors, floorHeight }
+  }, [width, height, depth, style])
+}
+
+/** Cornices, string courses and a plinth: the horizontals that give scale. */
+function FacadeTrim({
+  width,
+  height,
+  depth,
+  floors,
+  floorHeight,
+  trim,
+  style,
+}: {
+  width: number
+  height: number
+  depth: number
+  floors: number
+  floorHeight: number
+  trim: string
+  style: BuildingStyle
+}) {
+  return (
+    <>
+      {/* Plinth */}
+      <mesh receiveShadow castShadow position={[0, 0.8, 0]}>
+        <boxGeometry args={[width + 0.7, 1.6, depth + 0.7]} />
+        <meshStandardMaterial color={trim} roughness={0.95} />
+      </mesh>
+
+      {/* Crowning cornice */}
+      <mesh castShadow position={[0, height + 0.45, 0]}>
+        <boxGeometry args={[width + 1.6, 0.9, depth + 1.6]} />
+        <meshStandardMaterial color={trim} roughness={0.9} />
+      </mesh>
+      <mesh castShadow position={[0, height + 1.15, 0]}>
+        <boxGeometry args={[width + 0.9, 0.5, depth + 0.9]} />
+        <meshStandardMaterial color={trim} roughness={0.9} />
+      </mesh>
+
+      {/* A string course between floors. Heritage fronts get one per floor;
+          everything else only gets the one over the ground floor, which is
+          what stops a modern block reading as an extruded rectangle. */}
+      {Array.from({ length: style === 'heritage' ? floors : 1 }, (_, i) => (
+        <mesh key={i} castShadow position={[0, 1.6 + (i + 1) * floorHeight, 0]}>
+          <boxGeometry args={[width + 0.45, 0.3, depth + 0.45]} />
+          <meshStandardMaterial color={trim} roughness={0.9} />
+        </mesh>
+      ))}
+    </>
+  )
+}
+
+/** The doorway on the +Z face, which is the face every building presents. */
+function Entrance({ depth, trim }: { depth: number; trim: string }) {
+  return (
+    <group position={[0, 0, depth / 2 + 0.06]}>
+      {/* Steps up to the threshold */}
+      {[0, 1, 2].map((i) => (
+        <mesh key={i} receiveShadow castShadow position={[0, 0.18 + i * 0.28, 1.5 - i * 0.5]}>
+          <boxGeometry args={[7.5 - i * 0.6, 0.3, 1.1]} />
+          <meshStandardMaterial color={trim} roughness={0.95} />
+        </mesh>
+      ))}
+
+      {/* Surround */}
+      <mesh castShadow position={[0, 2.6, 0.05]}>
+        <boxGeometry args={[6.4, 5.2, 0.5]} />
+        <meshStandardMaterial color={trim} roughness={0.85} />
+      </mesh>
+      {/* Recessed dark reveal */}
+      <mesh position={[0, 2.4, 0.32]}>
+        <boxGeometry args={[5.2, 4.4, 0.2]} />
+        <meshStandardMaterial color="#2a323d" roughness={0.6} metalness={0.2} />
+      </mesh>
+      {/* Glazed doors */}
+      <mesh position={[0, 2.2, 0.45]}>
+        <boxGeometry args={[4.4, 3.9, 0.12]} />
+        <meshStandardMaterial
+          color="#8fd0ff"
+          roughness={0.08}
+          metalness={0.5}
+          transparent
+          opacity={0.7}
+        />
+      </mesh>
+      {/* Mullion, so it reads as a pair of doors */}
+      <mesh position={[0, 2.2, 0.52]}>
+        <boxGeometry args={[0.14, 3.9, 0.1]} />
+        <meshStandardMaterial color="#3b444f" roughness={0.5} metalness={0.4} />
+      </mesh>
+      {/* Canopy */}
+      <mesh castShadow position={[0, 5.3, 0.9]}>
+        <boxGeometry args={[7.2, 0.3, 2.2]} />
+        <meshStandardMaterial color={trim} roughness={0.8} />
+      </mesh>
+    </group>
+  )
+}
+
+interface BuildingProps {
+  position?: Vec3
+  size?: Vec3
+  color?: string
+  trim?: string
+  name?: string
+  icon?: string
+  style?: BuildingStyle
+  timeOfDay?: TimeOfDay | string
+  /** Kept for callers that still pass it; the sign is geometry now, not a button. */
+  onEnter?: () => void
+  canEnter?: boolean
+}
+
+/**
+ * An enterable building: textured facade, instanced windows, cornices, a
+ * recessed entrance and a sign board over the door.
+ *
+ * The "Enter" button used to be a drei `Html` node floating at each doorway.
+ * Two DOM overlays per building meant the browser was transforming a couple of
+ * dozen absolutely-positioned elements every frame, and they were unclickable
+ * anyway while the pointer was locked for mouse-look — which is how the game is
+ * actually played. The prompt now lives in the HUD, driven by proximity.
+ */
+export function Building({
+  position = [0, 0, 0],
+  size = [14, 12, 10],
+  color = '#9aa4b1',
+  trim = '#5c6472',
+  name,
+  icon,
+  style = 'modern',
+  timeOfDay = 'day',
+}: BuildingProps) {
+  const [width, height, depth] = size
+  const layout = useFacadeLayout(width, height, depth, style)
+  const facade = facadeTexture(color, style)
+  const sign = name ? buildingSignTexture(name, icon ?? '') : null
+  const lit = daylight(timeOfDay).lampsOn
+  // Stable per building, so its lit windows do not change when React re-renders.
+  const seed = useMemo(() => Math.abs(Math.round(position[0] * 7 + position[2] * 13)), [position])
+
+  const facadeMap = useMemo(() => {
+    if (!facade) return null
+    const clone = facade.clone()
+    clone.needsUpdate = true
+    clone.repeat.set(width / 9, height / 9)
+    return clone
+  }, [facade, width, height])
+
+  useLayoutEffect(() => () => facadeMap?.dispose(), [facadeMap])
+
+  return (
+    <group position={position}>
       <mesh castShadow receiveShadow position={[0, height / 2, 0]}>
         <boxGeometry args={[width, height, depth]} />
-        <meshStandardMaterial color={color} roughness={0.85} metalness={0.05} />
-      </mesh>
-
-      {/* Roof lip, so the silhouette is not a bare cuboid */}
-      <mesh castShadow position={[0, height + 0.35, 0]}>
-        <boxGeometry args={[width + 0.8, 0.7, depth + 0.8]} />
-        <meshStandardMaterial color="#5c6472" roughness={0.9} />
-      </mesh>
-
-      {/* Ground-floor plinth */}
-      <mesh receiveShadow position={[0, 0.4, 0]}>
-        <boxGeometry args={[width + 0.5, 0.8, depth + 0.5]} />
-        <meshStandardMaterial color="#7b8496" roughness={0.95} />
-      </mesh>
-
-      <instancedMesh
-        ref={meshRef}
-        args={[undefined, undefined, windows.length]}
-        castShadow={false}
-      >
-        <planeGeometry args={[1.1, 1.5]} />
         <meshStandardMaterial
-          emissiveIntensity={timeOfDay === "dusk" ? 0.9 : 0.05}
-          emissive="#ffd98a"
-          roughness={0.25}
-          metalness={0.1}
-          toneMapped={false}
+          map={facadeMap ?? undefined}
+          color={facadeMap ? '#ffffff' : color}
+          roughness={style === 'glass' ? 0.4 : 0.88}
+          metalness={style === 'glass' ? 0.25 : 0.04}
         />
-      </instancedMesh>
+      </mesh>
 
-      {/* Recessed entrance on the +Z face */}
-      <group position={[0, 0, depth / 2 + 0.05]}>
-        <mesh position={[0, 1.6, 0]}>
-          <boxGeometry args={[3.4, 3.2, 0.3]} />
-          <meshStandardMaterial color="#33404f" roughness={0.6} metalness={0.2} />
-        </mesh>
-        <mesh position={[0, 1.5, 0.18]}>
-          <boxGeometry args={[2.6, 2.8, 0.1]} />
+      <FacadeTrim
+        width={width}
+        height={height}
+        depth={depth}
+        floors={layout.floors}
+        floorHeight={layout.floorHeight}
+        trim={trim}
+        style={style}
+      />
+
+      <CampusWindows
+        items={layout.windows}
+        kind={windowKind(style)}
+        wall={color}
+        size={windowSize(style)}
+        lit={lit}
+        seed={seed}
+      />
+
+      <Entrance depth={depth} trim={trim} />
+
+      {sign && (
+        <mesh position={[0, 6.2, depth / 2 + 0.35]}>
+          <planeGeometry args={[10, 2.5]} />
           <meshStandardMaterial
-            color="#8fd0ff"
-            roughness={0.1}
-            metalness={0.4}
-            transparent
-            opacity={0.65}
+            map={sign}
+            roughness={0.6}
+            emissive="#ffffff"
+            emissiveMap={sign}
+            emissiveIntensity={lit ? 0.55 : 0.12}
           />
         </mesh>
-
-        {canEnter && (
-          <Html position={[0, 3.6, 0]} center distanceFactor={18} zIndexRange={[9, 0]}>
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                onEnter?.()
-              }}
-              className="px-2 py-1 rounded bg-blue-600/90 hover:bg-blue-500 text-white text-xs whitespace-nowrap"
-            >
-              Enter {name} (E)
-            </button>
-          </Html>
-        )}
-      </group>
-
-      {name && (
-        <Html position={[0, height + 2, 0]} center distanceFactor={26} zIndexRange={[9, 0]}>
-          <div className="bg-black/70 text-white px-3 py-1 rounded text-sm whitespace-nowrap pointer-events-none">
-            {icon} {name}
-          </div>
-        </Html>
       )}
     </group>
   )
 }
 
-/** Trees, lamps and benches as instanced meshes. */
-export function CampusProps({
-  count = 26,
-  radius = 120,
-  timeOfDay = "day",
+/** A building you cannot go into. Same facade treatment, no door, no sign. */
+export function SceneryBuilding({
+  block,
+  timeOfDay = 'day',
 }: {
-  count?: number
-  radius?: number
-  timeOfDay?: string
+  block: SceneryBlock
+  timeOfDay?: TimeOfDay | string
+}) {
+  const [width, height, depth] = block.size
+  const style: BuildingStyle = block.arched ? 'heritage' : block.style
+  const layout = useFacadeLayout(width, height, depth, style)
+  const facade = facadeTexture(block.color, style)
+  const lit = daylight(timeOfDay).lampsOn
+  const seed = useMemo(
+    () => Math.abs(Math.round(block.position[0] * 3 + block.position[2] * 11)),
+    [block.position],
+  )
+
+  const facadeMap = useMemo(() => {
+    if (!facade) return null
+    const clone = facade.clone()
+    clone.needsUpdate = true
+    clone.repeat.set(width / 9, height / 9)
+    return clone
+  }, [facade, width, height])
+
+  useLayoutEffect(() => () => facadeMap?.dispose(), [facadeMap])
+
+  return (
+    <group position={block.position}>
+      <mesh castShadow receiveShadow position={[0, height / 2, 0]}>
+        <boxGeometry args={[width, height, depth]} />
+        <meshStandardMaterial
+          map={facadeMap ?? undefined}
+          color={facadeMap ? '#ffffff' : block.color}
+          roughness={0.88}
+        />
+      </mesh>
+
+      <FacadeTrim
+        width={width}
+        height={height}
+        depth={depth}
+        floors={layout.floors}
+        floorHeight={layout.floorHeight}
+        trim={block.trim}
+        style={style}
+      />
+
+      <CampusWindows
+        items={layout.windows}
+        kind={windowKind(style)}
+        wall={block.color}
+        size={windowSize(style)}
+        lit={lit}
+        seed={seed}
+      />
+    </group>
+  )
+}
+
+/** The whole non-enterable backdrop, in one component. */
+export function CampusSkyline({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay | string }) {
+  return (
+    <group>
+      {SCENERY_BLOCKS.map((block, i) => (
+        <SceneryBuilding key={i} block={block} timeOfDay={timeOfDay} />
+      ))}
+    </group>
+  )
+}
+
+const TRUNK_COLORS = ['#5b432c', '#4d3a26', '#66502f']
+const CANOPY_DAY = ['#3f7a34', '#4c8a3c', '#356b2c']
+const CANOPY_DUSK = ['#26401f', '#2d4a24', '#1f3619']
+
+/**
+ * Trees, lamps and benches.
+ *
+ * All instanced, all placed by the layout module's seeded scatter, and all
+ * written once in a layout effect. The old version re-checked a `done` flag on
+ * every single frame for the life of the session.
+ */
+export function CampusProps({
+  treeCount = 150,
+  timeOfDay = 'day',
+}: {
+  treeCount?: number
+  timeOfDay?: TimeOfDay | string
+}) {
+  const trees = useMemo(
+    () => scatterProps({ count: treeCount, seed: 20240917, blocked: KEEP_CLEAR, clearance: 5, variants: 3 }),
+    [treeCount],
+  )
+
+  // Lamps line the routes rather than scattering, because that is what lamps do.
+  const lamps = useMemo(() => {
+    const items: { x: number; z: number }[] = []
+    for (let z = -170; z <= 170; z += 22) {
+      items.push({ x: -9.5, z }, { x: 9.5, z })
+    }
+    for (let x = -160; x <= 160; x += 24) {
+      items.push({ x, z: -54.5 })
+    }
+    return items
+  }, [])
+
+  const benches = useMemo(() => {
+    const items: { x: number; z: number; ry: number }[] = []
+    // Around the quad, facing in.
+    for (let i = 0; i < 8; i++) {
+      const angle = (i / 8) * Math.PI * 2
+      items.push({
+        x: QUAD_CENTRE[0] + Math.cos(angle) * (QUAD_RADIUS - 2.5),
+        z: QUAD_CENTRE[1] + Math.sin(angle) * (QUAD_RADIUS - 2.5),
+        ry: -angle + Math.PI / 2,
+      })
+    }
+    return items
+  }, [])
+
+  const config = daylight(timeOfDay)
+  const canopyColors = config.lampsOn ? CANOPY_DUSK : CANOPY_DAY
+
+  // Split once. Filtering inline handed TreeVariant a new array on every
+  // render, and that array is the only dependency of the effect that writes
+  // the instance matrices — so every unrelated re-render rewrote the matrices
+  // of all 150 trees, which is exactly what this file claims not to do.
+  const treesByVariant = useMemo(
+    () => TRUNK_COLORS.map((_, variant) => trees.filter((t) => t.variant === variant)),
+    [trees],
+  )
+
+  return (
+    <group>
+      {/* One instanced mesh per colour variant: instanceColor would also work,
+          but three separate meshes keep flat shading crisp and are still only
+          three draw calls each. */}
+      {TRUNK_COLORS.map((trunkColor, variant) => (
+        <TreeVariant
+          key={variant}
+          items={treesByVariant[variant]}
+          trunkColor={trunkColor}
+          canopyColor={canopyColors[variant]}
+        />
+      ))}
+
+      <Lamps items={lamps} on={config.lampsOn} />
+      <Benches items={benches} />
+    </group>
+  )
+}
+
+function TreeVariant({
+  items,
+  trunkColor,
+  canopyColor,
+}: {
+  items: { x: number; z: number; scale: number; rotation: number }[]
+  trunkColor: string
+  canopyColor: string
 }) {
   const trunks = useRef<THREE.InstancedMesh>(null)
   const canopies = useRef<THREE.InstancedMesh>(null)
+  const tops = useRef<THREE.InstancedMesh>(null)
 
-  const layout = useMemo(() => {
-    // Deterministic layout: a re-render must not teleport the scenery.
-    const items: { x: number; z: number; scale: number }[] = []
-    for (let i = 0; i < count; i++) {
-      const angle = (i / count) * Math.PI * 2 + (i % 3) * 0.35
-      const distance = 40 + ((i * 37) % (radius - 40))
-      items.push({
-        x: Math.cos(angle) * distance,
-        z: Math.sin(angle) * distance,
-        scale: 0.8 + ((i * 13) % 7) / 10,
-      })
-    }
-    // Keep the crossing paths clear.
-    return items.filter((t) => Math.abs(t.x) > 10 && Math.abs(t.z) > 10)
-  }, [count, radius])
-
-  useFrame(() => {
-    // Tuples, not a plain array: inference otherwise widens the element type
-    // to the union of a ref and a number, and `yOffset * t.scale` stops
-    // typechecking.
+  useLayoutEffect(() => {
     const parts: [React.RefObject<THREE.InstancedMesh | null>, number, number][] = [
-      [trunks, 1.6, 1],
-      [canopies, 4.2, 1],
+      [trunks, 1.9, 1],
+      [canopies, 4.6, 1],
+      // A second, smaller ball above the first so a tree has a silhouette
+      // instead of being a lollipop.
+      [tops, 6.6, 0.62],
     ]
-    for (const [ref, yOffset, scaleAxis] of parts) {
+    for (const [ref, yOffset, scaleFactor] of parts) {
       const mesh = ref.current
-      if (!mesh || mesh.userData.done) continue
-      const dummy = new THREE.Object3D()
-      layout.forEach((t, i) => {
-        dummy.position.set(t.x, yOffset * t.scale, t.z)
-        dummy.scale.setScalar(t.scale * scaleAxis)
+      if (!mesh) continue
+      items.forEach((item, i) => {
+        dummy.position.set(item.x, yOffset * item.scale, item.z)
+        dummy.rotation.set(0, item.rotation, 0)
+        dummy.scale.setScalar(item.scale * scaleFactor)
         dummy.updateMatrix()
         mesh.setMatrixAt(i, dummy.matrix)
       })
       mesh.instanceMatrix.needsUpdate = true
-      mesh.userData.done = true
+      mesh.computeBoundingSphere()
     }
-  })
+  }, [items])
+
+  if (!items.length) return null
 
   return (
     <group>
-      <instancedMesh ref={trunks} args={[undefined, undefined, layout.length]} castShadow>
-        <cylinderGeometry args={[0.28, 0.38, 3.2, 6]} />
-        <meshStandardMaterial color="#5b432c" roughness={1} />
+      <instancedMesh ref={trunks} args={[undefined, undefined, items.length]} castShadow>
+        <cylinderGeometry args={[0.3, 0.45, 3.8, 6]} />
+        <meshStandardMaterial color={trunkColor} roughness={1} />
       </instancedMesh>
 
-      <instancedMesh ref={canopies} args={[undefined, undefined, layout.length]} castShadow>
-        <icosahedronGeometry args={[2.4, 0]} />
-        <meshStandardMaterial color={timeOfDay === "dusk" ? "#26401f" : "#3f7a34"} roughness={1} flatShading />
+      <instancedMesh ref={canopies} args={[undefined, undefined, items.length]} castShadow>
+        <icosahedronGeometry args={[2.7, 0]} />
+        <meshStandardMaterial color={canopyColor} roughness={1} flatShading />
+      </instancedMesh>
+
+      <instancedMesh ref={tops} args={[undefined, undefined, items.length]} castShadow>
+        <icosahedronGeometry args={[2.7, 0]} />
+        <meshStandardMaterial color={canopyColor} roughness={1} flatShading />
       </instancedMesh>
     </group>
   )
 }
 
-/** Desks, chairs, a podium and a board frame, so the room is not a bare box. */
-function LectureRoomFurniture() {
-  const rows = [-6, -1, 4, 9]
-  const columns = [-10, -5, 5, 10]
+function Lamps({ items, on }: { items: { x: number; z: number }[]; on: boolean }) {
+  const posts = useRef<THREE.InstancedMesh>(null)
+  const heads = useRef<THREE.InstancedMesh>(null)
+
+  useLayoutEffect(() => {
+    const parts: [React.RefObject<THREE.InstancedMesh | null>, number][] = [
+      [posts, 2.6],
+      [heads, 5.4],
+    ]
+    for (const [ref, y] of parts) {
+      const mesh = ref.current
+      if (!mesh) continue
+      items.forEach((item, i) => {
+        dummy.position.set(item.x, y, item.z)
+        dummy.rotation.set(0, 0, 0)
+        dummy.scale.setScalar(1)
+        dummy.updateMatrix()
+        mesh.setMatrixAt(i, dummy.matrix)
+      })
+      mesh.instanceMatrix.needsUpdate = true
+      mesh.computeBoundingSphere()
+    }
+  }, [items])
+
+  if (!items.length) return null
 
   return (
     <group>
-      {/* Board frame on the far wall, behind whatever screen share is mounted */}
-      <mesh position={[0, 5, -19.6]} receiveShadow>
-        <boxGeometry args={[24, 10, 0.3]} />
-        <meshStandardMaterial color="#1f2733" roughness={0.6} />
-      </mesh>
+      <instancedMesh ref={posts} args={[undefined, undefined, items.length]} castShadow>
+        <cylinderGeometry args={[0.12, 0.18, 5.2, 8]} />
+        <meshStandardMaterial color="#2f3640" roughness={0.6} metalness={0.5} />
+      </instancedMesh>
 
-      {/* Podium */}
-      <group position={[-9, 0, -15]}>
-        <mesh castShadow position={[0, 0.55, 0]}>
-          <boxGeometry args={[1.6, 1.1, 0.9]} />
-          <meshStandardMaterial color="#6b4f34" roughness={0.8} />
-        </mesh>
-        <mesh castShadow position={[0, 1.15, 0]} rotation={[-0.3, 0, 0]}>
-          <boxGeometry args={[1.7, 0.08, 0.9]} />
-          <meshStandardMaterial color="#7d5c3d" roughness={0.75} />
-        </mesh>
-      </group>
+      {/* The glow is emissive rather than a real light. Three hundred point
+          lights would be three hundred extra shading passes; this reads the
+          same from the ground and costs one draw call. */}
+      <instancedMesh ref={heads} args={[undefined, undefined, items.length]}>
+        <sphereGeometry args={[0.36, 12, 10]} />
+        <meshStandardMaterial
+          color={on ? '#fff0c4' : '#cfd4d9'}
+          emissive="#ffcf7a"
+          emissiveIntensity={on ? 2.4 : 0}
+          toneMapped={false}
+        />
+      </instancedMesh>
+    </group>
+  )
+}
 
-      {rows.map((z) =>
-        columns.map((x) => (
-          <group key={`${x}-${z}`} position={[x, 0, z]}>
-            {/* Desk top */}
-            <mesh castShadow receiveShadow position={[0, 0.75, 0]}>
-              <boxGeometry args={[3.4, 0.12, 1.2]} />
-              <meshStandardMaterial color="#8a6742" roughness={0.8} />
-            </mesh>
-            {/* Legs */}
-            {[[-1.5, -0.45], [1.5, -0.45], [-1.5, 0.45], [1.5, 0.45]].map(([lx, lz], i) => (
-              <mesh key={i} castShadow position={[lx, 0.38, lz]}>
-                <cylinderGeometry args={[0.06, 0.06, 0.75, 6]} />
-                <meshStandardMaterial color="#4a4f57" roughness={0.7} metalness={0.3} />
-              </mesh>
-            ))}
-            {/* Two chairs per desk */}
-            {[-0.85, 0.85].map((cx) => (
-              <group key={cx} position={[cx, 0, 1.1]}>
-                <mesh castShadow position={[0, 0.45, 0]}>
-                  <boxGeometry args={[0.7, 0.08, 0.7]} />
-                  <meshStandardMaterial color="#3f5b7a" roughness={0.85} />
-                </mesh>
-                <mesh castShadow position={[0, 0.8, 0.31]}>
-                  <boxGeometry args={[0.7, 0.7, 0.08]} />
-                  <meshStandardMaterial color="#3f5b7a" roughness={0.85} />
-                </mesh>
-              </group>
-            ))}
-          </group>
-        )),
-      )}
+function Benches({ items }: { items: { x: number; z: number; ry: number }[] }) {
+  const seats = useRef<THREE.InstancedMesh>(null)
+  const backs = useRef<THREE.InstancedMesh>(null)
+  // Without these the seat and back hung in the air with nothing under them.
+  const legs = useRef<THREE.InstancedMesh>(null)
+
+  useLayoutEffect(() => {
+    const parts: [React.RefObject<THREE.InstancedMesh | null>, number, number, number][] = [
+      [seats, 0.55, 0, 0],
+      [backs, 0.95, -0.32, -0.3],
+    ]
+    for (const [ref, y, z, tilt] of parts) {
+      const mesh = ref.current
+      if (!mesh) continue
+      items.forEach((item, i) => {
+        dummy.position.set(item.x, y, item.z)
+        // YXZ, not the default XYZ: with XYZ the backrest's lean is applied
+        // before the bench's heading, so a bench facing sideways leaned
+        // sideways instead of backwards. Around a circular quad that meant
+        // every bench but two was tipping over.
+        dummy.rotation.set(tilt, item.ry, 0, 'YXZ')
+        dummy.scale.setScalar(1)
+        dummy.translateZ(z)
+        dummy.updateMatrix()
+        mesh.setMatrixAt(i, dummy.matrix)
+      })
+      mesh.instanceMatrix.needsUpdate = true
+      mesh.computeBoundingSphere()
+    }
+
+    // Two cast-iron end frames per bench, so it stands on something.
+    const legMesh = legs.current
+    if (legMesh) {
+      items.forEach((item, i) => {
+        for (const side of [-1, 1]) {
+          dummy.position.set(item.x, 0.28, item.z)
+          dummy.rotation.set(0, item.ry, 0)
+          dummy.scale.set(1, 1, 1)
+          dummy.translateX(side * 1.05)
+          dummy.updateMatrix()
+          legMesh.setMatrixAt(i * 2 + (side === -1 ? 0 : 1), dummy.matrix)
+        }
+      })
+      legMesh.instanceMatrix.needsUpdate = true
+      legMesh.computeBoundingSphere()
+    }
+  }, [items])
+
+  if (!items.length) return null
+
+  return (
+    <group>
+      <instancedMesh ref={seats} args={[undefined, undefined, items.length]} castShadow receiveShadow>
+        <boxGeometry args={[2.6, 0.16, 0.7]} />
+        <meshStandardMaterial color="#7a5a3a" roughness={0.9} />
+      </instancedMesh>
+      <instancedMesh ref={backs} args={[undefined, undefined, items.length]} castShadow>
+        <boxGeometry args={[2.6, 0.7, 0.14]} />
+        <meshStandardMaterial color="#7a5a3a" roughness={0.9} />
+      </instancedMesh>
+      <instancedMesh ref={legs} args={[undefined, undefined, items.length * 2]} castShadow>
+        <boxGeometry args={[0.14, 0.56, 0.62]} />
+        <meshStandardMaterial color="#2f3640" roughness={0.7} metalness={0.4} />
+      </instancedMesh>
     </group>
   )
 }
 
 /**
- * Interior shown when a player enters a building. A simple lit room with a
- * lecture board, so entering leads somewhere rather than being a no-op.
+ * A player's name, as a sprite.
+ *
+ * Sprites attenuate with distance by default, and that is kept: a campus this
+ * size would otherwise be a wall of full-size labels stacked over each other
+ * from the far end of the spine. Distance culling is the LOD's job, not the
+ * tag's.
  */
-export function BuildingInterior({
-  children,
+export function NameTag({
+  name,
+  accent,
+  position = [0, 2.25, 0],
 }: {
-  children?: React.ReactNode
+  name: string
+  accent?: string
+  position?: Vec3
 }) {
+  const texture = nameTagTexture(name, accent)
+  if (!texture) return null
+
   return (
-    <group>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <planeGeometry args={[40, 40]} />
-        <meshStandardMaterial color="#8d8577" roughness={0.9} />
-      </mesh>
-
-      {/* Walls */}
-      {([
-        [0, 5, -20, 0],
-        [0, 5, 20, Math.PI],
-        [-20, 5, 0, Math.PI / 2],
-        [20, 5, 0, -Math.PI / 2],
-      ] as [number, number, number, number][]).map(([x, y, z, ry], i) => (
-        <mesh key={i} position={[x, y, z]} rotation={[0, ry, 0]} receiveShadow>
-          <planeGeometry args={[40, 10]} />
-          <meshStandardMaterial color="#cfc7b8" roughness={0.95} side={THREE.DoubleSide} />
-        </mesh>
-      ))}
-
-      <mesh position={[0, 10, 0]} rotation={[Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[40, 40]} />
-        <meshStandardMaterial color="#e8e3d8" roughness={1} side={THREE.DoubleSide} />
-      </mesh>
-
-      <ambientLight intensity={0.7} />
-      <pointLight position={[0, 8, 0]} intensity={80} distance={45} castShadow />
-      <pointLight position={[-12, 7, -12]} intensity={30} distance={30} />
-      <pointLight position={[12, 7, 12]} intensity={30} distance={30} />
-
-      <LectureRoomFurniture />
-
-      {children}
-
-      {/* No name plate in the scene. It landed on the projector screen, and the
-          page already shows which building you are inside.
-
-          The way out is a fixed overlay in the page too, not an Html marker:
-          the player spawns facing the board, so anything placed behind them is
-          off screen and they cannot find it. */}
-    </group>
+    <sprite position={position} scale={[1.6, 0.4, 1]}>
+      <spriteMaterial map={texture} transparent depthTest depthWrite={false} toneMapped={false} />
+    </sprite>
   )
 }
 
-/** Better character: capsule torso, head, arms and legs, and it casts a shadow. */
-export function CharacterModel({
-  color = "#4F46E5",
-  isMoving = false,
-  direction = "down",
-}: {
-  color?: string
-  isMoving?: boolean
-  direction?: string
-}) {
-  const legs = useRef<THREE.Group>(null)
-
-  useFrame((state) => {
-    if (!legs.current) return
-    // Simple walk cycle; still cheap, but remote players stop looking static.
-    const t = state.clock.elapsedTime * 9
-    const swing = isMoving ? Math.sin(t) * 0.5 : 0
-    legs.current.children.forEach((leg, i) => {
-      leg.rotation.x = i === 0 ? swing : -swing
-    })
-  })
-
-  const facing =
-    ({ down: 0, up: Math.PI, left: Math.PI / 2, right: -Math.PI / 2 } as Record<string, number>)[direction] ?? 0
-
+/**
+ * The enterable buildings, drawn from the layout.
+ *
+ * The main building gets its own component. It is the one real building on
+ * this campus and deserves more than an extruded box with windows on it.
+ */
+export function CampusBuildings({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay | string }) {
   return (
-    <group rotation={[0, facing, 0]}>
-      <mesh castShadow position={[0, 1.05, 0]}>
-        <capsuleGeometry args={[0.28, 0.5, 4, 12]} />
-        <meshStandardMaterial color={color} roughness={0.7} />
-      </mesh>
-
-      <mesh castShadow position={[0, 1.6, 0]}>
-        <sphereGeometry args={[0.23, 20, 16]} />
-        <meshStandardMaterial color="#f2c4a8" roughness={0.8} />
-      </mesh>
-
-      {/* Hair, so heads are not featureless spheres */}
-      <mesh position={[0, 1.7, -0.02]}>
-        <sphereGeometry args={[0.235, 20, 16, 0, Math.PI * 2, 0, Math.PI / 2]} />
-        <meshStandardMaterial color="#3a2b23" roughness={1} />
-      </mesh>
-
-      {[-0.36, 0.36].map((x) => (
-        <mesh key={x} castShadow position={[x, 1.05, 0]} rotation={[0, 0, x > 0 ? -0.15 : 0.15]}>
-          <capsuleGeometry args={[0.09, 0.42, 4, 8]} />
-          <meshStandardMaterial color={color} roughness={0.7} />
-        </mesh>
-      ))}
-
-      <group ref={legs} position={[0, 0.62, 0]}>
-        {[-0.14, 0.14].map((x) => (
-          <mesh key={x} castShadow position={[x, -0.3, 0]}>
-            <capsuleGeometry args={[0.11, 0.4, 4, 8]} />
-            <meshStandardMaterial color="#2f3a4a" roughness={0.85} />
-          </mesh>
-        ))}
-      </group>
+    <group>
+      {CAMPUS_BUILDINGS.map((building) =>
+        building.interior === 'ufaz' ? (
+          <UfazBuilding key={building.id} building={building} timeOfDay={timeOfDay} />
+        ) : (
+          <Building
+            key={building.id}
+            position={building.position}
+            size={building.size}
+            color={building.color}
+            trim={building.trim}
+            name={building.name}
+            icon={building.icon}
+            style={building.style}
+            timeOfDay={timeOfDay}
+          />
+        ),
+      )}
     </group>
   )
 }

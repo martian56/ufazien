@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import * as THREE from "three"
+import { fitProjector } from './projectorFit'
 
 /**
  * A projector screen that lives in the room.
@@ -12,22 +13,13 @@ import * as THREE from "three"
  * walk up to it to read small text, the way a projector actually behaves.
  */
 
-const MAX_WIDTH = 16
-const MAX_HEIGHT = 8.4
-
-/** Screen size that fits the video's aspect inside the wall's budget. */
-function fitScreen(aspect: number): [number, number] {
-  const width = Math.min(MAX_WIDTH, MAX_HEIGHT * aspect)
-  return [width, width / aspect]
-}
-
 /**
  * The light between lens and screen, as a rectangular pyramid rather than a
  * cone: a projector throws the shape of its image, and a cone gives away that
  * the beam is a prop.
  */
 function useBeamGeometry(width: number, height: number, apex: [number, number, number]) {
-  return useMemo(() => {
+  const geometry = useMemo(() => {
     const halfWidth = width / 2
     const halfHeight = height / 2
     // Lands just short of the screen. Ending exactly on it puts the base edges
@@ -50,6 +42,12 @@ function useBeamGeometry(width: number, height: number, apex: [number, number, n
     geometry.computeVertexNormals()
     return geometry
   }, [width, height, apex])
+
+  // r3f does not own a geometry handed to it through the `geometry` prop, so
+  // nothing else will free this one when it is replaced.
+  useEffect(() => () => geometry.dispose(), [geometry])
+
+  return geometry
 }
 
 /** Reads the real aspect ratio, which is only known once the video has arrived. */
@@ -96,17 +94,32 @@ function useVideoTexture(video: HTMLVideoElement | null) {
 interface ProjectorScreenProps {
   video: HTMLVideoElement | null
   position?: [number, number, number]
+  /**
+   * The room's ceiling height. Defaults to 10, which is what the interiors
+   * were before they each got their own dimensions.
+   */
+  ceiling?: number
 }
 
-export default function ProjectorScreen({ video, position = [0, 5.2, -19.15] }: ProjectorScreenProps) {
+export default function ProjectorScreen({
+  video,
+  position = [0, 5.2, -19.15],
+  ceiling = 10,
+}: ProjectorScreenProps) {
   const aspect = useVideoAspect(video)
   const texture = useVideoTexture(video)
-  const [width, height] = fitScreen(aspect)
+  const { width, height, mount } = fitProjector(aspect, position[1], ceiling)
 
-  // Ceiling mount, in front of and above the screen.
+  // Ceiling mount, in front of and above the screen. In the screen's local
+  // space, so it has to undo the group's own offset.
+  //
+  // Keyed on the numbers, not the array: `position` has an array default and
+  // callers pass literals, so a reference comparison never matches and every
+  // render produced a new lens — which in turn rebuilt the beam geometry.
+  const [, centreY, centreZ] = position
   const lens = useMemo<[number, number, number]>(
-    () => [0, 8.7 - position[1], -7 - position[2]],
-    [position],
+    () => [0, mount - centreY, -7 - centreZ],
+    [centreY, centreZ, mount],
   )
   const beam = useBeamGeometry(width, height, lens)
 

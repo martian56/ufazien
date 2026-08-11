@@ -260,6 +260,37 @@ class LobbyConsumerTests(TestCase):
         self.assertTrue(stored.is_moving)
         self.assertEqual(stored.current_room, "library")
 
+    def test_lobby_state_reports_who_is_indoors(self):
+        """Joining mid-presentation has to show the share, not a blank screen."""
+        from asgiref.sync import async_to_sync
+        from .models import PlayerPosition
+
+        PlayerPosition.objects.create(
+            lobby=self.lobby, user=self.host, x=3.0, y=4.0,
+            direction="up", is_moving=False, current_room="3",
+        )
+
+        async def scenario():
+            import json
+
+            communicator, _ = await self._connect(self.player)
+            try:
+                for _ in range(5):
+                    if await communicator.receive_nothing(timeout=1):
+                        continue
+                    payload = json.loads(await communicator.receive_from(timeout=2))
+                    if payload.get("type") == "lobby_state":
+                        return payload
+                return None
+            finally:
+                await communicator.disconnect()
+
+        payload = async_to_sync(scenario)()
+        self.assertIsNotNone(payload, "never received a lobby_state frame")
+        rooms = {entry["user_id"]: entry.get("current_room") for entry in payload["positions"]}
+        self.assertIn(self.host.id, rooms)
+        self.assertEqual(rooms[self.host.id], "3")
+
     def test_chat_message_is_broadcast_and_persisted(self):
         from asgiref.sync import async_to_sync
 

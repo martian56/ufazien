@@ -333,11 +333,17 @@ class LobbyConsumer(AsyncWebsocketConsumer):
                 'user_id': position.user.id,
                 'username': position.user.username,
                 'full_name': position.user.get_full_name() or position.user.username,  # Fallback to username if full_name is empty
-                # Send only the fields our frontend expects (x, y, direction, is_moving)
                 'x': position.x,
                 'y': position.y,
                 'direction': getattr(position, 'direction', None),
                 'is_moving': getattr(position, 'is_moving', False),
+                # The room the player is standing in. Left out of this snapshot
+                # while `position_update` sent it all along, so someone joining
+                # a lobby learned where everybody was but not who was indoors.
+                # A screen share is drawn on the projector of the presenter's
+                # room, so arriving mid-presentation showed a blank screen
+                # until the presenter happened to take a step.
+                'current_room': position.current_room,
                 'last_updated': position.last_updated.isoformat(),
             }
             for position in lobby_state['positions']
