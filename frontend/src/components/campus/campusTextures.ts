@@ -749,6 +749,95 @@ function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number)
   return lines.length ? lines : ['…']
 }
 
+/* ------------------------------------------------------------------ */
+
+const MAX_BOARDS = 8
+const boards = new Map<string, THREE.Texture>()
+
+/**
+ * A board with real text on it: today's timetable, or the latest posts.
+ *
+ * Cached on the content, so a board that has not changed is not redrawn, and
+ * bounded like the other canvas caches — the schedule refetches on a timer and
+ * an unbounded map would keep every version of it ever rendered.
+ */
+export function boardTexture(
+  title: string,
+  lines: { primary: string; secondary?: string; trailing?: string }[],
+  accent = '#8fd0ff',
+): THREE.Texture | null {
+  const key = `board:${title}:${accent}:${lines
+    .map((l) => `${l.primary}|${l.secondary ?? ''}|${l.trailing ?? ''}`)
+    .join('~')}`
+  const hit = boards.get(key)
+  if (hit) {
+    boards.delete(key)
+    boards.set(key, hit)
+    return hit
+  }
+
+  if (typeof document === 'undefined') return null
+  const canvas = document.createElement('canvas')
+  canvas.width = 1024
+  canvas.height = 512
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return null
+
+  ctx.fillStyle = '#141a22'
+  ctx.fillRect(0, 0, 1024, 512)
+
+  ctx.fillStyle = accent
+  ctx.fillRect(0, 0, 1024, 8)
+
+  ctx.font = '700 46px system-ui, -apple-system, "Segoe UI", sans-serif'
+  ctx.fillStyle = accent
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'alphabetic'
+  ctx.fillText(title.toUpperCase(), 48, 92)
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.12)'
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  ctx.moveTo(48, 118)
+  ctx.lineTo(976, 118)
+  ctx.stroke()
+
+  lines.slice(0, 6).forEach((line, i) => {
+    const y = 176 + i * 58
+    ctx.font = '600 34px system-ui, -apple-system, "Segoe UI", sans-serif'
+    ctx.fillStyle = '#eef4ff'
+    ctx.textAlign = 'left'
+    ctx.fillText(line.primary, 48, y, 640)
+
+    if (line.secondary) {
+      ctx.font = '400 25px system-ui, -apple-system, "Segoe UI", sans-serif'
+      ctx.fillStyle = 'rgba(200,214,232,0.7)'
+      ctx.fillText(line.secondary, 48, y + 26, 640)
+    }
+
+    if (line.trailing) {
+      ctx.font = '600 32px system-ui, -apple-system, "Segoe UI", sans-serif'
+      ctx.fillStyle = accent
+      ctx.textAlign = 'right'
+      ctx.fillText(line.trailing, 976, y)
+    }
+  })
+
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.colorSpace = THREE.SRGBColorSpace
+  texture.anisotropy = 4
+
+  if (boards.size >= MAX_BOARDS) {
+    const oldest = boards.keys().next().value
+    if (oldest !== undefined) {
+      boards.get(oldest)?.dispose()
+      boards.delete(oldest)
+    }
+  }
+  boards.set(key, texture)
+  return texture
+}
+
 function roundRect(
   ctx: CanvasRenderingContext2D,
   x: number,

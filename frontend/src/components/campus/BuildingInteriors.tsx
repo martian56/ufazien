@@ -18,6 +18,7 @@ import {
   VENDING_MACHINES,
   libraryAisleHalf,
 } from './interiorPhysics'
+import { NoticeBoard, ScheduleBoard } from './CampusBoards'
 import { INTERIOR_SPECS, type FloorKind, type InteriorSpec } from './interiorSpecs'
 import { LECTURE_ROWS, LECTURE_SEATING } from './lectureSeating'
 import {
@@ -814,13 +815,13 @@ function LectureInterior({ spec }: { spec: InteriorSpec }) {
         </mesh>
       </group>
 
-      {/* Whiteboards flanking the projector screen */}
-      {[-13, 13].map((x) => (
-        <mesh key={x} castShadow position={[x, 4.4, -half + 0.5]}>
-          <boxGeometry args={[7.5, 4, 0.2]} />
-          <meshStandardMaterial color="#f4f6f4" roughness={0.25} />
-        </mesh>
-      ))}
+      {/* A whiteboard one side, today's real timetable the other. The board
+          used to be a second blank rectangle. */}
+      <mesh castShadow position={[-13, 4.4, -half + 0.5]}>
+        <boxGeometry args={[7.5, 4, 0.2]} />
+        <meshStandardMaterial color="#f4f6f4" roughness={0.25} />
+      </mesh>
+      <ScheduleBoard position={[13, 4.4, -half + 0.65]} />
 
       {/* A dark band behind the screen, so a projected image has contrast */}
       <mesh position={[0, 5.6, -half + 0.42]} receiveShadow>
@@ -980,7 +981,8 @@ function StudentCentreInterior({ spec }: { spec: InteriorSpec }) {
       <Plant position={[-half + 3, 0, -half + 5]} scale={1.3} />
       <Plant position={[-half + 3, 0, 4]} scale={1.1} />
 
-      <WallPanel position={[half - 0.4, 5, 6]} rotation={-Math.PI / 2} size={[5, 3]} panelColor="#eef3f6" frame={spec.accent} />
+      {/* The latest posts from the blog, rather than another blank panel. */}
+      <NoticeBoard position={[half - 0.55, 4.6, 6]} rotation={-Math.PI / 2} />
       <WallPanel position={[-half + 0.4, 5, 12]} rotation={Math.PI / 2} size={[5, 3]} panelColor="#eef3f6" frame={spec.accent} />
     </group>
   )
