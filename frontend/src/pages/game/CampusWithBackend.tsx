@@ -54,6 +54,14 @@ import {
 } from '../../components/campus/interiorPhysics'
 import { EMOTE_SECONDS, type Activity } from '../../components/campus/avatarPose'
 import { takenSeatIds } from '../../components/campus/seatState'
+import {
+  nearestProp,
+  propsIn,
+  throwTarget,
+  CARRY_HEIGHT,
+  type PropSpec,
+} from '../../components/campus/campusProps'
+import CampusPropObjects from '../../components/campus/CampusPropObjects'
 import { INTERIOR_SPECS, interiorHalfExtent } from '../../components/campus/interiorSpecs'
 import {
   CAMPUS_BUILDINGS,
@@ -591,6 +599,110 @@ function ProximityInteraction({
   return null
 }
 
+/**
+ * Picking things up, throwing them, and the light switch.
+ *
+ * Held down, G charges a throw; tapped, it drops the object at your feet. The
+ * charge is the only reason this needs a frame loop rather than a key handler:
+ * the power has to be read at the moment of release.
+ */
+function PropController({
+  campusHook,
+  insideBuilding,
+  myRoom,
+  onCandidate,
+  onCharge,
+}: {
+  campusHook: CampusHook
+  insideBuilding: CampusBuilding | null
+  myRoom: string | null
+  onCandidate: (prop: PropSpec | null) => void
+  onCharge: (power: number) => void
+}) {
+  const { camera } = useThree()
+  const [, get] = useKeyboardControls()
+  const {
+    ownProp,
+    carriedProps,
+    propPositions,
+    takeProp,
+    dropProp,
+    roomLights,
+    setRoomLight,
+    worldTo2D,
+    coordsTo3D,
+  } = campusHook
+  const held = useRef({ grab: false, light: false })
+  const chargedAt = useRef(0)
+  const candidate = useRef<PropSpec | null>(null)
+
+  // Where each object in this room is, in world coordinates. Anything the
+  // server has no record of is still at home.
+  const here = useMemo(() => propsIn(insideBuilding?.interior ?? null), [insideBuilding])
+  const restingPlaces = useMemo(() => {
+    const places = new Map<string, { x: number; z: number }>()
+    for (const prop of here) {
+      const moved = propPositions.get(prop.id)
+      places.set(prop.id, moved ? coordsTo3D(moved.x, moved.y) : { x: prop.home[0], z: prop.home[1] })
+    }
+    return places
+  }, [here, propPositions, coordsTo3D])
+
+  const inHands = useMemo(() => new Set(carriedProps.values()), [carriedProps])
+
+  useFrame((state) => {
+    const typing = isTypingInField()
+    const controls = get()
+
+    // What is within reach, so the prompt can name it.
+    const near = ownProp
+      ? null
+      : nearestProp(camera.position.x, camera.position.z, here, restingPlaces, inHands)
+    if (near?.id !== candidate.current?.id) {
+      candidate.current = near
+      onCandidate(near)
+    }
+
+    const grabbing = !typing && Boolean(controls.grab)
+    if (grabbing && !held.current.grab) {
+      if (ownProp) chargedAt.current = state.clock.elapsedTime
+      else if (near) takeProp(near.id)
+    }
+
+    // The charge, so the HUD can show it filling.
+    if (grabbing && ownProp && chargedAt.current) {
+      onCharge(Math.min(1, (state.clock.elapsedTime - chargedAt.current) / THROW_CHARGE_SECONDS))
+    }
+
+    if (!grabbing && held.current.grab && ownProp && chargedAt.current) {
+      const power = Math.min(1, (state.clock.elapsedTime - chargedAt.current) / THROW_CHARGE_SECONDS)
+      const landing = throwTarget(
+        camera.position.x,
+        camera.position.z,
+        cameraHeading(camera),
+        power,
+      )
+      const sent = worldTo2D(landing.x, landing.z)
+      dropProp(ownProp, sent.x, sent.y)
+      chargedAt.current = 0
+      onCharge(0)
+    }
+    held.current.grab = grabbing
+
+    // The light switch, which is a room-wide toggle rather than anything held.
+    const switching = !typing && Boolean(controls.light)
+    if (switching && !held.current.light && myRoom) {
+      setRoomLight(myRoom, !(roomLights.get(myRoom) ?? true))
+    }
+    held.current.light = switching
+  })
+
+  return null
+}
+
+/** How long G must be held for a throw at full power, in seconds. */
+const THROW_CHARGE_SECONDS = 1.1
+
 /** Feeds the mini-games the state of the hold key, from either input method. */
 function ActionKeyBridge({ action }: { action: React.RefObject<ActionInput> }) {
   const [, get] = useKeyboardControls()
@@ -989,6 +1101,10 @@ const CampusWithBackend = () => {
    * exist.
    */
   const [leaning, setLeaning] = useState(false)
+  /** What is within reach to pick up, so the prompt can name it. */
+  const [propCandidate, setPropCandidate] = useState<PropSpec | null>(null)
+  /** How far a throw is wound up, 0 to 1. */
+  const [throwCharge, setThrowCharge] = useState(0)
   /**
    * A clock for expiring chat bubbles.
    *
@@ -1274,6 +1390,48 @@ const CampusWithBackend = () => {
     [playerAvatars, myRoom],
   )
 
+  /**
+   * The loose objects in this room, wherever they have got to.
+   *
+   * A carried one rides at its carrier's position, which is why this is built
+   * from the avatars rather than only from the resting places: an object in
+   * somebody's hand has no resting place until they put it down.
+   */
+  const propPlacements = useMemo(() => {
+    const carrierOf = new Map<string, { x: number; z: number }>()
+    for (const avatar of visibleAvatars) {
+      const carrying = campusHook.carriedProps.get(avatar.id)
+      if (carrying) carrierOf.set(carrying, avatar.position)
+    }
+
+    return propsIn(insideBuilding?.interior ?? null).map((spec) => {
+      const carried = carrierOf.get(spec.id)
+      if (carried) {
+        return { spec, x: carried.x, z: carried.z, y: CARRY_HEIGHT, carried: true }
+      }
+      const moved = campusHook.propPositions.get(spec.id)
+      const at = moved
+        ? campusHook.coordsTo3D(moved.x, moved.y)
+        : { x: spec.home[0], z: spec.home[1] }
+      return { spec, x: at.x, z: at.z, y: spec.radius, carried: false }
+    })
+    // The player's own object is deliberately not placed: in first person
+    // there is no avatar to hang it from, and drawing it at the camera puts it
+    // inside the near plane.
+  }, [
+    visibleAvatars,
+    insideBuilding,
+    campusHook.carriedProps,
+    campusHook.propPositions,
+    campusHook.coordsTo3D,
+  ])
+
+  /** Whether the room the player is standing in has its lights on. */
+  const roomLit = useMemo(
+    () => (myRoom ? (campusHook.roomLights.get(myRoom) ?? true) : true),
+    [myRoom, campusHook.roomLights],
+  )
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-indigo-900 flex items-center justify-center">
@@ -1384,6 +1542,37 @@ const CampusWithBackend = () => {
             <div className="text-[11px] text-gray-400 mt-1">
               V lean · 1 wave · 2 clap · 3 raise hand · 4 point
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Objects, and the light switch. Separate from the seating prompt
+          because the two are reachable at the same time and a single box
+          would have to pick one of them to hide. */}
+      {!games.active && (propCandidate || campusHook.ownProp || insideBuilding) && (
+        <div className="absolute right-4 bottom-32 sm:bottom-16 z-30 pointer-events-none max-w-[45vw]">
+          <div className="bg-black/80 backdrop-blur-sm border border-amber-500/30 rounded-xl px-3 py-2 text-white">
+            {campusHook.ownProp ? (
+              <>
+                <div className="text-xs text-amber-300">
+                  Hold G to throw · tap to drop
+                </div>
+                {/* The wind-up, so a throw is aimed rather than guessed. */}
+                <div className="mt-1.5 h-1.5 w-full bg-white/15 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-amber-400 transition-[width] duration-75"
+                    style={{ width: `${Math.round(throwCharge * 100)}%` }}
+                  />
+                </div>
+              </>
+            ) : propCandidate ? (
+              <div className="text-xs text-amber-300">Press G to pick up the {propCandidate.label}</div>
+            ) : null}
+            {insideBuilding && (
+              <div className="text-[11px] text-gray-400 mt-1">
+                L · turn the lights {roomLit ? 'off' : 'on'}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1600,6 +1789,7 @@ const CampusWithBackend = () => {
             {insideBuilding && interiorSpec ? (
               <BuildingInterior
                 kind={insideBuilding.interior}
+                lit={roomLit}
                 whiteboard={
                   insideBuilding.interior === 'lecture' ? (
                     <Whiteboard
@@ -1638,6 +1828,8 @@ const CampusWithBackend = () => {
                     range={24}
                   />
                 )}
+                <CampusPropObjects placements={propPlacements} />
+
                 {/* The people in the room with you. A room used to be a local
                     view that nobody else appeared in, so walking into the
                     cafeteria with a friend put you both somewhere empty. The
@@ -1678,6 +1870,8 @@ const CampusWithBackend = () => {
                   hoop={[OUTDOOR_COURT[0], 3.05, OUTDOOR_COURT[2] - 9]}
                 />
                 <DashCourse games={games} />
+
+                <CampusPropObjects placements={propPlacements} />
 
                 {/* Everybody else who is also outdoors. Anyone inside a
                     building is sending room coordinates, which drawn out here
@@ -1721,6 +1915,13 @@ const CampusWithBackend = () => {
               onEmote={setEmote}
               leaning={leaning}
               onLean={setLeaning}
+            />
+            <PropController
+              campusHook={campusHook}
+              insideBuilding={insideBuilding}
+              myRoom={myRoom}
+              onCandidate={setPropCandidate}
+              onCharge={setThrowCharge}
             />
 
             {/* Without a selector drei binds the lock handler to document, so every

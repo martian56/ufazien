@@ -172,6 +172,15 @@ class CampusWebSocketService {
             case 'seat_denied':
                 this.emit('seatDenied', data);
                 break;
+            case 'prop_update':
+                this.emit('propUpdate', data);
+                break;
+            case 'prop_denied':
+                this.emit('propDenied', data);
+                break;
+            case 'light_update':
+                this.emit('lightUpdate', data);
+                break;
             case 'chat_message':
                 this.emit('chatMessage', data);
                 break;
@@ -230,6 +239,34 @@ class CampusWebSocketService {
     leaveSeat() {
         if (!this.isConnected) return;
         this.send({ type: 'leave_seat' });
+    }
+
+    /**
+     * Reach for something. The answer is `propUpdate` or `propDenied`.
+     *
+     * Asked rather than assumed, for the same reason a chair is: a ball two
+     * clients each believe they are holding is two balls.
+     */
+    takeProp(prop: string) {
+        if (!this.isConnected) return;
+        this.send({ type: 'take_prop', prop });
+    }
+
+    /**
+     * Put it down, or throw it, at a point in the 2D frame.
+     *
+     * The client simulated the arc, so it names where the object came to rest;
+     * the server bounds how far that may be from the thrower.
+     */
+    dropProp(prop: string, x: number, y: number) {
+        if (!this.isConnected) return;
+        this.send({ type: 'drop_prop', prop, x, y });
+    }
+
+    /** Flick a room's lights, for everybody in it. */
+    setLight(room: string, on: boolean) {
+        if (!this.isConnected) return;
+        this.send({ type: 'set_light', room, on });
     }
 
     /**
