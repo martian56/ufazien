@@ -5,7 +5,9 @@ import {
   CAMPUS_LIMIT,
   KEEP_CLEAR,
   PLAYER_RADIUS,
+  QUAD_CENTRE,
   SCENERY_BLOCKS,
+  SPAWN,
   buildingRect,
   clampToCampus,
   insideRect,
@@ -223,8 +225,13 @@ describe('campus data', () => {
   })
 
   it('leaves the spawn point clear of walls', () => {
-    const resolved = resolveCollision(0, 6)
-    expect(resolved).toEqual({ x: 0, z: 6 })
+    expect(resolveCollision(SPAWN[0], SPAWN[2])).toEqual({ x: SPAWN[0], z: SPAWN[2] })
+  })
+
+  it('does not spawn the player inside the fountain', () => {
+    // The fountain basin is 7.4 across and sits at the centre of the quad.
+    const distance = Math.hypot(SPAWN[0] - QUAD_CENTRE[0], SPAWN[2] - QUAD_CENTRE[1])
+    expect(distance).toBeGreaterThan(10)
   })
 })
 

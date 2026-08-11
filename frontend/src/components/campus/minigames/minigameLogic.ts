@@ -188,7 +188,9 @@ export const DASH_CHECKPOINTS: Vec3[] = [
   [-62, 0, 22],
   [-70, 0, 92],
   [-10, 0, 100],
-  [74, 0, 122],
+  // Past the basketball court, not on it. A ring standing on the free-throw
+  // line put a two-metre hoop between the shooter and the basket.
+  [74, 0, 150],
   [68, 0, 34],
   [62, 0, -34],
   [0, 0, -56],

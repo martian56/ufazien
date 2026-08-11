@@ -470,8 +470,17 @@ export function nearestEntrance(
   return best
 }
 
-/** Where a player starts: on the spine, looking north at the main building. */
-export const SPAWN: Vec3 = [0, 1.7, 6]
+/**
+ * Where a player starts: on the spine, looking north at the main building.
+ *
+ * The sightline here is load-bearing, and narrower than it looks. Too close to
+ * the quad and the fountain — fifteen metres across — stands directly between
+ * the player and the landmark, so the first thing anyone sees on joining is a
+ * wall of water. Too far back down the spine and they spawn inside one of the
+ * campus dash rings instead. This sits between the two, on the near edge of the
+ * quad; `campusLayout.test.ts` holds it there.
+ */
+export const SPAWN: Vec3 = [0, 1.7, 12]
 
 export type TimeOfDay = 'day' | 'dusk' | 'night'
 

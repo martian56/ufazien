@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest'
 import {
+  CAMPUS_BUILDINGS,
+  CAMPUS_COLLIDERS,
+  CAMPUS_LIMIT,
+  OUTDOOR_COURT,
+  SPAWN,
+  insideRect,
+} from '../campusLayout'
+import {
   DASH_CHECKPOINTS,
   DASH_PAR,
   FREE_THROW_ATTEMPTS,
@@ -335,5 +343,53 @@ describe('formatClock', () => {
   it('never shows a negative or a NaN clock', () => {
     expect(formatClock(-5)).toBe('0:00')
     expect(formatClock(Number.NaN)).toBe('0:00')
+  })
+})
+
+describe('the dash route', () => {
+  it('never puts a ring inside a building', () => {
+    // A checkpoint in a wall is one you can never reach, which strands the run.
+    for (const [i, point] of DASH_CHECKPOINTS.entries()) {
+      const blocked = CAMPUS_COLLIDERS.find((rect) => insideRect(point[0], point[2], rect, 3))
+      expect(blocked, `ring ${i} at ${point[0]},${point[2]} is inside a building`).toBeUndefined()
+    }
+  })
+
+  it('keeps every ring inside the playable area', () => {
+    for (const point of DASH_CHECKPOINTS) {
+      expect(Math.abs(point[0])).toBeLessThanOrEqual(CAMPUS_LIMIT)
+      expect(Math.abs(point[2])).toBeLessThanOrEqual(CAMPUS_LIMIT)
+    }
+  })
+
+  it('keeps the route clear of the basketball station', () => {
+    // The two games share the campus but must not share a spot: a ring on the
+    // free-throw line stands between the shooter and the basket.
+    const hoop = { x: OUTDOOR_COURT[0], z: OUTDOOR_COURT[2] - 9 }
+    for (const point of DASH_CHECKPOINTS) {
+      expect(Math.hypot(point[0] - hoop.x, point[2] - hoop.z)).toBeGreaterThan(20)
+    }
+  })
+})
+
+describe('the spawn point', () => {
+  it('does not drop the player inside a dash ring', () => {
+    // Twice now the spawn and the course have been moved into each other, and
+    // a two-metre steel hoop across your first view is hard to miss.
+    for (const [i, point] of DASH_CHECKPOINTS.entries()) {
+      const distance = Math.hypot(SPAWN[0] - point[0], SPAWN[2] - point[2])
+      expect(distance, `spawn sits on ring ${i}`).toBeGreaterThan(12)
+    }
+  })
+
+  it('keeps a clear sightline to the main building', () => {
+    // Nothing solid between the spawn and the landmark's door.
+    const target = CAMPUS_BUILDINGS.find((b) => b.interior === 'ufaz')!
+    const doorZ = target.position[2] + target.size[2] / 2
+    for (let t = 0; t <= 1; t += 0.02) {
+      const z = SPAWN[2] + (doorZ - SPAWN[2]) * t
+      const blocked = CAMPUS_COLLIDERS.find((rect) => insideRect(SPAWN[0], z, rect))
+      expect(blocked, `view blocked at z=${z.toFixed(0)}`).toBeUndefined()
+    }
   })
 })
