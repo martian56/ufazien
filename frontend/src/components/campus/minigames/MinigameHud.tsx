@@ -48,18 +48,19 @@ function useNearbyStation(enabled: boolean): MinigameId | null {
 }
 
 function Meter({ value, label, tone = 'blue' }: { value: number; label: string; tone?: 'blue' | 'amber' }) {
+  const percent = Math.min(100, Math.max(0, value * 100))
   return (
     <div>
       <div className="flex justify-between text-[11px] text-gray-300 mb-1">
         <span>{label}</span>
-        <span>{Math.round(value * 100)}%</span>
+        <span>{Math.round(percent)}%</span>
       </div>
       <div className="h-2 rounded-full bg-white/15 overflow-hidden">
         <div
           className={`h-full rounded-full transition-[width] duration-75 ${
             tone === 'amber' ? 'bg-amber-400' : 'bg-blue-400'
           }`}
-          style={{ width: `${Math.min(100, Math.max(0, value * 100))}%` }}
+          style={{ width: `${percent}%` }}
         />
       </div>
     </div>
@@ -78,6 +79,12 @@ export default function MinigameHud({
 }) {
   const nearby = useNearbyStation(!games.active)
   const live = games.live.current
+
+  // Declared above the early returns so the hook order stays stable. A game can
+  // end while the hold button is still pressed — the button unmounts before its
+  // touchend fires, and without this the action stays held into the next game,
+  // which then charges a shot or pours the burette by itself.
+  useEffect(() => () => onAction?.(false), [onAction])
 
   /* ---------------- result card ---------------- */
   if (games.result) {
@@ -196,7 +203,7 @@ export default function MinigameHud({
               {games.shelf.state.picked.length}/{games.shelf.books.length} shelved
             </span>
             <span className="text-red-300">
-              {games.shelf.mistakes} mistake{games.shelf.mistakes === 1 ? '' : 's'}
+              {games.shelf.state.mistakes} mistake{games.shelf.state.mistakes === 1 ? '' : 's'}
             </span>
           </div>
         )}

@@ -89,12 +89,21 @@ function faceMaterial(variant: 0 | 1 | 2): THREE.MeshBasicMaterial | null {
 
 /* ------------------------------------------------------------------ */
 
-const FACING: Record<string, number> = {
-  down: 0,
-  up: Math.PI,
-  left: Math.PI / 2,
-  right: -Math.PI / 2,
-}
+/**
+ * A Map, not an object literal.
+ *
+ * `direction` arrives off the socket as an arbitrary string and the consumer
+ * does not validate it. An object literal inherits `Object.prototype`, so
+ * `FACING['constructor']` returns a function rather than undefined, the `??`
+ * fallback never fires, and a function assigned to `Euler.y` produces a NaN
+ * matrix that silently removes the avatar from the scene.
+ */
+const FACING = new Map<string, number>([
+  ['down', 0],
+  ['up', Math.PI],
+  ['left', Math.PI / 2],
+  ['right', -Math.PI / 2],
+])
 
 export interface CharacterModelProps {
   /** Shirt colour. Matches the hue shown beside the player's name. */
@@ -115,7 +124,7 @@ export function CharacterModel({
   seed = 0,
 }: CharacterModelProps) {
   const look = useMemo(() => avatarLook(seed), [seed])
-  const facing = FACING[direction] ?? 0
+  const facing = FACING.get(direction) ?? 0
 
   return (
     <group rotation={[0, facing, 0]} scale={look.height}>

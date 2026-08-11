@@ -85,9 +85,13 @@ function RoomShell({ spec, children }: { spec: InteriorSpec; children?: React.Re
   // without paying for a light per square metre.
   const lights = useMemo(() => {
     const spread = spec.halfExtent * 0.55
+    // A small room does not need nine fill lights. Each one is another term in
+    // the fragment shader of every lit surface in the room, and the emissive
+    // fittings below already carry most of the look.
+    const axis = spec.halfExtent > 22 ? [-spread, 0, spread] : [-spread * 0.8, spread * 0.8]
     const items: [number, number][] = []
-    for (const x of [-spread, 0, spread]) {
-      for (const z of [-spread, 0, spread]) items.push([x, z])
+    for (const x of axis) {
+      for (const z of axis) items.push([x, z])
     }
     return items
   }, [spec.halfExtent])
@@ -469,9 +473,10 @@ const STACK_ROWS = [-15, -9, -3, 3]
 /**
  * Books, instanced.
  *
- * Every shelf on both sides of every stack, roughly two thousand spines, in a
+ * Every shelf on both sides of every stack — around two thousand spines — in a
  * single draw call with a per-instance colour. Modelling them as meshes would
- * be two thousand objects for the renderer to sort.
+ * be two thousand objects for the renderer to sort, and the spine width is kept
+ * wide enough that the shadow pass is not walking six thousand instances.
  */
 function Books({ count, layout }: { count: number; layout: { x: number; y: number; z: number; ry: number; w: number }[] }) {
   const mesh = useRef<THREE.InstancedMesh>(null)
@@ -519,7 +524,7 @@ function LibraryInterior({ spec }: { spec: InteriorSpec }) {
         for (const side of [-1, 1]) {
           let x = -half + 4
           while (x < half - 4) {
-            const w = 0.16 + random() * 0.14
+            const w = 0.28 + random() * 0.22
             // Leave the occasional gap: a shelf packed edge to edge looks
             // painted on, and someone always has a book out.
             if (random() > 0.08) {
@@ -642,7 +647,7 @@ function LabInterior({ spec }: { spec: InteriorSpec }) {
             <boxGeometry args={[22, 0.08, 0.6]} />
             <meshStandardMaterial color="#c3ccd3" roughness={0.5} />
           </mesh>
-          {[-9, -5, -1, 3, 7].map((x) => (
+          {[-9, -5, -1, 3, 7].map((x, i) => (
             <group key={x}>
               {/* Tap */}
               <mesh castShadow position={[x, 1.3, 0.7]}>
@@ -658,7 +663,7 @@ function LabInterior({ spec }: { spec: InteriorSpec }) {
               <mesh castShadow position={[x + 0.4, 1.85, 0]}>
                 <cylinderGeometry args={[0.13, 0.13, 0.5, 10]} />
                 <meshStandardMaterial
-                  color={x % 8 === 0 ? '#7fd4a8' : '#d4a87f'}
+                  color={i % 2 === 0 ? '#7fd4a8' : '#d4a87f'}
                   transparent
                   opacity={0.8}
                   roughness={0.15}
@@ -1097,7 +1102,7 @@ function SportsInterior({ spec }: { spec: InteriorSpec }) {
 
       {/* Wall bars on the far side */}
       {Array.from({ length: 10 }, (_, i) => (
-        <mesh key={i} castShadow position={[half - 0.7, 1.2 + i * 0.55, 6]} rotation={[0, 0, Math.PI / 2]}>
+        <mesh key={i} castShadow position={[half - 0.7, 1.2 + i * 0.55, 6]} rotation={[Math.PI / 2, 0, 0]}>
           <cylinderGeometry args={[0.07, 0.07, 5, 8]} />
           <meshStandardMaterial color="#c2954f" roughness={0.7} />
         </mesh>

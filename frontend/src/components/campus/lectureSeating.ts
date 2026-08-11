@@ -16,7 +16,8 @@ export const LECTURE_SEATING = {
   rowCount: 6,
 }
 
-export const LECTURE_ROWS = [0, 1, 2, 3, 4, 5]
+/** Derived, so the tiers drawn and the extent asserted can never disagree. */
+export const LECTURE_ROWS = Array.from({ length: LECTURE_SEATING.rowCount }, (_, i) => i)
 
 /**
  * The box the tiers occupy, which nothing may spawn inside.

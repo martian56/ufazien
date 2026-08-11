@@ -55,7 +55,7 @@ export const MINIGAMES: Record<MinigameId, MinigameMeta> = {
     id: 'booksort',
     name: 'Shelf Order',
     blurb: 'Put the returns back in call-number order, fastest wins.',
-    controls: 'Click the books in ascending order',
+    controls: 'Look at a book · press F to shelve, lowest call number first',
     icon: '📚',
   },
 }
@@ -236,7 +236,10 @@ export function advanceDash(
   if (!target) return { ...state, finished: true, running: false }
 
   const reached = Math.hypot(x - target[0], z - target[2]) <= radius
-  if (!reached) return { ...state, elapsed, running: state.running }
+  // Same object when nothing changed. This runs from `useFrame`, and a fresh
+  // identity here makes React re-render every consumer of the games hook sixty
+  // times a second — the live clock is kept in a ref precisely so it need not.
+  if (!reached) return state
 
   const index = state.index + 1
   const finished = index >= checkpoints.length
@@ -350,7 +353,11 @@ export interface ShelfBook {
   slot: number
 }
 
-const LC_CLASSES = ['QA', 'QC', 'QD', 'QH', 'TA', 'TK', 'HB', 'PN', 'BF', 'GV']
+// Alphabetical, and it has to stay that way: `rank` uses the index as the
+// primary key, so an unsorted list makes the required order unguessable. With
+// QA first and BF last, `QA 900.9` sorted before `BF 20.1` — a player shelving
+// in real call-number order was marked wrong on every pick.
+const LC_CLASSES = ['BF', 'GV', 'HB', 'PN', 'QA', 'QC', 'QD', 'QH', 'TA', 'TK']
 
 /** Deals a shuffled shelf of books for a round. */
 export function makeShelf(seed: number, count = 6): ShelfBook[] {

@@ -528,5 +528,8 @@ export const DAYLIGHT: Record<TimeOfDay, DaylightConfig> = {
 }
 
 export function daylight(timeOfDay: TimeOfDay | string): DaylightConfig {
-  return DAYLIGHT[timeOfDay as TimeOfDay] ?? DAYLIGHT.day
+  // Own properties only. `DAYLIGHT['toString']` is an inherited function, which
+  // is not nullish, so a `??` fallback would hand the caller something with no
+  // `sun` and no `fog` on it.
+  return Object.hasOwn(DAYLIGHT, timeOfDay) ? DAYLIGHT[timeOfDay as TimeOfDay] : DAYLIGHT.day
 }

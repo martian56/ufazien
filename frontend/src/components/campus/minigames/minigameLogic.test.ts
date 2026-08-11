@@ -290,13 +290,28 @@ describe('shelf order', () => {
     expect([...slots].sort((a, b) => a - b)).toEqual([0, 1, 2, 3, 4, 5])
   })
 
-  it('sorts by class letters first, then by number', () => {
-    const books = [
-      { id: 0, code: 'TA 10.1', rank: 4 * 100000 + 10 * 100 + 1, slot: 0 },
-      { id: 1, code: 'QA 900.9', rank: 0 * 100000 + 900 * 100 + 9, slot: 1 },
-      { id: 2, code: 'QA 10.0', rank: 0 * 100000 + 10 * 100 + 0, slot: 2 },
-    ]
-    expect(correctOrder(books)).toEqual([2, 1, 0])
+  it('orders by the call number the player can actually read', () => {
+    // Asserted against the codes on the spines, not against hand-written ranks.
+    // A fixture that repeats the implementation's own rank formula passes even
+    // when the class list is out of order, which is how that shipped once.
+    for (const seed of [3, 21, 77, 512]) {
+      const books = makeShelf(seed, 6)
+      // Numeric collation, because that is how a shelf is actually ordered:
+      // QA 9 comes before QA 76, not after it the way a plain string compare
+      // would have it. This is derived from the spines alone, so it can catch
+      // an ordering the player has no way to guess.
+      const byCode = [...books]
+        .sort((a, b) => a.code.localeCompare(b.code, 'en', { numeric: true }))
+        .map((b) => b.id)
+      expect(correctOrder(books)).toEqual(byCode)
+    }
+  })
+
+  it('deals call numbers whose class letters sort alphabetically', () => {
+    const classes = makeShelf(9, 10).map((book) => book.code.slice(0, 2))
+    const ranks = makeShelf(9, 10).map((book) => book.rank)
+    const byRank = classes.map((cls, i) => ({ cls, rank: ranks[i] })).sort((a, b) => a.rank - b.rank)
+    expect(byRank.map((b) => b.cls)).toEqual([...byRank.map((b) => b.cls)].sort())
   })
 
   it('accepts picks in order and finishes on the last one', () => {

@@ -207,8 +207,10 @@ export function BasketballStation({ games, action, hoop, facing = 0, range = 22 
         <meshStandardMaterial color="#d4682a" roughness={0.85} />
       </mesh>
 
+      {/* Same trigonometry as the free-throw line above. Special-casing a
+          facing of zero dropped the marker onto the hoop for every other one. */}
       <StationMarker
-        position={[hoop[0], 0, hoop[2] + (facing === 0 ? 5.5 : 0)]}
+        position={[hoop[0] + Math.sin(facing) * 5.5, 0, hoop[2] + Math.cos(facing) * 5.5]}
         game="basketball"
         games={games}
         range={range}

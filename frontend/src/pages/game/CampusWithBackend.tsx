@@ -587,6 +587,13 @@ function Player({
     }
 
     const moving = direction.current.lengthSq() > 0
+    // The heading, kept as a unit vector before the frame scale goes on.
+    // Deriving the facing from the scaled vector made it depend on frame rate:
+    // one step at 5.5 m/s and 60fps is 0.09 units, which failed the 0.1 test
+    // below, so a player walking forwards was reported as facing 'down' to
+    // everyone else — but the same input at 30fps passed.
+    let headingX = 0
+    let headingZ = 0
     if (moving) {
       direction.current.normalize()
       direction.current.multiplyScalar(speed * delta)
@@ -594,6 +601,10 @@ function Player({
       // Apply camera rotation to movement direction
       direction.current.applyEuler(camera.rotation)
       direction.current.y = 0 // Keep movement horizontal
+
+      const length = Math.hypot(direction.current.x, direction.current.z) || 1
+      headingX = direction.current.x / length
+      headingZ = direction.current.z / length
     }
 
     // Jump logic
@@ -635,10 +646,10 @@ function Player({
 
     let playerDirection = 'down'
     if (moving) {
-      if (Math.abs(direction.current.x) > Math.abs(direction.current.z)) {
-        playerDirection = direction.current.x > 0 ? 'right' : 'left'
-      } else if (Math.abs(direction.current.z) > 0.1) {
-        playerDirection = direction.current.z > 0 ? 'down' : 'up'
+      if (Math.abs(headingX) > Math.abs(headingZ)) {
+        playerDirection = headingX > 0 ? 'right' : 'left'
+      } else if (Math.abs(headingZ) > 0.1) {
+        playerDirection = headingZ > 0 ? 'down' : 'up'
       }
     }
 
@@ -723,10 +734,14 @@ const CampusWithBackend = () => {
 
   // Leaving the area you joined should also leave the room on the server.
   const joinedArea = useRef<string | null>(null)
+  // Mirrored into state purely so the button's label repaints. Writing a ref
+  // schedules nothing, so it kept reading "Join study" after a join.
+  const [joinedAreaId, setJoinedAreaId] = useState<string | null>(null)
   useEffect(() => {
     if (joinedArea.current && joinedArea.current !== nearArea?.id) {
       leaveStudyRoom(joinedArea.current)
       joinedArea.current = null
+      setJoinedAreaId(null)
     }
   }, [nearArea, leaveStudyRoom])
 
@@ -1054,10 +1069,11 @@ const CampusWithBackend = () => {
               onClick={() => {
                 joinStudyRoom(nearArea.id)
                 joinedArea.current = nearArea.id
+                setJoinedAreaId(nearArea.id)
               }}
               className="mt-3 w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg text-sm font-medium"
             >
-              {joinedArea.current === nearArea.id ? 'Joined' : 'Join study'}
+              {joinedAreaId === nearArea.id ? 'Joined' : 'Join study'}
             </button>
           </div>
         </div>

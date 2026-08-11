@@ -62,7 +62,6 @@ export interface ShelfRun {
   books: ShelfBook[]
   state: ShelfState
   startedAt: number
-  mistakes: number
 }
 
 function loadBest(): Partial<Record<MinigameId, number>> {
@@ -99,18 +98,31 @@ export function useCampusGames() {
   /** Seeds the titration targets, so every round of one run is reproducible. */
   const titrationSeed = useRef(0)
 
+  /**
+   * Records a personal best.
+   *
+   * The updater only computes the next value. React may call an updater more
+   * than once — StrictMode does it deliberately in development — so writing to
+   * local storage from inside one is a side effect that can run twice. The
+   * write happens in an effect keyed to the result instead.
+   */
   const recordBest = useCallback((id: MinigameId, score: number) => {
-    setBest((previous) => {
-      if ((previous[id] ?? 0) >= score) return previous
-      const next = { ...previous, [id]: score }
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
-      } catch {
-        // A full or blocked storage must not take the game down with it.
-      }
-      return next
-    })
+    setBest((previous) => ((previous[id] ?? 0) >= score ? previous : { ...previous, [id]: score }))
   }, [])
+
+  const persisted = useRef(false)
+  useEffect(() => {
+    // Skip the first pass: that value came out of storage a moment ago.
+    if (!persisted.current) {
+      persisted.current = true
+      return
+    }
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(best))
+    } catch {
+      // A full or blocked storage must not take the game down with it.
+    }
+  }, [best])
 
   const start = useCallback((id: MinigameId) => {
     setResult(null)
@@ -127,7 +139,7 @@ export function useCampusGames() {
     }
     if (id === 'booksort') {
       const books = makeShelf(Math.floor(performance.now()), 6)
-      setShelf({ books, state: newShelfState(), startedAt: performance.now(), mistakes: 0 })
+      setShelf({ books, state: newShelfState(), startedAt: performance.now() })
     }
   }, [])
 
@@ -138,61 +150,59 @@ export function useCampusGames() {
 
   /* ---------------- free throws ---------------- */
 
-  const takeShot = useCallback(
-    (made: boolean) => {
-      setThrows((session) => {
-        const next = recordShot(session, made)
-        if (throwSessionOver(next)) {
-          recordBest('basketball', next.score)
-          setResult({
-            title: made ? 'Buzzer beater!' : "That's the set",
-            detail: `${next.made}/${FREE_THROW_ATTEMPTS} made · best streak ${next.bestStreak}`,
-            score: next.score,
-          })
-          setActive(null)
-        }
-        return next
-      })
-    },
-    [recordBest],
-  )
+  const takeShot = useCallback((made: boolean) => {
+    setThrows((session) => recordShot(session, made))
+  }, [])
+
+  // The set ending is a property of the state, so it is watched rather than
+  // detected inside the updater that produced it.
+  useEffect(() => {
+    if (active !== 'basketball' || !throwSessionOver(throws)) return
+    recordBest('basketball', throws.score)
+    setResult({
+      title: throws.streak > 0 ? 'Buzzer beater!' : "That's the set",
+      detail: `${throws.made}/${FREE_THROW_ATTEMPTS} made · best streak ${throws.bestStreak}`,
+      score: throws.score,
+    })
+    setActive(null)
+  }, [active, throws, recordBest])
 
   /* ---------------- dash ---------------- */
 
-  const dashProgress = useCallback(
-    (x: number, z: number) => {
-      const elapsed = (performance.now() - startedAt.current) / 1000
-      live.current.elapsed = elapsed
+  const dashProgress = useCallback((x: number, z: number) => {
+    const elapsed = (performance.now() - startedAt.current) / 1000
+    live.current.elapsed = elapsed
 
-      setDash((state) => {
-        if (state.finished) return state
+    setDash((state) => {
+      if (state.finished) return state
+      if (elapsed > DASH_TIME_LIMIT) return { ...state, finished: true, running: false }
+      return advanceDash(state, x, z, elapsed)
+    })
+  }, [])
 
-        if (elapsed > DASH_TIME_LIMIT) {
-          setResult({
-            title: 'Out of time',
-            detail: `${state.index}/${DASH_CHECKPOINTS.length} rings cleared`,
-            score: 0,
-          })
-          setActive(null)
-          return { ...state, finished: true, running: false }
-        }
+  useEffect(() => {
+    if (active !== 'dash' || !dash.finished) return
+    // Cleared the last ring, or ran out of clock: the index says which.
+    const complete = dash.index >= DASH_CHECKPOINTS.length
+    const elapsed = dash.splits[dash.splits.length - 1] ?? live.current.elapsed
 
-        const next = advanceDash(state, x, z, elapsed)
-        if (next.finished && !state.finished) {
-          const score = dashScore(elapsed)
-          recordBest('dash', score)
-          setResult({
-            title: 'Course complete',
-            detail: `${elapsed.toFixed(1)}s across the whole campus`,
-            score,
-          })
-          setActive(null)
-        }
-        return next
+    if (complete) {
+      const score = dashScore(elapsed)
+      recordBest('dash', score)
+      setResult({
+        title: 'Course complete',
+        detail: `${elapsed.toFixed(1)}s across the whole campus`,
+        score,
       })
-    },
-    [recordBest],
-  )
+    } else {
+      setResult({
+        title: 'Out of time',
+        detail: `${dash.index}/${DASH_CHECKPOINTS.length} rings cleared`,
+        score: 0,
+      })
+    }
+    setActive(null)
+  }, [active, dash, recordBest])
 
   /* ---------------- titration ---------------- */
 
@@ -203,55 +213,51 @@ export function useCampusGames() {
     setTitration((run) => {
       if (!run) return run
       const verdict = titrationVerdict(delivered, run.target)
-      const total = run.total + verdict.score
       const round = run.round + 1
-
-      if (round >= TITRATION_ROUNDS) {
-        recordBest('titration', total)
-        setResult({
-          title: total >= TITRATION_ROUNDS * 80 ? 'Analytically sound' : 'Run complete',
-          detail: `${TITRATION_ROUNDS} titrations · ${Math.round(total / TITRATION_ROUNDS)}% average`,
-          score: total,
-        })
-        setActive(null)
-        return null
-      }
-
       return {
         round,
         target: titrationTarget(titrationSeed.current, round),
-        total,
+        total: run.total + verdict.score,
         lastVerdict: `${verdict.label} · ${verdict.score}%`,
       }
     })
-  }, [recordBest])
+  }, [])
+
+  useEffect(() => {
+    if (active !== 'titration' || !titration || titration.round < TITRATION_ROUNDS) return
+    recordBest('titration', titration.total)
+    setResult({
+      title: titration.total >= TITRATION_ROUNDS * 80 ? 'Analytically sound' : 'Run complete',
+      detail: `${TITRATION_ROUNDS} titrations · ${Math.round(titration.total / TITRATION_ROUNDS)}% average`,
+      score: titration.total,
+    })
+    setActive(null)
+    setTitration(null)
+  }, [active, titration, recordBest])
 
   /* ---------------- shelf ---------------- */
 
-  const pick = useCallback(
-    (id: number) => {
-      setShelf((run) => {
-        if (!run) return run
-        const state = pickBook(run.state, run.books, id)
-        if (state === run.state) return run
+  const pick = useCallback((id: number) => {
+    setShelf((run) => {
+      if (!run) return run
+      const state = pickBook(run.state, run.books, id)
+      return state === run.state ? run : { ...run, state }
+    })
+  }, [])
 
-        if (state.done) {
-          const seconds = (performance.now() - run.startedAt) / 1000
-          const score = shelfScore(run.books.length, seconds, state.mistakes)
-          recordBest('booksort', score)
-          setResult({
-            title: 'Shelf restored',
-            detail: `${seconds.toFixed(1)}s · ${state.mistakes} mistake${state.mistakes === 1 ? '' : 's'}`,
-            score,
-          })
-          setActive(null)
-          return null
-        }
-        return { ...run, state, mistakes: state.mistakes }
-      })
-    },
-    [recordBest],
-  )
+  useEffect(() => {
+    if (active !== 'booksort' || !shelf?.state.done) return
+    const seconds = (performance.now() - shelf.startedAt) / 1000
+    const score = shelfScore(shelf.books.length, seconds, shelf.state.mistakes)
+    recordBest('booksort', score)
+    setResult({
+      title: 'Shelf restored',
+      detail: `${seconds.toFixed(1)}s · ${shelf.state.mistakes} mistake${shelf.state.mistakes === 1 ? '' : 's'}`,
+      score,
+    })
+    setActive(null)
+    setShelf(null)
+  }, [active, shelf, recordBest])
 
   /** The id the shelf game wants picked next, for highlighting it after a slip. */
   const shelfExpecting = useMemo(() => {

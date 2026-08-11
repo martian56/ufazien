@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 
 import { playerPositionFromUpdate } from '../../hooks/useCampusSimulator'
 import { fitProjector } from './projectorFit'
-import { INTERIOR_SPECS } from './interiorSpecs'
+import { INTERIOR_SPECS, interiorHalfExtent } from './interiorSpecs'
 import { lectureSeatingExtent } from './lectureSeating'
 import { CAMPUS_BUILDINGS } from './campusLayout'
 
@@ -152,7 +152,7 @@ describe('interior spawns', () => {
   it('keeps every spawn inside its room and out of the walls', () => {
     for (const building of CAMPUS_BUILDINGS) {
       const spec = INTERIOR_SPECS[building.interior]
-      const limit = spec.halfExtent - 1.5
+      const limit = interiorHalfExtent(building.interior)
       expect(Math.abs(spec.spawn[0]), `${building.name} spawn x`).toBeLessThanOrEqual(limit)
       expect(Math.abs(spec.spawn[2]), `${building.name} spawn z`).toBeLessThanOrEqual(limit)
     }
@@ -171,5 +171,42 @@ describe('interior spawns', () => {
         expect(spec.spawn[2], `${building.name}`).toBeGreaterThan(spec.projector[2])
       }
     }
+  })
+})
+
+describe('the two position paths agree', () => {
+  it('maps a lobby snapshot and a live frame to the same shape', () => {
+    // The snapshot sends a flat record, the live frame a nested one. They used
+    // to be mapped by two hand-written copies of the same code, and they drifted
+    // — which is the bug this whole file exists for.
+    const flat = {
+      x: 12,
+      y: -4,
+      direction: 'left',
+      is_moving: true,
+      current_room: '5',
+      username: 'nigar',
+      full_name: 'Nigar A',
+      last_updated: '2026-01-01T00:00:00.000Z',
+    }
+
+    const snapshot = playerPositionFromUpdate({
+      position: flat as never,
+      username: flat.username,
+      full_name: flat.full_name,
+      last_updated: flat.last_updated,
+    })
+    const live = playerPositionFromUpdate({
+      position: flat as never,
+      username: flat.username,
+      full_name: flat.full_name,
+    })
+
+    // Everything but the timestamp, which the snapshot takes from the server.
+    const { last_updated: snapshotStamp, ...snapshotRest } = snapshot
+    const { last_updated: liveStamp, ...liveRest } = live
+    expect(snapshotRest).toEqual(liveRest)
+    expect(snapshotStamp).toBe(flat.last_updated)
+    expect(liveStamp).not.toBe(flat.last_updated)
   })
 })

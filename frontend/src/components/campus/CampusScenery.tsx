@@ -319,7 +319,10 @@ function useFacadeLayout(width: number, height: number, depth: number, style: Bu
   return useMemo(() => {
     // Heritage floors are tall; a modern block packs them tighter.
     const floorHeight = style === 'heritage' ? 4.1 : 3.4
-    const floors = Math.max(1, Math.round((height - 1.6) / floorHeight))
+    // Floor, not round. Rounding up fits one more storey than the wall has
+    // room for, and the same count drives the string courses: a 21-metre
+    // terrace got its top course at y 22.1, inside the crowning cornice.
+    const floors = Math.max(1, Math.floor((height - 1.6) / floorHeight))
     const spacing = style === 'glass' ? 3.0 : 3.6
     const perFront = Math.max(2, Math.floor(width / spacing) - 1)
     const perSide = Math.max(1, Math.floor(depth / spacing) - 1)
@@ -669,6 +672,15 @@ export function CampusProps({
   const config = daylight(timeOfDay)
   const canopyColors = config.lampsOn ? CANOPY_DUSK : CANOPY_DAY
 
+  // Split once. Filtering inline handed TreeVariant a new array on every
+  // render, and that array is the only dependency of the effect that writes
+  // the instance matrices — so every unrelated re-render rewrote the matrices
+  // of all 150 trees, which is exactly what this file claims not to do.
+  const treesByVariant = useMemo(
+    () => TRUNK_COLORS.map((_, variant) => trees.filter((t) => t.variant === variant)),
+    [trees],
+  )
+
   return (
     <group>
       {/* One instanced mesh per colour variant: instanceColor would also work,
@@ -677,7 +689,7 @@ export function CampusProps({
       {TRUNK_COLORS.map((trunkColor, variant) => (
         <TreeVariant
           key={variant}
-          items={trees.filter((t) => t.variant === variant)}
+          items={treesByVariant[variant]}
           trunkColor={trunkColor}
           canopyColor={canopyColors[variant]}
         />
@@ -867,8 +879,10 @@ function Benches({ items }: { items: { x: number; z: number; ry: number }[] }) {
 /**
  * A player's name, as a sprite.
  *
- * `sizeAttenuation` is off so the tag stays legible from across the quad
- * instead of shrinking to a pixel, which is how a name tag should behave.
+ * Sprites attenuate with distance by default, and that is kept: a campus this
+ * size would otherwise be a wall of full-size labels stacked over each other
+ * from the far end of the spine. Distance culling is the LOD's job, not the
+ * tag's.
  */
 export function NameTag({
   name,

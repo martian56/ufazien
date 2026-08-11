@@ -365,7 +365,6 @@ export function lettersTexture(text: string, color = '#6b5b40') {
   ctx.fillText(text, 512, 100)
   ctx.fillStyle = color
   ctx.fillText(text, 512, 96)
-  ctx.letterSpacing = '0px'
 
   const texture = new THREE.CanvasTexture(canvas)
   texture.colorSpace = THREE.SRGBColorSpace
@@ -588,13 +587,29 @@ export function ceilingTexture() {
  * session. A sprite is one quad, drawn by the GPU, and it cannot be scrolled
  * over or clicked through by accident.
  */
+/**
+ * How many name tags to keep.
+ *
+ * Unlike every other generator here, this one is keyed on data that arrives
+ * over the socket, so its cache grows with the number of distinct people seen
+ * rather than with the fixed campus. A lobby caps at twenty; this leaves room
+ * for churn and then evicts the oldest, disposing the GPU texture with it.
+ */
+const MAX_NAME_TAGS = 64
+const nameTags = new Map<string, THREE.Texture>()
+
 export function nameTagTexture(name: string, accent = '#8fd0ff'): THREE.Texture | null {
   // Not built through `build`: a tag is a wide strip, not a tiling square, and
   // repeat-wrapping one would smear the text across the edges of the sprite.
   const label = name.length > 22 ? `${name.slice(0, 21)}…` : name
   const key = `nametag:${label}:${accent}`
-  const hit = cache.get(key)
-  if (hit) return hit
+  const hit = nameTags.get(key)
+  if (hit) {
+    // Re-insert so the most recently used tag is the last to be evicted.
+    nameTags.delete(key)
+    nameTags.set(key, hit)
+    return hit
+  }
 
   if (typeof document === 'undefined') return null
   const canvas = document.createElement('canvas')
@@ -626,7 +641,15 @@ export function nameTagTexture(name: string, accent = '#8fd0ff'): THREE.Texture 
   const texture = new THREE.CanvasTexture(canvas)
   texture.colorSpace = THREE.SRGBColorSpace
   texture.anisotropy = 4
-  cache.set(key, texture)
+
+  if (nameTags.size >= MAX_NAME_TAGS) {
+    const oldest = nameTags.keys().next().value
+    if (oldest !== undefined) {
+      nameTags.get(oldest)?.dispose()
+      nameTags.delete(oldest)
+    }
+  }
+  nameTags.set(key, texture)
   return texture
 }
 

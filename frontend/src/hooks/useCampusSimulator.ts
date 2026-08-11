@@ -86,6 +86,8 @@ export function playerPositionFromUpdate(data: {
   position: PlayerPosition
   username?: string
   full_name?: string
+  /** Snapshot frames carry a server timestamp; live frames do not. */
+  last_updated?: string
 }): PlayerPosition {
   return {
     x: data.position.x,
@@ -93,7 +95,7 @@ export function playerPositionFromUpdate(data: {
     direction: data.position.direction || 'down',
     is_moving: data.position.is_moving || false,
     current_room: data.position.current_room ?? null,
-    last_updated: new Date().toISOString(),
+    last_updated: data.last_updated ?? new Date().toISOString(),
     username: data.username,
     // Use full_name, fallback to username
     full_name: data.full_name || data.username,
@@ -217,19 +219,16 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
             (data.positions || []).forEach((pos: any) => {
                 // Filter out current user's position - they control their own camera in first-person view
                 if (pos.user_id !== currentUserId) {
-                    positionsMap.set(pos.user_id, {
-                        x: pos.x,
-                        y: pos.y,
-                        direction: pos.direction || 'down',
-                        is_moving: pos.is_moving || false,
-                        // The backend has always sent this and it was dropped
-                        // here, so nothing downstream could tell which
-                        // building anyone was standing in.
-                        current_room: pos.current_room ?? null,
-                        last_updated: pos.last_updated,
+                    // Same mapping as the live path. Two hand-written copies of
+                    // this is what lost `current_room` in the first place: the
+                    // snapshot set it and the live frame did not, so a
+                    // presenter's room survived exactly until they moved.
+                    positionsMap.set(pos.user_id, playerPositionFromUpdate({
+                        position: pos,
                         username: pos.username,
-                        full_name: pos.full_name || pos.username  // Use full_name, fallback to username
-                    });
+                        full_name: pos.full_name,
+                        last_updated: pos.last_updated,
+                    }));
                 }
             });
             setPlayerPositions(positionsMap);
