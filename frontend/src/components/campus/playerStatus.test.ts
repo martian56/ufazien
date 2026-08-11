@@ -5,6 +5,7 @@ import {
   BUBBLE_MS,
   bubbleFor,
   buildingName,
+  inSameRoom,
   isSameParticipant,
   isSpeaking,
   statusFor,
@@ -135,6 +136,32 @@ describe('buildingName', () => {
     expect(buildingName(null)).toBeNull()
     expect(buildingName(undefined)).toBeNull()
     expect(buildingName('')).toBeNull()
+  })
+})
+
+describe('inSameRoom', () => {
+  it('puts two people on the open campus together', () => {
+    expect(inSameRoom(null, null)).toBe(true)
+    expect(inSameRoom(undefined, null)).toBe(true)
+    expect(inSameRoom('', null)).toBe(true)
+  })
+
+  it('puts two people in the same building together', () => {
+    expect(inSameRoom('3', '3')).toBe(true)
+    expect(inSameRoom(3, '3')).toBe(true)
+  })
+
+  it('keeps somebody indoors out of the quad', () => {
+    // The bug this exists for: a player inside a building keeps sending their
+    // position, and inside, that position is room space — the room is built at
+    // the origin. Unfiltered, everyone outdoors saw them walking around the
+    // middle of the quad while they were actually in the library.
+    expect(inSameRoom('3', null)).toBe(false)
+    expect(inSameRoom(null, '3')).toBe(false)
+  })
+
+  it('keeps two different buildings apart', () => {
+    expect(inSameRoom('3', '4')).toBe(false)
   })
 })
 

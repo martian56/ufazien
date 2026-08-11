@@ -97,6 +97,7 @@ class PlayerPosition(models.Model):
 
     STANDING = 'standing'
     SITTING = 'sitting'
+    LEANING = 'leaning'
     WAVING = 'waving'
     CLAPPING = 'clapping'
     HAND_RAISED = 'hand_raised'
@@ -104,6 +105,7 @@ class PlayerPosition(models.Model):
     ACTIVITY_CHOICES = [
         (STANDING, 'Standing'),
         (SITTING, 'Sitting'),
+        (LEANING, 'Leaning'),
         (WAVING, 'Waving'),
         (CLAPPING, 'Clapping'),
         (HAND_RAISED, 'Hand raised'),
@@ -120,6 +122,11 @@ class PlayerPosition(models.Model):
     # is what stops two people occupying the same chair, and a check that lives
     # in the browser is one a modified browser simply does not perform.
     seat = models.CharField(max_length=48, blank=True, null=True)
+
+    # What the player is carrying, if anything. Held here for the same reason
+    # the seat is: a ball two people are both holding is two balls, and the
+    # only place that can be decided once is the server.
+    holding = models.CharField(max_length=48, blank=True, null=True)
 
     is_moving = models.BooleanField(default=False)
     current_room = models.CharField(max_length=50, blank=True, null=True)
@@ -142,6 +149,16 @@ class PlayerPosition(models.Model):
             models.CheckConstraint(
                 condition=models.Q(seat__isnull=True) | ~models.Q(seat=''),
                 name='seat_is_null_or_named',
+            ),
+            # And one pair of hands per object, for the same reason.
+            models.UniqueConstraint(
+                fields=['lobby', 'holding'],
+                condition=models.Q(holding__isnull=False),
+                name='one_holder_per_prop',
+            ),
+            models.CheckConstraint(
+                condition=models.Q(holding__isnull=True) | ~models.Q(holding=''),
+                name='holding_is_null_or_named',
             ),
         ]
 
@@ -214,3 +231,66 @@ class SavedLobby(models.Model):
 
     def __str__(self):
         return f"{self.user.username} saved {self.lobby.name}"
+
+
+class RoomLight(models.Model):
+    """
+    Whether a room's lights are on, for everybody in it.
+
+    A switch that only dimmed the room for whoever flicked it would be a
+    decoration. Stored rather than broadcast and forgotten so that somebody
+    walking in ten minutes later finds the room as the last person left it,
+    which is the whole point of a light switch.
+
+    A row exists only once somebody has touched the switch; the absence of one
+    means the room is lit, which is how every room starts.
+    """
+    lobby = models.ForeignKey(Lobby, on_delete=models.CASCADE, related_name='room_lights')
+    # The building id, as `PlayerPosition.current_room` carries it.
+    room = models.CharField(max_length=50)
+    on = models.BooleanField(default=True)
+    changed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True
+    )
+    changed_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ['lobby', 'room']
+        ordering = ['room']
+
+    def __str__(self):
+        return f"{self.lobby.name} room {self.room}: {'on' if self.on else 'off'}"
+
+
+class CampusProp(models.Model):
+    """
+    Where a thrown or dropped object came to rest.
+
+    Without this a prop is only as real as the broadcast that moved it: two
+    people who watched the same throw agree on where the ball landed, and
+    anybody who joins afterwards finds it back on its shelf. Recording the
+    resting place is what makes the object part of the room rather than part of
+    a message.
+
+    Ownership is not here — that is `PlayerPosition.holding`, so that one
+    constraint decides who has it. This is only the position it is at when
+    nobody does.
+    """
+    lobby = models.ForeignKey(Lobby, on_delete=models.CASCADE, related_name='props')
+    # The id from the campus layout, e.g. 'ball-court'.
+    prop = models.CharField(max_length=48)
+    # Which room it is in, as `PlayerPosition.current_room` carries it. Null is
+    # the open campus, and a prop cannot be thrown from one room into another.
+    room = models.CharField(max_length=50, blank=True, null=True)
+    # In the same 2D frame the player positions use, so one conversion serves
+    # both and a prop cannot land somewhere a player could not stand.
+    x = models.FloatField()
+    y = models.FloatField()
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ['lobby', 'prop']
+        ordering = ['prop']
+
+    def __str__(self):
+        return f"{self.prop} at ({self.x}, {self.y}) in {self.lobby.name}"

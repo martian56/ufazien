@@ -118,11 +118,61 @@ export function todayKey(now: Date = new Date()): string {
 }
 
 /** What a board says when it has nothing to show. */
-export function emptyBoard(kind: 'schedule' | 'notices'): BoardLine[] {
-  return [
-    {
-      primary: kind === 'schedule' ? 'Nothing timetabled today' : 'No posts yet',
-      secondary: kind === 'schedule' ? 'Enjoy it' : 'Be the first',
-    },
-  ]
+export function emptyBoard(kind: 'schedule' | 'notices' | 'sites'): BoardLine[] {
+  const EMPTY = {
+    schedule: { primary: 'Nothing timetabled today', secondary: 'Enjoy it' },
+    notices: { primary: 'No posts yet', secondary: 'Be the first' },
+    sites: { primary: 'No student sites live yet', secondary: 'Publish one from Hosting' },
+  }
+  return [EMPTY[kind] ?? EMPTY.notices]
+}
+
+
+/** A hosted student site, as the public listing describes it. */
+export interface SiteLike {
+  name?: string
+  url?: string
+  domain?: string | null
+  creator?: string | null
+  description?: string | null
+  total_visits?: number | null
+}
+
+/**
+ * Student sites, as board lines.
+ *
+ * The address is the useful part — a screen naming a site nobody can find is a
+ * screen saying nothing — so it is the primary line, with who made it beneath.
+ * The visit count goes in the trailing column, which is what makes the board
+ * worth looking at twice.
+ */
+export function siteLines(sites: readonly SiteLike[]): BoardLine[] {
+  return sites
+    .filter((site) => Boolean(site?.name))
+    .slice(0, BOARD_LINES)
+    .map((site) => ({
+      primary: hostOf(site),
+      // Credited to a person, never to an address: the listing hands back a
+      // display name and this must not start reaching for anything else.
+      secondary: site.creator?.trim() || 'a student',
+      trailing: visitCount(site.total_visits),
+    }))
+}
+
+/**
+ * The address to type in, without the scheme.
+ *
+ * `url` is a full https:// address; a board is not a link and the scheme is
+ * four wasted characters on a line that has to fit a domain name.
+ */
+function hostOf(site: SiteLike): string {
+  const address = site.url || (site.domain ? `https://${site.domain}` : '')
+  if (address) return address.replace(/^https?:\/\//, '').replace(/\/$/, '')
+  return String(site.name)
+}
+
+function visitCount(visits: number | null | undefined): string | undefined {
+  if (typeof visits !== 'number' || !Number.isFinite(visits) || visits <= 0) return undefined
+  // Thousands abbreviated: a five-figure count pushes the name off the line.
+  return visits >= 1000 ? `${(visits / 1000).toFixed(1)}k` : String(Math.round(visits))
 }

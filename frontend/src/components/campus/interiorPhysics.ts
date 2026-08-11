@@ -179,6 +179,16 @@ function ufazPhysics(): InteriorPhysics {
 /** Where the stacks stand. */
 export const STACK_ROWS = [-15, -9, -3, 3]
 
+/**
+ * Where the calculator terminal stands.
+ *
+ * Against the west wall, clear of the reading tables and well off the line
+ * between any of them and the projector — a desk with a screen on it is a
+ * metre and a half of solid, which is exactly the height that blocks a seated
+ * sightline.
+ */
+export const LIBRARY_TERMINAL: [number, number] = [-13.5, 12]
+
 /** Where the reading tables stand, and how the chairs sit around them. */
 export const LIBRARY_TABLE_X = [-9, 9]
 export const LIBRARY_TABLE_Z = [10, 15, 20]
@@ -278,6 +288,17 @@ function libraryPhysics(): InteriorPhysics {
 
   // Issue desk by the door.
   colliders.push({ x: 0, z: half - 4, halfW: 3.5, halfD: 0.95, height: 1.35 })
+
+  // The calculator terminal, against the west wall clear of the reading
+  // tables. Turned to face into the room, so its footprint is deep rather
+  // than wide.
+  colliders.push({
+    x: LIBRARY_TERMINAL[0],
+    z: LIBRARY_TERMINAL[1],
+    halfW: 0.45,
+    halfD: 0.9,
+    height: 1.5,
+  })
 
   return { colliders, platforms: [], seats }
 }

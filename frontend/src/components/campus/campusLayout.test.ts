@@ -81,6 +81,11 @@ describe('resolveCollision', () => {
       [1.4, 1.4], [1.4, -1.4], [-1.4, 1.4], [-1.4, -1.4],
     ]
 
+    // Failures are collected rather than asserted inside the loop. An expect()
+    // per step meant more than ten thousand of them, which took longer than
+    // the five second timeout on a slower machine: the invariant held, but the
+    // test went red anyway, and only on some people's laptops.
+    const failures: string[] = []
     let checked = 0
     for (let x = -CAMPUS_LIMIT; x <= CAMPUS_LIMIT; x += 3) {
       for (let z = -CAMPUS_LIMIT; z <= CAMPUS_LIMIT; z += 3) {
@@ -90,11 +95,12 @@ describe('resolveCollision', () => {
           const stuck = CAMPUS_COLLIDERS.find((rect) =>
             insideRect(out.x, out.z, rect, PLAYER_RADIUS - 0.01),
           )
-          expect(stuck, `stepped from ${x},${z} by ${dx},${dz} into a wall`).toBeUndefined()
+          if (stuck) failures.push(`stepped from ${x},${z} by ${dx},${dz} into a wall`)
           checked++
         }
       }
     }
+    expect(failures.slice(0, 5)).toEqual([])
     // Guard against the loop silently skipping everything.
     expect(checked).toBeGreaterThan(10000)
   })

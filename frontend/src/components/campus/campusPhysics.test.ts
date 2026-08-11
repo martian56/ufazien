@@ -4,9 +4,11 @@ import {
   PROP_COLLIDERS,
   SOLID_CAMPUS,
   STEP_UP,
+  approachStep,
   blockingPlatforms,
   groundHeight,
   insideCollider,
+  leanSurface,
   resolveColliders,
   sightlineBlocker,
   type Collider,
@@ -229,5 +231,77 @@ describe('sightlineBlocker', () => {
     // The screen's own backing board is at the far end and is not in the way.
     const atTarget: Collider = { x: 0, z: -10, halfW: 5, halfD: 0.4, height: 9 }
     expect(sightlineBlocker(eye, screen, [atTarget])).toBeNull()
+  })
+})
+
+describe('leaning', () => {
+  const wall: Collider = { x: 0, z: -2, halfW: 6, halfD: 0.5 }
+
+  it('finds a wall at the player’s back', () => {
+    // Heading zero faces +Z, so the wall wanted is the one at -Z.
+    expect(leanSurface(0, -1, 0, [wall])).toBe(true)
+  })
+
+  it('does not lean on a wall the player is facing', () => {
+    // Turned around, the same wall is in front of them, and leaning backwards
+    // onto nothing is how an avatar ends up lying in the air.
+    expect(leanSurface(0, -1, Math.PI, [wall])).toBe(false)
+  })
+
+  it('does not reach across a room', () => {
+    expect(leanSurface(0, 6, 0, [wall])).toBe(false)
+  })
+
+  it('leans on the room’s own wall', () => {
+    // Interior walls are a clamp on the camera, not colliders. Checking only
+    // the collider list refuses the one surface every room is guaranteed to
+    // have, which is most of the walls anybody would want to lean on.
+    // Backed up against the clamp at -Z, which means facing +Z.
+    expect(leanSurface(0, -20, 0, [], 20)).toBe(true)
+    // And against the one at -X, which means facing +X.
+    expect(leanSurface(-20, 0, Math.PI / 2, [], 20)).toBe(true)
+    // A pace off the wall is still within reach, two paces is not.
+    expect(leanSurface(0, -19.5, 0, [], 20)).toBe(true)
+    expect(leanSurface(0, -18, 0, [], 20)).toBe(false)
+    expect(leanSurface(0, 0, 0, [], 20)).toBe(false)
+  })
+
+  it('finds a pillar behind the player', () => {
+    const column: Collider = { x: 0, z: -1.5, radius: 0.6 }
+    expect(leanSurface(0, -0.7, 0, [column])).toBe(true)
+  })
+})
+
+describe('following somebody', () => {
+  it('steps towards them', () => {
+    const step = approachStep({ x: 0, z: 0 }, { x: 0, z: 10 }, 1, 2.6)
+    expect(step).not.toBeNull()
+    expect(step!.z).toBeCloseTo(1)
+    expect(step!.x).toBeCloseTo(0)
+  })
+
+  it('stops short rather than standing inside them', () => {
+    // The avatar is drawn at the position it reports, so closing to zero puts
+    // the follower's camera inside somebody's head.
+    expect(approachStep({ x: 0, z: 0 }, { x: 0, z: 2 }, 1, 2.6)).toBeNull()
+  })
+
+  it('does not overshoot on the last step', () => {
+    // Arriving should be standing next to them, not sailing past and turning
+    // round to come back.
+    const step = approachStep({ x: 0, z: 0 }, { x: 0, z: 3 }, 5, 2.6)
+    expect(step!.z).toBeCloseTo(0.4)
+  })
+
+  it('survives being exactly on top of the target', () => {
+    // The direction is undefined there. Normalising a zero vector gives NaN,
+    // which puts the follower at NaN and takes the camera off the campus.
+    expect(approachStep({ x: 4, z: 4 }, { x: 4, z: 4 }, 1, 0)).toBeNull()
+  })
+
+  it('walks diagonally when they are diagonal', () => {
+    const step = approachStep({ x: 0, z: 0 }, { x: 10, z: 10 }, 1, 0)
+    expect(step!.x).toBeCloseTo(Math.SQRT1_2)
+    expect(step!.z).toBeCloseTo(Math.SQRT1_2)
   })
 })

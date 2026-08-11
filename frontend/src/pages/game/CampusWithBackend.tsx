@@ -1,4 +1,4 @@
-import React, { useState, useRef, Suspense, useEffect, useMemo } from "react"
+import React, { useState, useRef, Suspense, useCallback, useEffect, useMemo } from "react"
 import { Helmet } from "react-helmet"
 import { Canvas, useFrame, useThree } from "@react-three/fiber"
 import { KeyboardControls, useKeyboardControls, PointerLockControls, PerformanceMonitor } from "@react-three/drei"
@@ -12,6 +12,8 @@ import VoicePanel, { ScreenShareStage } from '../../components/campus/VoicePanel
 import ProjectorScreen from '../../components/campus/ProjectorScreen'
 import { api } from '../../lib/api/client'
 import { isAuthenticated } from '../../lib/api/tokens'
+import { errorMessage } from '../../lib/api/errors'
+import gpaApi from '../../lib/api/endpoints/gpa'
 import TouchControls, { createTouchState, useIsTouchDevice } from '../../components/campus/TouchControls'
 import type { TouchState } from '../../components/campus/TouchControls'
 import {
@@ -28,6 +30,7 @@ import {
 import {
   BUBBLE_MS,
   bubbleFor,
+  inSameRoom,
   isSameParticipant,
   isSpeaking,
   statusFor,
@@ -37,8 +40,10 @@ import Whiteboard from '../../components/campus/Whiteboard'
 import { isDrawableChat } from '../../components/campus/whiteboardStrokes'
 import {
   SOLID_CAMPUS,
+  approachStep,
   blockingPlatforms,
   groundHeight,
+  leanSurface,
   resolveColliders,
   type Collider,
 } from '../../components/campus/campusPhysics'
@@ -52,6 +57,28 @@ import {
 } from '../../components/campus/interiorPhysics'
 import { EMOTE_SECONDS, type Activity } from '../../components/campus/avatarPose'
 import { takenSeatIds } from '../../components/campus/seatState'
+import {
+  doorCrossed,
+  doorstep,
+  doorwayFor,
+  interiorDoorFor,
+  leavingThroughDoor,
+} from '../../components/campus/doorways'
+import {
+  nearestProp,
+  propsIn,
+  throwTarget,
+  CARRY_HEIGHT,
+  type PropSpec,
+} from '../../components/campus/campusProps'
+import CampusPropObjects from '../../components/campus/CampusPropObjects'
+import {
+  type TerminalStatistics,
+  LibraryTerminalDesk,
+  LibraryTerminalKey,
+  LibraryTerminalPanel,
+  LibraryTerminalSensor,
+} from '../../components/campus/LibraryTerminal'
 import { INTERIOR_SPECS, interiorHalfExtent } from '../../components/campus/interiorSpecs'
 import {
   CAMPUS_BUILDINGS,
@@ -128,6 +155,12 @@ const keyMap = [
   // Emotes. Number keys, because they are the ones nobody is holding down to
   // walk with, and a radial menu cannot be opened while the pointer is locked.
   { name: "sit", keys: ["KeyC"] },
+  // Leaning is a posture rather than an emote, so it sits next to sitting
+  // rather than on the number row, and holds until pressed again.
+  { name: "lean", keys: ["KeyV"] },
+  // Pick up and put down whatever is within reach; hold to throw it further.
+  { name: "grab", keys: ["KeyG"] },
+  { name: "light", keys: ["KeyL"] },
   { name: "wave", keys: ["Digit1"] },
   { name: "clap", keys: ["Digit2"] },
   { name: "raiseHand", keys: ["Digit3"] },
@@ -467,28 +500,35 @@ function PlayerAvatar({
  * Entering a building replaces the world with a room built at the origin.
  * Without moving the camera the player keeps their outdoor position, which is
  * usually outside that room, so they end up looking at the back of the walls.
+ *
+ * Both ends are placed at the door rather than at a remembered position. The
+ * old code restored wherever the player stood when they entered, which now
+ * means the point at which they crossed the facade — inside the alcove, on the
+ * far side of the plane that decides you are going in. Walking out put them
+ * back there and they walked straight in again.
  */
 function InteriorCameraPlacement({ insideBuilding }: { insideBuilding: CampusBuilding | null }) {
   const { camera } = useThree()
-  const outsidePosition = useRef<Vector3 | null>(null)
+  const previous = useRef<CampusBuilding | null>(null)
 
   useEffect(() => {
     if (insideBuilding) {
-      outsidePosition.current = camera.position.clone()
       const spec = INTERIOR_SPECS[insideBuilding.interior]
-      // Just inside the entrance, facing into the room.
-      camera.position.set(spec.spawn[0], spec.spawn[1], spec.spawn[2])
-      if (spec.spawnLookAt) {
-        // lookAt leaves roll at zero, so the pointer-lock controls pick this
-        // up as an ordinary heading and pitch.
-        camera.lookAt(spec.spawnLookAt[0], spec.spawnLookAt[1], spec.spawnLookAt[2])
-      } else {
-        camera.rotation.set(0, 0, 0)
-      }
-    } else if (outsidePosition.current) {
-      camera.position.copy(outsidePosition.current)
-      outsidePosition.current = null
+      const door = interiorDoorFor(insideBuilding.interior)
+      // Just inside the door you came through, which is now a real place in
+      // the room rather than a spawn point chosen per interior.
+      camera.position.set(door.x, spec.spawn[1], door.z - 1.5)
+      const look = spec.spawnLookAt ?? spec.projector
+      // lookAt leaves roll at zero, so the pointer-lock controls pick this up
+      // as an ordinary heading and pitch.
+      camera.lookAt(look[0], look[1], look[2])
+    } else if (previous.current) {
+      const door = doorstep(doorwayFor(previous.current))
+      camera.position.set(door.x, EYE_HEIGHT, door.z)
+      // Facing away from the building, which is the direction you were walking.
+      camera.lookAt(door.x, EYE_HEIGHT, door.z + 10)
     }
+    previous.current = insideBuilding
   }, [insideBuilding, camera])
 
   return null
@@ -544,44 +584,117 @@ function ProximitySensor({
 }
 
 /**
- * E to enter or leave a building.
+ * Picking things up, throwing them, and the light switch.
  *
- * Entering by clicking a marker in the world does not work while the pointer is
- * locked for mouse-look, which is the normal way to play, so the doors are
- * opened from wherever the player is standing instead.
+ * Held down, G charges a throw; tapped, it drops the object at your feet. The
+ * charge is the only reason this needs a frame loop rather than a key handler:
+ * the power has to be read at the moment of release.
  */
-function ProximityInteraction({
+function PropController({
+  campusHook,
   insideBuilding,
-  onEnter,
-  onExit,
-  touch,
+  myRoom,
+  onCandidate,
+  onCharge,
 }: {
+  campusHook: CampusHook
   insideBuilding: CampusBuilding | null
-  onEnter: (building: CampusBuilding) => void
-  onExit: () => void
-  touch?: React.RefObject<TouchState | null>
+  myRoom: string | null
+  onCandidate: (prop: PropSpec | null) => void
+  onCharge: (power: number) => void
 }) {
   const { camera } = useThree()
   const [, get] = useKeyboardControls()
-  const wasPressed = useRef(false)
+  const {
+    ownProp,
+    carriedProps,
+    propPositions,
+    takeProp,
+    dropProp,
+    roomLights,
+    setRoomLight,
+    worldTo2D,
+    coordsTo3D,
+  } = campusHook
+  const held = useRef({ grab: false, light: false })
+  const chargedAt = useRef(0)
+  const candidate = useRef<PropSpec | null>(null)
 
-  useFrame(() => {
-    const pressed = (Boolean(get().interact) && !isTypingInField()) || Boolean(touch?.current?.interact)
-    if (touch?.current?.interact) touch.current.interact = false
-    // Edge trigger: holding E must not toggle every frame.
-    if (pressed && !wasPressed.current) {
-      if (insideBuilding) {
-        onExit()
-      } else {
-        const found = nearestEntrance(camera.position.x, camera.position.z)
-        if (found) onEnter(found.building)
-      }
+  // Where each object in this room is, in world coordinates. Anything the
+  // server has no record of is still at home.
+  const here = useMemo(() => propsIn(insideBuilding?.interior ?? null), [insideBuilding])
+  const restingPlaces = useMemo(() => {
+    const places = new Map<string, { x: number; z: number }>()
+    for (const prop of here) {
+      const moved = propPositions.get(prop.id)
+      places.set(prop.id, moved ? coordsTo3D(moved.x, moved.y) : { x: prop.home[0], z: prop.home[1] })
     }
-    wasPressed.current = pressed
+    return places
+  }, [here, propPositions, coordsTo3D])
+
+  const inHands = useMemo(() => new Set(carriedProps.values()), [carriedProps])
+
+  useFrame((state) => {
+    const typing = isTypingInField()
+    const controls = get()
+
+    // What is within reach, so the prompt can name it.
+    const near = ownProp
+      ? null
+      : nearestProp(camera.position.x, camera.position.z, here, restingPlaces, inHands)
+    if (near?.id !== candidate.current?.id) {
+      candidate.current = near
+      onCandidate(near)
+    }
+
+    const grabbing = !typing && Boolean(controls.grab)
+    if (grabbing && !held.current.grab) {
+      if (ownProp) chargedAt.current = state.clock.elapsedTime
+      else if (near) takeProp(near.id)
+    }
+
+    // The charge, so the HUD can show it filling.
+    if (grabbing && ownProp && chargedAt.current) {
+      onCharge(Math.min(1, (state.clock.elapsedTime - chargedAt.current) / THROW_CHARGE_SECONDS))
+    }
+
+    if (!grabbing && held.current.grab && ownProp && chargedAt.current) {
+      const power = Math.min(1, (state.clock.elapsedTime - chargedAt.current) / THROW_CHARGE_SECONDS)
+      const landing = throwTarget(
+        camera.position.x,
+        camera.position.z,
+        cameraHeading(camera),
+        power,
+      )
+      const sent = worldTo2D(landing.x, landing.z)
+      dropProp(ownProp, sent.x, sent.y)
+      chargedAt.current = 0
+      onCharge(0)
+    }
+    held.current.grab = grabbing
+
+    // The light switch, which is a room-wide toggle rather than anything held.
+    const switching = !typing && Boolean(controls.light)
+    if (switching && !held.current.light && myRoom) {
+      setRoomLight(myRoom, !(roomLights.get(myRoom) ?? true))
+    }
+    held.current.light = switching
   })
 
   return null
 }
+
+/** How long G must be held for a throw at full power, in seconds. */
+const THROW_CHARGE_SECONDS = 1.1
+
+/**
+ * How close following gets you before it stops.
+ *
+ * Far enough not to stand inside them — the avatar is drawn at the position it
+ * reports, and a follower closing to zero ends up looking at the inside of a
+ * head.
+ */
+const FOLLOW_DISTANCE = 2.6
 
 /** Feeds the mini-games the state of the hold key, from either input method. */
 function ActionKeyBridge({ action }: { action: React.RefObject<ActionInput> }) {
@@ -646,19 +759,42 @@ function SeatController({
   ownSeat,
   onCandidate,
   onEmote,
+  leaning,
+  onLean,
 }: {
   campusHook: CampusHook
   insideBuilding: CampusBuilding | null
   ownSeat: string | null
   onCandidate: (seat: Seat | null) => void
   onEmote: (activity: Activity | null) => void
+  leaning: boolean
+  onLean: (leaning: boolean) => void
 }) {
   const { camera } = useThree()
   const [, get] = useKeyboardControls()
   const { takeSeat, leaveSeat, seatedPlayers } = campusHook
-  const held = useRef({ sit: false, emote: '' })
+  const held = useRef({ sit: false, lean: false, emote: '' })
   const candidate = useRef<Seat | null>(null)
   const emoteUntil = useRef(0)
+
+  /**
+   * Whether the player has their back to something they could lean on.
+   *
+   * Read from the camera every time rather than captured, because both terms
+   * change as the player moves: which colliders apply depends on the room, and
+   * a room's own walls are a clamp rather than geometry.
+   */
+  const wallBehind = useCallback(() => {
+    const solid = insideBuilding ? interiorColliders(insideBuilding.interior) : SOLID_CAMPUS
+    const limit = insideBuilding ? interiorHalfExtent(insideBuilding.interior) : undefined
+    return leanSurface(
+      camera.position.x,
+      camera.position.z,
+      cameraHeading(camera),
+      solid,
+      limit,
+    )
+  }, [camera, insideBuilding])
 
   // Seats other people are in. Offering an occupied chair and having the
   // server refuse it reads as the key not working.
@@ -692,6 +828,23 @@ function SeatController({
     }
     held.current.sit = sitPressed
 
+    // Leaning. A posture rather than an emote: it holds until pressed again,
+    // and unlike a chair there is nothing to claim, because two people can
+    // lean on the same wall.
+    const leanPressed = !typing && Boolean(controls.lean)
+    if (leanPressed && !held.current.lean) {
+      if (leaning) {
+        onLean(false)
+      } else if (!ownSeat && wallBehind()) {
+        onLean(true)
+      }
+    }
+    held.current.lean = leanPressed
+
+    // Walking away from the wall stands you up. Without this a player leans
+    // on nothing all the way across the quad.
+    if (leaning && !wallBehind()) onLean(false)
+
     // Emotes are one-shot and release themselves, so a wave does not last
     // until the player thinks to press something else.
     let pressed: Activity | '' = ''
@@ -722,6 +875,10 @@ function Player({
   touch,
   seated,
   emote,
+  leaning,
+  follow,
+  onEnter,
+  onLeave,
 }: {
   campusHook: CampusHook
   insideBuilding: CampusBuilding | null
@@ -730,12 +887,27 @@ function Player({
   seated: Seat | null
   /** A one-shot pose, or null. Held poses come through `seated`. */
   emote: Activity | null
+  /** Propped against a wall, which is a posture rather than an emote. */
+  leaning: boolean
+  /** Walked in through a door. */
+  onEnter: (building: CampusBuilding) => void
+  /** Walked back out through one. */
+  onLeave: (building: CampusBuilding) => void
+  /**
+   * Somebody to walk towards, in world coordinates, or null.
+   *
+   * Only ever set for a player in the same room, because a position means
+   * different things in different rooms.
+   */
+  follow: { x: number; z: number } | null
 }) {
   const { camera } = useThree()
   const [, get] = useKeyboardControls()
   const velocity = useRef(new Vector3())
   const direction = useRef(new Vector3())
   const isOnGround = useRef(true)
+  /** Where the player was at the top of this frame, for the door test. */
+  const before = useRef({ x: 0, z: 0 })
 
   const { updatePosition, worldTo2D } = campusHook
 
@@ -806,7 +978,7 @@ function Player({
       }
     }
 
-    const moving = direction.current.lengthSq() > 0
+    const driving = direction.current.lengthSq() > 0
     // The heading, kept as a unit vector before the frame scale goes on.
     // Deriving the facing from the scaled vector made it depend on frame rate:
     // one step at 5.5 m/s and 60fps is 0.09 units, which failed the 0.1 test
@@ -814,7 +986,9 @@ function Player({
     // everyone else — but the same input at 30fps passed.
     let headingX = 0
     let headingZ = 0
-    if (moving) {
+    let moving = driving
+
+    if (driving) {
       direction.current.normalize()
       direction.current.multiplyScalar(speed * delta)
 
@@ -825,6 +999,23 @@ function Player({
       const length = Math.hypot(direction.current.x, direction.current.z) || 1
       headingX = direction.current.x / length
       headingZ = direction.current.z / length
+    } else if (follow) {
+      // Following somebody, which is the same movement by a different input.
+      // Steering the same vector rather than moving the camera separately is
+      // what gives follow its collision, its gravity and its position frames
+      // for free. Only when the player is not driving: their own input has to
+      // win, or the follow fights them for the controls.
+      //
+      // Already in world axes, so unlike key input it must not be rotated by
+      // the camera — the target is a place, not a direction relative to a face.
+      const step = approachStep(camera.position, follow, speed * delta, FOLLOW_DISTANCE)
+      if (step) {
+        direction.current.set(step.x, 0, step.z)
+        moving = true
+        const length = Math.hypot(step.x, step.z) || 1
+        headingX = step.x / length
+        headingZ = step.z / length
+      }
     }
 
     // Jump logic
@@ -836,6 +1027,8 @@ function Player({
     // Apply gravity
     velocity.current.y -= 20 * delta
 
+    before.current.x = camera.position.x
+    before.current.z = camera.position.z
     camera.position.add(direction.current)
     camera.position.y += velocity.current.y * delta
 
@@ -853,6 +1046,15 @@ function Player({
       : SOLID_CAMPUS
 
     if (insideBuilding) {
+      // Walking out through the door, which has to be asked before the clamp:
+      // afterwards the position has already been pulled back inside the room
+      // and there is nothing left to detect.
+      const door = interiorDoorFor(insideBuilding.interior)
+      if (leavingThroughDoor(camera.position.x, camera.position.z, door)) {
+        onLeave(insideBuilding)
+        return
+      }
+
       // The room's own walls, which are a clamp rather than geometry.
       const limit = interiorHalfExtent(insideBuilding.interior)
       camera.position.x = MathUtils.clamp(camera.position.x, -limit, limit)
@@ -860,6 +1062,21 @@ function Player({
     } else {
       camera.position.x = MathUtils.clamp(camera.position.x, -CAMPUS_LIMIT, CAMPUS_LIMIT)
       camera.position.z = MathUtils.clamp(camera.position.z, -CAMPUS_LIMIT, CAMPUS_LIMIT)
+
+      // And walking in through one. Measured across the step rather than at
+      // the end of it, so a fast frame that clears the whole alcove still
+      // counts as going inside rather than stopping against the back wall.
+      const entered = doorCrossed(
+        { x: before.current.x, z: before.current.z },
+        { x: camera.position.x, z: camera.position.z },
+      )
+      if (entered) {
+        const building = CAMPUS_BUILDINGS.find((b) => b.id === entered.id)
+        if (building) {
+          onEnter(building)
+          return
+        }
+      }
     }
 
     // Everything solid, indoors and out: buildings, trees, the fountain, and
@@ -903,7 +1120,9 @@ function Player({
       y: backendCoords.y,
       direction: playerDirection,
       heading,
-      activity: emote ?? 'standing',
+      // An emote wins over the posture, the posture over standing: waving
+      // from a wall is still waving, and stopping is still leaning.
+      activity: emote ?? (leaning ? 'leaning' : 'standing'),
       is_moving: moving,
       // Was hardcoded null, so the server never knew which building anyone
       // was standing in, and neither did anyone else's client. Sent as the
@@ -927,6 +1146,27 @@ const CampusWithBackend = () => {
   /** The chair within reach, for the prompt. Not the one being sat in. */
   const [seatCandidate, setSeatCandidate] = useState<Seat | null>(null)
   const [emote, setEmote] = useState<Activity | null>(null)
+  /**
+   * Propped against a wall.
+   *
+   * Held here rather than in the controller that sets it because the pose has
+   * to reach the position frames, and those are sent from the player
+   * controller — a posture nobody else can see is a posture that does not
+   * exist.
+   */
+  const [leaning, setLeaning] = useState(false)
+  /** What is within reach to pick up, so the prompt can name it. */
+  const [propCandidate, setPropCandidate] = useState<PropSpec | null>(null)
+  /** How far a throw is wound up, 0 to 1. */
+  const [throwCharge, setThrowCharge] = useState(0)
+  /** Whoever the player is walking after, if anybody. */
+  const [followingId, setFollowingId] = useState<string | number | null>(null)
+  /** The library's calculator terminal: standing at it, and using it. */
+  const [atTerminal, setAtTerminal] = useState(false)
+  const [terminalOpen, setTerminalOpen] = useState(false)
+  const [terminalStats, setTerminalStats] = useState<TerminalStatistics | null>(null)
+  const [terminalLoading, setTerminalLoading] = useState(false)
+  const [terminalError, setTerminalError] = useState<string | null>(null)
   /**
    * A clock for expiring chat bubbles.
    *
@@ -979,6 +1219,17 @@ const CampusWithBackend = () => {
 
   // Initialize campus simulation hook
   const campusHook = useCampusSimulator(lobbyId)
+
+  /**
+   * The room this player is in, in the form it travels in.
+   *
+   * The same value that goes out on every position frame, so that comparing it
+   * against another player's `current_room` is comparing like with like.
+   */
+  const myRoom = useMemo(
+    () => (insideBuilding ? String(insideBuilding.id) : null),
+    [insideBuilding],
+  )
 
   /**
    * The seat the player is actually in.
@@ -1142,9 +1393,19 @@ const CampusWithBackend = () => {
 
   // Convert backend player positions to 3D world coordinates
   // Filter out current user's position since they control their own camera (first-person view)
+  /**
+   * Everyone else, and the room each of them is standing in.
+   *
+   * The room matters because a position means different things in different
+   * places. Indoors the camera is in room space — every interior is built at
+   * the origin — and that is what gets sent. Drawn without checking the room,
+   * somebody sitting in the library appeared to everyone outdoors as an avatar
+   * wandering around the middle of the quad.
+   */
   const playerAvatars = useMemo(() => {
     const avatars: {
       id: string | number
+      room: string | null
       position: { x: number; z: number }
       userData: Record<string, unknown>
     }[] = []
@@ -1157,6 +1418,7 @@ const CampusWithBackend = () => {
       const worldPos = coordsTo3D(position.x, position.y)
       avatars.push({
         id: userId,
+        room: position.current_room ?? null,
         position: { x: worldPos.x, z: worldPos.z },
         userData: {
           username: position.username,
@@ -1176,6 +1438,104 @@ const CampusWithBackend = () => {
     })
     return avatars
   }, [playerPositions, coordsTo3D, currentUser?.id])
+
+  /**
+   * The ones you can actually see from where you are standing.
+   *
+   * A room is a shared place now, not a local view of one: walk into the
+   * cafeteria with somebody and you are both in it. Outdoors this hides
+   * everybody who is indoors, whose coordinates would otherwise land them on
+   * the quad.
+   */
+  const visibleAvatars = useMemo(
+    () => playerAvatars.filter((avatar) => inSameRoom(avatar.room, myRoom)),
+    [playerAvatars, myRoom],
+  )
+
+  /**
+   * The loose objects in this room, wherever they have got to.
+   *
+   * A carried one rides at its carrier's position, which is why this is built
+   * from the avatars rather than only from the resting places: an object in
+   * somebody's hand has no resting place until they put it down.
+   */
+  const propPlacements = useMemo(() => {
+    const carrierOf = new Map<string, { x: number; z: number }>()
+    for (const avatar of visibleAvatars) {
+      const carrying = campusHook.carriedProps.get(avatar.id)
+      if (carrying) carrierOf.set(carrying, avatar.position)
+    }
+
+    return propsIn(insideBuilding?.interior ?? null).map((spec) => {
+      const carried = carrierOf.get(spec.id)
+      if (carried) {
+        return { spec, x: carried.x, z: carried.z, y: CARRY_HEIGHT, carried: true }
+      }
+      const moved = campusHook.propPositions.get(spec.id)
+      const at = moved
+        ? campusHook.coordsTo3D(moved.x, moved.y)
+        : { x: spec.home[0], z: spec.home[1] }
+      return { spec, x: at.x, z: at.z, y: spec.radius, carried: false }
+    })
+    // The player's own object is deliberately not placed: in first person
+    // there is no avatar to hang it from, and drawing it at the camera puts it
+    // inside the near plane.
+  }, [
+    visibleAvatars,
+    insideBuilding,
+    campusHook.carriedProps,
+    campusHook.propPositions,
+    campusHook.coordsTo3D,
+  ])
+
+  /**
+   * Where the person being followed is, or null.
+   *
+   * Resolved from the visible list rather than from every player, so following
+   * stops of its own accord the moment they walk into a building: their
+   * coordinates are room space from then on, and walking to them would send
+   * the follower across the quad to a place nobody is standing.
+   */
+  const followTarget = useMemo(() => {
+    if (followingId === null) return null
+    const target = visibleAvatars.find((avatar) => String(avatar.id) === String(followingId))
+    return target ? target.position : null
+  }, [followingId, visibleAvatars])
+
+  // Give up when they are no longer somewhere we can walk to, rather than
+  // holding a follow that silently does nothing.
+  useEffect(() => {
+    if (followingId !== null && !followTarget) setFollowingId(null)
+  }, [followingId, followTarget])
+
+  // Read on first opening rather than on entering the library: a student who
+  // walks past the desk should not be charged a request for it.
+  useEffect(() => {
+    if (!terminalOpen || terminalStats || terminalLoading) return
+    let cancelled = false
+    setTerminalLoading(true)
+    setTerminalError(null)
+    gpaApi
+      .statistics()
+      .then((stats) => {
+        if (!cancelled) setTerminalStats(stats)
+      })
+      .catch((err) => {
+        if (!cancelled) setTerminalError(errorMessage(err, 'Could not read your record.'))
+      })
+      .finally(() => {
+        if (!cancelled) setTerminalLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [terminalOpen, terminalStats, terminalLoading])
+
+  /** Whether the room the player is standing in has its lights on. */
+  const roomLit = useMemo(
+    () => (myRoom ? (campusHook.roomLights.get(myRoom) ?? true) : true),
+    [myRoom, campusHook.roomLights],
+  )
 
   if (isLoading) {
     return (
@@ -1266,7 +1626,7 @@ const CampusWithBackend = () => {
             </div>
             <div className="text-xs text-gray-300 mt-0.5">{nearBuilding.blurb}</div>
             <div className="text-xs text-blue-300 mt-1">
-              {isTouchDevice ? 'Tap Enter to go inside' : 'Press E to go inside'}
+              Walk in through the doors
             </div>
           </div>
         </div>
@@ -1274,15 +1634,50 @@ const CampusWithBackend = () => {
 
       {/* Sitting down. The prompt names the chair you are actually standing at,
           and only offers one nobody else is in. */}
-      {insideBuilding && !games.active && (seatCandidate || campusHook.ownSeat) && (
+      {!games.active && (insideBuilding || leaning) && (seatCandidate || campusHook.ownSeat || leaning) && (
         <div className="absolute left-1/2 -translate-x-1/2 bottom-32 sm:bottom-16 z-30 pointer-events-none max-w-[92vw]">
           <div className="bg-black/80 backdrop-blur-sm border border-emerald-500/30 rounded-xl px-4 py-2.5 text-white text-center">
             <div className="text-xs text-emerald-300">
-              {campusHook.ownSeat ? 'Press C to stand up' : 'Press C to sit down'}
+              {leaning
+                ? 'Press V to stand up straight'
+                : campusHook.ownSeat
+                  ? 'Press C to stand up'
+                  : 'Press C to sit down'}
             </div>
             <div className="text-[11px] text-gray-400 mt-1">
-              1 wave · 2 clap · 3 raise hand · 4 point
+              V lean · 1 wave · 2 clap · 3 raise hand · 4 point
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Objects, and the light switch. Separate from the seating prompt
+          because the two are reachable at the same time and a single box
+          would have to pick one of them to hide. */}
+      {!games.active && (propCandidate || campusHook.ownProp || insideBuilding) && (
+        <div className="absolute right-4 bottom-32 sm:bottom-16 z-30 pointer-events-none max-w-[45vw]">
+          <div className="bg-black/80 backdrop-blur-sm border border-amber-500/30 rounded-xl px-3 py-2 text-white">
+            {campusHook.ownProp ? (
+              <>
+                <div className="text-xs text-amber-300">
+                  Hold G to throw · tap to drop
+                </div>
+                {/* The wind-up, so a throw is aimed rather than guessed. */}
+                <div className="mt-1.5 h-1.5 w-full bg-white/15 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-amber-400 transition-[width] duration-75"
+                    style={{ width: `${Math.round(throwCharge * 100)}%` }}
+                  />
+                </div>
+              </>
+            ) : propCandidate ? (
+              <div className="text-xs text-amber-300">Press G to pick up the {propCandidate.label}</div>
+            ) : null}
+            {insideBuilding && (
+              <div className="text-[11px] text-gray-400 mt-1">
+                L · turn the lights {roomLit ? 'off' : 'on'}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1376,6 +1771,66 @@ const CampusWithBackend = () => {
           </div>
         )}
       </div>
+
+      {/* Who is here with you, and the follow button.
+          DOM rather than a panel in the scene for the same pointer-lock reason
+          as the doors: a click in the world never lands while the pointer is
+          locked, which is the normal way to play. */}
+      {visibleAvatars.length > 0 && !games.active && (
+        <div className="absolute top-4 left-4 z-10 pointer-events-auto w-[min(15rem,52vw)]">
+          <div className="bg-black/75 backdrop-blur-sm border border-blue-500/25 rounded-xl px-3 py-2 text-white">
+            <div className="text-[11px] uppercase tracking-wide text-blue-300/80 mb-1">
+              {myRoom ? 'In this room' : 'On the campus'}
+            </div>
+            <ul className="space-y-1">
+              {visibleAvatars.slice(0, 6).map((avatar) => {
+                const followingThem = String(followingId) === String(avatar.id)
+                return (
+                  <li key={avatar.id} className="flex items-center justify-between gap-2">
+                    <span className="text-xs truncate">
+                      {String(avatar.userData.full_name || avatar.userData.username || 'Student')}
+                    </span>
+                    <button
+                      onClick={() => setFollowingId(followingThem ? null : avatar.id)}
+                      className={`text-[10px] px-2 py-0.5 rounded-md shrink-0 transition-colors ${
+                        followingThem
+                          ? 'bg-blue-500 text-white'
+                          : 'bg-white/10 text-blue-200 hover:bg-white/20'
+                      }`}
+                    >
+                      {followingThem ? 'Stop' : 'Follow'}
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+            {followingId !== null && (
+              <div className="text-[10px] text-gray-400 mt-1.5">
+                Walking after them. Any movement key takes back the controls.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* The library terminal. */}
+      {atTerminal && !terminalOpen && !games.active && (
+        <div className="absolute left-1/2 -translate-x-1/2 bottom-44 sm:bottom-28 z-30 pointer-events-none">
+          <div className="bg-black/80 backdrop-blur-sm border border-sky-500/30 rounded-xl px-4 py-2 text-white text-center">
+            <div className="text-xs text-sky-300">Press E to use the terminal</div>
+          </div>
+        </div>
+      )}
+
+      {terminalOpen && (
+        <LibraryTerminalPanel
+          statistics={terminalStats}
+          loading={terminalLoading}
+          error={terminalError}
+          onClose={() => setTerminalOpen(false)}
+          onOpenCalculator={() => navigate('/gpa-calculator')}
+        />
+      )}
 
       {/* Standing in a study area offers to join it. Also DOM rather than a
           panel in the scene, for the same pointer-lock reason as the doors. */}
@@ -1499,6 +1954,7 @@ const CampusWithBackend = () => {
             {insideBuilding && interiorSpec ? (
               <BuildingInterior
                 kind={insideBuilding.interior}
+                lit={roomLit}
                 whiteboard={
                   insideBuilding.interior === 'lecture' ? (
                     <Whiteboard
@@ -1527,7 +1983,15 @@ const CampusWithBackend = () => {
                   <TitrationStation games={games} action={actionInput} position={[0, 0, 8]} />
                 )}
                 {insideBuilding.interior === 'library' && (
-                  <ShelfStation games={games} action={actionInput} position={[0, 0, 14]} />
+                  <>
+                    <ShelfStation games={games} action={actionInput} position={[0, 0, 14]} />
+                    <LibraryTerminalDesk awake={atTerminal} />
+                    <LibraryTerminalSensor active onNear={setAtTerminal} />
+                    <LibraryTerminalKey
+                      enabled={atTerminal && !terminalOpen && !games.active}
+                      onOpen={() => setTerminalOpen(true)}
+                    />
+                  </>
                 )}
                 {insideBuilding.interior === 'sports' && (
                   <BasketballStation
@@ -1537,6 +2001,24 @@ const CampusWithBackend = () => {
                     range={24}
                   />
                 )}
+                <CampusPropObjects placements={propPlacements} />
+
+                {/* The people in the room with you. A room used to be a local
+                    view that nobody else appeared in, so walking into the
+                    cafeteria with a friend put you both somewhere empty. The
+                    coordinates need no conversion: inside, everyone's camera
+                    is already in this room's space. */}
+                {visibleAvatars.map((avatar) => (
+                  <PlayerAvatar
+                    key={avatar.id}
+                    position={avatar.position}
+                    userData={avatar.userData}
+                    seed={avatar.id}
+                    bubble={bubbleFor(avatar.id, spokenMessages, bubbleClock)}
+                    speaking={isSpeaking(avatar.id, voice.participants)}
+                    isPresenting={isSameParticipant(voice.screenShare?.identity, avatar.id)}
+                  />
+                ))}
               </BuildingInterior>
             ) : (
               <>
@@ -1562,9 +2044,12 @@ const CampusWithBackend = () => {
                 />
                 <DashCourse games={games} />
 
-                {/* Other Players. Only drawn outdoors: the interiors are a
-                    local view of a room, not a shared copy of the world. */}
-                {playerAvatars.map((avatar) => (
+                <CampusPropObjects placements={propPlacements} />
+
+                {/* Everybody else who is also outdoors. Anyone inside a
+                    building is sending room coordinates, which drawn out here
+                    put them in the middle of the quad. */}
+                {visibleAvatars.map((avatar) => (
                   <PlayerAvatar
                     key={avatar.id}
                     position={avatar.position}
@@ -1580,12 +2065,6 @@ const CampusWithBackend = () => {
 
             <InteriorCameraPlacement insideBuilding={insideBuilding} />
             <ProximitySensor insideBuilding={insideBuilding} target={proximity} />
-            <ProximityInteraction
-              insideBuilding={insideBuilding}
-              onEnter={setInsideBuilding}
-              onExit={() => setInsideBuilding(null)}
-              touch={touchState}
-            />
             <ActionKeyBridge action={actionInput} />
             <Player
               campusHook={campusHook}
@@ -1593,6 +2072,10 @@ const CampusWithBackend = () => {
               touch={touchState}
               seated={seatedOn}
               emote={emote}
+              leaning={leaning}
+              follow={followTarget}
+              onEnter={setInsideBuilding}
+              onLeave={() => setInsideBuilding(null)}
             />
             <SeatController
               campusHook={campusHook}
@@ -1600,6 +2083,15 @@ const CampusWithBackend = () => {
               ownSeat={campusHook.ownSeat}
               onCandidate={setSeatCandidate}
               onEmote={setEmote}
+              leaning={leaning}
+              onLean={setLeaning}
+            />
+            <PropController
+              campusHook={campusHook}
+              insideBuilding={insideBuilding}
+              myRoom={myRoom}
+              onCandidate={setPropCandidate}
+              onCharge={setThrowCharge}
             />
 
             {/* Without a selector drei binds the lock handler to document, so every

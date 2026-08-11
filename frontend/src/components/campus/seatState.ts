@@ -93,3 +93,19 @@ export function seatsFromSnapshot(
   }
   return seats
 }
+
+/**
+ * The reader's own seat in a snapshot, which `seatsFromSnapshot` omits.
+ *
+ * The counterpart to that omission. Both halves of the snapshot have to be
+ * read, or the one player whose seat the client cares about most is the one it
+ * never learns about.
+ */
+export function ownSeatFromSnapshot(
+  positions: readonly { user_id: string | number; seat?: string | null }[],
+  selfId: string | number | null | undefined,
+): string | null {
+  if (selfId === null || selfId === undefined) return null
+  const mine = positions.find((position) => position.user_id === selfId)
+  return mine?.seat || null
+}

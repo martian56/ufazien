@@ -8,7 +8,14 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.db import IntegrityError, transaction
 from django.contrib.auth import get_user_model
-from .models import Lobby, LobbyMember, PlayerPosition, ChatMessage
+from .models import (
+    CampusProp,
+    ChatMessage,
+    Lobby,
+    LobbyMember,
+    PlayerPosition,
+    RoomLight,
+)
 
 User = get_user_model()
 
@@ -16,6 +23,16 @@ _ACTIVITIES = {value for value, _label in PlayerPosition.ACTIVITY_CHOICES}
 # Long enough for the ids the campus generates ("lecture-5-8", "cafe-11.5-13-0.8-1.4")
 # and short enough that the column cannot be used as free storage.
 _MAX_SEAT_ID = 48
+
+# The 2D frame is the world scaled by ten about (400, 300), and the campus is
+# clamped to 150 world units, so nothing legitimate reaches four figures either
+# side of the offsets. Generous, because it only has to catch nonsense.
+_MAX_COORDINATE = 100000
+
+# How far a thrown object may travel from the person who threw it, in the same
+# 2D units. Twenty-five world metres — a long throw, and short enough that a
+# modified client cannot post a ball across the campus into a locked room.
+_MAX_THROW = 250
 
 
 def _clean_heading(value):
@@ -42,14 +59,38 @@ def _clean_activity(value):
     return value if value in _ACTIVITIES else PlayerPosition.STANDING
 
 
-def _clean_seat(value):
-    """A seat id, or None. Bounded, because it is client-supplied text."""
+def _clean_token(value):
+    """
+    A bounded id, or None.
+
+    Seats, props and rooms are all client-supplied strings naming something in
+    the campus layout. None of them is trusted for anything but equality, and
+    all of them need the same guard: a non-empty string that cannot be used as
+    free storage.
+    """
     if not isinstance(value, str):
         return None
-    seat = value.strip()
-    if not seat or len(seat) > _MAX_SEAT_ID:
+    token = value.strip()
+    if not token or len(token) > _MAX_SEAT_ID:
         return None
-    return seat
+    return token
+
+
+def _clean_coordinate(value, limit=_MAX_COORDINATE):
+    """
+    A finite position in the 2D frame the campus uses, or None.
+
+    Same reasoning as the heading: this is written to a float column and read
+    back by every other client, so a NaN or an infinity here is a row that
+    breaks everyone's scene rather than just the sender's.
+    """
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(number) or abs(number) > limit:
+        return None
+    return number
 
 
 class LobbyConsumer(AsyncWebsocketConsumer):
@@ -109,6 +150,15 @@ class LobbyConsumer(AsyncWebsocketConsumer):
             # against everyone else for the life of the lobby.
             await self.release_seat()
 
+            # And put down whatever they were carrying, where they were
+            # standing. An object held by somebody who has closed the tab is
+            # one nobody can pick up again: the constraint that makes it theirs
+            # does not care that they have gone.
+            dropped = await self.drop_everything()
+            if dropped:
+                prop, x, y, room = dropped
+                await self.broadcast_prop(prop, held=False, x=x, y=y, room=room)
+
             # Notify other users that someone left
             await self.channel_layer.group_send(
                 self.lobby_group_name,
@@ -138,6 +188,12 @@ class LobbyConsumer(AsyncWebsocketConsumer):
                 await self.handle_take_seat(data)
             elif message_type == 'leave_seat':
                 await self.handle_leave_seat(data)
+            elif message_type == 'take_prop':
+                await self.handle_take_prop(data)
+            elif message_type == 'drop_prop':
+                await self.handle_drop_prop(data)
+            elif message_type == 'set_light':
+                await self.handle_set_light(data)
             elif message_type == 'chat_message':
                 await self.handle_chat_message(data)
             elif message_type == 'study_room_join':
@@ -197,7 +253,7 @@ class LobbyConsumer(AsyncWebsocketConsumer):
         Two people in one chair is only cosmetic, but the same reasoning
         applies to anything the world holds on a player's behalf.
         """
-        seat = _clean_seat(data.get('seat'))
+        seat = _clean_token(data.get('seat'))
         if not seat:
             await self.send(text_data=json.dumps({'type': 'seat_denied', 'seat': None}))
             return
@@ -215,6 +271,206 @@ class LobbyConsumer(AsyncWebsocketConsumer):
         """Stand up, releasing the seat for whoever wants it next."""
         await self.release_seat()
         await self.broadcast_seating(None, PlayerPosition.STANDING)
+
+    async def handle_take_prop(self, data):
+        """
+        Pick something up, if it is not already in somebody's hands.
+
+        Decided here for the same reason a chair is: a ball that two clients
+        each believe they are holding is two balls, and only one of them is
+        going to land where the other expects.
+        """
+        prop = _clean_token(data.get('prop'))
+        if not prop:
+            await self.send(text_data=json.dumps({'type': 'prop_denied', 'prop': None}))
+            return
+
+        taken = await self.claim_prop(prop)
+        if not taken:
+            await self.send(text_data=json.dumps({'type': 'prop_denied', 'prop': prop}))
+            return
+
+        await self.broadcast_prop(prop, held=True)
+
+    async def handle_drop_prop(self, data):
+        """
+        Put down or throw whatever the player is carrying.
+
+        The landing place comes from the client, which is what simulated the
+        arc, but the distance is the server's to bound: without it, "I dropped
+        it here" names any point on the campus, and an object is a thing you
+        can hide inside a wall or post into a room you are not in.
+        """
+        prop = _clean_token(data.get('prop'))
+        x = _clean_coordinate(data.get('x'))
+        y = _clean_coordinate(data.get('y'))
+        if not prop or x is None or y is None:
+            await self.send(text_data=json.dumps({'type': 'prop_denied', 'prop': prop}))
+            return
+
+        landed = await self.release_prop(prop, x, y)
+        if not landed:
+            # They were not holding it. Nothing to announce: the client that
+            # thinks otherwise is corrected by the next lobby snapshot.
+            await self.send(text_data=json.dumps({'type': 'prop_denied', 'prop': prop}))
+            return
+
+        await self.broadcast_prop(prop, held=False, x=landed[0], y=landed[1], room=landed[2])
+
+    async def handle_set_light(self, data):
+        """
+        Flick a room's lights, for everybody in it.
+
+        No permission check. A light switch that only the host may touch is a
+        worse feature than no light switch, and the worst anybody can do with
+        it is turn the lights off in a room they are standing in.
+        """
+        room = _clean_token(data.get('room'))
+        if not room:
+            return
+
+        on = bool(data.get('on'))
+        await self.store_light(room, on)
+        await self.channel_layer.group_send(
+            self.lobby_group_name,
+            {
+                'type': 'light_update',
+                'user_id': self.user.id,
+                'room': room,
+                'on': on,
+            }
+        )
+
+    async def broadcast_prop(self, prop, held, x=None, y=None, room=None):
+        await self.channel_layer.group_send(
+            self.lobby_group_name,
+            {
+                'type': 'prop_update',
+                'user_id': self.user.id,
+                'prop': prop,
+                'held': held,
+                'x': x,
+                'y': y,
+                'room': room,
+            }
+        )
+
+    async def prop_update(self, event):
+        await self.send(text_data=json.dumps({
+            'type': 'prop_update',
+            'user_id': event['user_id'],
+            'prop': event['prop'],
+            'held': event['held'],
+            'x': event['x'],
+            'y': event['y'],
+            'room': event['room'],
+        }))
+
+    async def light_update(self, event):
+        await self.send(text_data=json.dumps({
+            'type': 'light_update',
+            'user_id': event['user_id'],
+            'room': event['room'],
+            'on': event['on'],
+        }))
+
+    @database_sync_to_async
+    def claim_prop(self, prop):
+        """
+        Takes the object, or reports that somebody else has it.
+
+        The unique constraint is the authority, exactly as it is for seats: two
+        players reaching for the same ball in one tick both see it lying free.
+        """
+        try:
+            with transaction.atomic():
+                position, _ = PlayerPosition.objects.get_or_create(
+                    user=self.user, lobby_id=self.lobby_id
+                )
+                if position.holding and position.holding != prop:
+                    # One thing at a time. Otherwise a player accumulates the
+                    # whole campus and nothing can ever be picked up again.
+                    return False
+                if PlayerPosition.objects.filter(
+                    lobby_id=self.lobby_id, holding=prop
+                ).exclude(pk=position.pk).exists():
+                    return False
+                position.holding = prop
+                position.save(update_fields=['holding', 'last_updated'])
+                return True
+        except IntegrityError:
+            return False
+
+    @database_sync_to_async
+    def release_prop(self, prop, x, y):
+        """
+        Records where the object came to rest, and frees the hands holding it.
+
+        Returns the resting place actually stored, which is not always the one
+        asked for: the throw is clamped to `_MAX_THROW` of the thrower. Returns
+        None if this player was not holding the thing they say they dropped.
+        """
+        with transaction.atomic():
+            position = PlayerPosition.objects.filter(
+                lobby_id=self.lobby_id, user=self.user, holding=prop
+            ).first()
+            if position is None:
+                return None
+
+            # Clamped along the line from the thrower, so an over-long throw
+            # becomes a shorter one in the same direction rather than a throw
+            # that does not happen.
+            dx = x - position.x
+            dy = y - position.y
+            distance = math.hypot(dx, dy)
+            if distance > _MAX_THROW:
+                scale = _MAX_THROW / distance
+                x = position.x + dx * scale
+                y = position.y + dy * scale
+
+            room = position.current_room
+            position.holding = None
+            position.save(update_fields=['holding', 'last_updated'])
+            CampusProp.objects.update_or_create(
+                lobby_id=self.lobby_id,
+                prop=prop,
+                defaults={'x': x, 'y': y, 'room': room},
+            )
+            return x, y, room
+
+    @database_sync_to_async
+    def drop_everything(self):
+        """
+        Let go of whatever is being carried, wherever the player stands.
+
+        Called on disconnect, alongside releasing the seat. An object held by
+        somebody who has closed the tab is one nobody can ever pick up again,
+        because the constraint that makes it theirs does not care that they
+        have gone.
+        """
+        position = PlayerPosition.objects.filter(
+            lobby_id=self.lobby_id, user=self.user
+        ).exclude(holding=None).first()
+        if position is None:
+            return None
+
+        prop = position.holding
+        position.holding = None
+        position.save(update_fields=['holding', 'last_updated'])
+        CampusProp.objects.update_or_create(
+            lobby_id=self.lobby_id,
+            prop=prop,
+            defaults={'x': position.x, 'y': position.y, 'room': position.current_room},
+        )
+        return prop, position.x, position.y, position.current_room
+
+    @database_sync_to_async
+    def store_light(self, room, on):
+        RoomLight.objects.update_or_create(
+            lobby_id=self.lobby_id,
+            room=room,
+            defaults={'on': on, 'changed_by': self.user},
+        )
 
     async def broadcast_seating(self, seat, activity):
         await self.channel_layer.group_send(
@@ -419,6 +675,10 @@ class LobbyConsumer(AsyncWebsocketConsumer):
             # waved. The chair was then offered to the next person to walk up,
             # who pressed the key and had the claim refused.
             position_data['seat'] = position.seat if position else None
+            # And what is in their hands, for the same reason: a frame that
+            # says nothing about it reads as empty-handed, so the object would
+            # blink out of the carrier's hands every time they moved.
+            position_data['holding'] = position.holding if position else None
 
             # Reuse the row rather than letting update_or_create fetch it a
             # second time. Position frames arrive ten times a second per
@@ -461,12 +721,21 @@ class LobbyConsumer(AsyncWebsocketConsumer):
             
             # Get recent chat messages (last 50)
             messages = list(ChatMessage.objects.filter(lobby=lobby).select_related('user').order_by('-created_at')[:50])
-            
+
+            # Where the loose objects are lying, and which rooms are dark.
+            # Both are things the world remembers between visits, so somebody
+            # arriving has to be told them or they see the room as it was
+            # built rather than as the last person left it.
+            props = list(CampusProp.objects.filter(lobby=lobby))
+            lights = list(RoomLight.objects.filter(lobby=lobby))
+
             return {
                 'lobby': lobby,
                 'members': members,
                 'positions': positions,
                 'messages': messages,
+                'props': props,
+                'lights': lights,
             }
         except Lobby.DoesNotExist:
             return None
@@ -501,6 +770,7 @@ class LobbyConsumer(AsyncWebsocketConsumer):
                 'heading': getattr(position, 'heading', 0.0),
                 'activity': getattr(position, 'activity', PlayerPosition.STANDING),
                 'seat': getattr(position, 'seat', None),
+                'holding': getattr(position, 'holding', None),
                 'is_moving': getattr(position, 'is_moving', False),
                 # The room the player is standing in. Left out of this snapshot
                 # while `position_update` sent it all along, so someone joining
@@ -539,4 +809,11 @@ class LobbyConsumer(AsyncWebsocketConsumer):
             'members': members,
             'positions': positions,
             'messages': messages,
+            'props': [
+                {'prop': prop.prop, 'x': prop.x, 'y': prop.y, 'room': prop.room}
+                for prop in lobby_state['props']
+            ],
+            'lights': [
+                {'room': light.room, 'on': light.on} for light in lobby_state['lights']
+            ],
         }))

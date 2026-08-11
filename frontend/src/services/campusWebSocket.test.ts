@@ -53,3 +53,47 @@ describe('the event registry', () => {
     expect(later).toHaveBeenCalled()
   })
 })
+
+/**
+ * Listener lifetime.
+ *
+ * This is a module singleton, so it outlives the component subscribing to it,
+ * and `disconnect()` leaves the callbacks in place. Joining a second lobby ran
+ * the hook's registration a second time on top of the first, so every chat
+ * message arrived once per past connection and the stale handlers went on
+ * writing to state belonging to a render that no longer existed.
+ */
+describe('listener lifetime', () => {
+  it('forgets everything on demand', () => {
+    const stale = vi.fn()
+    campusWebSocket.on('chatMessage', stale)
+    campusWebSocket.clearListeners()
+    campusWebSocket.emit('chatMessage', { message: 'hi' })
+    expect(stale).not.toHaveBeenCalled()
+  })
+
+  it('does not deliver one message twice after a second registration', () => {
+    // The symptom, rather than the mechanism: subscribe, reconnect, subscribe
+    // again, and one message must still arrive once.
+    const register = (seen: () => void) => {
+      campusWebSocket.clearListeners()
+      campusWebSocket.on('chatMessage', seen)
+    }
+
+    const seen = vi.fn()
+    register(seen)
+    campusWebSocket.disconnect()
+    register(seen)
+
+    campusWebSocket.emit('chatMessage', { message: 'hello' })
+    expect(seen).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaves a fresh registration working', () => {
+    const heard = vi.fn()
+    campusWebSocket.clearListeners()
+    campusWebSocket.on('seatUpdate', heard)
+    campusWebSocket.emit('seatUpdate', { user_id: 1, seat: 'cafe-1' })
+    expect(heard).toHaveBeenCalledTimes(1)
+  })
+})

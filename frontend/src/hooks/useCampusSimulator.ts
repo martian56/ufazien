@@ -9,6 +9,7 @@ import campusApi from '../services/campusApi';
 import { errorMessage } from '../lib/api/errors';
 import {
     NO_SEATS,
+    ownSeatFromSnapshot,
     seatAfterDenial,
     seatsFromSnapshot,
     withSeat,
@@ -77,6 +78,8 @@ export interface PlayerPosition {
   activity?: string
   /** The seat they hold, if any. Assigned by the server, never the client. */
   seat?: string | null
+  /** What they are carrying, if anything. Server-assigned in the same way. */
+  holding?: string | null
   is_moving?: boolean
   current_room?: string | null
   username?: string
@@ -122,6 +125,13 @@ interface SentPosition {
     current_room?: string | null
 }
 
+/** Where a loose object came to rest, in the 2D frame positions use. */
+export interface PropRest {
+    x: number
+    y: number
+    room: string | null
+}
+
 export function playerPositionFromUpdate(data: {
   position: PlayerPosition
   username?: string
@@ -138,6 +148,7 @@ export function playerPositionFromUpdate(data: {
     heading: data.position.heading ?? 0,
     activity: data.position.activity || 'standing',
     seat: data.position.seat ?? null,
+    holding: data.position.holding ?? null,
     is_moving: data.position.is_moving || false,
     current_room: data.position.current_room ?? null,
     last_updated: data.last_updated ?? new Date().toISOString(),
@@ -180,6 +191,30 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
      * person to walk up was offered it.
      */
     const [seatedPlayers, setSeatedPlayers] = useState<SeatMap>(NO_SEATS);
+    /**
+     * Who is carrying what.
+     *
+     * The same shape as the seating map, and for the same reasons: it is a
+     * server-owned claim, it arrives in its own message, and it outlives any
+     * single position frame.
+     */
+    const [carriedProps, setCarriedProps] = useState<SeatMap>(NO_SEATS);
+    /** The object this player is holding, as the server sees it. */
+    const [ownProp, setOwnProp] = useState<string | null>(null);
+    /**
+     * Where the loose objects are lying.
+     *
+     * Only the ones that have been moved. A prop with no entry is wherever the
+     * campus layout puts it, so a fresh lobby needs no rows at all.
+     */
+    const [propPositions, setPropPositions] = useState<ReadonlyMap<string, PropRest>>(new Map());
+    /**
+     * Which rooms have had their lights turned off.
+     *
+     * Absence means lit, which is how every room starts, so a lobby nobody has
+     * touched carries no state at all.
+     */
+    const [roomLights, setRoomLights] = useState<ReadonlyMap<string, boolean>>(new Map());
     const [studyRooms, setStudyRooms] = useState<any[]>([]);
 
     // Chat state
@@ -262,6 +297,13 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
      * Set up WebSocket event listeners
      */
     const setupWebSocketListeners = useCallback(() => {
+        // Start from nothing. The socket service is a module singleton and
+        // keeps its callbacks across a disconnect, so joining a second lobby
+        // used to leave the first lobby's handlers subscribed as well: chat
+        // messages arrived once per past connection, and the stale handlers
+        // went on writing to state that belonged to a dead render.
+        campusWebSocket.clearListeners();
+
         // Connection status events
         campusWebSocket.on('connected', () => {
             setIsConnected(true);
@@ -300,6 +342,37 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
             });
             setPlayerPositions(positionsMap);
             setSeatedPlayers(seatsFromSnapshot(data.positions || [], currentUserId));
+            // Including our own chair, which the map above deliberately leaves
+            // out. Disconnecting releases a seat, so this is usually null — but
+            // the snapshot is the server's answer either way, and deriving
+            // `ownSeat` from anything else is how the two disagree.
+            setOwnSeat(ownSeatFromSnapshot(data.positions || [], currentUserId));
+
+            // What everybody is carrying, and where the things nobody is
+            // carrying have been left. Both are what the world remembers
+            // between visits: without them somebody arriving sees the room as
+            // it was built rather than as the last person left it.
+            const carried = new Map<string | number, string>();
+            (data.positions || []).forEach((pos: any) => {
+                if (pos.holding) carried.set(pos.user_id, pos.holding);
+            });
+            setCarriedProps(carried);
+            setOwnProp(
+                (data.positions || []).find((pos: any) => pos.user_id === currentUserId)?.holding
+                    || null,
+            );
+
+            const rested = new Map<string, PropRest>();
+            (data.props || []).forEach((prop: any) => {
+                rested.set(prop.prop, { x: prop.x, y: prop.y, room: prop.room ?? null });
+            });
+            setPropPositions(rested);
+
+            const lights = new Map<string, boolean>();
+            (data.lights || []).forEach((light: any) => {
+                lights.set(String(light.room), Boolean(light.on));
+            });
+            setRoomLights(lights);
         });
 
         // User joined lobby
@@ -329,6 +402,7 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
             // Their chair is free again. The server releases it on disconnect;
             // this is the same fact reaching the people still in the room.
             setSeatedPlayers(prev => withoutPlayer(prev, data.user_id));
+            setCarriedProps(prev => withoutPlayer(prev, data.user_id));
         });
 
         // Position update received
@@ -348,6 +422,7 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
             // sender chose. Kept in step here so a player who sat down before
             // we ever saw them still occupies their chair in this map.
             setSeatedPlayers(prev => withSeat(prev, data.user_id, data.position?.seat));
+            setCarriedProps(prev => withSeat(prev, data.user_id, data.position?.holding));
         });
 
         // Somebody sat down or stood up. Carried separately from position
@@ -380,6 +455,41 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
         // Somebody else got the chair first.
         campusWebSocket.on('seatDenied', (data: any) => {
             setOwnSeat(prev => seatAfterDenial(prev, data?.seat));
+        });
+
+        // Somebody picked something up or put it down. Carried in its own
+        // message for the same reasons seating is: the server decides it, and
+        // it has to survive the next position frame.
+        campusWebSocket.on('propUpdate', (data: any) => {
+            const held = Boolean(data.held);
+            if (data.user_id === currentUserIdRef.current) {
+                setOwnProp(held ? (data.prop ?? null) : null);
+            }
+            // `withSeat` is the generic "this player holds this token" update;
+            // a chair and a ball are the same shape of claim.
+            setCarriedProps(prev => withSeat(prev, data.user_id, held ? data.prop : null));
+
+            if (!held && data.prop && typeof data.x === 'number' && typeof data.y === 'number') {
+                setPropPositions(prev => {
+                    const next = new Map(prev);
+                    next.set(data.prop, { x: data.x, y: data.y, room: data.room ?? null });
+                    return next;
+                });
+            }
+        });
+
+        campusWebSocket.on('propDenied', (data: any) => {
+            // Same rule as a refused chair: only give up the one it names.
+            setOwnProp(prev => seatAfterDenial(prev, data?.prop));
+        });
+
+        campusWebSocket.on('lightUpdate', (data: any) => {
+            if (!data?.room) return;
+            setRoomLights(prev => {
+                const next = new Map(prev);
+                next.set(String(data.room), Boolean(data.on));
+                return next;
+            });
         });
 
         // Chat message received
@@ -523,8 +633,32 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
     }, []);
 
     const leaveSeat = useCallback(() => {
+        // No optimistic clear. Standing up is the server's to confirm, exactly
+        // as sitting down is: if the socket is down the message never lands,
+        // and clearing here would show a player on their feet while the server
+        // still holds their chair against everybody else.
         campusWebSocket.leaveSeat();
-        setOwnSeat(null);
+    }, []);
+
+    /** Reach for something. The answer is `propUpdate` or `propDenied`. */
+    const takeProp = useCallback((prop: string) => {
+        campusWebSocket.takeProp(prop);
+    }, []);
+
+    /**
+     * Put down or throw what is being carried, at a point in the 2D frame.
+     *
+     * No optimistic clear, exactly as with standing up: the server decides
+     * where it landed, and it may move the landing place to bring an
+     * over-long throw back within range.
+     */
+    const dropProp = useCallback((prop: string, x: number, y: number) => {
+        campusWebSocket.dropProp(prop, x, y);
+    }, []);
+
+    /** Flick a room's lights for everybody in it. */
+    const setRoomLight = useCallback((room: string, on: boolean) => {
+        campusWebSocket.setLight(room, on);
     }, []);
 
     const joinStudyRoom = useCallback((roomId: string) => {
@@ -563,6 +697,10 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
                 setPlayerPositions(new Map());
                 setSeatedPlayers(NO_SEATS);
                 setOwnSeat(null);
+                setCarriedProps(NO_SEATS);
+                setOwnProp(null);
+                setPropPositions(new Map());
+                setRoomLights(new Map());
                 setChatMessages([]);
                 
                 // Disconnect WebSocket
@@ -602,6 +740,10 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
         setPlayerPositions(new Map());
         setSeatedPlayers(NO_SEATS);
         setOwnSeat(null);
+        setCarriedProps(NO_SEATS);
+        setOwnProp(null);
+        setPropPositions(new Map());
+        setRoomLights(new Map());
         setChatMessages([]);
         setError(null);
     }, []);
@@ -735,6 +877,13 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
         seatedPlayers,
         takeSeat,
         leaveSeat,
+        ownProp,
+        carriedProps,
+        propPositions,
+        takeProp,
+        dropProp,
+        roomLights,
+        setRoomLight,
         getNearbyPlayers,
 
         // Utilities

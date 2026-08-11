@@ -22,7 +22,7 @@ import {
   VENDING_MACHINES,
   libraryAisleHalf,
 } from './interiorPhysics'
-import { NoticeBoard, ScheduleBoard } from './CampusBoards'
+import { NoticeBoard, ScheduleBoard, SitesBoard } from './CampusBoards'
 import { INTERIOR_SPECS, type FloorKind, type InteriorSpec } from './interiorSpecs'
 import { LECTURE_ROWS, LECTURE_SEATING } from './lectureSeating'
 import {
@@ -78,8 +78,26 @@ function floorMaterial(kind: FloorKind) {
  * the lights are placed as a grid rather than as one bulb at the centre, which
  * is what made every old interior look like a cave with a torch in it.
  */
-function RoomShell({ spec, children }: { spec: InteriorSpec; children?: React.ReactNode }) {
+function RoomShell({
+  spec,
+  lit = true,
+  children,
+}: {
+  spec: InteriorSpec
+  /**
+   * Whether the lights are on.
+   *
+   * Off is dim rather than black: a room nobody can see is a room nobody can
+   * walk out of, and the emissive fittings staying faintly visible is what
+   * tells you where the switch you just used was.
+   */
+  lit?: boolean
+  children?: React.ReactNode
+}) {
   const size = spec.halfExtent * 2
+  // One factor, applied to every light in the room, so the switch cannot leave
+  // a fitting burning that nothing turned off.
+  const level = lit ? spec.lightIntensity : spec.lightIntensity * 0.12
   const floor = floorMaterial(spec.floor)
   const ceiling = ceilingTexture()
 
@@ -161,13 +179,16 @@ function RoomShell({ spec, children }: { spec: InteriorSpec; children?: React.Re
         )}
       </mesh>
 
-      <ambientLight intensity={0.55 * spec.lightIntensity} color={spec.lightColor} />
+      <ambientLight
+        intensity={(lit ? 0.55 : 0.28) * level}
+        color={lit ? spec.lightColor : '#8fa6c8'}
+      />
       {/* One shadow-casting light, so furniture is grounded, and a ring of
           cheap ones for fill. Nine shadow maps would cost more than the whole
           rest of the scene. */}
       <pointLight
         position={[0, spec.ceiling - 1.2, 0]}
-        intensity={70 * spec.lightIntensity}
+        intensity={70 * level}
         distance={spec.halfExtent * 3}
         color={spec.lightColor}
         castShadow
@@ -178,7 +199,7 @@ function RoomShell({ spec, children }: { spec: InteriorSpec; children?: React.Re
         <group key={i}>
           <pointLight
             position={[x, spec.ceiling - 1.2, z]}
-            intensity={22 * spec.lightIntensity}
+            intensity={22 * level}
             distance={spec.halfExtent * 1.6}
             color={spec.lightColor}
           />
@@ -186,9 +207,11 @@ function RoomShell({ spec, children }: { spec: InteriorSpec; children?: React.Re
           <mesh position={[x, spec.ceiling - 0.25, z]}>
             <boxGeometry args={[2.4, 0.12, 0.7]} />
             <meshStandardMaterial
-              color="#ffffff"
+              color={lit ? '#ffffff' : '#3b4048'}
               emissive={spec.lightColor}
-              emissiveIntensity={1.6}
+              // A fitting that still glows with the lights off is the one
+              // thing that gives away that they are off rather than broken.
+              emissiveIntensity={lit ? 1.6 : 0.08}
               toneMapped={false}
             />
           </mesh>
@@ -1000,7 +1023,10 @@ function StudentCentreInterior({ spec }: { spec: InteriorSpec }) {
 
       {/* The latest posts from the blog, rather than another blank panel. */}
       <NoticeBoard position={[half - 0.55, 4.6, 6]} rotation={-Math.PI / 2} />
-      <WallPanel position={[-half + 0.4, 5, 12]} rotation={Math.PI / 2} size={[5, 3]} panelColor="#eef3f6" frame={spec.accent} />
+      {/* And the sites students have actually published, opposite. The blank
+          panel that used to hang here was the last decoration in the room
+          standing in for something the platform already knows. */}
+      <SitesBoard position={[-half + 0.55, 4.6, 12]} rotation={Math.PI / 2} />
     </group>
   )
 }
@@ -1219,10 +1245,13 @@ const CONTENTS: Record<InteriorKind, (props: InteriorProps) => React.ReactElemen
  */
 export function BuildingInterior({
   kind = 'lecture',
+  lit = true,
   children,
   whiteboard,
 }: {
   kind?: InteriorKind
+  /** Whether the room's lights are on, which everybody in it shares. */
+  lit?: boolean
   children?: React.ReactNode
   /** Mounted by the page, which owns the socket the strokes travel over. */
   whiteboard?: React.ReactNode
@@ -1231,7 +1260,7 @@ export function BuildingInterior({
   const Contents = CONTENTS[kind] ?? LectureInterior
 
   return (
-    <RoomShell spec={spec}>
+    <RoomShell spec={spec} lit={lit}>
       <Contents spec={spec} whiteboard={whiteboard} />
       {children}
     </RoomShell>

@@ -10,11 +10,14 @@ import {
   QUAD_CENTRE,
   QUAD_RADIUS,
   SCENERY_BLOCKS,
+  ALCOVE_DEPTH,
   daylight,
+  doorwayFor,
   campusBenches,
   campusLamps,
   campusTrees,
   type BuildingStyle,
+  type CampusBuilding,
   type DaylightConfig,
   type SceneryBlock,
   type TimeOfDay,
@@ -951,9 +954,55 @@ export function SpeakingRing({ accent = '#6ee7a8' }: { accent?: string }) {
  * The main building gets its own component. It is the one real building on
  * this campus and deserves more than an extruded box with windows on it.
  */
+/**
+ * The opening in a facade, as something you can see.
+ *
+ * The collider already has the notch — this is what stops the notch being
+ * invisible. A recess set into the wall, a frame around it, and a canopy over
+ * it, so the way in is findable from across the quad rather than being a place
+ * where the wall happens not to stop you.
+ */
+function Doorway({ building }: { building: CampusBuilding }) {
+  const door = doorwayFor(building)
+  const height = 3.4
+  const width = door.halfW * 2
+
+  return (
+    <group position={[door.x, 0, door.z]}>
+      {/* The recess. Pushed a hair proud of the facade so it does not fight
+          the wall behind it for the same pixels. */}
+      <mesh position={[0, height / 2, -ALCOVE_DEPTH / 2 + 0.01]}>
+        <boxGeometry args={[width, height, ALCOVE_DEPTH]} />
+        <meshStandardMaterial color="#12161c" roughness={0.95} />
+      </mesh>
+      {/* Frame: two jambs and a head. */}
+      {[-1, 1].map((side) => (
+        <mesh key={side} position={[side * (door.halfW + 0.16), height / 2, 0.08]} castShadow>
+          <boxGeometry args={[0.32, height + 0.4, 0.5]} />
+          <meshStandardMaterial color="#d8d2c6" roughness={0.7} />
+        </mesh>
+      ))}
+      <mesh position={[0, height + 0.2, 0.08]} castShadow>
+        <boxGeometry args={[width + 0.64, 0.4, 0.5]} />
+        <meshStandardMaterial color="#d8d2c6" roughness={0.7} />
+      </mesh>
+      {/* A canopy, which is most of what reads as an entrance at a distance. */}
+      <mesh position={[0, height + 0.55, 0.7]} castShadow>
+        <boxGeometry args={[width + 1.6, 0.18, 1.6]} />
+        <meshStandardMaterial color="#b6ad9c" roughness={0.8} />
+      </mesh>
+      {/* And a light under it, so the door is findable at night. */}
+      <pointLight position={[0, height - 0.2, 0.6]} intensity={12} distance={9} color="#ffe6bb" />
+    </group>
+  )
+}
+
 export function CampusBuildings({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay | string }) {
   return (
     <group>
+      {CAMPUS_BUILDINGS.map((building) => (
+        <Doorway key={`door-${building.id}`} building={building} />
+      ))}
       {CAMPUS_BUILDINGS.map((building) =>
         building.interior === 'ufaz' ? (
           <UfazBuilding key={building.id} building={building} timeOfDay={timeOfDay} />
