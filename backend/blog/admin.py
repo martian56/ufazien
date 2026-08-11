@@ -1,7 +1,7 @@
 from django.contrib import admin
 from .models import (
     BlogPost, Category, Tag, Comment,
-    BlogPostLike, BlogPostBookmark, CommentLike
+    BlogPostLike, BlogPostBookmark, CommentLike, BlogPostView
 )
 class BlogPostAdmin(admin.ModelAdmin):
     list_display = ('title', 'author', 'category', 'published_at')
@@ -41,3 +41,15 @@ admin.site.register(Comment, CommentAdmin)
 admin.site.register(BlogPostLike, BlogPostLikeAdmin)
 admin.site.register(BlogPostBookmark, BlogPostBookmarkAdmin)
 admin.site.register(CommentLike, CommentLikeAdmin)
+
+
+@admin.register(BlogPostView)
+class BlogPostViewAdmin(admin.ModelAdmin):
+    """One row per read. This is what the view counts on posts are built from."""
+
+    list_display = ['post', 'user', 'viewed_at']
+    list_filter = ['viewed_at']
+    search_fields = ['post__title', 'user__username', 'user__first_name', 'user__last_name']
+    readonly_fields = ['viewed_at']
+    list_select_related = ['post', 'user']
+    date_hierarchy = 'viewed_at'

@@ -1,5 +1,8 @@
 from django.contrib import admin
-from .models import Lobby, LobbyMember, PlayerPosition, StudyRoom, ChatMessage, SavedLobby
+from .models import (
+    Lobby, LobbyMember, PlayerPosition, StudyRoom, ChatMessage, SavedLobby,
+    CampusProp, RoomLight,
+)
 
 
 @admin.register(Lobby)
@@ -56,3 +59,25 @@ class SavedLobbyAdmin(admin.ModelAdmin):
     list_display = ['user', 'lobby', 'saved_at']
     list_filter = ['saved_at']
     search_fields = ['user__username', 'lobby__name']
+
+
+@admin.register(CampusProp)
+class CampusPropAdmin(admin.ModelAdmin):
+    """Where a carryable object was put down, per lobby."""
+
+    list_display = ['prop', 'lobby', 'room', 'x', 'y', 'updated_at']
+    list_filter = ['room', 'updated_at']
+    search_fields = ['prop', 'room', 'lobby__name', 'lobby__id']
+    readonly_fields = ['updated_at']
+    list_select_related = ['lobby']
+
+
+@admin.register(RoomLight)
+class RoomLightAdmin(admin.ModelAdmin):
+    """Whether a room's lights are on, and who last flipped them."""
+
+    list_display = ['room', 'lobby', 'on', 'changed_by', 'changed_at']
+    list_filter = ['on', 'room', 'changed_at']
+    search_fields = ['room', 'lobby__name', 'lobby__id', 'changed_by__username']
+    readonly_fields = ['changed_at']
+    list_select_related = ['lobby', 'changed_by']
