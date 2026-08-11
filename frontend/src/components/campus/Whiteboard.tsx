@@ -26,11 +26,20 @@ import type { Vec3 } from './campusLayout'
 
 const CANVAS = 1024
 
+/**
+ * Module scope, not a default parameter.
+ *
+ * A default is evaluated on every call, so `size = [7, 3.6]` was a fresh array
+ * identity per render — and the memo below keys on it, so every render threw
+ * away a 1024-pixel canvas and its texture and built new ones.
+ */
+const DEFAULT_SIZE: [number, number] = [7, 3.6]
+
 export default function Whiteboard({
   board,
   position,
   rotation = 0,
-  size = [7, 3.6],
+  size = DEFAULT_SIZE,
   messages,
   onStroke,
   enabled = true,
@@ -53,16 +62,19 @@ export default function Whiteboard({
   // halfway through a lecture sees what is already on the board.
   const strokes = useMemo(() => strokesFromMessages(messages, board), [messages, board])
 
+  // Keyed on the numbers, not the array: a caller passing an inline literal
+  // would otherwise rebuild the canvas on every render too.
+  const [sizeW, sizeH] = size
   const { texture, canvas } = useMemo(() => {
     if (typeof document === 'undefined') return { texture: null, canvas: null }
     const element = document.createElement('canvas')
     element.width = CANVAS
-    element.height = Math.round(CANVAS * (size[1] / size[0]))
+    element.height = Math.round(CANVAS * (sizeH / sizeW))
     const made = new THREE.CanvasTexture(element)
     made.colorSpace = THREE.SRGBColorSpace
     made.anisotropy = 4
     return { texture: made, canvas: element }
-  }, [size])
+  }, [sizeW, sizeH])
 
   useEffect(() => () => texture?.dispose(), [texture])
 
@@ -98,6 +110,11 @@ export default function Whiteboard({
 
   useEffect(() => repaint(null), [repaint])
 
+  // Abandon anything half-drawn when the board goes inert.
+  useEffect(() => {
+    if (!enabled) drawing.current = null
+  }, [enabled])
+
   /** Where on the board a pointer event landed, as 0..1. */
   const toBoard = (event: ThreeEvent<PointerEvent>): StrokePoint | null => {
     const uv = event.uv
@@ -125,6 +142,9 @@ export default function Whiteboard({
   const handleUp = () => {
     const points = drawing.current
     drawing.current = null
+    // Down and move both check this; up did not, so locking the pointer
+    // mid-stroke still published whatever had been drawn so far.
+    if (!enabled) return
     // One point is a stray click, not a stroke, and the decoder rejects it —
     // so sending it would put a message in the backlog that draws nothing.
     if (!points || points.length < 2) return

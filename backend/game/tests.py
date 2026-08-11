@@ -291,13 +291,11 @@ class LobbyConsumerTests(TestCase):
         self.assertIn(self.host.id, rooms)
         self.assertEqual(rooms[self.host.id], "3")
 
-    def _drain(self, *communicators):
+    async def _drain(self, *communicators):
         """Swallow the state and join frames each side gets on connect."""
-        async def go():
-            for c in communicators:
-                while await c.receive_nothing(timeout=0.2) is False:
-                    await c.receive_from(timeout=1)
-        return go()
+        for c in communicators:
+            while await c.receive_nothing(timeout=0.2) is False:
+                await c.receive_from(timeout=1)
 
     @staticmethod
     def _seating(lobby_id):

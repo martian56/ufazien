@@ -404,12 +404,22 @@ class LobbyConsumer(AsyncWebsocketConsumer):
             position = PlayerPosition.objects.filter(lobby=lobby, user=self.user).first()
             if position and position.seat and defaults.get('activity') == PlayerPosition.STANDING:
                 defaults['activity'] = PlayerPosition.SITTING
+                # And in the payload the caller broadcasts. `defaults` is a
+                # filtered copy, so correcting only that stored the player as
+                # sitting and announced them to every peer as standing: the
+                # avatar left the chair everywhere while the server still held
+                # the seat.
+                position_data['activity'] = PlayerPosition.SITTING
 
-            position, created = PlayerPosition.objects.update_or_create(
-                lobby=lobby,
-                user=self.user,
-                defaults=defaults
-            )
+            # Reuse the row rather than letting update_or_create fetch it a
+            # second time. Position frames arrive ten times a second per
+            # player, so this is the hot path.
+            if position is None:
+                return PlayerPosition.objects.create(lobby=lobby, user=self.user, **defaults)
+
+            for field, value in defaults.items():
+                setattr(position, field, value)
+            position.save(update_fields=[*defaults, 'last_updated'])
             return position
         except Lobby.DoesNotExist:
             return None

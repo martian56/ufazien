@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 
 import {
+  MAX_BOARD_ID,
+  MAX_MESSAGE_LENGTH,
   MAX_POINTS,
   MAX_STROKES,
   STROKE_COLORS,
@@ -54,8 +56,9 @@ describe('the wire format', () => {
       color: STROKE_COLORS[0],
       points: Array.from({ length: 200 }, (_, i) => ({ x: i / 200, y: (i % 7) / 7 })),
     }
-    // ChatMessage.message is capped at 500 characters by the model.
-    expect(encodeStroke(long).length).toBeLessThanOrEqual(500)
+    // ChatMessage.message is capped at 500 characters by the model, and the
+    // worst case is what matters: five-character coordinates throughout.
+    expect(encodeStroke(long).length).toBeLessThanOrEqual(MAX_MESSAGE_LENGTH)
   })
 
   it('caps the points rather than truncating the message', () => {
@@ -96,6 +99,30 @@ describe('decoding untrusted input', () => {
     expect(decodeStroke(`wb1:${long}|${STROKE_COLORS[0]}|0,0 1,1`)).toBeNull()
   })
 
+  it('rejects a board id carrying the separator', () => {
+    // It would encode a message every client rejects, so the stroke reaches
+    // everybody and draws nothing at all.
+    expect(decodeStroke(`wb1:a|b|${STROKE_COLORS[0]}|0,0 1,1`)).toBeNull()
+    expect(() => encodeStroke({ ...stroke, board: 'a|b' })).toThrow()
+    expect(() => encodeStroke({ ...stroke, board: 'x'.repeat(MAX_BOARD_ID + 1) })).toThrow()
+  })
+
+  it('rejects a truncated coordinate pair', () => {
+    // `Number('')` is 0, so this used to decode to a point on the top edge.
+    expect(decodeStroke(`wb1:lecture|${STROKE_COLORS[0]}|0.5, 1,1`)).toBeNull()
+    expect(decodeStroke(`wb1:lecture|${STROKE_COLORS[0]}|,0.5 1,1`)).toBeNull()
+  })
+
+  it('stays inside the transport limit for the longest legal board id', () => {
+    const worst = {
+      board: 'x'.repeat(MAX_BOARD_ID),
+      color: STROKE_COLORS[0],
+      // 0.123 style coordinates are the widest `round` produces.
+      points: Array.from({ length: MAX_POINTS * 2 }, () => ({ x: 0.123, y: 0.987 })),
+    }
+    expect(encodeStroke(worst).length).toBeLessThanOrEqual(MAX_MESSAGE_LENGTH)
+  })
+
   it('clamps coordinates onto the board rather than drawing off it', () => {
     const decoded = decodeStroke(`wb1:lecture|${STROKE_COLORS[0]}|-5,9 0.5,0.5`)
     expect(decoded?.points[0]).toEqual({ x: 0, y: 1 })
@@ -119,7 +146,7 @@ describe('accumulating a board', () => {
   })
 
   it('drops the oldest once the board is full', () => {
-    let strokes: Stroke[] = []
+    let strokes: readonly Stroke[] = []
     for (let i = 0; i < MAX_STROKES + 20; i++) {
       strokes = addStroke(strokes, { ...stroke, points: [{ x: i / 500, y: 0 }, { x: 1, y: 1 }] }, 'lecture')
     }

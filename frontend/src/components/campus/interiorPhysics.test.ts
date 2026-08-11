@@ -109,7 +109,10 @@ describe('colliders do not trap the player', () => {
           const a = colliders[i]
           const b = colliders[j]
           const gap = separation(a, b)
-          const tooClose = gap > 0 && gap < minGap
+          // A negative gap is an overlap, which is worse than a narrow slot —
+          // and `gap > 0` used to filter exactly those out, so the one case
+          // this test exists to catch was the one it could never fail on.
+          const tooClose = gap < minGap
           expect(tooClose, `${kind}: ${describe_(a)} and ${describe_(b)} are ${gap.toFixed(2)} apart`).toBe(false)
         }
       }
@@ -234,20 +237,40 @@ describe('the board is visible from every seat', () => {
  * bounding-circle gap of 0.55, which reads as a trap that is not there.
  */
 function separation(a: Collider, b: Collider): number {
-  const boxA = !('radius' in a) && !a.ry
-  const boxB = !('radius' in b) && !b.ry
-  if (boxA && boxB) {
+  const circleA = 'radius' in a
+  const circleB = 'radius' in b
+
+  if (!circleA && !circleB && !a.ry && !b.ry) {
     const gapX = Math.abs(a.x - b.x) - (a.halfW + b.halfW)
     const gapZ = Math.abs(a.z - b.z) - (a.halfD + b.halfD)
-    // Overlapping on both axes means they intersect; otherwise the gap is the
-    // one on whichever axis they are actually separated along.
-    if (gapX <= 0 && gapZ <= 0) return Math.max(gapX, gapZ)
+    // Negative on both axes means they intersect, and the value is then how
+    // deep. Otherwise it is the gap along whichever axis separates them.
     return Math.max(gapX, gapZ)
   }
 
-  const ra = 'radius' in a ? a.radius : Math.hypot(a.halfW, a.halfD)
-  const rb = 'radius' in b ? b.radius : Math.hypot(b.halfW, b.halfD)
-  return Math.hypot(a.x - b.x, a.z - b.z) - ra - rb
+  if (circleA && circleB) {
+    return Math.hypot(a.x - b.x, a.z - b.z) - a.radius - b.radius
+  }
+
+  // Circle against an un-turned box: measure to the nearest point on the box,
+  // not to its bounding circle. The bounding circle of a 1.6 x 4.4 bench
+  // reaches 2.34 m from its centre, which reported a column two metres clear
+  // of it as an overlap.
+  const circle = (circleA ? a : b) as { x: number; z: number; radius: number }
+  const box = (circleA ? b : a) as { x: number; z: number; halfW: number; halfD: number; ry?: number }
+  if (!box.ry) {
+    const dx = Math.max(0, Math.abs(circle.x - box.x) - box.halfW)
+    const dz = Math.max(0, Math.abs(circle.z - box.z) - box.halfD)
+    return Math.hypot(dx, dz) - circle.radius
+  }
+
+  // A turned box against a circle is the one case left, and there is none on
+  // this campus. Fall back to the bounding circle rather than reporting clear.
+  return (
+    Math.hypot(circle.x - box.x, circle.z - box.z) -
+    circle.radius -
+    Math.hypot(box.halfW, box.halfD)
+  )
 }
 
 function describe_(c: Collider): string {

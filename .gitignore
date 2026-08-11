@@ -25,5 +25,5 @@ id_ed25519*
 .github/agents/
 .github/hooks/
 
-# Tooling caches, which are not source
+# Installed dependencies and tooling caches, which are not source
 node_modules/

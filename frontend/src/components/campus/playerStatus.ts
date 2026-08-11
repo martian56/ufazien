@@ -10,7 +10,7 @@
  * Pure, so the timing rules can be tested without a canvas or a clock.
  */
 
-import type { Activity } from './avatarPose'
+import { toActivity } from './avatarPose'
 import { CAMPUS_BUILDINGS } from './campusLayout'
 
 /** How long a chat message hangs over its author's head, in milliseconds. */
@@ -78,13 +78,19 @@ export function statusFor({
 }): string | null {
   if (isPresenting) return 'presenting'
 
-  switch (activity as Activity) {
+  // Narrowed rather than cast. The cast that used to be here told the compiler
+  // every string was an `Activity`, which turned off exhaustiveness checking —
+  // and `pointing` was then silently missing from the switch, so a pointing
+  // player was the only emote that showed nothing.
+  switch (toActivity(activity)) {
     case 'hand_raised':
       return 'hand up'
     case 'waving':
       return 'waving'
     case 'clapping':
       return 'clapping'
+    case 'pointing':
+      return 'pointing'
     case 'sitting': {
       const room = buildingName(currentRoom)
       return room ? `sitting in the ${room}` : 'sitting'

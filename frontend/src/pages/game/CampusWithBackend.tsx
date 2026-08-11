@@ -675,9 +675,10 @@ function SeatController({
 
     // What is within reach, so the prompt can name it.
     const seats = insideBuilding ? interiorSeats(insideBuilding.interior) : []
+    const feet = camera.position.y - EYE_HEIGHT
     const near = ownSeat
       ? null
-      : nearestSeat(camera.position.x, camera.position.z, seats, SEAT_REACH, taken)
+      : nearestSeat(camera.position.x, camera.position.z, seats, SEAT_REACH, taken, feet)
     if (near?.id !== candidate.current?.id) {
       candidate.current = near
       onCandidate(near)
@@ -774,7 +775,10 @@ function Player({
         y: backend.y,
         direction: 'down',
         heading: seated.ry,
-        activity: 'sitting',
+        // An emote wins over the seat. Raising a hand from a chair in a lecture
+        // is the whole point of having both; the server keeps the seat either
+        // way, because only leave_seat releases it.
+        activity: emote ?? 'sitting',
         is_moving: false,
         current_room: insideBuilding ? String(insideBuilding.id) : null,
       })
@@ -988,6 +992,25 @@ const CampusWithBackend = () => {
     return interiorSeats(insideBuilding.interior).find((s) => s.id === campusHook.ownSeat) ?? null
   }, [campusHook.ownSeat, insideBuilding])
 
+  // Walking out of the room gives up the chair. `seatedOn` goes null on its own
+  // when the building does, so the player stands up locally and gets their
+  // movement back — but the server holds a seat until it is released, and both
+  // ways out of a building (the button and walking through the door) went
+  // straight past that. The chair stayed occupied for everybody else until the
+  // tab closed, and the prompt that teaches C is hidden once you are outside.
+  const { ownSeat, leaveSeat } = campusHook
+  useEffect(() => {
+    if (!insideBuilding && ownSeat) leaveSeat()
+  }, [insideBuilding, ownSeat, leaveSeat])
+
+  // Whiteboard strokes ride the chat channel and are not things anybody said.
+  // The chat panel and the unread badge already filter them; without this the
+  // encoded payload appears in a speech bubble over whoever drew it.
+  const spokenMessages = useMemo(
+    () => campusHook.chatMessages.filter((m) => isDrawableChat(m.message)),
+    [campusHook.chatMessages],
+  )
+
   const {
     isConnected,
     isLoading,
@@ -1139,6 +1162,13 @@ const CampusWithBackend = () => {
           username: position.username,
           full_name: position.full_name || position.username,  // Use full_name, fallback to username
           direction: position.direction,
+          // Without these three, everything this page draws for a remote player
+          // falls back to standing and facing one of four ways: the heading is
+          // unused, every pose reads as 'standing', and the status line is
+          // always null. The socket carries them; only this mapping dropped them.
+          heading: position.heading,
+          activity: position.activity,
+          current_room: position.current_room,
           is_moving: position.is_moving,
           color: `hsl(${(Number(userId) * 137.5) % 360}, 70%, 60%)`, // Generate colour from user id
         }
@@ -1540,7 +1570,7 @@ const CampusWithBackend = () => {
                     position={avatar.position}
                     userData={avatar.userData}
                     seed={avatar.id}
-                    bubble={bubbleFor(avatar.id, campusHook.chatMessages, bubbleClock)}
+                    bubble={bubbleFor(avatar.id, spokenMessages, bubbleClock)}
                     speaking={isSpeaking(avatar.id, voice.participants)}
                     isPresenting={isSameParticipant(voice.screenShare?.identity, avatar.id)}
                   />

@@ -19,7 +19,7 @@ import type { InteriorKind } from './campusLayout'
 import { INTERIOR_SPECS, interiorHalfExtent } from './interiorSpecs'
 import { fitProjector } from './projectorFit'
 import { LECTURE_SEATING, LECTURE_ROWS } from './lectureSeating'
-import type { Collider, Platform } from './campusPhysics'
+import { STEP_UP, type Collider, type Platform } from './campusPhysics'
 
 /** Somewhere a player can sit, and which way they face once they do. */
 export interface Seat {
@@ -64,17 +64,38 @@ interface InteriorPhysics {
  * might be trying to watch. Moved right, the centre of the hall is clear from
  * the door all the way to the screen.
  */
-/** Where the two flags stand, clear of the sightlines to the board. */
-export const UFAZ_FLAGS = [13.5, 16.5]
+/**
+ * Where the two flags stand.
+ *
+ * Either side of the axis, which is where a lobby puts them. They were pushed
+ * out to the east wall when the waiting benches were still over there and the
+ * flags stood between them and the board; the benches have since moved west,
+ * and out at 16.5 the stands were inside the colonnade at 17.
+ */
+export const UFAZ_FLAGS = [-3, 3]
+
+/** The reception desk, clear of the colonnade behind it. */
+export const UFAZ_DESK_X = -11.8
+
+/**
+ * The waiting benches, moved down the wall.
+ *
+ * They were at -6, 0 and 6, and the one at 6 ran into the reception desk once
+ * both were on the west side of the hall.
+ */
+export const UFAZ_BENCH_Z = [-10, -4, 2]
 
 export const UFAZ_STAIR = {
-  x: 12.5,
+  // Narrower and further in than the first attempt at moving it. At x 12.5
+  // with a four-metre half-width its balustrade landed at 16.7, which is
+  // inside the colonnade at 17 — the rail ran straight through a column.
+  x: 10.5,
   z: -10,
   steps: 14,
   rise: 0.3,
   going: 0.62,
-  halfW: 4,
-  landing: { z: -19.4, halfW: 5.5, halfD: 2.2, top: 4.55 },
+  halfW: 3.5,
+  landing: { z: -19.4, halfW: 4.5, halfD: 2.2, top: 4.55 },
 }
 
 function ufazPhysics(): InteriorPhysics {
@@ -119,8 +140,10 @@ function ufazPhysics(): InteriorPhysics {
     })
   }
 
-  // Reception desk.
-  colliders.push({ x: -13, z: 8, halfW: 3, halfD: 0.9, height: 1.25 })
+  // Reception desk. Pulled in off the colonnade: at -13 its corner clipped
+  // the column at -17, and a five-centimetre intersection is a seam the
+  // collision resolver cannot settle a player on.
+  colliders.push({ x: UFAZ_DESK_X, z: 8, halfW: 3, halfD: 0.9, height: 1.25 })
 
   // Flag stands, moved out towards the walls. On the centre line they stood
   // between the waiting benches and one corner of the board.
@@ -130,7 +153,7 @@ function ufazPhysics(): InteriorPhysics {
 
   // Waiting benches down the west side. They were opposite, which put the
   // staircase balustrade between everyone sitting on them and the board.
-  for (const z of [-6, 0, 6]) {
+  for (const z of UFAZ_BENCH_Z) {
     const id = `ufaz-bench-${z}`
     colliders.push({ id, x: -half + 8, z, halfW: 0.8, halfD: 2.2, height: 0.6 })
     seats.push({
@@ -597,12 +620,18 @@ export function nearestSeat(
   seats: Seat[],
   reach = SEAT_REACH,
   taken: ReadonlySet<string> = new Set(),
+  feet?: number,
 ): Seat | null {
   let best: Seat | null = null
   let bestDistance = reach
 
   for (const seat of seats) {
     if (taken.has(seat.id)) continue
+    // A seat on another tier is not the seat you are standing at. The sports
+    // hall's bleachers are 1.4 apart in x and 0.7 in y, and the reach is 1.6,
+    // so without this a player on one tier is offered the row above and below
+    // and sitting teleports them to a different height.
+    if (feet !== undefined && Math.abs(seat.y - feet) > STEP_UP) continue
     const distance = Math.hypot(x - seat.x, z - seat.z)
     if (distance <= bestDistance) {
       best = seat

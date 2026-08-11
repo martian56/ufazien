@@ -39,8 +39,27 @@ export type StrokeColor = (typeof STROKE_COLORS)[number]
 
 const COLOR_SET: ReadonlySet<string> = new Set(STROKE_COLORS)
 
-/** Points per stroke. Past this the message would not fit in one chat row. */
-export const MAX_POINTS = 40
+/**
+ * Longest board id the wire format allows.
+ *
+ * Part of the character budget below, and it must not contain the `|` the
+ * format separates on — a board id that did would encode a message every
+ * client rejects, so the stroke would reach everybody and draw nothing.
+ */
+export const MAX_BOARD_ID = 16
+
+/** What the chat transport accepts: `ChatMessage.message` is capped at this. */
+export const MAX_MESSAGE_LENGTH = 500
+
+/**
+ * Points per stroke.
+ *
+ * Sized against the worst case, not guessed. A rounded coordinate is up to 5
+ * characters, so a pair costs up to 11 plus a separator; the header costs the
+ * 4-character prefix, the board id, a 7-character colour and two bars. At 40
+ * points that totals 516, which is over the limit the format is built around.
+ */
+export const MAX_POINTS = 36
 
 /** Strokes kept per board, oldest dropped first. */
 export const MAX_STROKES = 120
@@ -52,7 +71,14 @@ export const MAX_STROKES = 120
  * program, and the difference between 0.123 and 0.1234567 is well under a
  * pixel, while the second costs four times the characters.
  */
+export function isValidBoardId(board: string): boolean {
+  return board.length > 0 && board.length <= MAX_BOARD_ID && !board.includes('|')
+}
+
 export function encodeStroke(stroke: Stroke): string {
+  if (!isValidBoardId(stroke.board)) {
+    throw new Error(`invalid whiteboard id: ${stroke.board}`)
+  }
   const points = stroke.points
     .slice(0, MAX_POINTS)
     .map((p) => `${round(p.x)},${round(p.y)}`)
@@ -89,13 +115,16 @@ export function decodeStroke(message: string): Stroke | null {
   if (parts.length !== 3) return null
 
   const [board, color, raw] = parts
-  if (!board || board.length > 24) return null
+  if (!isValidBoardId(board)) return null
   if (!COLOR_SET.has(color)) return null
 
   const points: StrokePoint[] = []
   for (const pair of raw.split(' ')) {
     if (!pair) continue
     const [xs, ys] = pair.split(',')
+    // `Number('')` is 0, so a truncated pair like "0.5," would decode to a
+    // point on the top edge of the board rather than being rejected.
+    if (!xs || !ys) return null
     const x = Number(xs)
     const y = Number(ys)
     if (!Number.isFinite(x) || !Number.isFinite(y)) return null
@@ -115,8 +144,12 @@ export function decodeStroke(message: string): Stroke | null {
  * Returns the same array when nothing changed, so a consumer re-rendering on
  * identity does not repaint for a message that was not for this board.
  */
-export function addStroke(strokes: readonly Stroke[], stroke: Stroke, board: string): Stroke[] {
-  if (stroke.board !== board) return strokes as Stroke[]
+export function addStroke(
+  strokes: readonly Stroke[],
+  stroke: Stroke,
+  board: string,
+): readonly Stroke[] {
+  if (stroke.board !== board) return strokes
   const next = [...strokes, stroke]
   return next.length > MAX_STROKES ? next.slice(next.length - MAX_STROKES) : next
 }

@@ -136,6 +136,13 @@ class PlayerPosition(models.Model):
                 condition=models.Q(seat__isnull=False),
                 name='one_occupant_per_seat',
             ),
+            # Empty string is not "no seat". The uniqueness rule above excludes
+            # only NULL, so two players holding '' would be a genuine conflict
+            # in one lobby — and `default=None` does not prevent a write of ''.
+            models.CheckConstraint(
+                condition=models.Q(seat__isnull=True) | ~models.Q(seat=''),
+                name='seat_is_null_or_named',
+            ),
         ]
 
     def __str__(self):

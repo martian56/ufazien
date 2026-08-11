@@ -15,6 +15,8 @@ import {
   SCOREBOARD_Y,
   STACK_ROWS,
   TABLE_FOOTBALL,
+  UFAZ_BENCH_Z,
+  UFAZ_DESK_X,
   UFAZ_FLAGS,
   UFAZ_STAIR,
   VENDING_MACHINES,
@@ -392,7 +394,7 @@ function UfazHall({ spec }: { spec: InteriorSpec }) {
 
       {/* Reception desk. The worktop was near-black, which in a cream marble
           hall read as a monolith rather than a counter. */}
-      <group position={[-13, 0, 8]}>
+      <group position={[UFAZ_DESK_X, 0, 8]}>
         <mesh castShadow receiveShadow position={[0, 0.55, 0]}>
           <boxGeometry args={[5.5, 1.1, 1.4]} />
           <meshStandardMaterial color="#6d5334" roughness={0.6} />
@@ -450,7 +452,7 @@ function UfazHall({ spec }: { spec: InteriorSpec }) {
       ))}
 
       {/* Seating for people waiting, and greenery */}
-      {[-6, 0, 6].map((z) => (
+      {UFAZ_BENCH_Z.map((z) => (
         <group key={z} position={[-half + 8, 0, z]}>
           <mesh castShadow receiveShadow position={[0, 0.45, 0]}>
             <boxGeometry args={[1.6, 0.25, 4.4]} />
@@ -534,11 +536,21 @@ function LibraryInterior({ spec }: { spec: InteriorSpec }) {
     const random = mulberry32(1337)
     const items: { x: number; y: number; z: number; ry: number; w: number }[] = []
     for (const z of STACK_ROWS) {
+      // Books follow the shelves, which are now two runs either side of the
+      // sightline wedge. Generated across the full width they floated in the
+      // aisle with no shelf under them — and stood in the very gap the layout
+      // exists to keep clear.
+      const aisle = libraryAisleHalf(z)
+      const runHalf = ((half - 4) - aisle) / 2
+      if (runHalf <= 0.5) continue
+
       for (let shelf = 0; shelf < 5; shelf++) {
         const y = 0.75 + shelf * 1.05
+        for (const run of [-1, 1]) {
         for (const side of [-1, 1]) {
-          let x = -half + 4
-          while (x < half - 4) {
+          const runStart = run < 0 ? -(aisle + runHalf * 2) : aisle
+          let x = runStart
+          while (x < runStart + runHalf * 2) {
             const w = 0.28 + random() * 0.22
             // Leave the occasional gap: a shelf packed edge to edge looks
             // painted on, and someone always has a book out.
@@ -547,6 +559,7 @@ function LibraryInterior({ spec }: { spec: InteriorSpec }) {
             }
             x += w + 0.02
           }
+        }
         }
       }
     }

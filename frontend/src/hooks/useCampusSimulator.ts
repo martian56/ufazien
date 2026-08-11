@@ -88,6 +88,32 @@ export interface PlayerPosition {
  * sharing worked right up until the presenter moved, and then went blank for
  * everyone watching.
  */
+/**
+ * How far the camera may turn before it is worth telling anybody.
+ *
+ * About three degrees. The heading comes off the camera, which never sits
+ * perfectly still, so an exact comparison would send a frame every tick for a
+ * player standing motionless.
+ */
+const HEADING_EPSILON = 0.05
+
+/**
+ * A frame as this hook sends it.
+ *
+ * Declared rather than inferred: the significance test compares `heading` and
+ * `activity`, and an inferred object literal has neither, which makes those
+ * comparisons a type error at best and silently constant at worst.
+ */
+interface SentPosition {
+    x: number
+    y: number
+    direction: string
+    heading?: number
+    activity?: string
+    is_moving?: boolean
+    current_room?: string | null
+}
+
 export function playerPositionFromUpdate(data: {
   position: PlayerPosition
   username?: string
@@ -144,11 +170,14 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
 
     // User state
     const [currentUser, setCurrentUser] = useState<any>(null);
-    const [userPosition, setUserPosition] = useState({ x: 0, y: 0, direction: 'down', is_moving: false });
+    const [userPosition, setUserPosition] = useState<SentPosition>({
+        x: 0, y: 0, direction: 'down', is_moving: false,
+    });
 
     // Refs for preventing stale closures
     const positionRef = useRef(userPosition);
-    const lastSentPositionRef = useRef({ x: 0, y: 0, direction: 'down' });
+    /** The last frame actually put on the wire. */
+    const lastSentPositionRef = useRef<SentPosition>({ x: 0, y: 0, direction: 'down' });
     const positionThrottleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const positionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const isMovingRef = useRef(false);
@@ -360,6 +389,20 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
         const isMoving = newPosition.is_moving || false;
         const wasMoving = isMovingRef.current;
 
+        // A pose is not a movement. The interval below only runs while the
+        // player is walking, so an emote pressed standing still — or a turn on
+        // the spot, which is what the heading is read from the camera for —
+        // produced no frame at all and stayed purely local.
+        if (!isMoving && !wasMoving) {
+            const last = lastSentPositionRef.current;
+            const posed = newPosition.activity !== last.activity;
+            const turned = Math.abs((newPosition.heading ?? 0) - (last.heading ?? 0)) > HEADING_EPSILON;
+            if ((posed || turned) && campusWebSocket.getConnectionStatus()) {
+                campusWebSocket.sendPositionUpdate(newPosition);
+                lastSentPositionRef.current = { ...newPosition };
+            }
+        }
+
         // Only manage interval when movement state changes (starting or stopping)
         if (isMoving && !wasMoving) {
             // Movement just started - send initial update and start interval
@@ -391,11 +434,16 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
                     return;
                 }
 
-                // Only send if position actually changed significantly
+                // Only send if position actually changed significantly.
+                // Heading is in here with a tolerance rather than an exact
+                // compare: it comes off the camera, which never sits perfectly
+                // still, so an equality test would send every single tick.
                 const hasMovedSignificantly = 
                     Math.abs(currentPos.x - lastPos.x) > 0.5 ||
                     Math.abs(currentPos.y - lastPos.y) > 0.5 ||
-                    currentPos.direction !== lastPos.direction;
+                    currentPos.direction !== lastPos.direction ||
+                    currentPos.activity !== lastPos.activity ||
+                    Math.abs((currentPos.heading ?? 0) - (lastPos.heading ?? 0)) > HEADING_EPSILON;
 
                 if (hasMovedSignificantly) {
                     campusWebSocket.sendPositionUpdate(currentPos);

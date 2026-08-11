@@ -6,6 +6,7 @@ import * as THREE from 'three'
 import { avatarLook, type AvatarLook } from './avatarAppearance'
 import {
   TURN_RATE,
+  WALK_SPEED,
   approachAngle,
   gaitFor,
   poseFrame,
@@ -151,6 +152,7 @@ export function CharacterModel({
 }: CharacterModelProps) {
   const look = useMemo(() => avatarLook(seed), [seed])
   const body = useRef<THREE.Group>(null)
+  const placed = useRef(false)
 
   // A real angle if the client sent one, otherwise the old four-way enum. The
   // enum is why every remote student used to face north, south, east or west
@@ -165,7 +167,7 @@ export function CharacterModel({
   const ground = speed !== undefined && Number.isFinite(speed)
     ? speed
     : isMoving
-      ? 5.5
+      ? WALK_SPEED
       : 0
 
   // Turned towards the heading rather than snapped to it, and never the long
@@ -173,14 +175,25 @@ export function CharacterModel({
   useFrame((_, delta) => {
     const group = body.current
     if (!group) return
+    // Face the right way on the first frame rather than swinging round from
+    // zero when an avatar first appears.
+    if (!placed.current) {
+      placed.current = true
+      group.rotation.y = target
+      return
+    }
     group.rotation.y =
       pose === 'sitting'
         ? target
         : approachAngle(group.rotation.y, target, TURN_RATE * Math.min(delta, 0.1))
   })
 
+  // No `rotation` prop. r3f writes an array prop straight onto the object, so
+  // a changing `rotation={[0, target, 0]}` overwrote `rotation.y` on every
+  // render — which is exactly the value `useFrame` above is interpolating, so
+  // a remote player snapped to a new heading instead of turning at TURN_RATE.
   return (
-    <group ref={body} rotation={[0, target, 0]} scale={look.height}>
+    <group ref={body} scale={look.height}>
       <Detailed distances={[0, 22, 55]}>
         <FullBody color={color} look={look} activity={pose} speed={ground} />
         <SimpleBody color={color} look={look} activity={pose} speed={ground} />
@@ -328,7 +341,6 @@ function Hair({ look }: { look: AvatarLook }) {
 /* ------------------------------------------------------------------ */
 
 /** No face, no hands, no shoes, no bag. None of it resolves at this range. */
-/** No face, no hands, no shoes, no bag. None of it resolves at this range. */
 function SimpleBody({
   color,
   look,
@@ -443,13 +455,16 @@ interface Rig {
  * without a canvas.
  */
 function usePose(rig: React.RefObject<Rig>, activity: Activity, speed: number) {
+  // Speed only changes when a new position frame arrives, so recomputing the
+  // gait per frame per avatar per level of detail is pure waste.
+  const gait = useMemo(() => gaitFor(speed), [speed])
+
   useFrame((state) => {
     const parts = rig.current
     if (!parts) return
 
     const time = state.clock.elapsedTime
     const frame = poseFrame(activity, time, speed)
-    const gait = gaitFor(speed)
 
     apply(parts.leftHip, frame.leftHip)
     apply(parts.rightHip, frame.rightHip)

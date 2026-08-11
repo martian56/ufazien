@@ -875,7 +875,11 @@ export function NameTag({
   status?: string | null
 }) {
   const texture = nameTagTexture(name, accent)
-  const statusTexture = nameTagTexture(status ? `· ${status} ·` : '', '#7f8ea3')
+  // Only when there is something to say. Called unconditionally it built a
+  // 512-pixel canvas for an empty label and stored it in the bounded name-tag
+  // cache, where every status-less avatar then kept touching that one entry
+  // and pushing real name tags towards eviction.
+  const statusTexture = status ? nameTagTexture(`· ${status} ·`, '#7f8ea3') : null
   if (!texture) return null
 
   return (

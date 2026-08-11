@@ -116,8 +116,19 @@ describe('statusFor', () => {
 describe('buildingName', () => {
   it('resolves the id that travels as current_room', () => {
     for (const building of CAMPUS_BUILDINGS) {
-      expect(buildingName(String(building.id))).toBe(building.name)
+      // Compared against the same transform the function applies, so this
+      // stays a test of the lookup rather than an accident of the fact that
+      // no building is currently called "The Library".
+      expect(buildingName(String(building.id))).toBe(building.name.replace(/^The\s+/i, ''))
     }
+  })
+
+  it('does not label somebody as being "in the The Library"', () => {
+    // The article-stripping branch, which the loop above cannot reach while
+    // no building name happens to start with one.
+    const named = CAMPUS_BUILDINGS.map((b) => b.name)
+    expect(named.some((n) => /^The\s+/i.test(n))).toBe(false)
+    expect(buildingName('nope')).toBeNull()
   })
 
   it('returns nothing for no room', () => {

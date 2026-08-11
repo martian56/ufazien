@@ -23,6 +23,8 @@ class CampusWebSocketService {
             userJoined: [],
             userLeft: [],
             positionUpdate: [],
+            seatUpdate: [],
+            seatDenied: [],
             chatMessage: [],
             studyRoomJoin: [],
             studyRoomLeave: [],
@@ -289,9 +291,15 @@ class CampusWebSocketService {
      * @param {Function} callback - Callback function
      */
     on(event: string, callback: (...args: any[]) => void) {
-        if (this.listeners[event]) {
-            this.listeners[event].push(callback);
+        // Create the bucket rather than dropping the registration. The map used
+        // to be a fixed list, so subscribing to an event that was not in it
+        // silently did nothing — which is how the seating events shipped
+        // completely inert: the server sent them, the hook subscribed, and
+        // neither end ever noticed the other was not there.
+        if (!this.listeners[event]) {
+            this.listeners[event] = [];
         }
+        this.listeners[event].push(callback);
     }
 
     /**
