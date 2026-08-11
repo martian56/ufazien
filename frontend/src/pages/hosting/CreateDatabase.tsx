@@ -415,8 +415,8 @@ export default function CreateDatabase() {
                   
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="flex items-start space-x-3">
-                      <div className="bg-green-100 rounded-lg p-2">
-                        <Zap className="h-5 w-5 text-green-600" />
+                      <div className="bg-gray-100 rounded-lg p-2">
+                        <Zap className="h-5 w-5 text-gray-700" />
                       </div>
                       <div>
                         <h3 className="font-medium text-gray-900">High Performance</h3>
@@ -425,8 +425,8 @@ export default function CreateDatabase() {
                     </div>
                     
                     <div className="flex items-start space-x-3">
-                      <div className="bg-blue-100 rounded-lg p-2">
-                        <Shield className="h-5 w-5 text-blue-600" />
+                      <div className="bg-gray-100 rounded-lg p-2">
+                        <Shield className="h-5 w-5 text-gray-700" />
                       </div>
                       <div>
                         <h3 className="font-medium text-gray-900">Secure by Default</h3>
@@ -435,8 +435,8 @@ export default function CreateDatabase() {
                     </div>
                     
                     <div className="flex items-start space-x-3">
-                      <div className="bg-purple-100 rounded-lg p-2">
-                        <Database className="h-5 w-5 text-purple-600" />
+                      <div className="bg-gray-100 rounded-lg p-2">
+                        <Database className="h-5 w-5 text-gray-700" />
                       </div>
                       <div>
                         <h3 className="font-medium text-gray-900">Auto Backups</h3>

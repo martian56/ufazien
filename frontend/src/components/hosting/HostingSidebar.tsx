@@ -15,6 +15,7 @@ import {
   Menu,
   X
 } from 'lucide-react';
+import UfazienMark from '../ui/UfazienMark';
 
 const HostingSidebar = () => {
   const navigate = useNavigate();
@@ -142,12 +143,10 @@ const HostingSidebar = () => {
             <ArrowLeft className="h-4 w-4" />
             <span className="text-sm font-medium">Back to Main App</span>
           </button>
-          <div className="flex items-center space-x-3">
-            <div className="bg-blue-600 rounded-lg p-2">
-              <Server className="h-6 w-6 text-white" />
-            </div>
+          <div className="flex items-center gap-2.5">
+            <UfazienMark className="w-8 h-8" />
             <div>
-              <h1 className="text-xl font-bold text-gray-900">Hosting</h1>
+              <h1 className="text-xl font-semibold tracking-tight text-gray-900">Hosting</h1>
               <p className="text-sm text-gray-500">Manage your websites</p>
             </div>
           </div>

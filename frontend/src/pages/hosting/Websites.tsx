@@ -219,8 +219,8 @@ export default function Websites() {
                   <div className="p-6">
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex items-center space-x-3">
-                        <div className="bg-blue-100 rounded-lg p-2">
-                          <Globe className="h-5 w-5 text-blue-600" />
+                        <div className="bg-gray-100 rounded-lg p-2">
+                          <Globe className="h-5 w-5 text-gray-700" />
                         </div>
                         <div>
                           <h3 className="font-semibold text-gray-900">{website.name}</h3>

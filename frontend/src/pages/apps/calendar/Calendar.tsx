@@ -261,15 +261,9 @@ export default function Calendar() {
         <meta name="description" content="Manage your academic schedule with Ufazien's calendar." />
       </Helmet>
       <SidebarPanel>
-        <div className="mt-8 px-3">
-          <div className="bg-gray-50 rounded-lg p-4">
-            <h3 className="font-medium text-gray-900 mb-3">Quick Navigation</h3>
-            <button
-              onClick={goToToday}
-              className="w-full px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors mb-3"
-            >
-              Go to Today
-            </button>
+        <div className="mt-3 px-3">
+          <div className="bg-gray-50 rounded-lg p-3">
+            <h3 className="text-sm font-medium text-gray-900 mb-2">Categories</h3>
             <div className="space-y-2">
               {categories.slice(1, 5).map((category) => (
                 <button
@@ -412,6 +406,12 @@ export default function Calendar() {
                   className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
                 >
                   <ChevronRight className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={goToToday}
+                  className="ml-1 px-3 py-1.5 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Today
                 </button>
               </div>
             </div>

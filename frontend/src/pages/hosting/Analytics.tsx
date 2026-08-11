@@ -104,10 +104,13 @@ export default function Analytics() {
 
     if (!websitesLoading && selectedWebsite) {
       loadAnalytics()
-    } else if (!websitesLoading) {
+    } else if (!websitesLoading && websites.length === 0) {
+      // Only stop here when there is genuinely nothing to select. Dropping out
+      // of loading while the effect below is still about to pick the first
+      // website showed the page, then the skeleton again.
       setLoading(false)
     }
-  }, [selectedWebsite?.id, selectedPeriod, websitesLoading])
+  }, [selectedWebsite?.id, selectedPeriod, websitesLoading, websites.length])
 
   // Auto-select first website when websites load
   useEffect(() => {
@@ -244,8 +247,8 @@ export default function Analytics() {
             {/* Header */}
             <div className="mb-8">
               <div className="flex items-center space-x-3 mb-4">
-                <div className="bg-blue-100 rounded-lg p-2">
-                  <BarChart3 className="h-6 w-6 text-blue-600" />
+                <div className="bg-gray-100 rounded-lg p-2">
+                  <BarChart3 className="h-6 w-6 text-gray-700" />
                 </div>
                 <div>
                   <h1 className="text-3xl font-bold text-gray-900">Analytics</h1>

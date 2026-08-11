@@ -150,7 +150,7 @@ export default function UserSites() {
               <div className="p-4">
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-3">
-                    <div className="bg-blue-100 rounded-lg p-2"><Globe className="h-5 w-5 text-blue-600" /></div>
+                    <div className="bg-gray-100 rounded-lg p-2"><Globe className="h-5 w-5 text-gray-700" /></div>
                     <div>
                       <div className="font-semibold text-gray-900">{site.name}</div>
                       <div className="text-sm text-gray-500">{site.domain || `${(site.name || '').toLowerCase()}.ufazien.com`}</div>

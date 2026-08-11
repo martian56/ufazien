@@ -168,8 +168,8 @@ export default function Domains() {
             <div className="mb-8">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center space-x-3">
-                  <div className="bg-blue-100 rounded-lg p-2">
-                    <Server className="h-6 w-6 text-blue-600" />
+                  <div className="bg-gray-100 rounded-lg p-2">
+                    <Server className="h-6 w-6 text-gray-700" />
                   </div>
                   <div>
                     <h1 className="text-3xl font-bold text-gray-900">Domains</h1>
