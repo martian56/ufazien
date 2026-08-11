@@ -24,15 +24,24 @@ import {
   NameTag,
 } from '../../components/campus/CampusScenery'
 import { BuildingInterior } from '../../components/campus/BuildingInteriors'
+import {
+  SOLID_CAMPUS,
+  blockingPlatforms,
+  groundHeight,
+  resolveColliders,
+  type Collider,
+} from '../../components/campus/campusPhysics'
+import {
+  interiorColliders,
+  interiorPlatforms,
+} from '../../components/campus/interiorPhysics'
 import { INTERIOR_SPECS, interiorHalfExtent } from '../../components/campus/interiorSpecs'
 import {
   CAMPUS_BUILDINGS,
   CAMPUS_LIMIT,
   OUTDOOR_COURT,
   SPAWN,
-  clampToCampus,
   nearestEntrance,
-  resolveCollision,
   type CampusBuilding,
   type TimeOfDay,
 } from '../../components/campus/campusLayout'
@@ -522,6 +531,15 @@ function ActionKeyBridge({ action }: { action: React.RefObject<ActionInput> }) {
 }
 
 /** First person player controller with backend position sync. */
+/**
+ * Camera height above the floor the player is standing on.
+ *
+ * Was a bare 1.5 compared against `camera.position.y`, which only worked while
+ * the floor was a single plane at zero. With tiers and stairs the two have to
+ * be told apart: `feet + EYE_HEIGHT` is where the camera goes.
+ */
+const EYE_HEIGHT = 1.5
+
 function Player({
   campusHook,
   insideBuilding,
@@ -615,30 +633,49 @@ function Player({
 
     // Apply gravity
     velocity.current.y -= 20 * delta
-    if (camera.position.y <= 1.5 && velocity.current.y < 0) {
-      velocity.current.y = 0
-      camera.position.y = 1.5
-      isOnGround.current = true
-    }
 
     camera.position.add(direction.current)
     camera.position.y += velocity.current.y * delta
 
+    // What is solid here, and what can be stood on. Both change on the
+    // threshold of a building, which is why they are read per frame rather
+    // than captured once.
+    const platforms = insideBuilding ? interiorPlatforms(insideBuilding.interior) : []
+    const feet = camera.position.y - EYE_HEIGHT
+
+    // Anything too high to step onto is a wall rather than a ramp: a stage
+    // edge stops you from the floor, and once you are up there you walk about
+    // on top of it freely.
+    const solid: Collider[] = insideBuilding
+      ? [...interiorColliders(insideBuilding.interior), ...blockingPlatforms(platforms, feet)]
+      : SOLID_CAMPUS
+
     if (insideBuilding) {
-      // The room's own walls. There is no collision mesh inside, so the clamp
-      // is what stops the player walking out through them.
+      // The room's own walls, which are a clamp rather than geometry.
       const limit = interiorHalfExtent(insideBuilding.interior)
       camera.position.x = MathUtils.clamp(camera.position.x, -limit, limit)
       camera.position.z = MathUtils.clamp(camera.position.z, -limit, limit)
     } else {
-      // Outdoors the buildings are solid. This is new: you used to be able to
-      // walk straight through the library and out the far side.
-      const bounded = clampToCampus(camera.position.x, camera.position.z, CAMPUS_LIMIT)
-      const resolved = resolveCollision(bounded.x, bounded.z)
-      camera.position.x = resolved.x
-      camera.position.z = resolved.z
+      camera.position.x = MathUtils.clamp(camera.position.x, -CAMPUS_LIMIT, CAMPUS_LIMIT)
+      camera.position.z = MathUtils.clamp(camera.position.z, -CAMPUS_LIMIT, CAMPUS_LIMIT)
     }
-    camera.position.y = Math.max(camera.position.y, 1.5)
+
+    // Everything solid, indoors and out: buildings, trees, the fountain, and
+    // now every table, shelf and counter. None of it used to stop you.
+    const resolved = resolveColliders(camera.position.x, camera.position.z, solid)
+    camera.position.x = resolved.x
+    camera.position.z = resolved.z
+
+    // The floor under the player, which is not always zero: the amphitheatre
+    // is raked, the sports hall has bleachers, and the entrance hall has a
+    // staircase. All three used to pass straight through the player's head.
+    const floor = groundHeight(camera.position.x, camera.position.z, platforms, feet)
+    const standing = floor + EYE_HEIGHT
+    if (camera.position.y <= standing && velocity.current.y <= 0) {
+      velocity.current.y = 0
+      camera.position.y = standing
+      isOnGround.current = true
+    }
 
     // Always update backend position (even when not moving, to send final
     // position on stop). The hook throttles the sending.

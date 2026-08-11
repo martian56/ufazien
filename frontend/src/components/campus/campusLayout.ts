@@ -313,6 +313,54 @@ export function scatterProps({
   return items
 }
 
+/**
+ * The props, as data.
+ *
+ * These lived in `CampusScenery` as three `useMemo`s, which was fine while they
+ * were only drawn. They are solid now, and a tree that the renderer puts in one
+ * place and the collision system in another is worse than a tree you can walk
+ * through — so both read the same list from here.
+ */
+export const TREE_COUNT = 150
+
+/** Trunk radius used for collision. The canopy is wider; you duck under it. */
+export const TRUNK_RADIUS = 0.7
+export const LAMP_RADIUS = 0.32
+/** The fountain in the quad, which you now walk around rather than through. */
+export const FOUNTAIN_RADIUS = 7.5
+/** A bench, as a footprint: long, shallow, and turned to face the quad. */
+export const BENCH_HALF = { halfW: 1.25, halfD: 0.45 }
+
+export function campusTrees(count = TREE_COUNT): ScatterItem[] {
+  return scatterProps({ count, seed: 20240917, blocked: KEEP_CLEAR, clearance: 5, variants: 3 })
+}
+
+/** Lamps line the routes rather than scattering, because that is what lamps do. */
+export function campusLamps(): { x: number; z: number }[] {
+  const items: { x: number; z: number }[] = []
+  for (let z = -170; z <= 170; z += 22) {
+    items.push({ x: -9.5, z }, { x: 9.5, z })
+  }
+  for (let x = -160; x <= 160; x += 24) {
+    items.push({ x, z: -54.5 })
+  }
+  return items
+}
+
+/** Benches around the quad, facing in. */
+export function campusBenches(): { x: number; z: number; ry: number }[] {
+  const items: { x: number; z: number; ry: number }[] = []
+  for (let i = 0; i < 8; i++) {
+    const angle = (i / 8) * Math.PI * 2
+    items.push({
+      x: QUAD_CENTRE[0] + Math.cos(angle) * (QUAD_RADIUS - 2.5),
+      z: QUAD_CENTRE[1] + Math.sin(angle) * (QUAD_RADIUS - 2.5),
+      ry: -angle + Math.PI / 2,
+    })
+  }
+  return items
+}
+
 /** An axis-aligned footprint on the ground plane. */
 export interface Rect {
   x: number

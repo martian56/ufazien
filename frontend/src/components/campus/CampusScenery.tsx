@@ -6,13 +6,14 @@ import * as THREE from 'three'
 import {
   CAMPUS_BUILDINGS,
   GROUND_SIZE,
-  KEEP_CLEAR,
   PAVEMENTS,
   QUAD_CENTRE,
   QUAD_RADIUS,
   SCENERY_BLOCKS,
   daylight,
-  scatterProps,
+  campusBenches,
+  campusLamps,
+  campusTrees,
   type BuildingStyle,
   type DaylightConfig,
   type SceneryBlock,
@@ -638,36 +639,12 @@ export function CampusProps({
   treeCount?: number
   timeOfDay?: TimeOfDay | string
 }) {
-  const trees = useMemo(
-    () => scatterProps({ count: treeCount, seed: 20240917, blocked: KEEP_CLEAR, clearance: 5, variants: 3 }),
-    [treeCount],
-  )
-
-  // Lamps line the routes rather than scattering, because that is what lamps do.
-  const lamps = useMemo(() => {
-    const items: { x: number; z: number }[] = []
-    for (let z = -170; z <= 170; z += 22) {
-      items.push({ x: -9.5, z }, { x: 9.5, z })
-    }
-    for (let x = -160; x <= 160; x += 24) {
-      items.push({ x, z: -54.5 })
-    }
-    return items
-  }, [])
-
-  const benches = useMemo(() => {
-    const items: { x: number; z: number; ry: number }[] = []
-    // Around the quad, facing in.
-    for (let i = 0; i < 8; i++) {
-      const angle = (i / 8) * Math.PI * 2
-      items.push({
-        x: QUAD_CENTRE[0] + Math.cos(angle) * (QUAD_RADIUS - 2.5),
-        z: QUAD_CENTRE[1] + Math.sin(angle) * (QUAD_RADIUS - 2.5),
-        ry: -angle + Math.PI / 2,
-      })
-    }
-    return items
-  }, [])
+  // All three come from the layout module rather than being placed here. They
+  // are solid now, and a tree the renderer puts in one place and the collision
+  // system in another is worse than a tree you can walk through.
+  const trees = useMemo(() => campusTrees(treeCount), [treeCount])
+  const lamps = useMemo(() => campusLamps(), [])
+  const benches = useMemo(() => campusBenches(), [])
 
   const config = daylight(timeOfDay)
   const canopyColors = config.lampsOn ? CANOPY_DUSK : CANOPY_DAY
