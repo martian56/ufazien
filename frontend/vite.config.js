@@ -18,8 +18,11 @@ export default defineConfig({
     // unpinned makes rollup fold React into `three`, which the entry then
     // preloads. Both were tried.
 
-    // The campus chunk is ~1.4MB of three.js and LiveKit, which is the point.
-    chunkSizeWarningLimit: 1500,
+    // The campus chunk is ~1.5MB of three.js and LiveKit, which is the point.
+    // The scenery, interiors and mini-games added about 70kB of that (18kB
+    // gzipped) and no assets at all: everything in the campus is generated in
+    // code, so there are no textures or models to download alongside it.
+    chunkSizeWarningLimit: 1700,
   },
   server: {
     allowedHosts: ['localhost', 'ufazien.com', 'www.ufazien.com',],

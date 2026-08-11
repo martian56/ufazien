@@ -1,40 +1,12 @@
-import React, { useState, useRef, useCallback, Suspense, useEffect, useMemo } from "react"
+import React, { useState, useRef, Suspense, useEffect, useMemo } from "react"
 import { Helmet } from "react-helmet"
 import { Canvas, useFrame, useThree } from "@react-three/fiber"
-import { Text, Html, Sky, KeyboardControls, useKeyboardControls, PointerLockControls } from "@react-three/drei"
-import { Vector3, MathUtils } from "three"
+import { KeyboardControls, useKeyboardControls, PointerLockControls, PerformanceMonitor } from "@react-three/drei"
+import { Vector3, MathUtils, ACESFilmicToneMapping } from "three"
 import type { Group } from "three"
 import { useNavigate, useParams } from "react-router-dom"
-import { MessageCircle, Users, Settings, LogOut, Mic, MicOff, Video, VideoOff, MonitorUp } from "lucide-react"
+import { MessageCircle, Users, Settings, LogOut, MonitorUp, Sun, Sunset, Moon } from "lucide-react"
 import { useCampusSimulator } from '../../hooks/useCampusSimulator'
-import type { ChatMessage, NearbyPlayer, PlayerPosition } from '../../hooks/useCampusSimulator'
-
-/** Everything the hook returns, so the pieces below can take it as a prop. */
-type CampusHook = ReturnType<typeof useCampusSimulator>
-
-/** One of the five campus buildings declared at the top of this file. */
-/** One of the study areas declared at the top of this file. */
-interface StudyArea {
-  id: string
-  name: string
-  position: [number, number, number]
-  radius: number
-  icon: string
-  description: string
-  maxUsers: number
-  subject: string
-  duration: string
-  features: string[]
-}
-
-interface CampusBuilding {
-  id: number
-  name: string
-  position: [number, number, number]
-  size: [number, number, number]
-  color: string
-  icon: string
-}
 import { useCampusVoice } from '../../hooks/useCampusVoice'
 import VoicePanel, { ScreenShareStage } from '../../components/campus/VoicePanel'
 import ProjectorScreen from '../../components/campus/ProjectorScreen'
@@ -45,11 +17,50 @@ import type { TouchState } from '../../components/campus/TouchControls'
 import {
   CampusEnvironment,
   CampusGround,
-  Building,
   CampusProps,
-  BuildingInterior,
+  CampusBuildings,
+  CampusSkyline,
   CharacterModel,
+  NameTag,
 } from '../../components/campus/CampusScenery'
+import { BuildingInterior } from '../../components/campus/BuildingInteriors'
+import { INTERIOR_SPECS, interiorHalfExtent } from '../../components/campus/interiorSpecs'
+import {
+  CAMPUS_BUILDINGS,
+  CAMPUS_LIMIT,
+  OUTDOOR_COURT,
+  SPAWN,
+  clampToCampus,
+  nearestEntrance,
+  resolveCollision,
+  type CampusBuilding,
+  type TimeOfDay,
+} from '../../components/campus/campusLayout'
+import {
+  BasketballStation,
+  DashCourse,
+  ShelfStation,
+  TitrationStation,
+  type ActionInput,
+} from '../../components/campus/minigames/CampusMinigames'
+import MinigameHud, { Crosshair } from '../../components/campus/minigames/MinigameHud'
+import { useCampusGames } from '../../components/campus/minigames/useCampusGames'
+
+/** Everything the hook returns, so the pieces below can take it as a prop. */
+type CampusHook = ReturnType<typeof useCampusSimulator>
+
+/** A place on the campus that maps to a backend study room. */
+interface StudyArea {
+  id: string
+  name: string
+  position: [number, number, number]
+  radius: number
+  icon: string
+  description: string
+  maxUsers: number
+  subject: string
+  duration: string
+}
 
 /** The signed-in player, as this page needs them. Never carries an email. */
 interface CampusPlayer {
@@ -77,7 +88,8 @@ const getCurrentUser = (): CampusPlayer => {
   }
 }
 
-// Key controls for player movement
+// Key controls for player movement. `action` is the mini-games' hold key; it is
+// separate from `interact` so charging a shot cannot also open a door.
 const keyMap = [
   { name: "forward", keys: ["ArrowUp", "KeyW"] },
   { name: "backward", keys: ["ArrowDown", "KeyS"] },
@@ -86,66 +98,59 @@ const keyMap = [
   { name: "jump", keys: ["Space"] },
   { name: "run", keys: ["ShiftLeft"] },
   { name: "interact", keys: ["KeyE"] },
+  { name: "action", keys: ["KeyF"] },
 ]
 
-// Campus buildings and areas
-const campusBuildings: CampusBuilding[] = [
-  { id: 1, name: "Library", position: [-20, 0, -15], size: [15, 8, 12], color: "#8B5A2B", icon: "📚" },
-  { id: 2, name: "Science Lab", position: [15, 0, 8], size: [12, 6, 10], color: "#2D5016", icon: "🔬" },
-  { id: 3, name: "Student Center", position: [0, 0, 25], size: [20, 10, 15], color: "#4A1A5C", icon: "🏢" },
-  { id: 4, name: "Art Studio", position: [-25, 0, 10], size: [10, 5, 8], color: "#8B2C1B", icon: "🎨" },
-  { id: 5, name: "Cafeteria", position: [25, 0, -10], size: [18, 6, 12], color: "#2F4F4F", icon: "🍽️" },
-]
-
-// Enhanced study areas with more interactive features
+/**
+ * Study areas, on the places they describe.
+ *
+ * These are the backend's study rooms, so their ids are load-bearing and are
+ * left alone; only the coordinates moved when the campus grew.
+ */
 const studyAreas: StudyArea[] = [
   {
     id: "library-quiet",
     name: "Quiet Study Zone",
-    position: [-20, 1, -15],
-    radius: 8,
+    position: [-64, 1, 8],
+    radius: 9,
     icon: "📖",
-    description: "Silent study environment perfect for focused reading and research",
+    description: "Silent study outside the library, for focused reading and research",
     maxUsers: 12,
     subject: "General Study",
     duration: "Open 24/7",
-    features: ["Silent", "WiFi", "Power Outlets"]
   },
   {
     id: "lab-group",
     name: "Collaborative Lab",
-    position: [15, 1, 8],
-    radius: 6,
+    position: [62, 1, 6],
+    radius: 8,
     icon: "🧪",
-    description: "Group study space with lab equipment and collaborative tools",
+    description: "Group space by the laboratory building, with room to spread out",
     maxUsers: 8,
     subject: "Science & Research",
     duration: "8:00 AM - 10:00 PM",
-    features: ["Lab Equipment", "Whiteboard", "Group Tables"]
   },
   {
     id: "center-meeting",
-    name: "Meeting Rooms",
-    position: [0, 1, 25],
+    name: "Meeting Point",
+    position: [-70, 1, 80],
     radius: 10,
     icon: "💼",
-    description: "Private study rooms for small groups and presentations",
+    description: "Where groups gather before booking a room in the student centre",
     maxUsers: 6,
     subject: "Presentations",
     duration: "Bookable Slots",
-    features: ["Projector", "Soundproof", "Video Conferencing"]
   },
   {
-    id: "art-creative",
-    name: "Creative Workshop",
-    position: [-25, 1, 10],
-    radius: 5,
-    icon: "🎭",
-    description: "Open creative space for artistic projects and brainstorming",
-    maxUsers: 10,
-    subject: "Creative Arts",
-    duration: "9:00 AM - 9:00 PM",
-    features: ["Art Supplies", "Natural Light", "Flexible Seating"]
+    id: "quad-open",
+    name: "The Quad",
+    position: [0, 1, -9],
+    radius: 12,
+    icon: "🌳",
+    description: "Open-air study around the fountain, when the weather allows it",
+    maxUsers: 20,
+    subject: "Anything",
+    duration: "Daylight",
   },
 ]
 
@@ -173,7 +178,6 @@ function ChatSystem({
 }) {
   const [newMessage, setNewMessage] = useState("")
   const [activeTab, setActiveTab] = useState("global")
-  const [isTyping, setIsTyping] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const seenCountRef = useRef(0)
 
@@ -193,19 +197,16 @@ function ChatSystem({
   }, [isOpen, chatMessages.length])
   const unread = Math.max(0, chatMessages.length - seenCountRef.current)
 
-  const nearbyUsers = getNearbyPlayers(50) // Get users within 50 units
+  // In backend units, and the campus is ten of those to the world unit. 400
+  // covers the quad and the buildings around it, which is what "nearby" means
+  // now the world is nearly four times wider than it was.
+  const nearbyUsers = getNearbyPlayers(400)
 
   const handleSend = () => {
     if (newMessage.trim()) {
       sendChatMessage(newMessage, activeTab)
       setNewMessage("")
-      setIsTyping(false)
     }
-  }
-
-  const handleTyping = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setNewMessage(e.target.value)
-    setIsTyping(e.target.value.length > 0)
   }
 
   // Filter messages by channel
@@ -319,7 +320,7 @@ function ChatSystem({
           <input
             type="text"
             value={newMessage}
-            onChange={handleTyping}
+            onChange={(e) => setNewMessage(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleSend() } }}
             placeholder={`Message ${activeTab === "global" ? "everyone" : activeTab}...`}
             className="flex-1 bg-gray-800 text-white px-4 py-3 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
@@ -341,51 +342,53 @@ function ChatSystem({
   )
 }
 
-// Player avatar component with backend position sync
+/**
+ * Another player.
+ *
+ * The name is a sprite rather than a drei `Html` overlay. Twenty players used
+ * to mean twenty absolutely-positioned DOM nodes whose transforms the browser
+ * recomputed every frame; now it is twenty quads the GPU draws for free.
+ */
 function PlayerAvatar({
   position,
   userData,
-  isCurrentUser = false,
 }: {
   position: { x: number; z: number }
   /** Loose: the same component renders both a socket payload and local state. */
   userData: Record<string, unknown>
-  isCurrentUser?: boolean
 }) {
   const meshRef = useRef<Group>(null)
+  // Allocated once. The old version constructed a Vector3 every frame for every
+  // player on the campus, which is a garbage collection pause on a schedule.
+  const target = useRef(new Vector3())
 
-  useFrame((state) => {
-    if (meshRef.current && !isCurrentUser) {
-      // Smooth position interpolation for other players
-      const targetPosition = new Vector3(position.x, 0.5, position.z)
-      meshRef.current.position.lerp(targetPosition, 0.1)
-    }
+  useFrame(() => {
+    if (!meshRef.current) return
+    target.current.set(position.x, 0, position.z)
+    meshRef.current.position.lerp(target.current, 0.15)
   })
 
+  const name = String(userData.full_name || userData.username || userData.name || "Student")
+
   return (
-    <group ref={meshRef} position={isCurrentUser ? [0, 0, 0] : [position.x, 0.5, position.z]}>
+    <group ref={meshRef} position={[position.x, 0, position.z]}>
       <CharacterModel
         color={String(userData.color ?? "#4F46E5")}
         isMoving={Boolean(userData.is_moving)}
         direction={String(userData.direction ?? "down")}
       />
-
-      {/* Full Name Label */}
-      <Html position={[0, 2, 0]} center zIndexRange={[9, 0]}>
-        <div className="bg-black bg-opacity-75 text-white px-2 py-1 rounded text-xs whitespace-nowrap pointer-events-none">
-          {String(userData.full_name || userData.username || userData.name || "Student")}
-          {Boolean(userData.activity) && (
-            <div className="text-green-400 text-xs">{String(userData.activity)}</div>
-          )}
-        </div>
-      </Html>
+      <NameTag name={name} accent={String(userData.color ?? "#8fd0ff")} />
     </group>
   )
 }
 
-// Entering a building swaps in a room built at the world origin. Without moving
-// the camera the player keeps their outdoor position, which is usually outside
-// that room, so they end up looking at the back of the walls.
+/**
+ * Puts the camera somewhere sensible when the scene swaps.
+ *
+ * Entering a building replaces the world with a room built at the origin.
+ * Without moving the camera the player keeps their outdoor position, which is
+ * usually outside that room, so they end up looking at the back of the walls.
+ */
 function InteriorCameraPlacement({ insideBuilding }: { insideBuilding: CampusBuilding | null }) {
   const { camera } = useThree()
   const outsidePosition = useRef<Vector3 | null>(null)
@@ -393,8 +396,9 @@ function InteriorCameraPlacement({ insideBuilding }: { insideBuilding: CampusBui
   useEffect(() => {
     if (insideBuilding) {
       outsidePosition.current = camera.position.clone()
-      // Just inside the entrance, facing the board on the far wall.
-      camera.position.set(0, 1.7, 14)
+      const spawn = INTERIOR_SPECS[insideBuilding.interior].spawn
+      // Just inside the entrance, facing into the room.
+      camera.position.set(spawn[0], spawn[1], spawn[2])
       camera.rotation.set(0, 0, 0)
     } else if (outsidePosition.current) {
       camera.position.copy(outsidePosition.current)
@@ -405,17 +409,68 @@ function InteriorCameraPlacement({ insideBuilding }: { insideBuilding: CampusBui
   return null
 }
 
-// Entering by clicking a DOM button does not work while the pointer is locked
-// for mouse-look, which is the normal way to play. E does the same thing from
-// wherever the player is standing.
+/**
+ * What the player is standing next to.
+ *
+ * Written into a ref rather than React state: this runs every frame, and
+ * turning "am I near the library" into a state update would re-render the whole
+ * page as you walk past it. The HUD samples the ref a few times a second.
+ */
+export interface Proximity {
+  building: CampusBuilding | null
+  area: StudyArea | null
+}
+
+function ProximitySensor({
+  insideBuilding,
+  target,
+}: {
+  insideBuilding: CampusBuilding | null
+  target: React.RefObject<Proximity>
+}) {
+  const { camera } = useThree()
+
+  useFrame(() => {
+    if (!target.current) return
+
+    if (insideBuilding) {
+      target.current.building = null
+      target.current.area = null
+      return
+    }
+
+    target.current.building = nearestEntrance(camera.position.x, camera.position.z)?.building ?? null
+
+    let area: StudyArea | null = null
+    for (const candidate of studyAreas) {
+      const distance = Math.hypot(
+        camera.position.x - candidate.position[0],
+        camera.position.z - candidate.position[2],
+      )
+      if (distance < candidate.radius) {
+        area = candidate
+        break
+      }
+    }
+    target.current.area = area
+  })
+
+  return null
+}
+
+/**
+ * E to enter or leave a building.
+ *
+ * Entering by clicking a marker in the world does not work while the pointer is
+ * locked for mouse-look, which is the normal way to play, so the doors are
+ * opened from wherever the player is standing instead.
+ */
 function ProximityInteraction({
-  buildings,
   insideBuilding,
   onEnter,
   onExit,
   touch,
 }: {
-  buildings: CampusBuilding[]
   insideBuilding: CampusBuilding | null
   onEnter: (building: CampusBuilding) => void
   onExit: () => void
@@ -433,18 +488,8 @@ function ProximityInteraction({
       if (insideBuilding) {
         onExit()
       } else {
-        let nearest = null
-        let nearestDistance = Infinity
-        for (const building of buildings) {
-          const [bx, , bz] = building.position
-          const distance = Math.hypot(camera.position.x - bx, camera.position.z - bz)
-          const reach = Math.max(building.size[0], building.size[2]) / 2 + 6
-          if (distance < reach && distance < nearestDistance) {
-            nearest = building
-            nearestDistance = distance
-          }
-        }
-        if (nearest) onEnter(nearest)
+        const found = nearestEntrance(camera.position.x, camera.position.z)
+        if (found) onEnter(found.building)
       }
     }
     wasPressed.current = pressed
@@ -453,7 +498,20 @@ function ProximityInteraction({
   return null
 }
 
-// First person player controller with backend position sync
+/** Feeds the mini-games the state of the hold key, from either input method. */
+function ActionKeyBridge({ action }: { action: React.RefObject<ActionInput> }) {
+  const [, get] = useKeyboardControls()
+
+  useFrame(() => {
+    if (!action.current) return
+    const keyHeld = Boolean(get().action) && !isTypingInField()
+    action.current.held = keyHeld || action.current.touchHeld === true
+  })
+
+  return null
+}
+
+/** First person player controller with backend position sync. */
 function Player({
   campusHook,
   insideBuilding,
@@ -465,35 +523,38 @@ function Player({
 }) {
   const { camera } = useThree()
   const [, get] = useKeyboardControls()
-  const playerRef = useRef<Group>(null)
   const velocity = useRef(new Vector3())
   const direction = useRef(new Vector3())
-  const [isOnGround, setIsOnGround] = useState(true)
-  
-  const { updatePosition, userPosition, worldTo2D } = campusHook
+  const isOnGround = useRef(true)
 
-  // r3f aims the default camera at the scene origin. This camera sits directly
-  // above the origin, so that meant starting the game looking straight at the
-  // floor. Level the pitch once so the player starts facing the horizon.
+  const { updatePosition, worldTo2D } = campusHook
+
+  // r3f aims the default camera at the scene origin, so a camera above the
+  // origin starts the game looking at the floor. Level the pitch once and put
+  // the player on the spine, facing the main building.
   useEffect(() => {
     camera.rotation.set(0, 0, 0)
-    camera.position.set(0, 1.7, 12)
+    camera.position.set(SPAWN[0], SPAWN[1], SPAWN[2])
   }, [camera])
 
-  useFrame((state, delta) => {
+  useFrame((state, rawDelta) => {
+    // A backgrounded tab hands back a delta of whole seconds. Left unclamped,
+    // one frame of it teleports the player through a wall and past the far
+    // side of the campus.
+    const delta = Math.min(rawDelta, 0.1)
     const typing = isTypingInField()
     const raw = get()
     const { forward, backward, leftward, rightward, jump, run } = typing
       ? { forward: false, backward: false, leftward: false, rightward: false, jump: false, run: false }
       : raw
 
-    // Movement calculations
-    const speed = run ? 8 : 4
+    // Faster than it was: the campus is now nearly four times wider, and the
+    // old 4 m/s walk made crossing it a chore.
+    const speed = run ? 11 : 5.5
     const jumpForce = 8
 
-    // Get camera direction
     direction.current.set(0, 0, 0)
-    
+
     if (forward) direction.current.z -= 1
     if (backward) direction.current.z += 1
     if (leftward) direction.current.x -= 1
@@ -515,20 +576,20 @@ function Player({
       }
     }
 
-    // Normalize and apply speed
-    if (direction.current.length() > 0) {
+    const moving = direction.current.lengthSq() > 0
+    if (moving) {
       direction.current.normalize()
       direction.current.multiplyScalar(speed * delta)
-      
+
       // Apply camera rotation to movement direction
       direction.current.applyEuler(camera.rotation)
       direction.current.y = 0 // Keep movement horizontal
     }
 
     // Jump logic
-    if ((jump || touch?.current?.jump) && isOnGround) {
+    if ((jump || touch?.current?.jump) && isOnGround.current) {
       velocity.current.y = jumpForce
-      setIsOnGround(false)
+      isOnGround.current = false
     }
 
     // Apply gravity
@@ -536,28 +597,34 @@ function Player({
     if (camera.position.y <= 1.5 && velocity.current.y < 0) {
       velocity.current.y = 0
       camera.position.y = 1.5
-      setIsOnGround(true)
+      isOnGround.current = true
     }
 
-    // Apply movement
     camera.position.add(direction.current)
     camera.position.y += velocity.current.y * delta
 
-    // Boundary constraints. Indoors the room is 40x40 with walls at +-20, so
-    // keep the player just inside them; there is no collision mesh to stop
-    // them walking out otherwise.
-    const limit = insideBuilding ? 18.5 : 50
-    camera.position.x = MathUtils.clamp(camera.position.x, -limit, limit)
-    camera.position.z = MathUtils.clamp(camera.position.z, -limit, limit)
+    if (insideBuilding) {
+      // The room's own walls. There is no collision mesh inside, so the clamp
+      // is what stops the player walking out through them.
+      const limit = interiorHalfExtent(insideBuilding.interior)
+      camera.position.x = MathUtils.clamp(camera.position.x, -limit, limit)
+      camera.position.z = MathUtils.clamp(camera.position.z, -limit, limit)
+    } else {
+      // Outdoors the buildings are solid. This is new: you used to be able to
+      // walk straight through the library and out the far side.
+      const bounded = clampToCampus(camera.position.x, camera.position.z, CAMPUS_LIMIT)
+      const resolved = resolveCollision(bounded.x, bounded.z)
+      camera.position.x = resolved.x
+      camera.position.z = resolved.z
+    }
     camera.position.y = Math.max(camera.position.y, 1.5)
 
-    // Always update backend position (even when not moving, to send final position on stop)
+    // Always update backend position (even when not moving, to send final
+    // position on stop). The hook throttles the sending.
     const backendCoords = worldTo2D(camera.position.x, camera.position.z)
-    const isMoving = direction.current.length() > 0
-    
-    // Determine direction based on movement
+
     let playerDirection = 'down'
-    if (isMoving) {
+    if (moving) {
       if (Math.abs(direction.current.x) > Math.abs(direction.current.z)) {
         playerDirection = direction.current.x > 0 ? 'right' : 'left'
       } else if (Math.abs(direction.current.z) > 0.1) {
@@ -565,12 +632,11 @@ function Player({
       }
     }
 
-    // Update position every frame - the hook will throttle and handle sending updates
     updatePosition({
       x: backendCoords.x,
       y: backendCoords.y,
       direction: playerDirection,
-      is_moving: isMoving,
+      is_moving: moving,
       // Was hardcoded null, so the server never knew which building anyone
       // was standing in, and neither did anyone else's client. Sent as the
       // building's id rather than its name: two buildings could be given the
@@ -582,80 +648,7 @@ function Player({
   return null
 }
 
-// Study area interaction component
-function StudyAreaInteraction({ area, campusHook }: { area: StudyArea; campusHook: CampusHook }) {
-  const { camera } = useThree()
-  const [isInArea, setIsInArea] = useState(false)
-  const [showUI, setShowUI] = useState(false)
-  
-  const { joinStudyRoom, leaveStudyRoom, lobbyMembers } = campusHook
-
-  useFrame(() => {
-    const distance = camera.position.distanceTo(new Vector3(...area.position))
-    const wasInArea = isInArea
-    const nowInArea = distance < area.radius
-
-    setIsInArea(nowInArea)
-    
-    if (nowInArea && !wasInArea) {
-      setShowUI(true)
-    } else if (!nowInArea && wasInArea) {
-      setShowUI(false)
-      leaveStudyRoom(area.id)
-    }
-  })
-
-  const handleJoinArea = () => {
-    joinStudyRoom(area.id)
-  }
-
-  const handleLeaveArea = () => {
-    leaveStudyRoom(area.id)
-    setShowUI(false)
-  }
-
-  if (!showUI) return null
-
-  // Get members in this study area (simplified - you might want to track this differently)
-  const studyMembers = lobbyMembers.slice(0, Math.floor(Math.random() * area.maxUsers))
-
-  return (
-    <Html position={area.position} center zIndexRange={[9, 0]}>
-      <div className="bg-black bg-opacity-95 backdrop-blur-sm border border-blue-500/30 rounded-xl p-6 text-white text-center min-w-[350px] shadow-2xl pointer-events-auto">
-        <div className="text-3xl mb-3">{area.icon}</div>
-        <h3 className="text-xl font-bold text-blue-400 mb-2">{area.name}</h3>
-        <p className="text-gray-300 mb-4 text-sm leading-relaxed">{area.description}</p>
-
-        <div className="bg-gray-800 rounded-lg p-3 mb-4">
-          <div className="text-xs text-gray-400 mb-1">Current Activity</div>
-          <div className="text-sm font-semibold text-green-400">
-            👥 {studyMembers.length}/{area.maxUsers} students
-          </div>
-          <div className="text-xs text-blue-400 mt-1">
-            📚 {area.subject} • ⏱️ {area.duration}
-          </div>
-        </div>
-
-        <div className="flex gap-2">
-          <button
-            onClick={handleJoinArea}
-            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg text-sm font-medium transition-colors"
-          >
-            Join Study
-          </button>
-          <button
-            onClick={handleLeaveArea}
-            className="flex-1 bg-gray-600 hover:bg-gray-700 text-white py-2 px-4 rounded-lg text-sm font-medium transition-colors"
-          >
-            Leave Area
-          </button>
-        </div>
-      </div>
-    </Html>
-  )
-}
-
-// Main Campus component with backend integration
+/** Main Campus component with backend integration */
 const CampusWithBackend = () => {
   const navigate = useNavigate()
   const { lobbyId: rawLobbyId } = useParams()
@@ -668,10 +661,34 @@ const CampusWithBackend = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [shareExpanded, setShareExpanded] = useState(false)
   const [currentUser, setCurrentUser] = useState<CampusPlayer>(getCurrentUser())
+  const [timeOfDay, setTimeOfDay] = useState<TimeOfDay>('day')
+  // Scaled back automatically on a machine that cannot keep up.
+  const [dpr, setDpr] = useState(1.5)
+
+  const games = useCampusGames()
+  const actionInput = useRef<ActionInput>({ held: false, touchHeld: false })
+
+  const proximity = useRef<Proximity>({ building: null, area: null })
+  const [nearBuilding, setNearBuilding] = useState<CampusBuilding | null>(null)
+  const [nearArea, setNearArea] = useState<StudyArea | null>(null)
+
+  // Sampled rather than pushed: the sensor writes a ref every frame, and this
+  // turns it into React state only when the answer actually changes.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNearBuilding((current) =>
+        current?.id === proximity.current.building?.id ? current : proximity.current.building,
+      )
+      setNearArea((current) =>
+        current?.id === proximity.current.area?.id ? current : proximity.current.area,
+      )
+    }, 160)
+    return () => clearInterval(timer)
+  }, [])
 
   // Initialize campus simulation hook
   const campusHook = useCampusSimulator(lobbyId)
-  
+
   const {
     isConnected,
     isLoading,
@@ -681,16 +698,27 @@ const CampusWithBackend = () => {
     playerPositions,
     userPosition,
     disconnect,
-    coordsTo3D
+    coordsTo3D,
+    joinStudyRoom,
+    leaveStudyRoom,
   } = campusHook
 
   // Release the pointer when any panel opens: while it is locked the cursor is
   // hidden and clicks go to the 3D view instead of the UI.
   useEffect(() => {
-    if ((isChatOpen || isMenuOpen || insideBuilding) && document.pointerLockElement) {
+    if ((isChatOpen || isMenuOpen || games.result) && document.pointerLockElement) {
       document.exitPointerLock()
     }
-  }, [isChatOpen, isMenuOpen, insideBuilding])
+  }, [isChatOpen, isMenuOpen, games.result])
+
+  // Leaving the area you joined should also leave the room on the server.
+  const joinedArea = useRef<string | null>(null)
+  useEffect(() => {
+    if (joinedArea.current && joinedArea.current !== nearArea?.id) {
+      leaveStudyRoom(joinedArea.current)
+      joinedArea.current = null
+    }
+  }, [nearArea, leaveStudyRoom])
 
   // Voice rides on the positions the game already streams.
   const voice = useCampusVoice({
@@ -738,14 +766,13 @@ const CampusWithBackend = () => {
     const presenter = playerPositions?.get?.(userId) ?? playerPositions?.get?.(Number(userId))
     // The id is what travels; the name is what a person can read.
     const room = presenter?.current_room
-    return campusBuildings.find((b) => String(b.id) === room)?.name || null
+    return CAMPUS_BUILDINGS.find((b) => String(b.id) === room)?.name || null
   }, [voice.screenShare, playerPositions])
 
   // Nothing to zoom into once the share stops, or once it is out of the room.
   useEffect(() => {
     if (!voice.screenShare || !shareIsInThisRoom) setShareExpanded(false)
   }, [voice.screenShare, shareIsInThisRoom])
-
 
   // Fetch current user data
   useEffect(() => {
@@ -808,6 +835,8 @@ const CampusWithBackend = () => {
         userData: {
           username: position.username,
           full_name: position.full_name || position.username,  // Use full_name, fallback to username
+          direction: position.direction,
+          is_moving: position.is_moving,
           color: `hsl(${(Number(userId) * 137.5) % 360}, 70%, 60%)`, // Generate colour from user id
         }
       })
@@ -852,11 +881,13 @@ const CampusWithBackend = () => {
     )
   }
 
+  const interiorSpec = insideBuilding ? INTERIOR_SPECS[insideBuilding.interior] : null
+
   return (
     <>
       <Helmet>
         <title>Ufazien | Campus id: {lobbyId}</title>
-        <meta name="description" content="Build and explore virtual campuses with friends in real-time 3D environments." />
+        <meta name="description" content="Explore a 3D UFAZ campus with friends in real time: walk the Nizami Street frontage, go inside the buildings, and play." />
       </Helmet>
       <div className="h-screen w-screen relative overflow-hidden">
         {/* Connection status. A dot on touch, where the label wastes scarce width. */}
@@ -891,13 +922,30 @@ const CampusWithBackend = () => {
         </div>
       )}
 
+      {/* Walking up to a door offers to open it. This used to be a floating
+          HTML button in the 3D scene, which could not be clicked at all while
+          the pointer was locked for mouse-look. */}
+      {!insideBuilding && nearBuilding && !games.active && (
+        <div className="absolute left-1/2 -translate-x-1/2 bottom-32 sm:bottom-16 z-30 pointer-events-none max-w-[92vw]">
+          <div className="bg-black/80 backdrop-blur-sm border border-blue-500/30 rounded-xl px-4 py-2.5 text-white text-center">
+            <div className="text-sm font-semibold">
+              {nearBuilding.icon} {nearBuilding.name}
+            </div>
+            <div className="text-xs text-gray-300 mt-0.5">{nearBuilding.blurb}</div>
+            <div className="text-xs text-blue-300 mt-1">
+              {isTouchDevice ? 'Tap Enter to go inside' : 'Press E to go inside'}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Chat takes over the bottom of a phone screen, which is exactly where
           the controls live. Nobody steers while typing, so they stand down. */}
       {isTouchDevice && !isChatOpen && (
         <TouchControls
           stateRef={touchState}
           insideBuilding={insideBuilding}
-          canInteract
+          canInteract={Boolean(nearBuilding)}
         />
       )}
 
@@ -958,7 +1006,6 @@ const CampusWithBackend = () => {
         onClose={() => setShareExpanded(false)}
       />
 
-
       {/* Lobby info. One compact line on touch; the full card wastes the width. */}
       <div className="absolute top-4 right-4 z-10 pointer-events-auto max-w-[45vw]">
         {isTouchDevice ? (
@@ -982,11 +1029,33 @@ const CampusWithBackend = () => {
         )}
       </div>
 
+      {/* Standing in a study area offers to join it. Also DOM rather than a
+          panel in the scene, for the same pointer-lock reason as the doors. */}
+      {nearArea && !games.active && !nearBuilding && (
+        <div className="absolute right-4 top-32 z-20 pointer-events-auto w-[min(18rem,80vw)]">
+          <div className="bg-black/85 backdrop-blur-sm border border-blue-500/30 rounded-xl p-4 text-white">
+            <div className="text-2xl">{nearArea.icon}</div>
+            <h3 className="font-bold text-blue-400">{nearArea.name}</h3>
+            <p className="text-xs text-gray-300 mt-1 leading-relaxed">{nearArea.description}</p>
+            <p className="text-[11px] text-blue-300 mt-2">
+              📚 {nearArea.subject} · ⏱️ {nearArea.duration} · up to {nearArea.maxUsers}
+            </p>
+            <button
+              onClick={() => {
+                joinStudyRoom(nearArea.id)
+                joinedArea.current = nearArea.id
+              }}
+              className="mt-3 w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg text-sm font-medium"
+            >
+              {joinedArea.current === nearArea.id ? 'Joined' : 'Join study'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Game Menu */}
       {/* Top-left, under the connection pill: bottom-left belongs to the voice
-          panel, and the two overlapped each other. The Toggle Mic and Toggle
-          Video entries had no handlers and duplicated the voice panel, so they
-          are gone; Leave Campus is the only thing this menu actually did. */}
+          panel, and the two overlapped each other. */}
       <div className="absolute top-16 left-4 z-20 pointer-events-auto">
         <div className="flex flex-col gap-2 items-start">
           <button
@@ -999,6 +1068,32 @@ const CampusWithBackend = () => {
 
           {isMenuOpen && (
             <div className="bg-black bg-opacity-90 backdrop-blur-sm border border-gray-600 rounded-lg p-3 w-[min(17rem,80vw)] max-h-[70vh] overflow-y-auto space-y-3">
+              {/* Time of day. The lighting rig has three presets and they
+                  change the campus completely, so they are worth exposing. */}
+              <div>
+                <div className="text-xs text-gray-400 mb-1.5">Time of day</div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {([
+                    ['day', Sun, 'Day'],
+                    ['dusk', Sunset, 'Dusk'],
+                    ['night', Moon, 'Night'],
+                  ] as [TimeOfDay, typeof Sun, string][]).map(([key, Icon, label]) => (
+                    <button
+                      key={key}
+                      onClick={() => setTimeOfDay(key)}
+                      className={`flex flex-col items-center gap-1 py-2 rounded text-[11px] transition-colors ${
+                        timeOfDay === key
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                      }`}
+                    >
+                      <Icon className="w-4 h-4" />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {isTouchDevice && (
                 <VoicePanel
                   connected={voice.connected}
@@ -1029,78 +1124,119 @@ const CampusWithBackend = () => {
 
       {/* 3D Canvas */}
       <KeyboardControls map={keyMap}>
-        <Canvas id="campus-canvas" shadows camera={{ position: [0, 1.5, 0], fov: 75 }}>
+        <Canvas
+          id="campus-canvas"
+          shadows
+          dpr={dpr}
+          gl={{
+            antialias: true,
+            powerPreference: 'high-performance',
+            // Filmic response rather than a linear clip, so a sunlit limestone
+            // wall stops blowing out to flat white.
+            toneMapping: ACESFilmicToneMapping,
+            toneMappingExposure: 1.05,
+          }}
+          camera={{ position: SPAWN, fov: 70, near: 0.1, far: 2200 }}
+        >
+          {/* Drops the resolution on a machine that cannot hold frame rate,
+              and puts it back when it can. Better than picking one number and
+              hoping it suits both a laptop and a phone. */}
+          <PerformanceMonitor
+            onDecline={() => setDpr(1)}
+            onIncline={() => setDpr(Math.min(2, window.devicePixelRatio))}
+          />
+
           <Suspense fallback={null}>
-            {insideBuilding ? (
-              <BuildingInterior>
-                {/* No name or onExit prop: the interior draws neither. The
-                    building name is in the page header and the way out is the
-                    overlay button, because a marker placed behind the spawn
-                    point cannot be seen. */}
-                <ProjectorScreen video={shareIsInThisRoom ? voice.screenShare?.element || null : null} />
+            {insideBuilding && interiorSpec ? (
+              <BuildingInterior kind={insideBuilding.interior}>
+                {/* No name plate in the scene: the page header already says
+                    which building you are inside, and the way out is the
+                    overlay button, because a marker behind the spawn point
+                    cannot be seen. */}
+                <ProjectorScreen
+                  video={shareIsInThisRoom ? voice.screenShare?.element || null : null}
+                  position={interiorSpec.projector}
+                />
+
+                {/* Whichever mini-game lives in this building. */}
+                {insideBuilding.interior === 'lab' && (
+                  <TitrationStation games={games} action={actionInput} position={[0, 0, 8]} />
+                )}
+                {insideBuilding.interior === 'library' && (
+                  <ShelfStation games={games} action={actionInput} position={[0, 0, 14]} />
+                )}
+                {insideBuilding.interior === 'sports' && (
+                  <BasketballStation
+                    games={games}
+                    action={actionInput}
+                    hoop={[0, 3.05, -20]}
+                    range={24}
+                  />
+                )}
               </BuildingInterior>
             ) : (
               <>
-                <CampusEnvironment />
+                <CampusEnvironment timeOfDay={timeOfDay} />
                 <CampusGround />
-                <CampusProps />
+                <CampusProps timeOfDay={timeOfDay} />
+                <CampusBuildings timeOfDay={timeOfDay} />
+                <CampusSkyline timeOfDay={timeOfDay} />
 
-                {campusBuildings.map((building) => (
-                  <Building
-                    key={building.id}
-                    position={building.position}
-                    size={building.size}
-                    color={building.color}
-                    name={building.name}
-                    icon={building.icon}
-                    onEnter={() => setInsideBuilding(building)}
+                {/* Study area markers on the ground */}
+                {studyAreas.map((area) => (
+                  <mesh key={area.id} position={[area.position[0], 0.07, area.position[2]]} rotation={[-Math.PI / 2, 0, 0]}>
+                    <ringGeometry args={[area.radius - 0.7, area.radius, 48]} />
+                    <meshStandardMaterial color="#4F46E5" transparent opacity={0.35} />
+                  </mesh>
+                ))}
+
+                {/* Outdoor mini-games */}
+                <BasketballStation
+                  games={games}
+                  action={actionInput}
+                  hoop={[OUTDOOR_COURT[0], 3.05, OUTDOOR_COURT[2] - 9]}
+                />
+                <DashCourse games={games} />
+
+                {/* Other Players. Only drawn outdoors: the interiors are a
+                    local view of a room, not a shared copy of the world. */}
+                {playerAvatars.map((avatar) => (
+                  <PlayerAvatar
+                    key={avatar.id}
+                    position={avatar.position}
+                    userData={avatar.userData}
                   />
                 ))}
               </>
             )}
 
-            {/* Study Areas */}
-            {studyAreas.map((area) => (
-              <group key={area.id}>
-                {/* Area Visual Indicator */}
-                <mesh position={area.position}>
-                  <cylinderGeometry args={[area.radius, area.radius, 0.1, 32]} />
-                  <meshStandardMaterial color="#4F46E5" transparent opacity={0.2} />
-                </mesh>
-                
-                {/* Study Area Interaction */}
-                <StudyAreaInteraction area={area} campusHook={campusHook} />
-              </group>
-            ))}
-
-            {/* Other Players */}
-            {playerAvatars.map((avatar) => (
-              <PlayerAvatar
-                key={avatar.id}
-                position={avatar.position}
-                userData={avatar.userData}
-                isCurrentUser={false}
-              />
-            ))}
-
-            {/* First Person Player Controller */}
             <InteriorCameraPlacement insideBuilding={insideBuilding} />
+            <ProximitySensor insideBuilding={insideBuilding} target={proximity} />
             <ProximityInteraction
-              buildings={campusBuildings}
               insideBuilding={insideBuilding}
               onEnter={setInsideBuilding}
               onExit={() => setInsideBuilding(null)}
               touch={touchState}
             />
+            <ActionKeyBridge action={actionInput} />
             <Player campusHook={campusHook} insideBuilding={insideBuilding} touch={touchState} />
-            
-            {/* Camera Controls */}
+
             {/* Without a selector drei binds the lock handler to document, so every
-   HUD click grabbed the pointer and the next click never landed. */}
+                HUD click grabbed the pointer and the next click never landed. */}
             {!isTouchDevice && <PointerLockControls selector="#campus-canvas" />}
           </Suspense>
         </Canvas>
       </KeyboardControls>
+
+      <Crosshair visible={games.active === 'booksort'} />
+
+      <MinigameHud
+        games={games}
+        isTouchDevice={isTouchDevice}
+        onAction={(held) => {
+          actionInput.current.touchHeld = held
+        }}
+      />
 
       {/* Chat System */}
       <ChatSystem
@@ -1111,12 +1247,14 @@ const CampusWithBackend = () => {
       />
 
       {/* Instructions */}
-      <div className={`absolute left-1/2 transform -translate-x-1/2 pointer-events-none z-10 max-w-[90vw] ${isTouchDevice ? "hidden" : "bottom-4"}`}>
-        <div className="bg-black bg-opacity-75 text-white px-4 py-2 rounded-lg text-sm">
-          <span className="hidden sm:inline">WASD to move • Space to jump • Shift to run • Click to look around • E to enter or leave a building</span>
-          <span className="sm:hidden">Drag to look • Joystick to move</span>
+      {!games.active && (
+        <div className={`absolute left-1/2 transform -translate-x-1/2 pointer-events-none z-10 max-w-[90vw] ${isTouchDevice ? "hidden" : "bottom-4"}`}>
+          <div className="bg-black bg-opacity-75 text-white px-4 py-2 rounded-lg text-sm">
+            <span className="hidden sm:inline">WASD to move • Shift to run • Space to jump • Click to look • E to enter a building • F to play</span>
+            <span className="sm:hidden">Drag to look • Joystick to move</span>
+          </div>
         </div>
-      </div>
+      )}
     </div>
     </>
   )
