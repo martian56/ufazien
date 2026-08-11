@@ -13,15 +13,17 @@ import {
   Trash2,
   ExternalLink
 } from 'lucide-react';
-import SideBar from '../components/ui/SideBar';
 import notificationsAPI from '../lib/api/endpoints/notifications';
 import pushNotificationService from '../services/pushNotificationService';
 import { useToast, ToastContainer } from '../hooks/useToast';
+import Switch from "../components/ui/Switch"
+import NotificationIcon from "../features/notifications/NotificationIcon"
+import { useAppShell } from "../components/layout/appShellContext"
 
 export default function NotificationsPage() {
   const { notifications: toastNotifications, toast, removeNotification } = useToast();
   const navigate = useNavigate();
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const { isSidebarOpen, setIsSidebarOpen } = useAppShell()
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedFilter, setSelectedFilter] = useState('all');
@@ -139,22 +141,6 @@ export default function NotificationsPage() {
     return notification.notification_type === selectedFilter;
   });
 
-  const getNotificationIcon = (type: string) => {
-    switch (type) {
-      case 'follow':
-        return '👤';
-      case 'like_post':
-      case 'like_comment':
-        return '❤️';
-      case 'comment':
-        return '💬';
-      case 'new_post':
-        return '📝';
-      default:
-        return '🔔';
-    }
-  };
-
   const getTimeAgo = (dateString: string) => {
     const diffInSeconds = Math.floor((Date.now() - new Date(dateString).getTime()) / 1000);
 
@@ -176,7 +162,7 @@ export default function NotificationsPage() {
 
   if (loading && notifications.length === 0) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading notifications...</p>
@@ -191,18 +177,14 @@ export default function NotificationsPage() {
         <title>Ufazien | Notifications</title>
         <meta name="description" content="User notifications for managing alerts and updates." />
       </Helmet>
-      <div className="min-h-screen bg-gray-50 flex">
+      <div className="flex-1 flex flex-col min-w-0">
         {/* Sidebar */}
-        <SideBar
-          isSidebarOpen={isSidebarOpen}
-          setIsSidebarOpen={setIsSidebarOpen}
-        pageTitle="Notifications"
-      />
+        
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
-        <header className="bg-white shadow-sm border-b border-gray-200">
+        <header className="bg-white border-b border-gray-200">
           <div className="flex items-center justify-between h-16 px-4 sm:px-6 lg:px-8">
             <div className="flex items-center gap-4">
               <button 
@@ -256,18 +238,11 @@ export default function NotificationsPage() {
                 <h4 className="font-medium text-gray-900">Push Notifications</h4>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-700">Browser Push</span>
-                  <button
-                    onClick={togglePushNotifications}
-                    className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-                      pushEnabled ? 'bg-blue-600' : 'bg-gray-200'
-                    }`}
-                  >
-                    <span
-                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                        pushEnabled ? 'translate-x-5' : 'translate-x-0'
-                      }`}
-                    />
-                  </button>
+                  <Switch
+                    checked={pushEnabled}
+                    onCheckedChange={togglePushNotifications}
+                    aria-label="Push notifications"
+                  />
                 </div>
               </div>
 
@@ -282,21 +257,14 @@ export default function NotificationsPage() {
                 }).map(([key, label]) => (
                   <div key={key} className="flex items-center justify-between">
                     <span className="text-sm text-gray-700">{label}</span>
-                    <button
-                      onClick={() => updatePreferences({
+                    <Switch
+                      checked={Boolean(preferences[key])}
+                      onCheckedChange={(checked) => updatePreferences({
                         ...preferences,
-                        [key]: !preferences[key]
+                        [key]: checked
                       })}
-                      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-                        preferences[key] ? 'bg-blue-600' : 'bg-gray-200'
-                      }`}
-                    >
-                      <span
-                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                          preferences[key] ? 'translate-x-5' : 'translate-x-0'
-                        }`}
-                      />
-                    </button>
+                      aria-label={label}
+                    />
                   </div>
                 ))}
               </div>
@@ -310,21 +278,14 @@ export default function NotificationsPage() {
                 }).map(([key, label]) => (
                   <div key={key} className="flex items-center justify-between">
                     <span className="text-sm text-gray-700">{label}</span>
-                    <button
-                      onClick={() => updatePreferences({
+                    <Switch
+                      checked={Boolean(preferences[key])}
+                      onCheckedChange={(checked) => updatePreferences({
                         ...preferences,
-                        [key]: !preferences[key]
+                        [key]: checked
                       })}
-                      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-                        preferences[key] ? 'bg-blue-600' : 'bg-gray-200'
-                      }`}
-                    >
-                      <span
-                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                          preferences[key] ? 'translate-x-5' : 'translate-x-0'
-                        }`}
-                      />
-                    </button>
+                      aria-label={label}
+                    />
                   </div>
                 ))}
               </div>
@@ -378,9 +339,7 @@ export default function NotificationsPage() {
                 >
                   <div className="flex items-start gap-4">
                     {/* Icon */}
-                    <div className="flex-shrink-0 text-2xl">
-                      {getNotificationIcon(notification.notification_type)}
-                    </div>
+                    <NotificationIcon type={notification.notification_type} />
 
                     {/* Content */}
                     <div className="flex-1 min-w-0">
@@ -431,14 +390,6 @@ export default function NotificationsPage() {
           )}
         </main>
       </div>
-
-      {/* Mobile Sidebar Overlay */}
-      {isSidebarOpen && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden" 
-          onClick={() => setIsSidebarOpen(false)} 
-        />
-      )}
       
       {/* Toast Notifications */}
       <ToastContainer 

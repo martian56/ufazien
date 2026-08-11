@@ -1,6 +1,8 @@
 import type React from "react"
 
 import type { WizardErrors, WizardFormData } from "./wizardTypes"
+import Select from "../../components/ui/Select"
+import Radio from "../../components/ui/Radio"
 
 interface StepBasicInfoProps {
   formData: WizardFormData
@@ -24,7 +26,7 @@ export default function StepBasicInfo({ formData, errors, handleInputChange, ava
                       type="text"
                       value={formData.name}
                       onChange={(e) => handleInputChange("name", e.target.value)}
-                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                      className={`w-full px-3 py-2 border rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
                         errors.name ? 'border-red-300' : 'border-gray-300'
                       }`}
                       placeholder="My Awesome Website"
@@ -43,12 +45,11 @@ export default function StepBasicInfo({ formData, errors, handleInputChange, ava
                     <div className="mb-4">
                       <div className="space-y-3">
                         <label className="flex items-center">
-                          <input
-                            type="radio"
+                          <Radio
                             name="domainOption"
                             value="new"
                             checked={formData.domainOption === 'new'}
-                            onChange={(e) => handleInputChange("domainOption", e.target.value)}
+                            onSelect={(value) => handleInputChange("domainOption", value)}
                             className="mr-2"
                           />
                           <span className="text-sm text-gray-700">Create new subdomain</span>
@@ -56,12 +57,11 @@ export default function StepBasicInfo({ formData, errors, handleInputChange, ava
                     
                         {availableDomains.length > 0 && (
                           <label className="flex items-center">
-                            <input
-                              type="radio"
+                            <Radio
                               name="domainOption"
                               value="existing"
                               checked={formData.domainOption === 'existing'}
-                              onChange={(e) => handleInputChange("domainOption", e.target.value)}
+                              onSelect={(value) => handleInputChange("domainOption", value)}
                               className="mr-2"
                             />
                             <span className="text-sm text-gray-700">Use existing domain</span>
@@ -78,7 +78,7 @@ export default function StepBasicInfo({ formData, errors, handleInputChange, ava
                             type="text"
                             value={formData.subdomain}
                             onChange={(e) => handleInputChange("subdomain", e.target.value.toLowerCase())}
-                            className={`flex-1 min-w-0 px-3 py-2 border rounded-l-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                            className={`flex-1 min-w-0 px-3 py-2 border rounded-l-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
                               errors.subdomain ? 'border-red-300' : 'border-gray-300'
                             }`}
                             placeholder="mywebsite"
@@ -99,20 +99,16 @@ export default function StepBasicInfo({ formData, errors, handleInputChange, ava
                     {/* Existing domain selection */}
                     {formData.domainOption === 'existing' && availableDomains.length > 0 && (
                       <div className="mb-4">
-                        <select
-                          value={formData.selectedDomainId || ''}
-                          onChange={(e) => handleInputChange("selectedDomainId", e.target.value)}
-                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                            errors.selectedDomainId ? 'border-red-300' : 'border-gray-300'
-                          }`}
-                        >
-                          <option value="">Select an available domain</option>
-                          {availableDomains.map((domain) => (
-                            <option key={domain.id} value={domain.id}>
-                              {domain.name}
-                            </option>
-                          ))}
-                        </select>
+                        <Select
+                          value={formData.selectedDomainId || ""}
+                          onChange={(value) => handleInputChange("selectedDomainId", value)}
+                          options={availableDomains.map((domain) => ({
+                            value: String(domain.id),
+                            label: domain.name,
+                          }))}
+                          placeholder="Select an available domain"
+                          aria-label="Available domain"
+                        />
                         {errors.selectedDomainId && (
                           <p className="mt-1 text-sm text-red-600">{errors.selectedDomainId}</p>
                         )}
@@ -140,7 +136,7 @@ export default function StepBasicInfo({ formData, errors, handleInputChange, ava
                       value={formData.description}
                       onChange={(e) => handleInputChange("description", e.target.value)}
                       rows={3}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                       placeholder="Brief description of your website..."
                     />
                   </div>

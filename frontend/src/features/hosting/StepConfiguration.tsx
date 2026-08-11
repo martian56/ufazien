@@ -1,6 +1,8 @@
 import type React from "react"
 
 import type { WizardErrors, WizardFormData } from "./wizardTypes"
+import Select from "../../components/ui/Select"
+import { Checkbox } from "../../components/ui/checkbox"
 
 interface StepConfigurationProps {
   formData: WizardFormData
@@ -31,16 +33,16 @@ export default function StepConfiguration({
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         PHP Version
                       </label>
-                      <select
-                        value={formData.phpVersion}
-                        onChange={(e) => handleInputChange("phpVersion", e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      >
-                        <option value="8.2">PHP 8.2 (Recommended)</option>
-                        <option value="8.1">PHP 8.1</option>
-                        <option value="8.0">PHP 8.0</option>
-                        <option value="7.4">PHP 7.4</option>
-                      </select>
+                      <Select
+        value={formData.phpVersion}
+        onChange={(value) => handleInputChange("phpVersion", value)}
+        options={[
+          { value: "8.2", label: "PHP 8.2 (Recommended)" },
+          { value: "8.1", label: "PHP 8.1" },
+          { value: "8.0", label: "PHP 8.0" },
+          { value: "7.4", label: "PHP 7.4" },
+        ]}
+      />
                     </div>
                   )}
 
@@ -73,14 +75,14 @@ export default function StepConfiguration({
                               placeholder="Variable name (e.g., API_URL)"
                               value={envVar.key}
                               onChange={(e) => handleEnvironmentVariableChange(index, 'key', e.target.value)}
-                              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                             />
                             <input
                               type="text"
                               placeholder="Value (e.g., https://api.example.com)"
                               value={envVar.value}
                               onChange={(e) => handleEnvironmentVariableChange(index, 'value', e.target.value)}
-                              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                             />
                             <button
                               type="button"
@@ -105,12 +107,10 @@ export default function StepConfiguration({
                   {/* SSL Certificate */}
                   <div>
                     <div className="flex items-center space-x-2">
-                      <input
-                        type="checkbox"
+                      <Checkbox
                         id="enable-ssl"
                         checked={formData.ssl}
-                        onChange={(e) => handleInputChange("ssl", e.target.checked)}
-                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                        onCheckedChange={(checked) => handleInputChange("ssl", checked)}
                       />
                       <label htmlFor="enable-ssl" className="text-sm font-medium text-gray-700">
                         Enable SSL Certificate (HTTPS)

@@ -30,7 +30,7 @@ export default function FocusTimer({
   onToggleSound,
 }: FocusTimerProps) {
   return (
-    <div className={`rounded-xl shadow-sm border p-6 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+    <div className={`rounded-xl border p-6 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-semibold flex items-center">
           <Clock className="w-4 h-4 mr-2" />

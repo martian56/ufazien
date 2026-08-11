@@ -12,7 +12,6 @@ import { ArrowLeft, Heart, MessageCircle, Share2, Bookmark, Eye, Clock,
 } from "lucide-react"
 
 import { getMajorDisplayName, formatYearDisplay } from "../../../utils/majorUtils"
-import SideBar from "../../../components/ui/SideBar"
 // import "../../../components/RichTextEditor.css"
 // import "../../../components/BlogContent.css"
 import PostBody from "../../../features/blog/PostBody"
@@ -43,6 +42,7 @@ interface ReaderProfile {
 import { isAuthenticated } from "../../../lib/api/tokens"
 import { processblogContent, extractPlainText, calculateReadTime } from "../../../utils/contentProcessor"
 import { useToast, ToastContainer } from "../../../hooks/useToast"
+import { useAppShell } from "../../../components/layout/appShellContext"
 
 // Helper function to strip HTML tags for text processing
 export default function BlogRead() {
@@ -51,7 +51,7 @@ export default function BlogRead() {
   const navigate = useNavigate()
 
   // Sidebar state
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const { isSidebarOpen, setIsSidebarOpen } = useAppShell()
 
   // Core state
   const [post, setPost] = useState<BlogPost | null>(null)
@@ -455,7 +455,7 @@ export default function BlogRead() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-gray-600">Loading blog post...</p>
@@ -466,7 +466,7 @@ export default function BlogRead() {
 
   if (error || !post) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="text-center">
           <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
           <h2 className="text-xl font-semibold text-gray-900 mb-2">Error Loading Post</h2>
@@ -490,25 +490,17 @@ export default function BlogRead() {
       </Helmet>
 
       <div
-        className={`min-h-screen flex transition-colors duration-300 ${darkMode ? "bg-gray-900 text-white" : "bg-gray-50 text-gray-900"}`}
+        className={`flex-1 flex flex-col min-w-0 transition-colors duration-300 ${darkMode ? "bg-gray-900 text-white" : "bg-white text-gray-900"}`}
       >
-        {/* Sidebar Overlay for Mobile */}
-        {isSidebarOpen && (
-          <div
-            className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
-            onClick={() => setIsSidebarOpen(false)}
-          ></div>
-        )}
-
         {/* Sidebar */}
-        <SideBar isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen} pageTitle="Blog" />
+        
 
   {/* Main Content */}
   <div className="flex-1 flex flex-col overflow-hidden">
           {/* Reading Progress Bar */}
           <div className="fixed top-0 left-0 lg:left-64 w-full lg:w-[calc(100%-16rem)] h-1 bg-gray-200 z-50">
             <div
-              className="h-full bg-gradient-to-r from-blue-600 to-purple-600 transition-all duration-300"
+              className="h-full bg-blue-600 transition-all duration-300"
               style={{ width: `${readingProgress}%` }}
             ></div>
           </div>
@@ -718,7 +710,7 @@ export default function BlogRead() {
                   </span>
                   <span className="flex items-center space-x-2 text-gray-600">
                     <MessageCircle className="w-4 h-4" />
-                    <span>{countComments(comments)} comments</span>
+                    <span>{countComments(comments)} {countComments(comments) === 1 ? "comment" : "comments"}</span>
                   </span>
                 </div>
 
@@ -740,7 +732,7 @@ export default function BlogRead() {
 
           {/* Article Actions */}
           <div
-            className={`sticky bottom-6 mt-12 p-4 rounded-xl shadow-lg border backdrop-blur-sm ${
+            className={`sticky bottom-6 mt-12 p-4 rounded-lg border ${
               darkMode ? "bg-gray-800/90 border-gray-700" : "bg-white/90 border-gray-200"
             }`}
           >

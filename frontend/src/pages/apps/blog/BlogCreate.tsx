@@ -573,7 +573,7 @@ const BlogCreate = () => {
         <title>Ufazien | Blog Create</title>
         <meta name="description" content="Create and publish your articles on Ufazien's blog." />
       </Helmet>
-      <div className={`min-h-screen transition-colors duration-300 ${darkMode ? 'bg-gray-900 text-white' : 'bg-gray-50 text-gray-900'}`}>
+      <div className={`min-h-screen transition-colors duration-300 ${darkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'}`}>
         {/* Header */}
         <div className={`sticky top-0 z-50 border-b backdrop-blur-sm ${darkMode ? 'bg-gray-900/90 border-gray-700' : 'bg-white/90 border-gray-200'}`}>
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -586,7 +586,7 @@ const BlogCreate = () => {
                 <ChevronLeft className="w-5 h-5" />
                 <span className="hidden sm:inline">Back</span>
               </button>
-              <h1 className="text-base sm:text-xl font-bold truncate bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+              <h1 className="text-base sm:text-xl font-bold truncate text-gray-900">
                 Ufazien Blog Studio
               </h1>
               {isTyping && (
@@ -643,7 +643,7 @@ const BlogCreate = () => {
                 className={`flex items-center space-x-2 px-2.5 sm:px-4 py-2 rounded-lg transition-all ${
                   isPublishing || !title.trim() || !content.trim() || !category
                     ? 'bg-gray-400 cursor-not-allowed'
-                    : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700'
+                    : 'bg-blue-600 hover:bg-blue-700'
                 } text-white`}
               >
                 <Send className="w-4 h-4" />
@@ -658,7 +658,7 @@ const BlogCreate = () => {
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           {/* Main Editor */}
           <div className={`lg:col-span-3 ${focusMode ? 'lg:col-span-4' : ''}`}>
-            <div className={`rounded-xl shadow-sm border ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+            <div className={`rounded-xl border ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
               {/* Title Input */}
               <div className="p-6 pb-0">
                 <input
@@ -724,7 +724,7 @@ const BlogCreate = () => {
                 </div>
                 <div className={`w-full h-2 rounded-full ${darkMode ? 'bg-gray-700' : 'bg-gray-200'}`}>
                   <div 
-                    className="h-2 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full transition-all duration-300"
+                    className="h-2 bg-blue-600 rounded-full transition-all duration-300"
                     style={{ width: `${Math.min(writingProgress, 100)}%` }}
                   ></div>
                 </div>

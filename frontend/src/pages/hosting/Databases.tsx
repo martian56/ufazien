@@ -28,8 +28,11 @@ import UpgradePrompt from "../../components/hosting/UpgradePrompt"
 import ConfirmationModal from "../../components/ui/ConfirmationModal"
 import { useSubscription } from "../../hooks/useSubscription"
 import { useDatabases } from "../../hooks/useDatabases.js"
+import Select from "../../components/ui/Select"
+import { useDialogs } from "../../components/ui/Dialogs"
 
 export default function Databases() {
+  const { toast, confirm } = useDialogs()
   const navigate = useNavigate()
   const { subscription } = useSubscription()
   const { databases, loading, error, canCreate, deleteDatabase, updateDatabase } = useDatabases()
@@ -50,12 +53,16 @@ export default function Databases() {
   }
 
   const handleDeleteDatabase = async (databaseId: string) => {
-    if (confirm('Are you sure you want to delete this database? This action cannot be undone.')) {
-      try {
-        await deleteDatabase(databaseId)
-      } catch (error) {
-        alert('Failed to delete database: ' + errorMessage(error))
-      }
+    const ok = await confirm({
+      title: 'Delete this database?',
+      message: 'Everything in it goes with it. This cannot be undone.',
+      confirmText: 'Delete database',
+    })
+    if (!ok) return
+    try {
+      await deleteDatabase(databaseId)
+    } catch (error) {
+      toast.error('Could not delete the database. ' + errorMessage(error))
     }
   }
 
@@ -76,7 +83,7 @@ export default function Databases() {
       await deleteDatabase(deleteModal.database.id)
       closeDeleteModal()
     } catch (error) {
-      alert('Failed to delete database: ' + errorMessage(error))
+      toast.error('Could not delete the database. ' + errorMessage(error))
       setDeleteModal(prev => ({ ...prev, loading: false }))
     }
   }
@@ -127,7 +134,7 @@ export default function Databases() {
   const handlePasswordChange = async (databaseId: string) => {
     const newPassword = newPasswords[databaseId]
     if (!newPassword || newPassword.length < 8) {
-      alert('Password must be at least 8 characters long')
+      toast.error('The password needs at least 8 characters.')
       return
     }
 
@@ -135,9 +142,9 @@ export default function Databases() {
       await updateDatabase(databaseId, { password: newPassword })
       setChangingPassword(prev => ({ ...prev, [databaseId]: false }))
       setNewPasswords(prev => ({ ...prev, [databaseId]: '' }))
-      alert('Password updated successfully')
+      toast.success('Password updated.')
     } catch (error) {
-      alert('Failed to update password: ' + errorMessage(error))
+      toast.error('Could not update the password. ' + errorMessage(error))
     }
   }
 
@@ -161,7 +168,7 @@ export default function Databases() {
           <title>Databases | Ufazien Hosting</title>
           <meta name="description" content="Manage your MySQL and PostgreSQL databases" />
         </Helmet>
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen bg-white">
           <HostingSidebar />
           <div className="lg:ml-64">
             <div className="flex items-center justify-center h-64">
@@ -180,7 +187,7 @@ export default function Databases() {
           <title>Databases | Ufazien Hosting</title>
           <meta name="description" content="Manage your MySQL and PostgreSQL databases" />
         </Helmet>
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen bg-white">
           <HostingSidebar />
           <div className="lg:ml-64">
             <div className="flex items-center justify-center h-64">
@@ -202,7 +209,7 @@ export default function Databases() {
         <title>Databases | Ufazien Hosting</title>
         <meta name="description" content="Manage your MySQL and PostgreSQL databases" />
       </Helmet>
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-white">
         <HostingSidebar />
         
         <div className="lg:ml-64">
@@ -247,27 +254,27 @@ export default function Databases() {
                   placeholder="Search databases..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                 />
               </div>
               <div className="flex items-center gap-2">
                 <Filter className="h-4 w-4 text-gray-400" />
-                <select
-                  value={typeFilter}
-                  onChange={(e) => setTypeFilter(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="all">All Types</option>
-                  <option value="mysql">MySQL</option>
-                  <option value="postgresql">PostgreSQL</option>
-                </select>
+                <Select
+        value={typeFilter}
+        onChange={(value) => setTypeFilter(value)}
+        options={[
+          { value: "all", label: "All Types" },
+          { value: "mysql", label: "MySQL" },
+          { value: "postgresql", label: "PostgreSQL" },
+        ]}
+      />
               </div>
             </div>
 
             {/* Databases List */}
             <div className="space-y-4">
               {filteredDatabases.map((database) => (
-                <div key={database.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <div key={database.id} className="bg-white rounded-lg border border-gray-200 p-6">
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-center space-x-3">
                       <div className="bg-green-100 rounded-lg p-2">

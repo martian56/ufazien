@@ -52,6 +52,7 @@ import HostingSidebar from "../../components/hosting/HostingSidebar"
 import { useWebsites } from "../../hooks/useWebsites"
 import { useDashboard } from "../../hooks/useDashboard"
 import { useSubscription } from "../../hooks/useSubscription"
+import Select from "../../components/ui/Select"
 
 export default function Analytics() {
   const navigate = useNavigate()
@@ -177,7 +178,7 @@ export default function Analytics() {
           <title>Analytics | Ufazien Hosting</title>
           <meta name="description" content="Monitor your website traffic and performance" />
         </Helmet>
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen bg-white">
           <HostingSidebar />
           <div className="lg:ml-64">
             <div className="p-4 lg:p-6 pt-16 lg:pt-6">
@@ -207,7 +208,7 @@ export default function Analytics() {
           <title>Analytics | Ufazien Hosting</title>
           <meta name="description" content="Monitor your website traffic and performance" />
         </Helmet>
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen bg-white">
           <HostingSidebar />
           <div className="lg:ml-64">
             <div className="p-4 lg:p-6 pt-16 lg:pt-6">
@@ -235,7 +236,7 @@ export default function Analytics() {
         <title>Analytics | Ufazien Hosting</title>
         <meta name="description" content="Monitor your website traffic and performance" />
       </Helmet>
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-white">
         <HostingSidebar />
         
         <div className="lg:ml-64">
@@ -258,40 +259,35 @@ export default function Analytics() {
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Website
                   </label>
-                  <select
-                    value={selectedWebsite?.id || ''}
-                    onChange={(e) => {
-                      const website = websites.find(w => w.id === e.target.value)
+                  <Select
+                    value={selectedWebsite?.id ? String(selectedWebsite.id) : ""}
+                    onChange={(value) => {
+                      const website = websites.find((w) => String(w.id) === value)
                       setSelectedWebsite(website ?? null)
                     }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    {websites && websites.length > 0 ? (
-                      websites.map(website => (
-                        <option key={website.id} value={website.id}>
-                          {website.name}
-                        </option>
-                      ))
-                    ) : (
-                      <option value="">No websites available</option>
-                    )}
-                  </select>
+                    options={(websites ?? []).map((website) => ({
+                      value: String(website.id),
+                      label: website.name,
+                    }))}
+                    placeholder="Select a website"
+                    aria-label="Website"
+                  />
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Time Period
                   </label>
-                  <select
-                    value={selectedPeriod}
-                    onChange={(e) => setSelectedPeriod(e.target.value)}
-                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="1d">Last 24 hours</option>
-                    <option value="7d">Last 7 days</option>
-                    <option value="30d">Last 30 days</option>
-                    <option value="90d">Last 90 days</option>
-                  </select>
+                  <Select
+        value={selectedPeriod}
+        onChange={(value) => setSelectedPeriod(value)}
+        options={[
+          { value: "1d", label: "Last 24 hours" },
+          { value: "7d", label: "Last 7 days" },
+          { value: "30d", label: "Last 30 days" },
+          { value: "90d", label: "Last 90 days" },
+        ]}
+      />
                 </div>
               </div>
             </div>
@@ -312,7 +308,7 @@ export default function Analytics() {
               <>
                 {/* Stats Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                  <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                  <div className="bg-white rounded-lg border border-gray-200 p-6">
                     <div className="flex items-center">
                       <div className="p-2 bg-blue-100 rounded-lg">
                         <Users className="h-6 w-6 text-blue-600" />
@@ -326,7 +322,7 @@ export default function Analytics() {
                     </div>
                   </div>
 
-                  <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                  <div className="bg-white rounded-lg border border-gray-200 p-6">
                     <div className="flex items-center">
                       <div className="p-2 bg-green-100 rounded-lg">
                         <Eye className="h-6 w-6 text-green-600" />
@@ -340,7 +336,7 @@ export default function Analytics() {
                     </div>
                   </div>
 
-                  <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                  <div className="bg-white rounded-lg border border-gray-200 p-6">
                     <div className="flex items-center">
                       <div className="p-2 bg-yellow-100 rounded-lg">
                         <TrendingUp className="h-6 w-6 text-yellow-600" />
@@ -354,7 +350,7 @@ export default function Analytics() {
                     </div>
                   </div>
 
-                  <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                  <div className="bg-white rounded-lg border border-gray-200 p-6">
                     <div className="flex items-center">
                       <div className="p-2 bg-purple-100 rounded-lg">
                         <Clock className="h-6 w-6 text-purple-600" />
@@ -372,7 +368,7 @@ export default function Analytics() {
                 {/* Charts and Data */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
                   {/* Traffic Chart */}
-                  <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                  <div className="bg-white rounded-lg border border-gray-200 p-6">
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="text-lg font-semibold text-gray-900">Traffic Overview</h3>
                       <div className="flex items-center space-x-4 text-sm">
@@ -444,7 +440,7 @@ export default function Analytics() {
                   </div>
 
                   {/* Top Pages */}
-                  <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                  <div className="bg-white rounded-lg border border-gray-200 p-6">
                     <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Pages</h3>
                     <div className="space-y-3">
                       {/* The endpoint returns no per-page breakdown, so this
@@ -460,7 +456,7 @@ export default function Analytics() {
 
                 {/* Bandwidth Usage */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                  <div className="bg-white rounded-lg border border-gray-200 p-6">
                     <h3 className="text-lg font-semibold text-gray-900 mb-4">Bandwidth Usage</h3>
                     <div className="space-y-4">
                       <div className="flex items-center justify-between">
@@ -511,7 +507,7 @@ export default function Analytics() {
                     </div>
                   </div>
 
-                  <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                  <div className="bg-white rounded-lg border border-gray-200 p-6">
                     <h3 className="text-lg font-semibold text-gray-900 mb-4">Performance Metrics</h3>
                     <div className="space-y-4">
                       <div className="flex items-center justify-between">

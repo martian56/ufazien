@@ -1,3 +1,4 @@
+import { Palette } from "lucide-react"
 import { Label } from "../../components/ui/label"
 
 /**
@@ -43,21 +44,13 @@ function Choice({ id, label, value, options, onChange }: ChoiceProps) {
   return (
     <div className="space-y-2">
       <Label htmlFor={id} className="text-sm font-semibold text-gray-700">{label}</Label>
-      <select
-        id={id}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>{option.label}</option>
-        ))}
-      </select>
+      <Select id={id} value={value} onChange={onChange} options={options} />
     </div>
   )
 }
 
 import type { AppearanceSettings } from "./settingsMapping"
+import Select from "../../components/ui/Select"
 
 interface AppearanceTabProps {
   settings: AppearanceSettings
@@ -68,8 +61,8 @@ export default function AppearanceTab({ settings, onChange }: AppearanceTabProps
   return (
     <div className="p-8">
       <div className="flex items-center gap-4 mb-8">
-        <div className="w-12 h-12 bg-gradient-to-r from-pink-500 to-rose-600 rounded-xl flex items-center justify-center">
-          <span className="text-white text-xl">🎨</span>
+        <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
+          <Palette className="w-5 h-5 text-gray-700" aria-hidden="true" />
         </div>
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Appearance</h2>

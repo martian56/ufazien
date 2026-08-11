@@ -17,7 +17,7 @@ export default function HostingPage({ title, description, icon: Icon, children }
         <title>{title} | Ufazien Hosting</title>
         <meta name="description" content={description} />
       </Helmet>
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-white">
         <HostingSidebar />
         
         <div className="lg:ml-64">

@@ -28,12 +28,12 @@ import {
   CheckCircle,
   AlertCircle
 } from "lucide-react"
-import SideBar from "../../../components/ui/SideBar"
 import AverageTab from "./AverageTab"
 import MySchemasTab from "./MySchemasTab"
 import PublicSchemasTab from "./PublicSchemasTab"
 import averageApi, { type Schema, type SchemaGrades } from "../../../lib/api/endpoints/average"
 import { ApiError } from "../../../lib/api/errors"
+import { useAppShell } from "../../../components/layout/appShellContext"
 
 /** Page number to page of results, for the two schema lists. */
 interface PageInfo {
@@ -55,7 +55,7 @@ const PAGE_SIZE = 20
 
 export default function AverageCalculator() {
   const navigate = useNavigate()
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const { isSidebarOpen, setIsSidebarOpen } = useAppShell()
   const [activeTab, setActiveTab] = useState("average") // average, my-schemas, public-schemas
   const [currentSchema, setCurrentSchema] = useState<SchemaGrades | null>(null)
   const [mySchemas, setMySchemas] = useState<Schema[]>([])
@@ -331,18 +331,14 @@ export default function AverageCalculator() {
         <title>Ufazien | Average Calculator</title>
         <meta name="description" content="Calculate your average grades with Ufazien's Average Calculator." />
       </Helmet>
-      <div className="min-h-screen bg-gray-50 flex">
+      <div className="flex-1 flex flex-col min-w-0">
         {/* Sidebar */}
-        <SideBar
-          isSidebarOpen={isSidebarOpen}
-          setIsSidebarOpen={setIsSidebarOpen}
-        pageTitle="Average Calculator"
-      />
+        
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
-        <header className="bg-white shadow-sm border-b border-gray-200">
+        <header className="bg-white border-b border-gray-200">
           <div className="flex items-center justify-between h-16 px-4 sm:px-6 lg:px-8">
             <div className="flex items-center gap-4">
               <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden p-2 rounded-md hover:bg-gray-100">
@@ -481,11 +477,6 @@ export default function AverageCalculator() {
           )}
         </main>
       </div>
-
-      {/* Mobile Sidebar Overlay */}
-      {isSidebarOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden" onClick={() => setIsSidebarOpen(false)} />
-      )}
     </div>
   </>
   )

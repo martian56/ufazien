@@ -36,8 +36,10 @@ import HostingSidebar from "../../components/hosting/HostingSidebar"
 import ConfirmationModal from "../../components/ui/ConfirmationModal"
 import { hostingApi } from "../../utils/hostingApi"
 import { useWebsites } from "../../hooks/useWebsites.js"
+import { useDialogs } from "../../components/ui/Dialogs"
 
 export default function WebsiteDetail() {
+  const { toast, confirm } = useDialogs()
   const { websiteId = "" } = useParams()
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState("overview")
@@ -153,19 +155,24 @@ export default function WebsiteDetail() {
       setSelectedFiles([])
       await refreshFiles()
     } catch (err) {
-      alert('Upload failed: ' + errorMessage(err))
+      toast.error('Upload failed. ' + errorMessage(err))
     } finally {
       setUploading(false)
     }
   }
 
   const handleFileDelete = async (filename: string) => {
-    if (!confirm(`Delete ${filename}?`)) return
+    const ok = await confirm({
+      title: `Delete ${filename}?`,
+      message: 'This removes the file from the live site.',
+      confirmText: 'Delete file',
+    })
+    if (!ok) return
     try {
       await hostingApi.deleteFile(websiteId, filename)
       await refreshFiles()
     } catch (err) {
-      alert('Delete failed: ' + errorMessage(err))
+      toast.error('Could not delete that file. ' + errorMessage(err))
     }
   }
 
@@ -185,7 +192,7 @@ export default function WebsiteDetail() {
       document.body.removeChild(link)
       window.URL.revokeObjectURL(url)
     } catch (err) {
-      alert('Download failed: ' + errorMessage(err))
+      toast.error('Download failed. ' + errorMessage(err))
     }
   }
 
@@ -202,7 +209,7 @@ export default function WebsiteDetail() {
       const deploymentsData = (await hostingApi.getWebsiteDeployments(websiteId)) as Deployment[] | { results?: Deployment[] }
       setDeployments(Array.isArray(deploymentsData) ? deploymentsData : deploymentsData?.results ?? [])
     } catch (err) {
-      alert('Failed to deploy website: ' + errorMessage(err))
+      toast.error('Could not deploy the website. ' + errorMessage(err))
     }
   }
 
@@ -221,7 +228,7 @@ export default function WebsiteDetail() {
       await deleteWebsite(websiteId)
       navigate('/hosting/websites')
     } catch (err) {
-      alert('Failed to delete website: ' + errorMessage(err))
+      toast.error('Could not delete the website. ' + errorMessage(err))
       setDeleteModal(prev => ({ ...prev, loading: false }))
     }
   }
@@ -240,7 +247,7 @@ export default function WebsiteDetail() {
       setEditingSettings(false)
       // Show success message (could add toast notification here)
     } catch (err) {
-      alert('Failed to update website settings: ' + errorMessage(err))
+      toast.error('Could not save those settings. ' + errorMessage(err))
     }
   }
 
@@ -288,7 +295,7 @@ export default function WebsiteDetail() {
       setEditingEnvVars(false)
       // Show success message (could add toast notification here)
     } catch (err) {
-      alert('Failed to update environment variables: ' + errorMessage(err))
+      toast.error('Could not save the environment variables. ' + errorMessage(err))
     }
   }
 
@@ -315,7 +322,7 @@ export default function WebsiteDetail() {
         <Helmet>
           <title>Website Details | Ufazien Hosting</title>
         </Helmet>
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen bg-white">
           <HostingSidebar />
           <div className="lg:ml-64">
             <div className="flex items-center justify-center h-64 pt-16 lg:pt-0">
@@ -333,7 +340,7 @@ export default function WebsiteDetail() {
         <Helmet>
           <title>Website Not Found | Ufazien Hosting</title>
         </Helmet>
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen bg-white">
           <HostingSidebar />
           <div className="lg:ml-64">
             <div className="flex items-center justify-center h-64 pt-16 lg:pt-0">
@@ -365,7 +372,7 @@ export default function WebsiteDetail() {
         <title>{website.name} | Ufazien Hosting</title>
         <meta name="description" content={`Manage ${website.name} - ${website.domain}`} />
       </Helmet>
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-white">
         <HostingSidebar />
         
         <div className="lg:ml-64">
@@ -427,7 +434,7 @@ export default function WebsiteDetail() {
 
               {/* Quick Stats */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+                <div className="bg-white rounded-lg border border-gray-200 p-4">
                   <div className="flex items-center">
                     <Eye className="w-6 h-6 text-blue-600 mr-3" />
                     <div>
@@ -437,7 +444,7 @@ export default function WebsiteDetail() {
                   </div>
                 </div>
 
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+                <div className="bg-white rounded-lg border border-gray-200 p-4">
                   <div className="flex items-center">
                     <HardDrive className="w-6 h-6 text-green-600 mr-3" />
                     <div>
@@ -447,7 +454,7 @@ export default function WebsiteDetail() {
                   </div>
                 </div>
 
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+                <div className="bg-white rounded-lg border border-gray-200 p-4">
                   <div className="flex items-center">
                     <Clock className="w-6 h-6 text-purple-600 mr-3" />
                     <div>
@@ -459,7 +466,7 @@ export default function WebsiteDetail() {
                   </div>
                 </div>
 
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+                <div className="bg-white rounded-lg border border-gray-200 p-4">
                   <div className="flex items-center">
                     <Zap className="w-6 h-6 text-yellow-600 mr-3" />
                     <div>

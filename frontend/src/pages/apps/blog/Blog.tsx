@@ -8,7 +8,6 @@ import { PenTool, Search, Heart, MessageCircle,Share2,
   Twitter, Facebook, Linkedin, Copy,
 } from "lucide-react"
 
-import SideBar from "../../../components/ui/SideBar"
 import { formatYearWithOrdinal } from "../../../utils/majorUtils"
 import BlogPostCard from "../../../features/blog/BlogPostCard"
 import { createExcerpt } from "../../../features/blog/createExcerpt"
@@ -19,6 +18,9 @@ import { api } from "../../../lib/api/client"
 import { toList } from "../../../lib/api/types"
 import { errorMessage } from "../../../lib/api/errors"
 import { logger } from "../../../lib/logger"
+import Select from "../../../components/ui/Select"
+import { useDialogs } from "../../../components/ui/Dialogs"
+import { useAppShell } from "../../../components/layout/appShellContext"
 
 /** The category picker prepends an "All" entry, which has no id on the server. */
 type CategoryOption = { id: number | "all"; name: string }
@@ -34,8 +36,9 @@ interface BlogUser {
 }
 
 export default function Blog() {
+  const { toast } = useDialogs()
   const navigate = useNavigate()
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const { isSidebarOpen, setIsSidebarOpen } = useAppShell()
   const [activeTab, setActiveTab] = useState("all") // all, following, my-posts
   const [searchQuery, setSearchQuery] = useState("")
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("")
@@ -292,16 +295,7 @@ export default function Blog() {
     
     const url = `${window.location.origin}/blog/${selectedPostForShare.id}`
     navigator.clipboard.writeText(url)
-    
-    // Show a better notification
-    const notification = document.createElement('div')
-    notification.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50'
-    notification.textContent = 'Link copied to clipboard!'
-    document.body.appendChild(notification)
-    
-    setTimeout(() => {
-      document.body.removeChild(notification)
-    }, 3000)
+    toast.success('Link copied to clipboard.')
   }
 
   const handleShareClick = (post: BlogPost) => {
@@ -338,17 +332,13 @@ export default function Blog() {
         <title>Ufazien | Blog</title>
         <meta name="description" content="Read and share articles on Ufazien's blog." />
       </Helmet>
-      <div className="min-h-screen bg-gray-50 flex">
+      <div className="flex-1 flex flex-col min-w-0">
         {/* Sidebar */}
-        <SideBar
-          isSidebarOpen={isSidebarOpen}
-          setIsSidebarOpen={setIsSidebarOpen}
-          pageTitle="Blog"
-        />
+        
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
-        <header className="bg-white shadow-sm border-b border-gray-200">
+        <header className="bg-white border-b border-gray-200">
           <div className="flex items-center justify-between h-16 px-4 sm:px-6 lg:px-8">
             <div className="flex items-center gap-4">
               <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden p-2 rounded-md hover:bg-gray-100">
@@ -446,7 +436,7 @@ export default function Blog() {
                     placeholder="Search posts, tags, or authors..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-12 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full pl-10 pr-12 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                   />
                   {searchQuery && (
                     <button
@@ -466,43 +456,44 @@ export default function Blog() {
                 </div>
 
                 {/* Category Filter */}
-                <select
+                <Select
                   value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  onChange={setSelectedCategory}
                   disabled={categoriesLoading}
-                >
-                  {categories.map((category) => (
-                    <option key={category.id} value={category.id === 'all' ? 'all' : category.name.toLowerCase()}>
-                      {category.name}
-                    </option>
-                  ))}
-                </select>
+                  className="w-48"
+                  aria-label="Category"
+                  options={categories.map((category) => ({
+                    value: category.id === "all" ? "all" : category.name.toLowerCase(),
+                    label: category.name,
+                  }))}
+                />
 
                 {/* Sort Filter */}
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
-                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="latest">Latest</option>
-                  <option value="popular">Most Liked</option>
-                  <option value="trending">Most Viewed</option>
-                </select>
+                <Select
+        value={sortBy}
+        onChange={(value) => setSortBy(value)}
+        options={[
+          { value: "latest", label: "Latest" },
+          { value: "popular", label: "Most Liked" },
+          { value: "trending", label: "Most Viewed" },
+        ]}
+      />
 
                 {/* Page Size Selector */}
-                <select
-                  value={pageSize}
-                  onChange={(e) => {
-                    setPageSize(parseInt(e.target.value));
-                    setCurrentPage(1); // Reset to first page when changing page size
+                <Select
+                  value={String(pageSize)}
+                  onChange={(value) => {
+                    setPageSize(parseInt(value))
+                    setCurrentPage(1)
                   }}
-                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value={10}>10 per page</option>
-                  <option value={20}>20 per page</option>
-                  <option value={50}>50 per page</option>
-                </select>
+                  className="w-40"
+                  aria-label="Results per page"
+                  options={[
+                    { value: "10", label: "10 per page" },
+                    { value: "20", label: "20 per page" },
+                    { value: "50", label: "50 per page" },
+                  ]}
+                />
               </div>
             </div>
 
@@ -648,7 +639,7 @@ export default function Blog() {
               {/* Sidebar */}
               <div className="space-y-6">
                 {/* Trending Tags */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <div className="bg-white rounded-xl border border-gray-200 p-6">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-semibold text-gray-900">Trending Tags</h3>
                     {selectedTag && (
@@ -698,7 +689,7 @@ export default function Blog() {
                 </div>
 
                 {/* Popular Posts */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <div className="bg-white rounded-xl border border-gray-200 p-6">
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">Popular This Week</h3>
                   {popularPostsLoading ? (
                     <div className="flex items-center justify-center py-4">
@@ -731,7 +722,7 @@ export default function Blog() {
                 </div>
 
                 {/* Categories */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <div className="bg-white rounded-xl border border-gray-200 p-6">
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">Categories</h3>
                   {categoriesCountsLoading ? (
                     <div className="flex items-center justify-center py-4">
@@ -823,11 +814,6 @@ export default function Blog() {
             </div>
           </div>
         </div>
-      )}
-
-      {/* Mobile Sidebar Overlay */}
-      {isSidebarOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden" onClick={() => setIsSidebarOpen(false)} />
       )}
     </div>
   </>

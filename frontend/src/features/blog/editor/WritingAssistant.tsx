@@ -15,7 +15,7 @@ interface WritingAssistantProps {
 /** Writing suggestions panel. The suggestions themselves come from the page. */
 export default function WritingAssistant({ darkMode, suggestions, onGenerate }: WritingAssistantProps) {
   return (
-    <div className={`rounded-xl shadow-sm border p-6 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+    <div className={`rounded-xl border p-6 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-semibold flex items-center">
           <Sparkles className="w-4 h-4 mr-2" />
@@ -23,7 +23,7 @@ export default function WritingAssistant({ darkMode, suggestions, onGenerate }: 
         </h3>
         <button
           onClick={onGenerate}
-          className="p-1 rounded bg-gradient-to-r from-blue-500 to-purple-500 text-white hover:from-blue-600 hover:to-purple-600"
+          className="p-1 rounded bg-blue-600 text-white hover:bg-blue-700"
           aria-label="Get a writing suggestion"
         >
           <Plus className="w-4 h-4" />

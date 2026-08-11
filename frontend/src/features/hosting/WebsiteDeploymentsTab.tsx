@@ -11,7 +11,7 @@ interface WebsiteDeploymentsTabProps {
 /** Full deployment history for one website. */
 export default function WebsiteDeploymentsTab({ deployments, onDeploy }: WebsiteDeploymentsTabProps) {
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+    <div className="bg-white rounded-lg border border-gray-200">
       <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
         <h3 className="text-lg font-semibold text-gray-900">Deployment History</h3>
         <button

@@ -159,7 +159,7 @@ export default function StepDeployment({
                         type="file"
                         accept=".zip"
                         onChange={(e) => handleInputChange("zipFile", e.target.files?.[0])}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                       />
                       {errors.zipFile && (
                         <p className="mt-1 text-sm text-red-600">{errors.zipFile}</p>
@@ -178,7 +178,7 @@ export default function StepDeployment({
                           type="url"
                           value={formData.git_repository}
                           onChange={(e) => handleInputChange("git_repository", e.target.value)}
-                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                          className={`w-full px-3 py-2 border rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${
                             errors.git_repository ? 'border-red-300' : 'border-gray-300'
                           }`}
                           placeholder="https://github.com/username/repository.git"
@@ -199,7 +199,7 @@ export default function StepDeployment({
                           type="text"
                           value={formData.deployment_branch}
                           onChange={(e) => handleInputChange("deployment_branch", e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                           placeholder="main"
                         />
                         <p className="mt-1 text-sm text-gray-500">

@@ -1,7 +1,9 @@
-from rest_framework.test import APITestCase
+from rest_framework.test import APITestCase, APIClient
 from django.contrib.auth import get_user_model
 from blog.models import BlogPost
 from django.test import TestCase
+
+User = get_user_model()
 
 # Create your tests here.
 
@@ -48,3 +50,76 @@ class PlatformStatsTests(APITestCase):
         raw = self.client.get("/api/stats/").content.decode()
         self.assertNotIn("secret@example.com", raw)
         self.assertNotIn("statsprivate", raw)
+
+
+class SearchPermissionTests(TestCase):
+    """Search must never surface something the caller cannot already reach."""
+
+    def setUp(self):
+        from blog.models import BlogPost
+        from schedule.models import CalendarEvent
+
+        self.alice = User.objects.create_user(
+            username="alicesearch", email="alicesearch@example.com", password="pw"
+        )
+        self.bob = User.objects.create_user(
+            username="bobsearch", email="bobsearch@example.com", password="pw"
+        )
+
+        BlogPost.objects.create(
+            author=self.alice,
+            title="Quantum notes public",
+            content="body",
+            is_published=True,
+            visibility=BlogPost.Visibility.PUBLIC,
+        )
+        BlogPost.objects.create(
+            author=self.alice,
+            title="Quantum notes private",
+            content="body",
+            is_published=True,
+            visibility=BlogPost.Visibility.PRIVATE,
+        )
+        CalendarEvent.objects.create(
+            user=self.alice,
+            title="Quantum exam",
+            date="2026-09-01",
+            start_time="10:00",
+            end_time="11:00",
+        )
+
+        self.client_api = APIClient()
+        self.client_api.force_authenticate(user=self.bob)
+
+    def _titles(self, q="Quantum"):
+        response = self.client_api.get("/api/search/", {"q": q})
+        self.assertEqual(response.status_code, 200, response.content[:300])
+        return [r["title"] for r in response.json()["results"]]
+
+    def test_a_public_post_is_found(self):
+        self.assertIn("Quantum notes public", self._titles())
+
+    def test_another_users_private_post_is_not_found(self):
+        self.assertNotIn("Quantum notes private", self._titles())
+
+    def test_another_users_calendar_event_is_not_found(self):
+        self.assertNotIn("Quantum exam", self._titles())
+
+    def test_the_owner_finds_their_own_calendar_event(self):
+        self.client_api.force_authenticate(user=self.alice)
+        self.assertIn("Quantum exam", self._titles())
+
+    def test_no_result_ever_carries_an_email_address(self):
+        response = self.client_api.get("/api/search/", {"q": "search"})
+        body = response.content.decode()
+        self.assertNotIn("alicesearch@example.com", body)
+        self.assertNotIn("@example.com", body)
+
+    def test_a_short_query_returns_nothing(self):
+        response = self.client_api.get("/api/search/", {"q": "a"})
+        self.assertEqual(response.json()["results"], [])
+
+    def test_search_requires_authentication(self):
+        anon = APIClient()
+        response = anon.get("/api/search/", {"q": "Quantum"})
+        self.assertIn(response.status_code, (401, 403))

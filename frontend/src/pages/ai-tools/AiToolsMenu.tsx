@@ -9,12 +9,7 @@ import {
   Sparkles,
   FileText,
   MessageSquare,
-  Settings,
-  Menu,
-  X,
   ChevronRight,
-  Zap,
-  Wand2,
   PenTool,
   ArrowLeft,
 } from "lucide-react"
@@ -29,9 +24,7 @@ export default function AiToolsMenu() {
       name: "Text Humanizer",
       description: "Transform AI-generated text into natural, human-like content",
       icon: PenTool,
-      color: "from-blue-500 to-cyan-500",
       category: "Writing",
-      featured: true,
       component: HumanizerCard,
     },
     {
@@ -39,35 +32,29 @@ export default function AiToolsMenu() {
       name: "AI Paraphraser",
       description: "Rephrase and rewrite text while maintaining meaning",
       icon: MessageSquare,
-      color: "from-purple-500 to-pink-500",
       category: "Writing",
-      featured: false,
     },
     {
       id: "summarizer",
       name: "Text Summarizer",
       description: "Create concise summaries from long documents",
       icon: FileText,
-      color: "from-green-500 to-emerald-500",
       category: "Productivity",
-      featured: false,
     },
     {
       id: "grammar-checker",
       name: "Grammar Assistant",
       description: "Check and improve grammar, spelling, and style",
       icon: Sparkles,
-      color: "from-orange-500 to-red-500",
       category: "Writing",
-      featured: false,
     },
   ]
 
-  const categories = ["All", "Writing", "Productivity", "Research"]
+  const categories = ["All", "Writing", "Productivity"]
   const [selectedCategory, setSelectedCategory] = useState("All")
 
-  const filteredTools = aiTools.filter(tool => 
-    selectedCategory === "All" || tool.category === selectedCategory
+  const filteredTools = aiTools.filter(
+    (tool) => selectedCategory === "All" || tool.category === selectedCategory
   )
 
   return (
@@ -76,166 +63,85 @@ export default function AiToolsMenu() {
         <title>Ufazien | AI Tools</title>
         <meta name="description" content="Explore a variety of AI tools to enhance your productivity and creativity." />
       </Helmet>
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-indigo-900">
-        {/* Main Content */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Header */}
-          <header className="bg-black bg-opacity-50 backdrop-blur-sm border-b border-gray-700 px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => navigate("/dashboard")}
-              className="flex items-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors text-gray-300 hover:text-white"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              <span className="hidden sm:inline">Back to Dashboard</span>
-            </button>
-
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg">
-                <Brain className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-white">AI Tools</h1>
-                <p className="text-sm text-gray-400">Enhance your productivity with AI</p>
-              </div>
+      <div className="min-h-screen bg-white flex flex-col">
+        <header className="bg-white border-b border-gray-200">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <button
+                onClick={() => navigate("/dashboard")}
+                className="p-2 -ml-2 rounded-md text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors shrink-0"
+                aria-label="Back to dashboard"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              <h1 className="text-xl font-bold text-gray-900 truncate">AI Tools</h1>
             </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <div className="text-right hidden sm:block">
-              <p className="text-sm text-gray-400">Powered by</p>
-              <p className="text-sm font-semibold text-blue-400">OpenAI</p>
-            </div>
+            <p className="text-sm text-gray-500 hidden sm:block">Runs on Azure OpenAI</p>
           </div>
         </header>
 
-        {/* Hero Section */}
-        <div className="bg-gradient-to-r from-blue-600/20 to-purple-600/20 border-b border-gray-700">
-          <div className="max-w-7xl mx-auto px-4 py-8">
-            <div className="text-center mb-8">
-              <h2 className="text-3xl font-bold text-white mb-3">
-                Supercharge Your Studies with AI
-              </h2>
-              <p className="text-lg text-gray-300 max-w-2xl mx-auto">
-                Access powerful AI tools designed specifically for students. 
-                Write better, learn faster, and achieve more.
-              </p>
-            </div>
-
-            {/* Category Filter */}
-            <div className="flex flex-wrap justify-center gap-2 mb-6">
+        <main className="flex-1">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <div className="flex flex-wrap gap-2 mb-8">
               {categories.map((category) => (
                 <button
                   key={category}
                   onClick={() => setSelectedCategory(category)}
-                  className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
                     selectedCategory === category
-                      ? "bg-blue-600 text-white shadow-lg"
-                      : "bg-gray-800 text-gray-300 hover:bg-gray-700 hover:text-white"
+                      ? "bg-gray-900 text-white border-gray-900"
+                      : "bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:text-gray-900"
                   }`}
                 >
                   {category}
                 </button>
               ))}
             </div>
-          </div>
-        </div>
 
-        {/* Tools Grid */}
-        <div className="flex-1 overflow-auto p-4">
-          <div className="max-w-7xl mx-auto">
-            {/* Featured Tools */}
-            {filteredTools.some(tool => tool.featured) && (
-              <div className="mb-8">
-                <div className="flex items-center gap-2 mb-4">
-                  <Sparkles className="w-5 h-5 text-yellow-400" />
-                  <h3 className="text-xl font-bold text-white">Featured Tools</h3>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {filteredTools
-                    .filter(tool => tool.featured)
-                    .map((tool) => {
-                      const ToolComponent = tool.component as React.ComponentType<{ tool: typeof tool }>
-                      return <ToolComponent key={tool.id} tool={tool} />
-                    })
-                  }
-                </div>
-              </div>
-            )}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-stretch">
+              {filteredTools.map((tool) => {
+                if (tool.component) {
+                  const ToolComponent = tool.component as React.ComponentType<{ tool: typeof tool }>
+                  return <ToolComponent key={tool.id} tool={tool} />
+                }
 
-            {/* All Tools */}
-            <div className="mb-8">
-              <div className="flex items-center gap-2 mb-4">
-                <Zap className="w-5 h-5 text-blue-400" />
-                <h3 className="text-xl font-bold text-white">All Tools</h3>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {filteredTools.map((tool) => {
-                  if (tool.component) {
-                    const ToolComponent = tool.component as React.ComponentType<{ tool: typeof tool }>
-                    return <ToolComponent key={tool.id} tool={tool} />
-                  }
-                  
-                  // Default card for tools without custom components
-                  const IconComponent = tool.icon
-                  return (
-                    <div
-                      key={tool.id}
-                      onClick={() => navigate(`/ai-tools/${tool.id}`)}
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") navigate(`/ai-tools/${tool.id}`)
-                      }}
-                      className="bg-gray-800 bg-opacity-50 backdrop-blur-sm border border-gray-700 rounded-xl p-6 hover:bg-opacity-70 transition-all duration-300 group relative overflow-hidden cursor-pointer"
-                    >
-                      {/* Gradient Background */}
-                      <div className={`absolute inset-0 bg-gradient-to-br ${tool.color} opacity-5 group-hover:opacity-10 transition-opacity`} />
-                      
-                      <div className="relative">
-                        <div className={`inline-flex p-3 rounded-lg bg-gradient-to-r ${tool.color} mb-4`}>
-                          <IconComponent className="w-6 h-6 text-white" />
-                        </div>
-                        
-                        <h3 className="text-lg font-semibold text-white mb-2 group-hover:text-blue-400 transition-colors">
-                          {tool.name}
-                        </h3>
-                        
-                        <p className="text-gray-400 text-sm mb-4 line-clamp-2">
-                          {tool.description}
-                        </p>
-                        
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-medium text-blue-400 bg-blue-400/10 px-2 py-1 rounded-full">
-                            {tool.category}
-                          </span>
-                          
-                          <span className="flex items-center gap-1 text-sm font-medium text-white group-hover:text-blue-400 group-hover:translate-x-1 transition-all">
-                            Use Tool
-                            <ChevronRight className="w-4 h-4" />
-                          </span>
-                        </div>
-                      </div>
+                const IconComponent = tool.icon
+                return (
+                  <button
+                    key={tool.id}
+                    type="button"
+                    onClick={() => navigate(`/ai-tools/${tool.id}`)}
+                    className="group flex flex-col text-left bg-white border border-gray-200 rounded-lg p-5 hover:border-gray-300 transition-colors"
+                  >
+                    <div className="inline-flex p-2 rounded-md bg-gray-100 mb-4">
+                      <IconComponent className="w-5 h-5 text-gray-700" />
                     </div>
-                  )
-                })}
-              </div>
+
+                    <h2 className="font-semibold text-gray-900 mb-1">{tool.name}</h2>
+                    <p className="text-sm text-gray-500 mb-4">{tool.description}</p>
+
+                    <div className="flex items-center justify-between mt-auto pt-2">
+                      <span className="text-xs font-medium text-gray-500">{tool.category}</span>
+                      <span className="flex items-center gap-1 text-sm font-medium text-blue-600">
+                        Open
+                        <ChevronRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
+                      </span>
+                    </div>
+                  </button>
+                )
+              })}
             </div>
 
-            {/* No tools message */}
             {filteredTools.length === 0 && (
-              <div className="text-center py-12">
-                <div className="inline-flex p-4 bg-gray-800 rounded-full mb-4">
-                  <Brain className="w-8 h-8 text-gray-400" />
-                </div>
-                <h3 className="text-lg font-medium text-white mb-2">No tools found</h3>
-                <p className="text-gray-400">Try selecting a different category</p>
+              <div className="text-center py-16">
+                <Brain className="w-8 h-8 text-gray-400 mx-auto mb-3" />
+                <h2 className="font-medium text-gray-900 mb-1">No tools found</h2>
+                <p className="text-sm text-gray-500">Try selecting a different category</p>
               </div>
             )}
           </div>
-        </div>
+        </main>
       </div>
-    </div>
     </>
   )
 }

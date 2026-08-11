@@ -3,6 +3,8 @@ import { BrowserRouter as Router, Routes, Route } from "react-router-dom"
 import { SubscriptionProvider } from "./hooks/useSubscription"
 import ProtectedRoute from "./pages/auth/ProtectedRoute"
 import RouteFallback from "./components/ui/RouteFallback"
+import { DialogProvider } from "./components/ui/Dialogs"
+import AppShell from "./components/layout/AppShell"
 import Home from "./pages/Home"
 import NotFound from "./pages/NotFound"
 
@@ -75,42 +77,46 @@ const HostingRoutes = () => (
 function App() {
   return (
     <Router>
-      <Suspense fallback={<RouteFallback />}>
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/auth" element={<AuthPage />} />
-          {/* Protected routes */}
-          <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-          <Route path="/profile/:userId" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-          <Route path="/gpa-calculator" element={<ProtectedRoute><GpaCalculator /></ProtectedRoute>} />
-          <Route path="/average-calculator" element={<ProtectedRoute><AverageCalculator /></ProtectedRoute>} />
-          <Route path="/blog" element={<ProtectedRoute><Blog /></ProtectedRoute>} />
-          <Route path="/blog/new" element={<ProtectedRoute><BlogCreate /></ProtectedRoute>} />
-          <Route path="/blog/:id" element={<ProtectedRoute><BlogRead /></ProtectedRoute>} />
-          <Route path="/community" element={<ProtectedRoute><Community /></ProtectedRoute>} />
-          <Route path="/community/posts/:postId" element={<ProtectedRoute><PostDetail /></ProtectedRoute>} />
-          <Route path="/calendar" element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
-          <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-          <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
-          <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-          <Route path="/feedback" element={<ProtectedRoute><Feedback /></ProtectedRoute>} />
-          <Route path="/campus-simulator/:lobbyId" element={<ProtectedRoute><CampusWithBackend /></ProtectedRoute>} />
-          <Route path="/campus-simulator" element={<ProtectedRoute><CampusSimulatorMenuV2 /></ProtectedRoute>} />
-          <Route path="/ai-tools" element={<ProtectedRoute><AiToolsMenu /></ProtectedRoute>} />
-          <Route path="/ai-tools/humanizer" element={<ProtectedRoute><Humanizer /></ProtectedRoute>} />
-          <Route path="/ai-tools/paraphraser" element={<ProtectedRoute><Paraphraser /></ProtectedRoute>} />
-          <Route path="/ai-tools/summarizer" element={<ProtectedRoute><Summarizer /></ProtectedRoute>} />
-          <Route path="/ai-tools/grammar-checker" element={<ProtectedRoute><GrammarAssistant /></ProtectedRoute>} />
-          <Route path="/user-sites" element={<ProtectedRoute><UserSites /></ProtectedRoute>} />
-          {/* Hosting routes with subscription context */}
-          <Route path="/hosting/*" element={<HostingRoutes />} />
-          {/* Add more routes as needed */}
-          <Route path="/terms" element={<Terms />} />
-          <Route path="/privacy" element={<Privacy />} />
-          {/* Anything unmatched rendered a blank white page before this. */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </Suspense>
+      <DialogProvider>
+        <Suspense fallback={<RouteFallback />}>
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/auth" element={<AuthPage />} />
+            <Route path="/blog/new" element={<ProtectedRoute><BlogCreate /></ProtectedRoute>} />
+            <Route element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
+              <Route path="/profile" element={<Profile />} />
+              <Route path="/profile/:userId" element={<Profile />} />
+              <Route path="/gpa-calculator" element={<GpaCalculator />} />
+              <Route path="/average-calculator" element={<AverageCalculator />} />
+              <Route path="/blog" element={<Blog />} />
+              <Route path="/blog/:id" element={<BlogRead />} />
+              <Route path="/community" element={<Community />} />
+              <Route path="/calendar" element={<Calendar />} />
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/notifications" element={<Notifications />} />
+              <Route path="/settings" element={<Settings />} />
+              <Route path="/feedback" element={<Feedback />} />
+              <Route path="/user-sites" element={<UserSites />} />
+            </Route>
+            {/* Protected routes */}
+            <Route path="/community/posts/:postId" element={<ProtectedRoute><PostDetail /></ProtectedRoute>} />
+            <Route path="/campus-simulator/:lobbyId" element={<ProtectedRoute><CampusWithBackend /></ProtectedRoute>} />
+            <Route path="/campus-simulator" element={<ProtectedRoute><CampusSimulatorMenuV2 /></ProtectedRoute>} />
+            <Route path="/ai-tools" element={<ProtectedRoute><AiToolsMenu /></ProtectedRoute>} />
+            <Route path="/ai-tools/humanizer" element={<ProtectedRoute><Humanizer /></ProtectedRoute>} />
+            <Route path="/ai-tools/paraphraser" element={<ProtectedRoute><Paraphraser /></ProtectedRoute>} />
+            <Route path="/ai-tools/summarizer" element={<ProtectedRoute><Summarizer /></ProtectedRoute>} />
+            <Route path="/ai-tools/grammar-checker" element={<ProtectedRoute><GrammarAssistant /></ProtectedRoute>} />
+            {/* Hosting routes with subscription context */}
+            <Route path="/hosting/*" element={<HostingRoutes />} />
+            {/* Add more routes as needed */}
+            <Route path="/terms" element={<Terms />} />
+            <Route path="/privacy" element={<Privacy />} />
+            {/* Anything unmatched rendered a blank white page before this. */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </Suspense>
+      </DialogProvider>
     </Router>
   )
 }

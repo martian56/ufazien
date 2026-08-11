@@ -75,7 +75,7 @@ export default function EditableText({
           rows={4}
           maxLength={maxLength}
           autoFocus
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-y focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-y focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
         />
         {error && <p className="text-xs text-red-600">{error}</p>}
         <div className="flex items-center gap-2">

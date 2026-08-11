@@ -71,7 +71,7 @@ export default function PublicSchemasTab({
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           placeholder="Search public schemas..."
-          className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
         />
       </div>
 
@@ -93,7 +93,7 @@ export default function PublicSchemasTab({
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {schemas.map((schema) => (
-            <div key={schema.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow flex flex-col h-full">
+            <div key={schema.id} className="bg-white rounded-xl border border-gray-200 p-6 hover:border-gray-300 transition-colors flex flex-col h-full">
               <div className="flex-grow">
                 {/* Schema Header */}
                 <div className="flex items-start justify-between mb-4">

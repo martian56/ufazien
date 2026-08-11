@@ -2,6 +2,7 @@ import { useState } from "react"
 import type React from "react"
 import { X } from "lucide-react"
 import type { Forum, NewForumPost } from "../../../lib/api/endpoints/community"
+import Select from "../../../components/ui/Select"
 
 interface CreateModalProps {
   type: "group" | "forum" | "post"
@@ -125,7 +126,7 @@ export default function CreateModal({
                   ...prev,
                   [type === "group" ? "name" : "title"]: e.target.value
                 }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                 required
               />
             </div>
@@ -142,7 +143,7 @@ export default function CreateModal({
                   [type === "post" ? "content" : "description"]: e.target.value
                 }))}
                 rows={type === "post" ? 6 : 3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                 required
               />
             </div>
@@ -153,19 +154,13 @@ export default function CreateModal({
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Forum
                 </label>
-                <select
+                <Select
                   value={formData.forumId}
-                  onChange={(e) => setFormData(prev => ({ ...prev, forumId: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  required
-                >
-                  <option value="">Select a forum</option>
-                  {forums.map((forum) => (
-                    <option key={forum.id} value={forum.id}>
-                      {forum.title}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(value) => setFormData(prev => ({ ...prev, forumId: value }))}
+                  options={forums.map((forum) => ({ value: String(forum.id), label: forum.title }))}
+                  placeholder="Select a forum"
+                  aria-label="Forum"
+                />
               </div>
             )}
 
@@ -174,17 +169,12 @@ export default function CreateModal({
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Category
               </label>
-              <select
+              <Select
                 value={formData.category}
-                onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                {categories.map((cat) => (
-                  <option key={cat.id} value={cat.id}>
-                    {cat.name}
-                  </option>
-                ))}
-              </select>
+                onChange={(value) => setFormData(prev => ({ ...prev, category: value }))}
+                options={categories.map((cat) => ({ value: String(cat.id), label: cat.name }))}
+                aria-label="Category"
+              />
             </div>
 
             {/* Group-specific fields */}
@@ -195,14 +185,14 @@ export default function CreateModal({
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Group Type
                     </label>
-                    <select
-                      value={formData.type}
-                      onChange={(e) => setFormData(prev => ({ ...prev, type: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="public">Public</option>
-                      <option value="private">Private</option>
-                    </select>
+                    <Select
+        value={formData.type}
+        onChange={(value) => setFormData(prev => ({ ...prev, type: value }))}
+        options={[
+          { value: "public", label: "Public" },
+          { value: "private", label: "Private" },
+        ]}
+      />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -214,7 +204,7 @@ export default function CreateModal({
                       onChange={(e) => setFormData(prev => ({ ...prev, maxMembers: parseInt(e.target.value) }))}
                       min="2"
                       max="100"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                     />
                   </div>
                 </div>
@@ -229,7 +219,7 @@ export default function CreateModal({
                       value={formData.courseCode}
                       onChange={(e) => setFormData(prev => ({ ...prev, courseCode: e.target.value }))}
                       placeholder="e.g., CS301"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                     />
                   </div>
                   <div>
@@ -241,7 +231,7 @@ export default function CreateModal({
                       value={formData.professor}
                       onChange={(e) => setFormData(prev => ({ ...prev, professor: e.target.value }))}
                       placeholder="e.g., Dr. Smith"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                     />
                   </div>
                 </div>
@@ -255,35 +245,35 @@ export default function CreateModal({
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Icon
                   </label>
-                  <select
-                    value={formData.iconName}
-                    onChange={(e) => setFormData(prev => ({ ...prev, iconName: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="MessageCircle">Message Circle</option>
-                    <option value="Book">Book</option>
-                    <option value="Briefcase">Briefcase</option>
-                    <option value="Code">Code</option>
-                    <option value="Coffee">Coffee</option>
-                    <option value="Camera">Camera</option>
-                  </select>
+                  <Select
+        value={formData.iconName}
+        onChange={(value) => setFormData(prev => ({ ...prev, iconName: value }))}
+        options={[
+          { value: "MessageCircle", label: "Message Circle" },
+          { value: "Book", label: "Book" },
+          { value: "Briefcase", label: "Briefcase" },
+          { value: "Code", label: "Code" },
+          { value: "Coffee", label: "Coffee" },
+          { value: "Camera", label: "Camera" },
+        ]}
+      />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Color
                   </label>
-                  <select
-                    value={formData.colorClass}
-                    onChange={(e) => setFormData(prev => ({ ...prev, colorClass: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="bg-blue-500">Blue</option>
-                    <option value="bg-green-500">Green</option>
-                    <option value="bg-purple-500">Purple</option>
-                    <option value="bg-red-500">Red</option>
-                    <option value="bg-yellow-500">Yellow</option>
-                    <option value="bg-indigo-500">Indigo</option>
-                  </select>
+                  <Select
+        value={formData.colorClass}
+        onChange={(value) => setFormData(prev => ({ ...prev, colorClass: value }))}
+        options={[
+          { value: "bg-blue-500", label: "Blue" },
+          { value: "bg-green-500", label: "Green" },
+          { value: "bg-purple-500", label: "Purple" },
+          { value: "bg-red-500", label: "Red" },
+          { value: "bg-yellow-500", label: "Yellow" },
+          { value: "bg-indigo-500", label: "Indigo" },
+        ]}
+      />
                 </div>
               </div>
             )}
@@ -301,7 +291,7 @@ export default function CreateModal({
                     onChange={(e) => setTagInput(e.target.value)}
                     onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), addTag())}
                     placeholder="Add a tag"
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                   />
                   <button
                     type="button"

@@ -1,5 +1,6 @@
 import { X } from "lucide-react"
 import type { CalendarEvent } from "../../services/calendarApi"
+import Select from "../../components/ui/Select"
 
 interface Option {
   id: string
@@ -46,7 +47,7 @@ export default function EventModal({
               placeholder="Enter event title..."
               value={event.title}
               onChange={(e) => onChange({ ...event, title: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
             />
           </div>
 
@@ -58,7 +59,7 @@ export default function EventModal({
               value={event.description}
               onChange={(e) => onChange({ ...event, description: e.target.value })}
               rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 resize-none"
             />
           </div>
 
@@ -70,7 +71,7 @@ export default function EventModal({
                 type="date"
                 value={event.date}
                 onChange={(e) => onChange({ ...event, date: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
               />
             </div>
             <div>
@@ -79,7 +80,7 @@ export default function EventModal({
                 type="time"
                 value={event.startTime}
                 onChange={(e) => onChange({ ...event, startTime: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
               />
             </div>
             <div>
@@ -88,7 +89,7 @@ export default function EventModal({
                 type="time"
                 value={event.endTime}
                 onChange={(e) => onChange({ ...event, endTime: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
               />
             </div>
           </div>
@@ -101,7 +102,7 @@ export default function EventModal({
               placeholder="Enter location..."
               value={event.location}
               onChange={(e) => onChange({ ...event, location: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
             />
           </div>
 
@@ -109,31 +110,27 @@ export default function EventModal({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
-              <select
-                value={event.category}
-                onChange={(e) => onChange({ ...event, category: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                {categories.slice(1).map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
+              <Select
+                value={event.category ?? ""}
+                onChange={(value) => onChange({ ...event, category: value })}
+                options={categories.slice(1).map((category) => ({
+                  value: String(category.id),
+                  label: category.name,
+                }))}
+                aria-label="Category"
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Priority</label>
-              <select
-                value={event.priority}
-                onChange={(e) => onChange({ ...event, priority: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                {priorities.map((priority) => (
-                  <option key={priority.id} value={priority.id}>
-                    {priority.name}
-                  </option>
-                ))}
-              </select>
+              <Select
+                value={event.priority ?? ""}
+                onChange={(value) => onChange({ ...event, priority: value })}
+                options={priorities.map((priority) => ({
+                  value: String(priority.id),
+                  label: priority.name,
+                }))}
+                aria-label="Priority"
+              />
             </div>
           </div>
 
@@ -144,16 +141,16 @@ export default function EventModal({
           <div className="grid grid-cols-1 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Recurring</label>
-              <select
-                value={event.recurring}
-                onChange={(e) => onChange({ ...event, recurring: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="none">No repeat</option>
-                <option value="daily">Daily</option>
-                <option value="weekly">Weekly</option>
-                <option value="monthly">Monthly</option>
-              </select>
+              <Select
+        value={event.recurring ?? "none"}
+        onChange={(value) => onChange({ ...event, recurring: value })}
+        options={[
+          { value: "none", label: "No repeat" },
+          { value: "daily", label: "Daily" },
+          { value: "weekly", label: "Weekly" },
+          { value: "monthly", label: "Monthly" },
+        ]}
+      />
             </div>
           </div>
         </div>

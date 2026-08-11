@@ -5,6 +5,7 @@ import { Server, Plus, Globe, Shield, Trash2, Edit, ExternalLink, AlertCircle, C
 import { Helmet } from "react-helmet"
 import HostingSidebar from "../../components/hosting/HostingSidebar"
 import { useDomains } from "../../hooks/useDomains"
+import Radio from "../../components/ui/Radio"
 
 export default function Domains() {
   const { 
@@ -140,7 +141,7 @@ export default function Domains() {
           <title>Domains | Ufazien Hosting</title>
           <meta name="description" content="Manage your domains and subdomains" />
         </Helmet>
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen bg-white">
           <HostingSidebar />
           <div className="ml-64">
             <div className="flex items-center justify-center h-64">
@@ -158,7 +159,7 @@ export default function Domains() {
         <title>Domains | Ufazien Hosting</title>
         <meta name="description" content="Manage your domains and subdomains" />
       </Helmet>
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-white">
         <HostingSidebar />
         
         <div className="lg:ml-64">
@@ -196,7 +197,7 @@ export default function Domains() {
             )}
 
             {/* Domains List */}
-            <div className="bg-white rounded-lg shadow">
+            <div className="bg-white rounded-lg border border-gray-200">
               {domains.length === 0 ? (
                 <div className="text-center py-12">
                   <Server className="h-12 w-12 text-gray-400 mx-auto mb-4" />
@@ -308,23 +309,21 @@ export default function Domains() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">Domain Type</label>
                 <div className="space-y-2">
                   <label className="flex items-center">
-                    <input
-                      type="radio"
+                    <Radio
                       name="domainType"
                       value="subdomain"
                       checked={domainType === 'subdomain'}
-                      onChange={(e) => setDomainType(e.target.value)}
+                      onSelect={(value) => setDomainType(value)}
                       className="mr-2"
                     />
                     <span className="text-sm">Subdomain (free .ufazien.com)</span>
                   </label>
                   <label className="flex items-center">
-                    <input
-                      type="radio"
+                    <Radio
                       name="domainType"
                       value="custom"
                       checked={domainType === 'custom'}
-                      onChange={(e) => setDomainType(e.target.value)}
+                      onSelect={(value) => setDomainType(value)}
                       className="mr-2"
                     />
                     <span className="text-sm">Custom Domain (your own domain)</span>
@@ -344,7 +343,7 @@ export default function Domains() {
                       value={domainName}
                       onChange={(e) => setDomainName(e.target.value.toLowerCase())}
                       placeholder="mysite"
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-l-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-l-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                     />
                     <span className="px-3 py-2 bg-gray-100 border border-l-0 border-gray-300 rounded-r-lg text-gray-500">
                       .ufazien.com
@@ -356,7 +355,7 @@ export default function Domains() {
                     value={domainName}
                     onChange={(e) => setDomainName(e.target.value.toLowerCase())}
                     placeholder="example.com"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                   />
                 )}
                 {domainType === 'custom' && (

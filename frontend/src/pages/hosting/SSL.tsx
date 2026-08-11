@@ -41,8 +41,12 @@ import HostingSidebar from "../../components/hosting/HostingSidebar"
 import { hostingApi } from "../../utils/hostingApi"
 import { useWebsites } from "../../hooks/useWebsites.js"
 import ConfirmationModal from "../../components/ui/ConfirmationModal"
+import Select from "../../components/ui/Select"
+import { Checkbox } from "../../components/ui/checkbox"
+import { useDialogs } from "../../components/ui/Dialogs"
 
 export default function SSL() {
+  const { toast, confirm } = useDialogs()
   const [loading, setLoading] = useState(true)
   const [certificates, setCertificates] = useState<SslCertificate[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -155,7 +159,7 @@ export default function SSL() {
     } catch (err) {
       // errorMessage already understands the DRF shapes this was picking
       // through by hand, and there is no axios envelope to look in.
-      alert('Failed to create SSL certificate: ' + errorMessage(err))
+      toast.error('Could not create the certificate. ' + errorMessage(err))
     }
   }
 
@@ -174,7 +178,7 @@ export default function SSL() {
       setCertificates(prev => prev.filter(cert => cert.id !== target.id))
       setDeleteModal({ isOpen: false, certificate: null, loading: false })
     } catch (err) {
-      alert('Failed to delete certificate: ' + errorMessage(err))
+      toast.error('Could not delete the certificate. ' + errorMessage(err))
       setDeleteModal(prev => ({ ...prev, loading: false }))
     }
   }
@@ -187,9 +191,9 @@ export default function SSL() {
         ? response
         : (response as { results?: SslCertificate[] })?.results ?? []
       setCertificates(list)
-      alert('Certificate renewal initiated!')
+      toast.success('Renewal started.')
     } catch (err) {
-      alert('Failed to renew certificate: ' + errorMessage(err))
+      toast.error('Could not renew the certificate. ' + errorMessage(err))
     }
   }
 
@@ -200,7 +204,7 @@ export default function SSL() {
           <title>SSL Certificates | Ufazien Hosting</title>
           <meta name="description" content="Manage SSL certificates for your websites" />
         </Helmet>
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen bg-white">
           <HostingSidebar />
           <div className="lg:ml-64">
             <div className="flex items-center justify-center h-64 pt-16 lg:pt-0">
@@ -218,7 +222,7 @@ export default function SSL() {
         <title>SSL Certificates | Ufazien Hosting</title>
         <meta name="description" content="Manage SSL certificates for your websites" />
       </Helmet>
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-white">
         <HostingSidebar />
         
         <div className="lg:ml-64">
@@ -269,7 +273,7 @@ export default function SSL() {
             )}
 
             {/* SSL Certificates List */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+            <div className="bg-white rounded-lg border border-gray-200">
               <div className="px-6 py-4 border-b border-gray-200">
                 <h3 className="text-lg font-semibold text-gray-900">SSL Certificates</h3>
               </div>
@@ -390,7 +394,7 @@ export default function SSL() {
         {/* Create Certificate Modal */}
         {showCreateModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="bg-white rounded-lg border border-gray-200 shadow-lg w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
               <div className="p-6 border-b border-gray-200">
                 <h2 className="text-lg font-semibold text-gray-900">Add SSL Certificate</h2>
               </div>
@@ -443,18 +447,16 @@ export default function SSL() {
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Domain
                   </label>
-                  <select
+                  <Select
                     value={createForm.domain}
-                    onChange={(e) => setCreateForm(prev => ({ ...prev, domain: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="">Select a domain</option>
-                    {websites?.map(website => (
-                      <option key={website.id} value={website.domain?.name || `${website.name}.ufazien.com`}>
-                        {website.domain?.name || `${website.name}.ufazien.com`}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(value) => setCreateForm((prev) => ({ ...prev, domain: value }))}
+                    options={(websites ?? []).map((website) => {
+                      const name = website.domain?.name || `${website.name}.ufazien.com`
+                      return { value: name, label: name }
+                    })}
+                    placeholder="Select a domain"
+                    aria-label="Domain"
+                  />
                 </div>
 
                 {/* Custom Certificate Fields */}
@@ -506,12 +508,10 @@ MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC...
 
                 {/* Auto-renew Option */}
                 <div className="flex items-center">
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     id="auto-renew"
                     checked={createForm.auto_renew}
-                    onChange={(e) => setCreateForm(prev => ({ ...prev, auto_renew: e.target.checked }))}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    onCheckedChange={(checked) => setCreateForm(prev => ({ ...prev, auto_renew: checked }))}
                   />
                   <label htmlFor="auto-renew" className="ml-2 text-sm text-gray-700">
                     Enable automatic renewal (recommended)
@@ -541,7 +541,7 @@ MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC...
         {/* View Certificate Modal */}
         {viewModal.isOpen && viewModal.certificate && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="bg-white rounded-lg border border-gray-200 shadow-lg w-full max-w-3xl mx-4 max-h-[90vh] overflow-y-auto">
               <div className="p-6 border-b border-gray-200">
                 <h2 className="text-lg font-semibold text-gray-900">
                   Certificate Details - {viewModal.certificate.domain_name}
