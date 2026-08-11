@@ -17,6 +17,7 @@
 
 import type { InteriorKind } from './campusLayout'
 import { INTERIOR_SPECS, interiorHalfExtent } from './interiorSpecs'
+import { fitProjector } from './projectorFit'
 import { LECTURE_SEATING, LECTURE_ROWS } from './lectureSeating'
 import type { Collider, Platform } from './campusPhysics'
 
@@ -63,6 +64,9 @@ interface InteriorPhysics {
  * might be trying to watch. Moved right, the centre of the hall is clear from
  * the door all the way to the screen.
  */
+/** Where the two flags stand, clear of the sightlines to the board. */
+export const UFAZ_FLAGS = [13.5, 16.5]
+
 export const UFAZ_STAIR = {
   x: 12.5,
   z: -10,
@@ -118,8 +122,9 @@ function ufazPhysics(): InteriorPhysics {
   // Reception desk.
   colliders.push({ x: -13, z: 8, halfW: 3, halfD: 0.9, height: 1.25 })
 
-  // Flag stands.
-  for (const x of [-3.5, 3.5]) {
+  // Flag stands, moved out towards the walls. On the centre line they stood
+  // between the waiting benches and one corner of the board.
+  for (const x of UFAZ_FLAGS) {
     colliders.push({ x, z: -half + 15, radius: 0.45, height: 3.4 })
   }
 
@@ -172,20 +177,31 @@ const LIBRARY_AISLE_MARGIN = 0.7
  * So the aisle is a wedge, opening towards the reading floor along exactly the
  * lines the readers are looking down. Derived from the seat positions rather
  * than guessed, so moving a table cannot quietly wall the screen off again.
+ *
+ * Aimed at the *far edge* of the screen rather than its centre. Clearing the
+ * centre is what a first version did, and it is not the requirement: it leaves
+ * a reader at the end of a row able to see the middle of the picture and none
+ * of one side of it, which is worse than useless for a slide.
  */
 export function libraryAisleHalf(rowZ: number): number {
-  const screenZ = INTERIOR_SPECS.library.projector[2]
+  const spec = INTERIOR_SPECS.library
+  const screenZ = spec.projector[2]
+  const halfScreen = fitProjector(16 / 9, spec.projector[1], spec.ceiling).width / 2
   let required = 0
 
   for (const tableX of LIBRARY_TABLE_X) {
     for (const dx of LIBRARY_SEAT_DX) {
       for (const tableZ of LIBRARY_TABLE_Z) {
         for (const dz of LIBRARY_SEAT_DZ) {
-          const seatX = Math.abs(tableX + dx)
+          const seatX = tableX + dx
           const seatZ = tableZ + dz
           if (seatZ <= rowZ) continue
-          // Where that reader's line of sight crosses this row.
-          required = Math.max(required, (seatX * (rowZ - screenZ)) / (seatZ - screenZ))
+          const t = (rowZ - screenZ) / (seatZ - screenZ)
+          // Both edges of the screen: a reader to the left of centre is worst
+          // served by the left edge, and vice versa.
+          for (const edge of [-halfScreen, halfScreen]) {
+            required = Math.max(required, Math.abs(edge + (seatX - edge) * t))
+          }
         }
       }
     }
@@ -364,6 +380,9 @@ export const LOUNGE_CLUSTERS: [number, number][] = [
 /** Moved off the centre of the back wall, which is where the screen is. */
 export const VENDING_MACHINES = [-17, -14]
 
+/** Pushed into the corner: on the centre it stood across one side of the screen. */
+export const TABLE_FOOTBALL: [number, number] = [17, 8]
+
 function studentCentrePhysics(): InteriorPhysics {
   const half = INTERIOR_SPECS['student-center'].halfExtent
   const colliders: Collider[] = []
@@ -390,7 +409,7 @@ function studentCentrePhysics(): InteriorPhysics {
     colliders.push({ x, z, halfW: 1.1, halfD: 0.55, height: 0.5 })
   })
 
-  colliders.push({ x: 8, z: -14, halfW: 2.1, halfD: 1.2, height: 1.3 })
+  colliders.push({ x: TABLE_FOOTBALL[0], z: TABLE_FOOTBALL[1], halfW: 2.1, halfD: 1.2, height: 1.3 })
 
   // The pair as one collider: they stand shoulder to shoulder, and the
   // six-hundred-millimetre reveal between them is a slot, not a route.

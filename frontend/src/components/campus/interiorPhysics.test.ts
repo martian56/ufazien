@@ -156,19 +156,35 @@ describe('the board is visible from every seat', () => {
    * the student centre two vending machines, and the sports hall hung its
    * scoreboard over the picture.
    */
-  it('leaves nothing solid between a seat and the screen it faces', () => {
+  it('leaves nothing solid between a seat and any corner of the screen', () => {
+    // Corners, not just the centre. Clearing the centre is what a first
+    // version checked, and it is not the requirement: it leaves a reader at
+    // the end of a row seeing the middle of the picture and none of one side
+    // of it, which is worse than useless for a slide. Aiming the library's
+    // aisle at the screen's edges instead took 68 blocked lines to zero.
     for (const kind of KINDS) {
       const spec = INTERIOR_SPECS[kind]
       const colliders = interiorColliders(kind)
-      const screen = { x: spec.projector[0], y: spec.projector[1], z: spec.projector[2] }
+      const fit = fitProjector(16 / 9, spec.projector[1], spec.ceiling)
+      const [sx, sy, sz] = spec.projector
+
+      const targets: [string, number, number][] = [
+        ['centre', sx, sy],
+        ['bottom left', sx - fit.width / 2, sy - fit.height / 2],
+        ['bottom right', sx + fit.width / 2, sy - fit.height / 2],
+        ['top left', sx - fit.width / 2, sy + fit.height / 2],
+        ['top right', sx + fit.width / 2, sy + fit.height / 2],
+      ]
 
       for (const seat of interiorSeats(kind)) {
         const eye = { x: seat.x, y: seat.y + seat.seatHeight + SEATED_EYE, z: seat.z }
-        const blocker = sightlineBlocker(eye, screen, colliders)
-        expect(
-          blocker,
-          `${kind}: ${seat.id} cannot see the board — ${JSON.stringify(blocker)}`,
-        ).toBeNull()
+        for (const [corner, x, y] of targets) {
+          const blocker = sightlineBlocker(eye, { x, y, z: sz }, colliders)
+          expect(
+            blocker,
+            `${kind}: ${seat.id} cannot see the ${corner} of the board — ${JSON.stringify(blocker)}`,
+          ).toBeNull()
+        }
       }
     }
   })

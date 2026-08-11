@@ -14,6 +14,8 @@ import {
   LOUNGE_SOFA_OFFSET,
   SCOREBOARD_Y,
   STACK_ROWS,
+  TABLE_FOOTBALL,
+  UFAZ_FLAGS,
   UFAZ_STAIR,
   VENDING_MACHINES,
   libraryAisleHalf,
@@ -430,7 +432,7 @@ function UfazHall({ spec }: { spec: InteriorSpec }) {
       </group>
 
       {/* Flags on stands, as they stand in the real lobby */}
-      {([[-3.5, '#00b5e2'], [3.5, '#000091']] as [number, string][]).map(([x, flagColor]) => (
+      {([[UFAZ_FLAGS[0], '#00b5e2'], [UFAZ_FLAGS[1], '#000091']] as [number, string][]).map(([x, flagColor]) => (
         <group key={x} position={[x, 0, -half + 15]}>
           <mesh castShadow position={[0, 1.7, 0]}>
             <cylinderGeometry args={[0.05, 0.07, 3.4, 8]} />
@@ -881,7 +883,7 @@ function StudentCentreInterior({ spec }: { spec: InteriorSpec }) {
       ))}
 
       {/* Table football, which is what a student centre is actually for */}
-      <group position={[8, 0, -14]}>
+      <group position={[TABLE_FOOTBALL[0], 0, TABLE_FOOTBALL[1]]}>
         <mesh castShadow receiveShadow position={[0, 0.5, 0]}>
           <boxGeometry args={[4.2, 1, 2.4]} />
           <meshStandardMaterial color="#2f4a3f" roughness={0.7} />
