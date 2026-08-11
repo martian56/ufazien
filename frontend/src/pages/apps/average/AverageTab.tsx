@@ -11,6 +11,7 @@ function debounce<A extends unknown[]>(func: (...args: A) => void, delay: number
 }
 
 import type { SchemaField, SchemaGrades } from "../../../lib/api/endpoints/average"
+import Spinner from "../../../components/ui/Spinner"
 
 interface AverageTabProps {
   currentSchema: SchemaGrades | null
@@ -127,7 +128,7 @@ export default function AverageTab({
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <Spinner size="md" />
       </div>
     )
   }

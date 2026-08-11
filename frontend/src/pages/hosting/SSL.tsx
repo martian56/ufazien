@@ -44,6 +44,7 @@ import ConfirmationModal from "../../components/ui/ConfirmationModal"
 import Select from "../../components/ui/Select"
 import { Checkbox } from "../../components/ui/checkbox"
 import { useDialogs } from "../../components/ui/Dialogs"
+import Spinner from "../../components/ui/Spinner"
 
 export default function SSL() {
   const { toast, confirm } = useDialogs()
@@ -208,7 +209,7 @@ export default function SSL() {
           <HostingSidebar />
           <div className="lg:ml-64">
             <div className="flex items-center justify-center h-64 pt-16 lg:pt-0">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+              <Spinner size="lg" />
             </div>
           </div>
         </div>

@@ -37,6 +37,7 @@ import ConfirmationModal from "../../components/ui/ConfirmationModal"
 import { hostingApi } from "../../utils/hostingApi"
 import { useWebsites } from "../../hooks/useWebsites.js"
 import { useDialogs } from "../../components/ui/Dialogs"
+import Spinner from "../../components/ui/Spinner"
 
 export default function WebsiteDetail() {
   const { toast, confirm } = useDialogs()
@@ -326,7 +327,7 @@ export default function WebsiteDetail() {
           <HostingSidebar />
           <div className="lg:ml-64">
             <div className="flex items-center justify-center h-64 pt-16 lg:pt-0">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+              <Spinner size="lg" />
             </div>
           </div>
         </div>

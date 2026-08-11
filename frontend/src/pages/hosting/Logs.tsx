@@ -21,6 +21,7 @@ import HostingSidebar from "../../components/hosting/HostingSidebar"
 import { useLogs } from "../../hooks/useLogs"
 import Select from "../../components/ui/Select"
 import { Checkbox } from "../../components/ui/checkbox"
+import Spinner from "../../components/ui/Spinner"
 
 export default function Logs() {
   const { loading, error, logs, refreshLogs, loadMoreActivity, pagination } = useLogs()
@@ -147,7 +148,7 @@ export default function Logs() {
           <div className="ml-64">
             <div className="flex items-center justify-center h-64">
               <div className="text-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                <Spinner size="lg" className="mx-auto mb-4" />
                 <p className="text-gray-600">Loading logs...</p>
               </div>
             </div>

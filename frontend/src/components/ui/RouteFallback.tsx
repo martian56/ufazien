@@ -1,3 +1,4 @@
+import Spinner from "../../components/ui/Spinner"
 /** Shown while a lazy route's chunk downloads. */
 export default function RouteFallback() {
   return (
@@ -7,7 +8,7 @@ export default function RouteFallback() {
       aria-live="polite"
     >
       <div className="text-center">
-        <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+        <Spinner size="lg" className="mx-auto mb-3" />
         <p className="text-sm text-gray-500">Loading…</p>
       </div>
     </div>

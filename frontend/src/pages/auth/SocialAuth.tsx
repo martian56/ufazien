@@ -6,6 +6,7 @@ import { setTokens } from "../../lib/api/tokens"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import { GoogleOAuthProvider, useGoogleLogin } from "@react-oauth/google"
 import { Button } from "../../components/ui/button"
+import Spinner from "../../components/ui/Spinner"
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID
 
@@ -68,7 +69,7 @@ function GoogleLoginButton({ loadingProvider, setLoadingProvider }: ProviderButt
     >
       {loadingProvider === "Google" ? (
         <div className="flex items-center justify-center">
-          <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2" />
+          <Spinner size="sm" className="mr-2" />
           Connecting...
         </div>
       ) : (

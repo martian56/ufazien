@@ -30,6 +30,7 @@ import { useSubscription } from "../../hooks/useSubscription"
 import { useDatabases } from "../../hooks/useDatabases.js"
 import Select from "../../components/ui/Select"
 import { useDialogs } from "../../components/ui/Dialogs"
+import Spinner from "../../components/ui/Spinner"
 
 export default function Databases() {
   const { toast, confirm } = useDialogs()
@@ -172,7 +173,7 @@ export default function Databases() {
           <HostingSidebar />
           <div className="lg:ml-64">
             <div className="flex items-center justify-center h-64">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+              <Spinner size="lg" />
             </div>
           </div>
         </div>

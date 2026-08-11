@@ -17,6 +17,7 @@ import CreateModal from "../../../features/community/components/CreateModal"
 import PrivateChatModal from "../../../features/community/components/PrivateChatModal"
 import { useAppShell } from "../../../components/layout/appShellContext"
 import { SidebarPanel } from "../../../components/layout/AppShell"
+import Spinner from "../../../components/ui/Spinner"
 
 export default function Community() {
   const { isSidebarOpen, setIsSidebarOpen } = useAppShell()
@@ -258,7 +259,7 @@ export default function Community() {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+          <Spinner size="md" className="mx-auto" />
           <p className="mt-2 text-gray-600">Loading community...</p>
           <p className="mt-1 text-xs text-gray-400">Check console for debug logs</p>
           {error && <p className="mt-2 text-red-500 text-sm">Error: {error}</p>}

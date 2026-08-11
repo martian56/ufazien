@@ -21,6 +21,7 @@ import { logger } from "../../../lib/logger"
 import Select from "../../../components/ui/Select"
 import { useDialogs } from "../../../components/ui/Dialogs"
 import { useAppShell } from "../../../components/layout/appShellContext"
+import Spinner from "../../../components/ui/Spinner"
 
 /** The category picker prepends an "All" entry, which has no id on the server. */
 type CategoryOption = { id: number | "all"; name: string }
@@ -522,7 +523,7 @@ export default function Blog() {
                   </div>
                 ) : loading ? (
                   <div className="text-center py-12">
-                    <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                    <Spinner size="lg" className="mx-auto mb-4" />
                     <p className="text-gray-600">Loading posts...</p>
                   </div>
                 ) : error ? (
@@ -663,7 +664,7 @@ export default function Blog() {
                   )}
                   {tagsLoading ? (
                     <div className="flex items-center justify-center py-4">
-                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+                      <Spinner size="md" />
                     </div>
                   ) : (
                     <div className="flex flex-wrap gap-2">
@@ -693,7 +694,7 @@ export default function Blog() {
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">Popular This Week</h3>
                   {popularPostsLoading ? (
                     <div className="flex items-center justify-center py-4">
-                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+                      <Spinner size="md" />
                     </div>
                   ) : popularPosts.length === 0 ? (
                     <p className="text-gray-500 text-sm">No popular posts yet</p>
@@ -726,7 +727,7 @@ export default function Blog() {
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">Categories</h3>
                   {categoriesCountsLoading ? (
                     <div className="flex items-center justify-center py-4">
-                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+                      <Spinner size="md" />
                     </div>
                   ) : (
                     <div className="space-y-2">

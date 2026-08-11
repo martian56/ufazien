@@ -26,6 +26,7 @@ import { Textarea } from "../components/ui/textarea"
 import { useToast, ToastContainer } from "../hooks/useToast"
 import { api as apiClient } from "../lib/api/client"
 import { useAppShell } from "../components/layout/appShellContext"
+import Spinner from "../components/ui/Spinner"
 
 interface FeedbackType {
   value: string
@@ -443,7 +444,7 @@ export default function Feedback() {
                   >
                     {loading ? (
                       <div className="flex items-center justify-center gap-2">
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        <Spinner size="sm" tone="onColor" />
                         Submitting...
                       </div>
                     ) : (
@@ -518,7 +519,7 @@ export default function Feedback() {
               <div className="divide-y divide-gray-200">
                 {loadingHistory ? (
                   <div className="p-8 text-center">
-                    <div className="inline-block w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                    <Spinner size="md" />
                     <p className="text-sm text-gray-600 mt-2">Loading feedback history...</p>
                   </div>
                 ) : userFeedbacks.length === 0 ? (
