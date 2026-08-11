@@ -86,6 +86,41 @@ class PlayerPosition(models.Model):
         ],
         default='down'
     )
+    # Where the player is actually looking, in radians.
+    #
+    # `direction` above is four cardinal values, which is all the old sprite
+    # campus needed. In 3D it means someone walking diagonally across the quad
+    # is drawn facing north — you never notice on yourself, because you are in
+    # first person, and everybody else looks wrong. Kept alongside rather than
+    # replacing it, so a client that sends no heading still renders.
+    heading = models.FloatField(default=0.0)
+
+    STANDING = 'standing'
+    SITTING = 'sitting'
+    WAVING = 'waving'
+    CLAPPING = 'clapping'
+    HAND_RAISED = 'hand_raised'
+    POINTING = 'pointing'
+    ACTIVITY_CHOICES = [
+        (STANDING, 'Standing'),
+        (SITTING, 'Sitting'),
+        (WAVING, 'Waving'),
+        (CLAPPING, 'Clapping'),
+        (HAND_RAISED, 'Hand raised'),
+        (POINTING, 'Pointing'),
+    ]
+    # What the player is doing, as opposed to where they are. Without it,
+    # nothing anyone does is visible to anyone else: sitting down is a purely
+    # local illusion and everyone else still sees you standing in the aisle.
+    activity = models.CharField(
+        max_length=16, choices=ACTIVITY_CHOICES, default=STANDING
+    )
+
+    # Which seat, when sitting. Held here rather than on the client because it
+    # is what stops two people occupying the same chair, and a check that lives
+    # in the browser is one a modified browser simply does not perform.
+    seat = models.CharField(max_length=48, blank=True, null=True)
+
     is_moving = models.BooleanField(default=False)
     current_room = models.CharField(max_length=50, blank=True, null=True)
     last_updated = models.DateTimeField(auto_now=True)
@@ -93,6 +128,15 @@ class PlayerPosition(models.Model):
     class Meta:
         unique_together = ['user', 'lobby']
         ordering = ['last_updated']
+        constraints = [
+            # One person per chair. Partial, so that the many players sitting
+            # in no seat at all do not all collide with each other on NULL.
+            models.UniqueConstraint(
+                fields=['lobby', 'seat'],
+                condition=models.Q(seat__isnull=False),
+                name='one_occupant_per_seat',
+            ),
+        ]
 
     def __str__(self):
         return f"{self.user.username} at ({self.x}, {self.y}) in {self.lobby.name}"

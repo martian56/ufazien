@@ -291,6 +291,241 @@ class LobbyConsumerTests(TestCase):
         self.assertIn(self.host.id, rooms)
         self.assertEqual(rooms[self.host.id], "3")
 
+    def _drain(self, *communicators):
+        """Swallow the state and join frames each side gets on connect."""
+        async def go():
+            for c in communicators:
+                while await c.receive_nothing(timeout=0.2) is False:
+                    await c.receive_from(timeout=1)
+        return go()
+
+    @staticmethod
+    def _seating(lobby_id):
+        """
+        Who is sitting where, read while the sockets are still open.
+
+        Disconnecting releases a seat, so anything asserted after the scenario
+        has torn down passes whatever the code does.
+        """
+        from asgiref.sync import sync_to_async
+        from .models import PlayerPosition
+
+        @sync_to_async
+        def read():
+            return {
+                p.user_id: (p.seat, p.activity)
+                for p in PlayerPosition.objects.filter(lobby_id=lobby_id)
+            }
+
+        return read()
+
+    def test_a_seat_holds_one_person(self):
+        """Two people in one chair. The database decides, not the browser."""
+        from asgiref.sync import async_to_sync
+        from .models import PlayerPosition
+
+        async def scenario():
+            import json
+
+            a, _ = await self._connect(self.host)
+            b, _ = await self._connect(self.player)
+            try:
+                await self._drain(a, b)
+
+                await a.send_json_to({'type': 'take_seat', 'seat': 'lecture-0-4'})
+                # Let the first claim land, and let the broadcast of it reach
+                # the second player, before the second claim is made.
+                await a.receive_from(timeout=2)
+                await self._drain(b)
+
+                await b.send_json_to({'type': 'take_seat', 'seat': 'lecture-0-4'})
+                for _ in range(6):
+                    if await b.receive_nothing(timeout=1):
+                        continue
+                    payload = json.loads(await b.receive_from(timeout=2))
+                    # Ignore anything that is about the other player.
+                    if payload.get('user_id') == self.host.id:
+                        continue
+                    if payload.get('type') in ('seat_denied', 'seat_update'):
+                        return payload, await self._seating(self.lobby.id)
+                return None, await self._seating(self.lobby.id)
+            finally:
+                await a.disconnect()
+                await b.disconnect()
+
+        payload, seating = async_to_sync(scenario)()
+        self.assertIsNotNone(payload, 'second player never heard back')
+        self.assertEqual(payload['type'], 'seat_denied')
+        self.assertEqual(payload['seat'], 'lecture-0-4')
+
+        holders = [uid for uid, (seat, _) in seating.items() if seat == 'lecture-0-4']
+        self.assertEqual(holders, [self.host.id])
+
+    def test_standing_up_frees_the_seat(self):
+        from asgiref.sync import async_to_sync
+        from .models import PlayerPosition
+
+        async def scenario():
+            a, _ = await self._connect(self.host)
+            try:
+                await self._drain(a)
+                await a.send_json_to({'type': 'take_seat', 'seat': 'cafe-1'})
+                await a.receive_from(timeout=2)
+                await a.send_json_to({'type': 'leave_seat'})
+                await a.receive_from(timeout=2)
+            finally:
+                await a.disconnect()
+
+        async_to_sync(scenario)()
+        position = PlayerPosition.objects.get(lobby=self.lobby, user=self.host)
+        self.assertIsNone(position.seat)
+        self.assertEqual(position.activity, PlayerPosition.STANDING)
+
+    def test_disconnecting_frees_the_seat(self):
+        """A chair must not stay held by somebody who closed the tab."""
+        from asgiref.sync import async_to_sync
+        from .models import PlayerPosition
+
+        async def scenario():
+            a, _ = await self._connect(self.host)
+            await self._drain(a)
+            await a.send_json_to({'type': 'take_seat', 'seat': 'cafe-2'})
+            await a.receive_from(timeout=2)
+            await a.disconnect()
+
+        async_to_sync(scenario)()
+        self.assertFalse(
+            PlayerPosition.objects.filter(lobby=self.lobby, seat='cafe-2').exists()
+        )
+
+    def test_moving_does_not_stand_a_seated_player_up(self):
+        """
+        The client sends position sixty times a second while sitting still.
+
+        Every one of those frames carries an activity, and if a position update
+        were allowed to set it, sitting down would be undone by the very next
+        frame — which is exactly how `current_room` used to be lost.
+        """
+        from asgiref.sync import async_to_sync
+        from .models import PlayerPosition
+
+        async def scenario():
+            a, _ = await self._connect(self.host)
+            try:
+                await self._drain(a)
+                await a.send_json_to({'type': 'take_seat', 'seat': 'lecture-2-3'})
+                await a.receive_from(timeout=2)
+                await a.send_json_to({
+                    'type': 'player_position',
+                    'x': 1.0, 'y': 2.0, 'activity': 'standing', 'is_moving': True,
+                })
+                await a.receive_nothing(timeout=0.5)
+                return await self._seating(self.lobby.id)
+            finally:
+                await a.disconnect()
+
+        seating = async_to_sync(scenario)()
+        self.assertEqual(seating[self.host.id], ('lecture-2-3', PlayerPosition.SITTING))
+
+    def test_a_position_frame_cannot_claim_a_seat(self):
+        """The occupancy check lives in take_seat; nothing may route around it."""
+        from asgiref.sync import async_to_sync
+        from .models import PlayerPosition
+
+        async def scenario():
+            a, _ = await self._connect(self.host)
+            try:
+                await self._drain(a)
+                await a.send_json_to({
+                    'type': 'player_position',
+                    'x': 0.0, 'y': 0.0, 'seat': 'lecture-0-0',
+                })
+                await a.receive_nothing(timeout=0.5)
+                return await self._seating(self.lobby.id)
+            finally:
+                await a.disconnect()
+
+        seating = async_to_sync(scenario)()
+        self.assertIsNone(seating[self.host.id][0])
+
+    def test_heading_and_activity_reach_the_other_player(self):
+        from asgiref.sync import async_to_sync
+
+        async def scenario():
+            import json
+
+            a, _ = await self._connect(self.host)
+            b, _ = await self._connect(self.player)
+            try:
+                await self._drain(a, b)
+                await a.send_json_to({
+                    'type': 'player_position',
+                    'x': 1.0, 'y': 2.0,
+                    'heading': 1.25,
+                    'activity': 'waving',
+                    'is_moving': False,
+                })
+                for _ in range(5):
+                    if await b.receive_nothing(timeout=1):
+                        continue
+                    payload = json.loads(await b.receive_from(timeout=2))
+                    if payload.get('type') == 'position_update':
+                        return payload
+                return None
+            finally:
+                await a.disconnect()
+                await b.disconnect()
+
+        payload = async_to_sync(scenario)()
+        self.assertIsNotNone(payload)
+        self.assertAlmostEqual(payload['position']['heading'], 1.25, places=5)
+        self.assertEqual(payload['position']['activity'], 'waving')
+
+    def test_a_nonsense_heading_does_not_reach_the_database(self):
+        """
+        The client sends this every frame. A NaN in the column is a row that
+        then breaks every serialiser that touches it, and JSON has no NaN, so
+        it arrives as a string or a null rather than as a number.
+        """
+        from asgiref.sync import async_to_sync
+        from .models import PlayerPosition
+
+        async def scenario():
+            a, _ = await self._connect(self.host)
+            try:
+                await self._drain(a)
+                for bad in ['not-a-number', None, 'Infinity']:
+                    await a.send_json_to({
+                        'type': 'player_position', 'x': 0.0, 'y': 0.0, 'heading': bad,
+                    })
+                    await a.receive_nothing(timeout=0.3)
+            finally:
+                await a.disconnect()
+
+        async_to_sync(scenario)()
+        position = PlayerPosition.objects.get(lobby=self.lobby, user=self.host)
+        import math
+        self.assertTrue(math.isfinite(position.heading))
+
+    def test_an_unknown_activity_falls_back_to_standing(self):
+        from asgiref.sync import async_to_sync
+        from .models import PlayerPosition
+
+        async def scenario():
+            a, _ = await self._connect(self.host)
+            try:
+                await self._drain(a)
+                await a.send_json_to({
+                    'type': 'player_position', 'x': 0.0, 'y': 0.0, 'activity': 'sudo',
+                })
+                await a.receive_nothing(timeout=0.5)
+            finally:
+                await a.disconnect()
+
+        async_to_sync(scenario)()
+        position = PlayerPosition.objects.get(lobby=self.lobby, user=self.host)
+        self.assertEqual(position.activity, PlayerPosition.STANDING)
+
     def test_chat_message_is_broadcast_and_persisted(self):
         from asgiref.sync import async_to_sync
 
