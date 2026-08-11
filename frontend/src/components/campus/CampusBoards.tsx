@@ -11,7 +11,7 @@ import {
   type BoardLine,
   type PostLike,
   type SiteLike,
-} from './campusBoards'
+} from './boardLines'
 import { calendarApi, type CalendarEvent } from '../../services/calendarApi'
 import { blogApi } from '../../lib/api/endpoints/blog'
 import { api } from '../../lib/api/client'

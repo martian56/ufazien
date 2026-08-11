@@ -10,7 +10,7 @@ import {
   siteLines,
   shortDate,
   todayKey,
-} from './campusBoards'
+} from './boardLines'
 import type { CalendarEvent } from '../../services/calendarApi'
 
 /**
