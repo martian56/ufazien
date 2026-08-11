@@ -218,3 +218,34 @@ describe('poseFrame', () => {
     }
   })
 })
+
+describe('leaning', () => {
+  it('is a posture that holds rather than an emote that releases', () => {
+    expect(isHeld('leaning')).toBe(true)
+  })
+
+  it('leans backwards, onto the wall rather than off it', () => {
+    // Forwards reads as being about to fall over. The wall is behind, because
+    // that is the only side the detection looks at.
+    const pose = poseFrame('leaning', 0, 0)
+    expect(pose.torsoLean).toBeLessThan(0)
+  })
+
+  it('ignores the gait, because you cannot walk while propped up', () => {
+    // Laid over a walk it produced a player sliding along the wall at an angle.
+    const still = poseFrame('leaning', 1, 0)
+    const running = poseFrame('leaning', 1, RUN_SPEED)
+    expect(running).toEqual(still)
+  })
+
+  it('crosses one leg over the other', () => {
+    // What separates it from standing still at a slight angle.
+    const pose = poseFrame('leaning', 0, 0)
+    expect(pose.leftHip).not.toBeCloseTo(pose.rightHip)
+  })
+
+  it('is a real activity as far as the wire is concerned', () => {
+    expect(isActivity('leaning')).toBe(true)
+    expect(toActivity('leaning')).toBe('leaning')
+  })
+})

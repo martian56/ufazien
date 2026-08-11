@@ -195,6 +195,45 @@ export function resolveColliders(
 }
 
 /** Whether a point is inside a collider, with an optional margin around it. */
+/**
+ * How far behind a player a wall may be and still be leanable.
+ *
+ * Measured from the centre of the player, so it has to clear the player's own
+ * radius before it reaches anything: `PLAYER_RADIUS` is 0.45, and this leaves
+ * about half a metre of gap you can still lean across. Any further and you
+ * lean on thin air a pace from the wall.
+ */
+export const LEAN_REACH = 0.95
+
+/**
+ * Whether there is something to lean against behind this player.
+ *
+ * `heading` is the avatar convention: zero faces +Z, and the wall wanted is the
+ * one at the player's back, so the sample goes the other way.
+ *
+ * `roomLimit` is the half-extent of the interior the player is standing in, if
+ * any. Interior walls are a clamp on the camera rather than colliders, so a
+ * check that only consulted the collider list would refuse to let anybody lean
+ * on the actual walls of a room — the one surface every room is guaranteed to
+ * have.
+ */
+export function leanSurface(
+  x: number,
+  z: number,
+  heading: number,
+  colliders: readonly Collider[],
+  roomLimit?: number,
+): boolean {
+  const behindX = x - Math.sin(heading) * LEAN_REACH
+  const behindZ = z - Math.cos(heading) * LEAN_REACH
+
+  if (roomLimit !== undefined) {
+    if (Math.abs(behindX) >= roomLimit || Math.abs(behindZ) >= roomLimit) return true
+  }
+
+  return colliders.some((collider) => insideCollider(behindX, behindZ, collider))
+}
+
 export function insideCollider(x: number, z: number, collider: Collider, margin = 0): boolean {
   if (isCircle(collider)) {
     const reach = collider.radius + margin

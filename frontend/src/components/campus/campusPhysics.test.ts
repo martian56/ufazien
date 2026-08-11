@@ -7,6 +7,7 @@ import {
   blockingPlatforms,
   groundHeight,
   insideCollider,
+  leanSurface,
   resolveColliders,
   sightlineBlocker,
   type Collider,
@@ -229,5 +230,43 @@ describe('sightlineBlocker', () => {
     // The screen's own backing board is at the far end and is not in the way.
     const atTarget: Collider = { x: 0, z: -10, halfW: 5, halfD: 0.4, height: 9 }
     expect(sightlineBlocker(eye, screen, [atTarget])).toBeNull()
+  })
+})
+
+describe('leaning', () => {
+  const wall: Collider = { x: 0, z: -2, halfW: 6, halfD: 0.5 }
+
+  it('finds a wall at the player’s back', () => {
+    // Heading zero faces +Z, so the wall wanted is the one at -Z.
+    expect(leanSurface(0, -1, 0, [wall])).toBe(true)
+  })
+
+  it('does not lean on a wall the player is facing', () => {
+    // Turned around, the same wall is in front of them, and leaning backwards
+    // onto nothing is how an avatar ends up lying in the air.
+    expect(leanSurface(0, -1, Math.PI, [wall])).toBe(false)
+  })
+
+  it('does not reach across a room', () => {
+    expect(leanSurface(0, 6, 0, [wall])).toBe(false)
+  })
+
+  it('leans on the room’s own wall', () => {
+    // Interior walls are a clamp on the camera, not colliders. Checking only
+    // the collider list refuses the one surface every room is guaranteed to
+    // have, which is most of the walls anybody would want to lean on.
+    // Backed up against the clamp at -Z, which means facing +Z.
+    expect(leanSurface(0, -20, 0, [], 20)).toBe(true)
+    // And against the one at -X, which means facing +X.
+    expect(leanSurface(-20, 0, Math.PI / 2, [], 20)).toBe(true)
+    // A pace off the wall is still within reach, two paces is not.
+    expect(leanSurface(0, -19.5, 0, [], 20)).toBe(true)
+    expect(leanSurface(0, -18, 0, [], 20)).toBe(false)
+    expect(leanSurface(0, 0, 0, [], 20)).toBe(false)
+  })
+
+  it('finds a pillar behind the player', () => {
+    const column: Collider = { x: 0, z: -1.5, radius: 0.6 }
+    expect(leanSurface(0, -0.7, 0, [column])).toBe(true)
   })
 })

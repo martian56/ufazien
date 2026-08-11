@@ -16,11 +16,19 @@
  */
 
 /** The poses a player can be in. Mirrors `PlayerPosition.ACTIVITY_CHOICES`. */
-export type Activity = 'standing' | 'sitting' | 'waving' | 'clapping' | 'hand_raised' | 'pointing'
+export type Activity =
+  | 'standing'
+  | 'sitting'
+  | 'leaning'
+  | 'waving'
+  | 'clapping'
+  | 'hand_raised'
+  | 'pointing'
 
 export const ACTIVITIES: readonly Activity[] = [
   'standing',
   'sitting',
+  'leaning',
   'waving',
   'clapping',
   'hand_raised',
@@ -48,6 +56,7 @@ export function toActivity(value: unknown): Activity {
 export const HELD_ACTIVITIES: ReadonlySet<Activity> = new Set<Activity>([
   'standing',
   'sitting',
+  'leaning',
   'hand_raised',
 ])
 
@@ -197,6 +206,10 @@ export const SIT_DROP = 0.42
  */
 export function poseFrame(activity: Activity, time: number, speed: number): PoseFrame {
   if (activity === 'sitting') return sitPose(time)
+  // Leaning is a whole-body pose like sitting rather than something laid over
+  // a gait: you cannot walk while propped against a wall, and blending the two
+  // gives a player sliding along it at a angle.
+  if (activity === 'leaning') return leanPose(time)
 
   const gait = gaitFor(speed)
   const base = gait.cadence > 0 ? walkPose(gait, time) : idlePose(time)
@@ -266,6 +279,40 @@ function sitPose(time: number): PoseFrame {
     rightShoulder: -0.45,
     leftElbow: 0.7,
     rightElbow: 0.7,
+  }
+}
+
+/**
+ * Propped against a wall.
+ *
+ * The lean is backwards, away from the direction the avatar faces, because the
+ * wall is behind them — a forward lean reads as being about to fall over. One
+ * ankle crossed over the other is what separates it from standing still at a
+ * slight angle, and is most of why it looks deliberate.
+ */
+export const LEAN_ANGLE = -0.22
+
+function leanPose(time: number): PoseFrame {
+  // Slower than the standing idle: somebody leaning is settled, and breathing
+  // at walking pace against a wall looks like fidgeting.
+  const breathe = Math.sin(time * 0.9) * 0.015
+
+  return {
+    ...REST,
+    torsoLean: LEAN_ANGLE + breathe,
+    headNod: -breathe,
+    // The near leg straight and taking the weight, the far one crossed in
+    // front of it.
+    leftHip: 0.06,
+    rightHip: -0.22,
+    rightKnee: 0.3,
+    // Arms folded, which is what hands do when the hips are not free.
+    leftShoulder: -0.5,
+    rightShoulder: -0.5,
+    leftElbow: 1.5,
+    rightElbow: 1.5,
+    leftShoulderZ: 0.18,
+    rightShoulderZ: -0.18,
   }
 }
 

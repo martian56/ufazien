@@ -95,6 +95,10 @@ export function statusFor({
       const room = buildingName(currentRoom)
       return room ? `sitting in the ${room}` : 'sitting'
     }
+    case 'leaning': {
+      const room = buildingName(currentRoom)
+      return room ? `leaning in the ${room}` : 'leaning on a wall'
+    }
     default: {
       const room = buildingName(currentRoom)
       return room ? `in the ${room}` : null

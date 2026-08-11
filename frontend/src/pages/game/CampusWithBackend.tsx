@@ -1,4 +1,4 @@
-import React, { useState, useRef, Suspense, useEffect, useMemo } from "react"
+import React, { useState, useRef, Suspense, useCallback, useEffect, useMemo } from "react"
 import { Helmet } from "react-helmet"
 import { Canvas, useFrame, useThree } from "@react-three/fiber"
 import { KeyboardControls, useKeyboardControls, PointerLockControls, PerformanceMonitor } from "@react-three/drei"
@@ -40,6 +40,7 @@ import {
   SOLID_CAMPUS,
   blockingPlatforms,
   groundHeight,
+  leanSurface,
   resolveColliders,
   type Collider,
 } from '../../components/campus/campusPhysics'
@@ -129,6 +130,12 @@ const keyMap = [
   // Emotes. Number keys, because they are the ones nobody is holding down to
   // walk with, and a radial menu cannot be opened while the pointer is locked.
   { name: "sit", keys: ["KeyC"] },
+  // Leaning is a posture rather than an emote, so it sits next to sitting
+  // rather than on the number row, and holds until pressed again.
+  { name: "lean", keys: ["KeyV"] },
+  // Pick up and put down whatever is within reach; hold to throw it further.
+  { name: "grab", keys: ["KeyG"] },
+  { name: "light", keys: ["KeyL"] },
   { name: "wave", keys: ["Digit1"] },
   { name: "clap", keys: ["Digit2"] },
   { name: "raiseHand", keys: ["Digit3"] },
@@ -647,19 +654,42 @@ function SeatController({
   ownSeat,
   onCandidate,
   onEmote,
+  leaning,
+  onLean,
 }: {
   campusHook: CampusHook
   insideBuilding: CampusBuilding | null
   ownSeat: string | null
   onCandidate: (seat: Seat | null) => void
   onEmote: (activity: Activity | null) => void
+  leaning: boolean
+  onLean: (leaning: boolean) => void
 }) {
   const { camera } = useThree()
   const [, get] = useKeyboardControls()
   const { takeSeat, leaveSeat, seatedPlayers } = campusHook
-  const held = useRef({ sit: false, emote: '' })
+  const held = useRef({ sit: false, lean: false, emote: '' })
   const candidate = useRef<Seat | null>(null)
   const emoteUntil = useRef(0)
+
+  /**
+   * Whether the player has their back to something they could lean on.
+   *
+   * Read from the camera every time rather than captured, because both terms
+   * change as the player moves: which colliders apply depends on the room, and
+   * a room's own walls are a clamp rather than geometry.
+   */
+  const wallBehind = useCallback(() => {
+    const solid = insideBuilding ? interiorColliders(insideBuilding.interior) : SOLID_CAMPUS
+    const limit = insideBuilding ? interiorHalfExtent(insideBuilding.interior) : undefined
+    return leanSurface(
+      camera.position.x,
+      camera.position.z,
+      cameraHeading(camera),
+      solid,
+      limit,
+    )
+  }, [camera, insideBuilding])
 
   // Seats other people are in. Offering an occupied chair and having the
   // server refuse it reads as the key not working.
@@ -693,6 +723,23 @@ function SeatController({
     }
     held.current.sit = sitPressed
 
+    // Leaning. A posture rather than an emote: it holds until pressed again,
+    // and unlike a chair there is nothing to claim, because two people can
+    // lean on the same wall.
+    const leanPressed = !typing && Boolean(controls.lean)
+    if (leanPressed && !held.current.lean) {
+      if (leaning) {
+        onLean(false)
+      } else if (!ownSeat && wallBehind()) {
+        onLean(true)
+      }
+    }
+    held.current.lean = leanPressed
+
+    // Walking away from the wall stands you up. Without this a player leans
+    // on nothing all the way across the quad.
+    if (leaning && !wallBehind()) onLean(false)
+
     // Emotes are one-shot and release themselves, so a wave does not last
     // until the player thinks to press something else.
     let pressed: Activity | '' = ''
@@ -723,6 +770,7 @@ function Player({
   touch,
   seated,
   emote,
+  leaning,
 }: {
   campusHook: CampusHook
   insideBuilding: CampusBuilding | null
@@ -731,6 +779,8 @@ function Player({
   seated: Seat | null
   /** A one-shot pose, or null. Held poses come through `seated`. */
   emote: Activity | null
+  /** Propped against a wall, which is a posture rather than an emote. */
+  leaning: boolean
 }) {
   const { camera } = useThree()
   const [, get] = useKeyboardControls()
@@ -904,7 +954,9 @@ function Player({
       y: backendCoords.y,
       direction: playerDirection,
       heading,
-      activity: emote ?? 'standing',
+      // An emote wins over the posture, the posture over standing: waving
+      // from a wall is still waving, and stopping is still leaning.
+      activity: emote ?? (leaning ? 'leaning' : 'standing'),
       is_moving: moving,
       // Was hardcoded null, so the server never knew which building anyone
       // was standing in, and neither did anyone else's client. Sent as the
@@ -928,6 +980,15 @@ const CampusWithBackend = () => {
   /** The chair within reach, for the prompt. Not the one being sat in. */
   const [seatCandidate, setSeatCandidate] = useState<Seat | null>(null)
   const [emote, setEmote] = useState<Activity | null>(null)
+  /**
+   * Propped against a wall.
+   *
+   * Held here rather than in the controller that sets it because the pose has
+   * to reach the position frames, and those are sent from the player
+   * controller — a posture nobody else can see is a posture that does not
+   * exist.
+   */
+  const [leaning, setLeaning] = useState(false)
   /**
    * A clock for expiring chat bubbles.
    *
@@ -1310,14 +1371,18 @@ const CampusWithBackend = () => {
 
       {/* Sitting down. The prompt names the chair you are actually standing at,
           and only offers one nobody else is in. */}
-      {insideBuilding && !games.active && (seatCandidate || campusHook.ownSeat) && (
+      {!games.active && (insideBuilding || leaning) && (seatCandidate || campusHook.ownSeat || leaning) && (
         <div className="absolute left-1/2 -translate-x-1/2 bottom-32 sm:bottom-16 z-30 pointer-events-none max-w-[92vw]">
           <div className="bg-black/80 backdrop-blur-sm border border-emerald-500/30 rounded-xl px-4 py-2.5 text-white text-center">
             <div className="text-xs text-emerald-300">
-              {campusHook.ownSeat ? 'Press C to stand up' : 'Press C to sit down'}
+              {leaning
+                ? 'Press V to stand up straight'
+                : campusHook.ownSeat
+                  ? 'Press C to stand up'
+                  : 'Press C to sit down'}
             </div>
             <div className="text-[11px] text-gray-400 mt-1">
-              1 wave · 2 clap · 3 raise hand · 4 point
+              V lean · 1 wave · 2 clap · 3 raise hand · 4 point
             </div>
           </div>
         </div>
@@ -1646,6 +1711,7 @@ const CampusWithBackend = () => {
               touch={touchState}
               seated={seatedOn}
               emote={emote}
+              leaning={leaning}
             />
             <SeatController
               campusHook={campusHook}
@@ -1653,6 +1719,8 @@ const CampusWithBackend = () => {
               ownSeat={campusHook.ownSeat}
               onCandidate={setSeatCandidate}
               onEmote={setEmote}
+              leaning={leaning}
+              onLean={setLeaning}
             />
 
             {/* Without a selector drei binds the lock handler to document, so every
