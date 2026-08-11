@@ -6,6 +6,7 @@ import { Helmet } from "react-helmet"
 import HostingSidebar from "../../components/hosting/HostingSidebar"
 import { useDomains } from "../../hooks/useDomains"
 import Radio from "../../components/ui/Radio"
+import Spinner from "../../components/ui/Spinner"
 
 export default function Domains() {
   const { 
@@ -145,7 +146,7 @@ export default function Domains() {
           <HostingSidebar />
           <div className="ml-64">
             <div className="flex items-center justify-center h-64">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+              <Spinner size="lg" />
             </div>
           </div>
         </div>

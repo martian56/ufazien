@@ -35,6 +35,7 @@ import {
 import type { AverageRow as AverageRowData, GpaStatistics, SavedCalculation } from "../../../lib/api/endpoints/gpa"
 import { useDialogs } from "../../../components/ui/Dialogs"
 import { useAppShell } from "../../../components/layout/appShellContext"
+import Spinner from "../../../components/ui/Spinner"
 
 interface Toast {
   id: number
@@ -712,13 +713,13 @@ export default function GpaCalculator() {
                       </button>
                       {loading && (
                         <div className="flex items-center gap-2 text-blue-600">
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                          <Spinner size="sm" />
                           <span className="text-sm">Saving GPA...</span>
                         </div>
                       )}
                       {inputSaving && (
                         <div className="flex items-center gap-2 text-green-600">
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-600"></div>
+                          <Spinner size="sm" />
                           <span className="text-sm">Saving inputs...</span>
                         </div>
                       )}

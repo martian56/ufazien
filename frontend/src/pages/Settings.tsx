@@ -30,6 +30,7 @@ import { errorMessage } from "../lib/api/errors"
 import { Helmet } from "react-helmet"
 import Radio from "../components/ui/Radio"
 import { useAppShell } from "../components/layout/appShellContext"
+import Spinner from "../components/ui/Spinner"
 
 
 const Settings = () => {
@@ -303,7 +304,7 @@ const Settings = () => {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <Spinner size="lg" className="mx-auto mb-4" />
           <p className="text-gray-600">Loading settings...</p>
         </div>
       </div>

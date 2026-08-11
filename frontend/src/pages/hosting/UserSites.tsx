@@ -5,6 +5,7 @@ import { ExternalLink, Globe, Search, X, Tag, Menu, ChevronDown } from 'lucide-r
 import { api } from '../../lib/api/client'
 import Select from "../../components/ui/Select"
 import { useAppShell } from "../../components/layout/appShellContext"
+import Spinner from "../../components/ui/Spinner"
 
 /** Mirrors PublicWebsiteSerializer. */
 interface PublicSite {
@@ -114,7 +115,7 @@ export default function UserSites() {
     if (loading) {
       return (
         <div className="text-center py-12">
-          <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <Spinner size="lg" className="mx-auto mb-4" />
           <p className="text-gray-600">Loading sites...</p>
         </div>
       )

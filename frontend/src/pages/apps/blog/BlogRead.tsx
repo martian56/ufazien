@@ -43,6 +43,7 @@ import { isAuthenticated } from "../../../lib/api/tokens"
 import { processblogContent, extractPlainText, calculateReadTime } from "../../../utils/contentProcessor"
 import { useToast, ToastContainer } from "../../../hooks/useToast"
 import { useAppShell } from "../../../components/layout/appShellContext"
+import Spinner from "../../../components/ui/Spinner"
 
 // Helper function to strip HTML tags for text processing
 export default function BlogRead() {
@@ -457,7 +458,7 @@ export default function BlogRead() {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <Spinner size="lg" className="mx-auto mb-4" />
           <p className="text-gray-600">Loading blog post...</p>
         </div>
       </div>

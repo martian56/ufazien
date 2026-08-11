@@ -11,6 +11,7 @@ import { useNavigate } from "react-router-dom"
 
 import { api, ApiError } from "../../lib/api/client"
 import { setTokens } from "../../lib/api/tokens"
+import Spinner from "../../components/ui/Spinner"
 
 
 /** What /auth/signup/ answers with. */
@@ -271,7 +272,7 @@ export default function SignUpForm() {
       >
         {isLoading ? (
           <div className="flex items-center justify-center">
-            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+            <Spinner size="sm" tone="onColor" className="mr-2" />
             Creating account...
           </div>
         ) : (
