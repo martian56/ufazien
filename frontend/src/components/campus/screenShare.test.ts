@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { playerPositionFromUpdate } from '../../hooks/useCampusSimulator'
+import { playerPositionFromUpdate, type PlayerPosition } from '../../hooks/useCampusSimulator'
 import { fitProjector } from './projectorFit'
 import { INTERIOR_SPECS, interiorHalfExtent } from './interiorSpecs'
 import { lectureSeatingExtent } from './lectureSeating'
@@ -175,38 +175,81 @@ describe('interior spawns', () => {
 })
 
 describe('the two position paths agree', () => {
-  it('maps a lobby snapshot and a live frame to the same shape', () => {
-    // The snapshot sends a flat record, the live frame a nested one. They used
-    // to be mapped by two hand-written copies of the same code, and they drifted
-    // — which is the bug this whole file exists for.
-    const flat = {
-      x: 12,
-      y: -4,
-      direction: 'left',
-      is_moving: true,
-      current_room: '5',
-      username: 'nigar',
-      full_name: 'Nigar A',
-      last_updated: '2026-01-01T00:00:00.000Z',
-    }
+  // The consumer sends the same player in two different envelopes, and the two
+  // used to be mapped by hand-written copies of the same code that drifted.
+  // These fixtures are the real wire shapes, so a change to either envelope
+  // breaks the test rather than sliding through a shared object.
 
-    const snapshot = playerPositionFromUpdate({
-      position: flat as never,
-      username: flat.username,
-      full_name: flat.full_name,
-      last_updated: flat.last_updated,
-    })
-    const live = playerPositionFromUpdate({
-      position: flat as never,
-      username: flat.username,
-      full_name: flat.full_name,
-    })
+  /** `lobby_state.positions[]` — the fields flat, alongside the user's. */
+  interface SnapshotEntry extends PlayerPosition {
+    user_id: number
+    username: string
+    full_name: string
+    last_updated: string
+  }
 
-    // Everything but the timestamp, which the snapshot takes from the server.
+  /** `position_update` — the fields nested under `position`, no timestamp. */
+  interface LiveFrame {
+    user_id: number
+    username: string
+    full_name: string
+    position: PlayerPosition
+  }
+
+  const snapshotEntry: SnapshotEntry = {
+    user_id: 7,
+    username: 'nigar',
+    full_name: 'Nigar A',
+    x: 12,
+    y: -4,
+    direction: 'left',
+    is_moving: true,
+    current_room: '5',
+    last_updated: '2026-01-01T00:00:00.000Z',
+  }
+
+  const liveFrame: LiveFrame = {
+    user_id: 7,
+    username: 'nigar',
+    full_name: 'Nigar A',
+    position: { x: 12, y: -4, direction: 'left', is_moving: true, current_room: '5' },
+  }
+
+  // How the hook unwraps each envelope. Kept identical to useCampusSimulator.
+  const fromSnapshot = (entry: SnapshotEntry) =>
+    playerPositionFromUpdate({
+      position: entry,
+      username: entry.username,
+      full_name: entry.full_name,
+      last_updated: entry.last_updated,
+    })
+  const fromLive = (frame: LiveFrame) => playerPositionFromUpdate(frame)
+
+  it('maps the flat snapshot entry and the nested live frame to the same player', () => {
+    const snapshot = fromSnapshot(snapshotEntry)
+    const live = fromLive(liveFrame)
+
+    // Everything but the timestamp, which only the snapshot carries.
     const { last_updated: snapshotStamp, ...snapshotRest } = snapshot
     const { last_updated: liveStamp, ...liveRest } = live
     expect(snapshotRest).toEqual(liveRest)
-    expect(snapshotStamp).toBe(flat.last_updated)
-    expect(liveStamp).not.toBe(flat.last_updated)
+    expect(snapshotStamp).toBe(snapshotEntry.last_updated)
+    expect(liveStamp).not.toBe(snapshotEntry.last_updated)
+  })
+
+  it('carries the room through the snapshot, so arriving mid-presentation shows it', () => {
+    // The server left `current_room` out of this envelope entirely: you joined,
+    // learned where everyone was standing but not who was indoors, and the
+    // share stayed blank until the presenter took a step.
+    expect(fromSnapshot(snapshotEntry).current_room).toBe('5')
+  })
+
+  it('carries the room through a live frame', () => {
+    expect(fromLive(liveFrame).current_room).toBe('5')
+  })
+
+  it('reads a room the snapshot omits as no room, not as undefined', () => {
+    const { current_room: _omitted, ...withoutRoom } = snapshotEntry
+    expect(fromSnapshot(withoutRoom as SnapshotEntry).current_room).toBeNull()
   })
 })
