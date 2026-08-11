@@ -196,6 +196,31 @@ export function resolveColliders(
 
 /** Whether a point is inside a collider, with an optional margin around it. */
 /**
+ * One step towards a point, stopping short of it.
+ *
+ * Used for following somebody. Returns null when there is nothing to do, which
+ * is either already being close enough or being exactly on top of the target —
+ * the second matters because the direction is undefined there, and normalising
+ * a zero vector produces NaN and sends the follower off the campus.
+ */
+export function approachStep(
+  from: { x: number; z: number },
+  to: { x: number; z: number },
+  stride: number,
+  stopAt: number,
+): { x: number; z: number } | null {
+  const dx = to.x - from.x
+  const dz = to.z - from.z
+  const gap = Math.hypot(dx, dz)
+  if (gap <= stopAt || gap === 0) return null
+
+  // Capped at the remaining gap, so arriving is standing next to somebody
+  // rather than overshooting and turning round to come back.
+  const step = Math.min(stride, gap - stopAt)
+  return { x: (dx / gap) * step, z: (dz / gap) * step }
+}
+
+/**
  * How far behind a player a wall may be and still be leanable.
  *
  * Measured from the centre of the player, so it has to clear the player's own

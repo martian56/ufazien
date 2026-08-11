@@ -38,6 +38,7 @@ import Whiteboard from '../../components/campus/Whiteboard'
 import { isDrawableChat } from '../../components/campus/whiteboardStrokes'
 import {
   SOLID_CAMPUS,
+  approachStep,
   blockingPlatforms,
   groundHeight,
   leanSurface,
@@ -703,6 +704,15 @@ function PropController({
 /** How long G must be held for a throw at full power, in seconds. */
 const THROW_CHARGE_SECONDS = 1.1
 
+/**
+ * How close following gets you before it stops.
+ *
+ * Far enough not to stand inside them — the avatar is drawn at the position it
+ * reports, and a follower closing to zero ends up looking at the inside of a
+ * head.
+ */
+const FOLLOW_DISTANCE = 2.6
+
 /** Feeds the mini-games the state of the hold key, from either input method. */
 function ActionKeyBridge({ action }: { action: React.RefObject<ActionInput> }) {
   const [, get] = useKeyboardControls()
@@ -883,6 +893,7 @@ function Player({
   seated,
   emote,
   leaning,
+  follow,
 }: {
   campusHook: CampusHook
   insideBuilding: CampusBuilding | null
@@ -893,6 +904,13 @@ function Player({
   emote: Activity | null
   /** Propped against a wall, which is a posture rather than an emote. */
   leaning: boolean
+  /**
+   * Somebody to walk towards, in world coordinates, or null.
+   *
+   * Only ever set for a player in the same room, because a position means
+   * different things in different rooms.
+   */
+  follow: { x: number; z: number } | null
 }) {
   const { camera } = useThree()
   const [, get] = useKeyboardControls()
@@ -969,7 +987,7 @@ function Player({
       }
     }
 
-    const moving = direction.current.lengthSq() > 0
+    const driving = direction.current.lengthSq() > 0
     // The heading, kept as a unit vector before the frame scale goes on.
     // Deriving the facing from the scaled vector made it depend on frame rate:
     // one step at 5.5 m/s and 60fps is 0.09 units, which failed the 0.1 test
@@ -977,7 +995,9 @@ function Player({
     // everyone else — but the same input at 30fps passed.
     let headingX = 0
     let headingZ = 0
-    if (moving) {
+    let moving = driving
+
+    if (driving) {
       direction.current.normalize()
       direction.current.multiplyScalar(speed * delta)
 
@@ -988,6 +1008,23 @@ function Player({
       const length = Math.hypot(direction.current.x, direction.current.z) || 1
       headingX = direction.current.x / length
       headingZ = direction.current.z / length
+    } else if (follow) {
+      // Following somebody, which is the same movement by a different input.
+      // Steering the same vector rather than moving the camera separately is
+      // what gives follow its collision, its gravity and its position frames
+      // for free. Only when the player is not driving: their own input has to
+      // win, or the follow fights them for the controls.
+      //
+      // Already in world axes, so unlike key input it must not be rotated by
+      // the camera — the target is a place, not a direction relative to a face.
+      const step = approachStep(camera.position, follow, speed * delta, FOLLOW_DISTANCE)
+      if (step) {
+        direction.current.set(step.x, 0, step.z)
+        moving = true
+        const length = Math.hypot(step.x, step.z) || 1
+        headingX = step.x / length
+        headingZ = step.z / length
+      }
     }
 
     // Jump logic
@@ -1105,6 +1142,8 @@ const CampusWithBackend = () => {
   const [propCandidate, setPropCandidate] = useState<PropSpec | null>(null)
   /** How far a throw is wound up, 0 to 1. */
   const [throwCharge, setThrowCharge] = useState(0)
+  /** Whoever the player is walking after, if anybody. */
+  const [followingId, setFollowingId] = useState<string | number | null>(null)
   /**
    * A clock for expiring chat bubbles.
    *
@@ -1426,6 +1465,26 @@ const CampusWithBackend = () => {
     campusHook.coordsTo3D,
   ])
 
+  /**
+   * Where the person being followed is, or null.
+   *
+   * Resolved from the visible list rather than from every player, so following
+   * stops of its own accord the moment they walk into a building: their
+   * coordinates are room space from then on, and walking to them would send
+   * the follower across the quad to a place nobody is standing.
+   */
+  const followTarget = useMemo(() => {
+    if (followingId === null) return null
+    const target = visibleAvatars.find((avatar) => String(avatar.id) === String(followingId))
+    return target ? target.position : null
+  }, [followingId, visibleAvatars])
+
+  // Give up when they are no longer somewhere we can walk to, rather than
+  // holding a follow that silently does nothing.
+  useEffect(() => {
+    if (followingId !== null && !followTarget) setFollowingId(null)
+  }, [followingId, followTarget])
+
   /** Whether the room the player is standing in has its lights on. */
   const roomLit = useMemo(
     () => (myRoom ? (campusHook.roomLights.get(myRoom) ?? true) : true),
@@ -1667,6 +1726,47 @@ const CampusWithBackend = () => {
         )}
       </div>
 
+      {/* Who is here with you, and the follow button.
+          DOM rather than a panel in the scene for the same pointer-lock reason
+          as the doors: a click in the world never lands while the pointer is
+          locked, which is the normal way to play. */}
+      {visibleAvatars.length > 0 && !games.active && (
+        <div className="absolute top-4 left-4 z-10 pointer-events-auto w-[min(15rem,52vw)]">
+          <div className="bg-black/75 backdrop-blur-sm border border-blue-500/25 rounded-xl px-3 py-2 text-white">
+            <div className="text-[11px] uppercase tracking-wide text-blue-300/80 mb-1">
+              {myRoom ? 'In this room' : 'On the campus'}
+            </div>
+            <ul className="space-y-1">
+              {visibleAvatars.slice(0, 6).map((avatar) => {
+                const followingThem = String(followingId) === String(avatar.id)
+                return (
+                  <li key={avatar.id} className="flex items-center justify-between gap-2">
+                    <span className="text-xs truncate">
+                      {String(avatar.userData.full_name || avatar.userData.username || 'Student')}
+                    </span>
+                    <button
+                      onClick={() => setFollowingId(followingThem ? null : avatar.id)}
+                      className={`text-[10px] px-2 py-0.5 rounded-md shrink-0 transition-colors ${
+                        followingThem
+                          ? 'bg-blue-500 text-white'
+                          : 'bg-white/10 text-blue-200 hover:bg-white/20'
+                      }`}
+                    >
+                      {followingThem ? 'Stop' : 'Follow'}
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+            {followingId !== null && (
+              <div className="text-[10px] text-gray-400 mt-1.5">
+                Walking after them. Any movement key takes back the controls.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Standing in a study area offers to join it. Also DOM rather than a
           panel in the scene, for the same pointer-lock reason as the doors. */}
       {nearArea && !games.active && !nearBuilding && (
@@ -1906,6 +2006,7 @@ const CampusWithBackend = () => {
               seated={seatedOn}
               emote={emote}
               leaning={leaning}
+              follow={followTarget}
             />
             <SeatController
               campusHook={campusHook}

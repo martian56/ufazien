@@ -4,6 +4,7 @@ import {
   PROP_COLLIDERS,
   SOLID_CAMPUS,
   STEP_UP,
+  approachStep,
   blockingPlatforms,
   groundHeight,
   insideCollider,
@@ -268,5 +269,39 @@ describe('leaning', () => {
   it('finds a pillar behind the player', () => {
     const column: Collider = { x: 0, z: -1.5, radius: 0.6 }
     expect(leanSurface(0, -0.7, 0, [column])).toBe(true)
+  })
+})
+
+describe('following somebody', () => {
+  it('steps towards them', () => {
+    const step = approachStep({ x: 0, z: 0 }, { x: 0, z: 10 }, 1, 2.6)
+    expect(step).not.toBeNull()
+    expect(step!.z).toBeCloseTo(1)
+    expect(step!.x).toBeCloseTo(0)
+  })
+
+  it('stops short rather than standing inside them', () => {
+    // The avatar is drawn at the position it reports, so closing to zero puts
+    // the follower's camera inside somebody's head.
+    expect(approachStep({ x: 0, z: 0 }, { x: 0, z: 2 }, 1, 2.6)).toBeNull()
+  })
+
+  it('does not overshoot on the last step', () => {
+    // Arriving should be standing next to them, not sailing past and turning
+    // round to come back.
+    const step = approachStep({ x: 0, z: 0 }, { x: 0, z: 3 }, 5, 2.6)
+    expect(step!.z).toBeCloseTo(0.4)
+  })
+
+  it('survives being exactly on top of the target', () => {
+    // The direction is undefined there. Normalising a zero vector gives NaN,
+    // which puts the follower at NaN and takes the camera off the campus.
+    expect(approachStep({ x: 4, z: 4 }, { x: 4, z: 4 }, 1, 0)).toBeNull()
+  })
+
+  it('walks diagonally when they are diagonal', () => {
+    const step = approachStep({ x: 0, z: 0 }, { x: 10, z: 10 }, 1, 0)
+    expect(step!.x).toBeCloseTo(Math.SQRT1_2)
+    expect(step!.z).toBeCloseTo(Math.SQRT1_2)
   })
 })
