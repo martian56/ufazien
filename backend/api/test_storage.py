@@ -109,20 +109,42 @@ class ProductionRequiresObjectStorageTests(SimpleTestCase):
                 else:
                     os.environ[k] = v
 
-    def test_production_without_object_storage_refuses_to_start(self):
+    def tearDown(self):
+        """Reload under the suite's own environment so later tests see it."""
+        self._load_settings({})
+
+    def test_production_refuses_to_start_when_either_variable_is_missing(self):
+        """
+        Each variable is tested on its own. Dropping both at once would pass
+        even if the guard only fired when neither was set, which is the case
+        that never happens in practice: a half-configured environment is.
+        """
         from django.core.exceptions import ImproperlyConfigured
 
-        with self.assertRaises(ImproperlyConfigured) as caught:
-            self._load_settings(
-                {
-                    "ENVIRONMENT": "production",
-                    "AWS_S3_ENDPOINT_URL": None,
-                    "AWS_ACCESS_KEY_ID": None,
-                }
-            )
-        self.assertIn("lost on redeploy", str(caught.exception))
-        # Leave the module in the state the rest of the suite expects.
-        self._load_settings({"ENVIRONMENT": None})
+        cases = {
+            "endpoint missing": {"AWS_S3_ENDPOINT_URL": None, "AWS_ACCESS_KEY_ID": "key"},
+            "access key missing": {
+                "AWS_S3_ENDPOINT_URL": "https://media.example.com",
+                "AWS_ACCESS_KEY_ID": None,
+            },
+            "both missing": {"AWS_S3_ENDPOINT_URL": None, "AWS_ACCESS_KEY_ID": None},
+        }
+        for label, env in cases.items():
+            with self.subTest(label):
+                with self.assertRaises(ImproperlyConfigured) as caught:
+                    self._load_settings({"ENVIRONMENT": "production", **env})
+                self.assertIn("lost on redeploy", str(caught.exception))
+
+    def test_production_starts_when_both_are_present(self):
+        """The guard must not block a correctly configured deployment."""
+        module, _ = self._load_settings(
+            {
+                "ENVIRONMENT": "production",
+                "AWS_S3_ENDPOINT_URL": "https://media.example.com",
+                "AWS_ACCESS_KEY_ID": "key",
+            }
+        )
+        self.assertTrue(module.USE_OBJECT_STORAGE)
 
     def test_local_development_without_object_storage_is_fine(self):
         """Requiring MinIO to run the app on a laptop would be friction."""
