@@ -22,7 +22,7 @@ import {
   VENDING_MACHINES,
   libraryAisleHalf,
 } from './interiorPhysics'
-import { NoticeBoard, ScheduleBoard } from './CampusBoards'
+import { NoticeBoard, ScheduleBoard, SitesBoard } from './CampusBoards'
 import { INTERIOR_SPECS, type FloorKind, type InteriorSpec } from './interiorSpecs'
 import { LECTURE_ROWS, LECTURE_SEATING } from './lectureSeating'
 import {
@@ -1023,7 +1023,10 @@ function StudentCentreInterior({ spec }: { spec: InteriorSpec }) {
 
       {/* The latest posts from the blog, rather than another blank panel. */}
       <NoticeBoard position={[half - 0.55, 4.6, 6]} rotation={-Math.PI / 2} />
-      <WallPanel position={[-half + 0.4, 5, 12]} rotation={Math.PI / 2} size={[5, 3]} panelColor="#eef3f6" frame={spec.accent} />
+      {/* And the sites students have actually published, opposite. The blank
+          panel that used to hang here was the last decoration in the room
+          standing in for something the platform already knows. */}
+      <SitesBoard position={[-half + 0.55, 4.6, 12]} rotation={Math.PI / 2} />
     </group>
   )
 }

@@ -6,12 +6,15 @@ import {
   emptyBoard,
   noticeLines,
   scheduleLines,
+  siteLines,
   todayKey,
   type BoardLine,
   type PostLike,
+  type SiteLike,
 } from './campusBoards'
 import { calendarApi, type CalendarEvent } from '../../services/calendarApi'
 import { blogApi } from '../../lib/api/endpoints/blog'
+import { api } from '../../lib/api/client'
 import type { Vec3 } from './campusLayout'
 
 /**
@@ -138,6 +141,36 @@ export function NoticeBoard({ position, rotation }: { position: Vec3; rotation?:
       title="Noticeboard"
       lines={lines}
       accent="#7fe0a8"
+      position={position}
+      rotation={rotation}
+      size={[6.4, 3.4]}
+    />
+  )
+}
+
+/**
+ * Student sites, on the screens in the student centre.
+ *
+ * Read from the public hosting listing, which is the same set of sites the
+ * platform already publishes — showing them here is another window onto that
+ * list, not a new disclosure. It carries a display name and never an address.
+ */
+export function SitesBoard({ position, rotation }: { position: Vec3; rotation?: number }) {
+  const lines = useBoardLines(async () => {
+    // `api` returns parsed JSON, not an axios envelope, and this endpoint is
+    // paginated — so the rows are under `results` rather than at the top.
+    const response = await api.get<unknown>('/hosting/public/websites/?page_size=6')
+    const sites: SiteLike[] = Array.isArray(response)
+      ? (response as SiteLike[])
+      : ((response as { results?: SiteLike[] })?.results ?? [])
+    return siteLines(sites)
+  }, emptyBoard('sites'))
+
+  return (
+    <Board
+      title="Built by students"
+      lines={lines}
+      accent="#f0b429"
       position={position}
       rotation={rotation}
       size={[6.4, 3.4]}

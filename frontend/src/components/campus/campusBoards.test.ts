@@ -7,6 +7,7 @@ import {
   isOnDay,
   noticeLines,
   scheduleLines,
+  siteLines,
   shortDate,
   todayKey,
 } from './campusBoards'
@@ -168,5 +169,52 @@ describe('board fallbacks', () => {
   it('keys today in the format the filter compares against', () => {
     expect(todayKey(new Date('2026-08-11T22:00:00Z'))).toBe(DAY)
     expect(todayKey()).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  })
+})
+
+describe('siteLines', () => {
+  const sites = [
+    { name: 'portfolio', url: 'https://portfolio.ufazien.com', creator: 'Aysel Mammadova', total_visits: 2400 },
+    { name: 'notes', url: 'https://notes.ufazien.com/', creator: '  ', total_visits: 12 },
+    { name: 'quiet', domain: 'quiet.example.com', creator: 'Rashad', total_visits: 0 },
+  ]
+
+  it('leads with the address, because that is what you would type', () => {
+    expect(siteLines(sites)[0].primary).toBe('portfolio.ufazien.com')
+  })
+
+  it('drops the scheme and a trailing slash', () => {
+    // A board is not a link, and four characters of "https://" is a chunk of a
+    // line that has to fit a domain name.
+    expect(siteLines(sites)[1].primary).toBe('notes.ufazien.com')
+  })
+
+  it('falls back to the domain when there is no url', () => {
+    expect(siteLines(sites)[2].primary).toBe('quiet.example.com')
+  })
+
+  it('credits somebody, even when the listing has no name', () => {
+    expect(siteLines(sites)[0].secondary).toBe('Aysel Mammadova')
+    expect(siteLines(sites)[1].secondary).toBe('a student')
+  })
+
+  it('abbreviates a large visit count and hides an empty one', () => {
+    expect(siteLines(sites)[0].trailing).toBe('2.4k')
+    expect(siteLines(sites)[1].trailing).toBe('12')
+    expect(siteLines(sites)[2].trailing).toBeUndefined()
+  })
+
+  it('fits the board', () => {
+    const many = Array.from({ length: 20 }, (_, i) => ({ name: `s${i}`, url: `https://s${i}.test` }))
+    expect(siteLines(many)).toHaveLength(BOARD_LINES)
+  })
+
+  it('ignores a row with no name at all', () => {
+    expect(siteLines([{ url: 'https://ghost.test' }, ...sites])).toHaveLength(3)
+  })
+
+  it('says something useful when nobody has published anything', () => {
+    expect(siteLines([])).toHaveLength(0)
+    expect(emptyBoard('sites')[0].primary).toContain('No student sites')
   })
 })

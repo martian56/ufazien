@@ -309,19 +309,39 @@ class WebsiteSummarySerializer(serializers.ModelSerializer):
 
 
 class PublicWebsiteSerializer(serializers.ModelSerializer):
-    """Serializer used for public listing of websites (for main app)"""
+    """
+    A site as anybody may see it: the public listing, and the campus screens.
+
+    Deliberately not `WebsiteSerializer`, which carries the environment
+    variables, the git repository and the build commands — everything needed to
+    deploy the thing — and is only ever read by the site's own owner. This one
+    is read by anybody, so it carries what a listing needs and nothing else. In
+    particular there is no email: the creator is a display name.
+    """
     domain = serializers.CharField(source='domain.name', read_only=True)
     creator = serializers.SerializerMethodField()
+    url = serializers.ReadOnlyField()
 
     class Meta:
         model = Website
-        fields = ('id', 'name', 'domain', 'creator', 'description', 'website_type', 'storage_used_mb', 'total_visits', 'status', 'created_at')
+        fields = ('id', 'name', 'domain', 'url', 'creator', 'description', 'website_type', 'storage_used_mb', 'total_visits', 'status', 'created_at')
 
     def get_creator(self, obj):
-        owner = getattr(obj, 'owner', None) or getattr(obj, 'user', None)
+        """
+        What to call the person who made it.
+
+        This used to join `first_name` and `last_name` unconditionally, and
+        both default to the empty string — so every account that never filled
+        in a name was credited as `" "`, a single space. On a listing that is
+        the whole point of the field, an anonymous entry is worse than a
+        username. Falls back to the username, and never to the email: an
+        address is not the owner's to give away because they published a site.
+        """
+        owner = getattr(obj, 'user', None)
         if not owner:
             return None
-        return getattr(owner, 'first_name', None) + ' ' + getattr(owner, 'last_name', None)
+        name = owner.get_full_name().strip() if hasattr(owner, 'get_full_name') else ''
+        return name or getattr(owner, 'username', None)
 
 
 class DatabaseSummarySerializer(serializers.ModelSerializer):
@@ -359,3 +379,4 @@ class SubscriptionLimitsSerializer(serializers.Serializer):
     databases = serializers.IntegerField()
     storage_mb = serializers.IntegerField()
     bandwidth_mb = serializers.IntegerField()
+
