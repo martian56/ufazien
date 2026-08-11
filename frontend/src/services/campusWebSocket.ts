@@ -314,6 +314,24 @@ class CampusWebSocketService {
     }
 
     /**
+     * Forget every listener.
+     *
+     * This is a module singleton, so it outlives the component that subscribes
+     * to it. `disconnect()` closes the socket and leaves the callbacks in
+     * place, so joining a second lobby — or the page unmounting and mounting
+     * again — registered a second full set on top of the first. Every chat
+     * message then arrived twice, and the first set went on calling setState
+     * on a component that no longer existed.
+     *
+     * Called by the one subscriber before it registers, rather than exposing
+     * an unsubscribe per listener that twelve call sites would have to thread
+     * back out.
+     */
+    clearListeners() {
+        this.listeners = {};
+    }
+
+    /**
      * Emit event to all listeners
      * @param {string} event - Event type
      * @param {Object} data - Event data

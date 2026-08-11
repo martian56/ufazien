@@ -9,6 +9,7 @@ import campusApi from '../services/campusApi';
 import { errorMessage } from '../lib/api/errors';
 import {
     NO_SEATS,
+    ownSeatFromSnapshot,
     seatAfterDenial,
     seatsFromSnapshot,
     withSeat,
@@ -262,6 +263,13 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
      * Set up WebSocket event listeners
      */
     const setupWebSocketListeners = useCallback(() => {
+        // Start from nothing. The socket service is a module singleton and
+        // keeps its callbacks across a disconnect, so joining a second lobby
+        // used to leave the first lobby's handlers subscribed as well: chat
+        // messages arrived once per past connection, and the stale handlers
+        // went on writing to state that belonged to a dead render.
+        campusWebSocket.clearListeners();
+
         // Connection status events
         campusWebSocket.on('connected', () => {
             setIsConnected(true);
@@ -300,6 +308,11 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
             });
             setPlayerPositions(positionsMap);
             setSeatedPlayers(seatsFromSnapshot(data.positions || [], currentUserId));
+            // Including our own chair, which the map above deliberately leaves
+            // out. Disconnecting releases a seat, so this is usually null — but
+            // the snapshot is the server's answer either way, and deriving
+            // `ownSeat` from anything else is how the two disagree.
+            setOwnSeat(ownSeatFromSnapshot(data.positions || [], currentUserId));
         });
 
         // User joined lobby
@@ -523,8 +536,11 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
     }, []);
 
     const leaveSeat = useCallback(() => {
+        // No optimistic clear. Standing up is the server's to confirm, exactly
+        // as sitting down is: if the socket is down the message never lands,
+        // and clearing here would show a player on their feet while the server
+        // still holds their chair against everybody else.
         campusWebSocket.leaveSeat();
-        setOwnSeat(null);
     }, []);
 
     const joinStudyRoom = useCallback((roomId: string) => {

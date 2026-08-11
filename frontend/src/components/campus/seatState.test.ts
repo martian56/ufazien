@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 
 import {
   NO_SEATS,
+  ownSeatFromSnapshot,
   seatAfterDenial,
   seatsFromSnapshot,
   takenSeatIds,
@@ -116,6 +117,31 @@ describe('seatsFromSnapshot', () => {
   it('copes with a snapshot that carries no seating at all', () => {
     expect(seatsFromSnapshot([], null).size).toBe(0)
     expect(seatsFromSnapshot([{ user_id: 7 }], null).size).toBe(0)
+  })
+})
+
+describe('ownSeatFromSnapshot', () => {
+  const positions = [
+    { user_id: 7, seat: 'lecture-1-3' },
+    { user_id: 9, seat: 'cafe-2' },
+  ]
+
+  it('reads the chair the server has the reader in', () => {
+    // The counterpart to the omission above. Both halves of the snapshot have
+    // to be read, or the one seat the client cares about most is the one it
+    // never learns about.
+    expect(ownSeatFromSnapshot(positions, 7)).toBe('lecture-1-3')
+  })
+
+  it('reports nothing for a player the server has standing', () => {
+    expect(ownSeatFromSnapshot([{ user_id: 7, seat: null }], 7)).toBeNull()
+    expect(ownSeatFromSnapshot([{ user_id: 7 }], 7)).toBeNull()
+    expect(ownSeatFromSnapshot(positions, 11)).toBeNull()
+  })
+
+  it('reports nothing when it does not know who is reading', () => {
+    expect(ownSeatFromSnapshot(positions, null)).toBeNull()
+    expect(ownSeatFromSnapshot(positions, undefined)).toBeNull()
   })
 })
 
