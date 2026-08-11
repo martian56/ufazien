@@ -4,6 +4,16 @@ import { Detailed } from '@react-three/drei'
 import * as THREE from 'three'
 
 import { avatarLook, type AvatarLook } from './avatarAppearance'
+import {
+  TURN_RATE,
+  WALK_SPEED,
+  approachAngle,
+  gaitFor,
+  poseFrame,
+  toActivity,
+  type Activity,
+  type PoseFrame,
+} from './avatarPose'
 import { faceTexture } from './campusTextures'
 
 /**
@@ -46,8 +56,15 @@ const GEO = {
   hairCap: new THREE.SphereGeometry(0.222, 20, 14, 0, Math.PI * 2, 0, Math.PI / 2.6),
   hairCrop: new THREE.SphereGeometry(0.224, 18, 12, 0, Math.PI * 2, 0, Math.PI / 3.2),
   hairBun: new THREE.SphereGeometry(0.105, 12, 10),
-  arm: new THREE.CapsuleGeometry(0.085, 0.42, 4, 10),
+  // Split at the elbow and the knee. A single-segment limb cannot sit down:
+  // rotating one capsule at the hip puts the whole leg out horizontally in
+  // front, like a doll propped against a wall.
+  upperArm: new THREE.CapsuleGeometry(0.082, 0.2, 4, 10),
+  foreArm: new THREE.CapsuleGeometry(0.075, 0.2, 4, 10),
   hand: new THREE.SphereGeometry(0.08, 10, 8),
+  thigh: new THREE.CapsuleGeometry(0.108, 0.2, 4, 10),
+  shin: new THREE.CapsuleGeometry(0.093, 0.2, 4, 10),
+  // Kept for the mid-detail body, which has no joints.
   leg: new THREE.CapsuleGeometry(0.105, 0.42, 4, 10),
   shoe: new THREE.BoxGeometry(0.16, 0.1, 0.26),
   backpack: new THREE.BoxGeometry(0.38, 0.46, 0.18),
@@ -109,7 +126,14 @@ export interface CharacterModelProps {
   /** Shirt colour. Matches the hue shown beside the player's name. */
   color?: string
   isMoving?: boolean
+  /** Cardinal fallback, for a client that sends no heading. */
   direction?: string
+  /** Where the player is actually looking, in radians. */
+  heading?: number
+  /** What they are doing: sitting, waving, a hand up. */
+  activity?: string
+  /** Ground speed, which decides whether this is a walk or a run. */
+  speed?: number
   /**
    * The user id. Everything except the shirt is derived from it, so a student
    * looks the same to everyone and stays the same between sessions.
@@ -121,16 +145,58 @@ export function CharacterModel({
   color = '#4F46E5',
   isMoving = false,
   direction = 'down',
+  heading,
+  activity = 'standing',
+  speed,
   seed = 0,
 }: CharacterModelProps) {
   const look = useMemo(() => avatarLook(seed), [seed])
-  const facing = FACING.get(direction) ?? 0
+  const body = useRef<THREE.Group>(null)
+  const placed = useRef(false)
 
+  // A real angle if the client sent one, otherwise the old four-way enum. The
+  // enum is why every remote student used to face north, south, east or west
+  // no matter which way they were walking.
+  const target = heading !== undefined && Number.isFinite(heading)
+    ? heading
+    : FACING.get(direction) ?? 0
+
+  const pose = toActivity(activity)
+  // Speed drives the gait. Without one, fall back to the boolean the socket
+  // has always carried, so an older client still animates.
+  const ground = speed !== undefined && Number.isFinite(speed)
+    ? speed
+    : isMoving
+      ? WALK_SPEED
+      : 0
+
+  // Turned towards the heading rather than snapped to it, and never the long
+  // way round. Sitting locks the body to the seat's facing.
+  useFrame((_, delta) => {
+    const group = body.current
+    if (!group) return
+    // Face the right way on the first frame rather than swinging round from
+    // zero when an avatar first appears.
+    if (!placed.current) {
+      placed.current = true
+      group.rotation.y = target
+      return
+    }
+    group.rotation.y =
+      pose === 'sitting'
+        ? target
+        : approachAngle(group.rotation.y, target, TURN_RATE * Math.min(delta, 0.1))
+  })
+
+  // No `rotation` prop. r3f writes an array prop straight onto the object, so
+  // a changing `rotation={[0, target, 0]}` overwrote `rotation.y` on every
+  // render — which is exactly the value `useFrame` above is interpolating, so
+  // a remote player snapped to a new heading instead of turning at TURN_RATE.
   return (
-    <group rotation={[0, facing, 0]} scale={look.height}>
+    <group ref={body} scale={look.height}>
       <Detailed distances={[0, 22, 55]}>
-        <FullBody color={color} look={look} isMoving={isMoving} />
-        <SimpleBody color={color} look={look} isMoving={isMoving} />
+        <FullBody color={color} look={look} activity={pose} speed={ground} />
+        <SimpleBody color={color} look={look} activity={pose} speed={ground} />
         <DistantBody color={color} look={look} />
       </Detailed>
     </group>
@@ -144,26 +210,25 @@ export function CharacterModel({
 function FullBody({
   color,
   look,
-  isMoving,
+  activity,
+  speed,
 }: {
   color: string
   look: AvatarLook
-  isMoving: boolean
+  activity: Activity
+  speed: number
 }) {
-  const legs = useRef<THREE.Group>(null)
-  const arms = useRef<THREE.Group>(null)
-  const upper = useRef<THREE.Group>(null)
-  const head = useRef<THREE.Group>(null)
-
-  useWalk({ legs, arms, upper, head, isMoving })
+  const rig = useRef<Rig>({})
+  usePose(rig, activity, speed)
 
   const shirt = material(color, 0.78)
   const skin = material(look.skin, 0.85)
   const face = faceMaterial(look.face)
+  const trousers = material(look.trousers, 0.85)
 
   return (
-    <group>
-      <group ref={upper}>
+    <group ref={(node) => { rig.current.root = node ?? undefined }}>
+      <group ref={(node) => { rig.current.upper = node ?? undefined }}>
         <mesh
           castShadow
           geometry={GEO.torso}
@@ -174,26 +239,40 @@ function FullBody({
         <mesh
           castShadow
           geometry={GEO.hips}
-          material={material(look.trousers, 0.85)}
+          material={trousers}
           position={[0, 0.71, 0]}
           scale={[1, 1, 0.78]}
         />
         <mesh castShadow geometry={GEO.neck} material={skin} position={[0, 1.5, 0]} />
 
-        <group ref={head} position={[0, 1.7, 0]}>
+        <group ref={(node) => { rig.current.head = node ?? undefined }} position={[0, 1.7, 0]}>
           <mesh castShadow geometry={GEO.head} material={skin} scale={[1, 1.1, 0.95]} />
           {face && <mesh geometry={GEO.face} material={face} position={[0, 0.012, 0.207]} />}
           <Hair look={look} />
         </group>
 
-        <group ref={arms}>
-          {[-0.325, 0.325].map((x) => (
-            <group key={x} position={[x, 1.3, 0]}>
-              <mesh castShadow geometry={GEO.arm} material={shirt} position={[0, -0.25, 0]} />
-              <mesh castShadow geometry={GEO.hand} material={skin} position={[0, -0.53, 0]} />
+        {/* Shoulders and elbows. Both arms are built the same way and told
+            apart by which ref they take, so a wave only moves one of them. */}
+        {([['left', -0.325], ['right', 0.325]] as const).map(([side, x]) => (
+          <group
+            key={side}
+            position={[x, 1.3, 0]}
+            ref={(node) => {
+              rig.current[side === 'left' ? 'leftShoulder' : 'rightShoulder'] = node ?? undefined
+            }}
+          >
+            <mesh castShadow geometry={GEO.upperArm} material={shirt} position={[0, -0.14, 0]} />
+            <group
+              position={[0, -0.28, 0]}
+              ref={(node) => {
+                rig.current[side === 'left' ? 'leftElbow' : 'rightElbow'] = node ?? undefined
+              }}
+            >
+              <mesh castShadow geometry={GEO.foreArm} material={skin} position={[0, -0.13, 0]} />
+              <mesh castShadow geometry={GEO.hand} material={skin} position={[0, -0.27, 0]} />
             </group>
-          ))}
-        </group>
+          </group>
+        ))}
 
         {look.backpack && (
           <group>
@@ -205,11 +284,26 @@ function FullBody({
         )}
       </group>
 
-      <group ref={legs} position={[0, 0.66, 0]}>
-        {[-0.135, 0.135].map((x) => (
-          <group key={x} position={[x, 0, 0]}>
-            <mesh castShadow geometry={GEO.leg} material={material(look.trousers, 0.85)} position={[0, -0.3, 0]} />
-            <mesh castShadow geometry={GEO.shoe} material={material(look.shoes, 0.6)} position={[0, -0.6, 0.05]} />
+      {/* Hips and knees. The knee is what makes sitting possible at all. */}
+      <group position={[0, 0.66, 0]}>
+        {([['left', -0.135], ['right', 0.135]] as const).map(([side, x]) => (
+          <group
+            key={side}
+            position={[x, 0, 0]}
+            ref={(node) => {
+              rig.current[side === 'left' ? 'leftHip' : 'rightHip'] = node ?? undefined
+            }}
+          >
+            <mesh castShadow geometry={GEO.thigh} material={trousers} position={[0, -0.15, 0]} />
+            <group
+              position={[0, -0.31, 0]}
+              ref={(node) => {
+                rig.current[side === 'left' ? 'leftKnee' : 'rightKnee'] = node ?? undefined
+              }}
+            >
+              <mesh castShadow geometry={GEO.shin} material={trousers} position={[0, -0.14, 0]} />
+              <mesh castShadow geometry={GEO.shoe} material={material(look.shoes, 0.6)} position={[0, -0.3, 0.05]} />
+            </group>
           </group>
         ))}
       </group>
@@ -250,20 +344,22 @@ function Hair({ look }: { look: AvatarLook }) {
 function SimpleBody({
   color,
   look,
-  isMoving,
+  activity,
+  speed,
 }: {
   color: string
   look: AvatarLook
-  isMoving: boolean
+  activity: Activity
+  speed: number
 }) {
-  const legs = useRef<THREE.Group>(null)
-  const upper = useRef<THREE.Group>(null)
+  const rig = useRef<Rig>({})
+  usePose(rig, activity, speed)
 
-  useWalk({ legs, upper, isMoving })
+  const trousers = material(look.trousers, 0.85)
 
   return (
-    <group>
-      <group ref={upper}>
+    <group ref={(node) => { rig.current.root = node ?? undefined }}>
+      <group ref={(node) => { rig.current.upper = node ?? undefined }}>
         <mesh
           castShadow
           geometry={GEO.torso}
@@ -278,16 +374,38 @@ function SimpleBody({
           position={[0, 1.704, -0.008]}
           scale={[1.03, 1.09, 1.02]}
         />
+        {/* Shoulders only. At this distance an elbow is under a pixel. */}
+        {([['left', -0.3], ['right', 0.3]] as const).map(([side, x]) => (
+          <group
+            key={side}
+            position={[x, 1.3, 0]}
+            ref={(node) => {
+              rig.current[side === 'left' ? 'leftShoulder' : 'rightShoulder'] = node ?? undefined
+            }}
+          >
+            <mesh castShadow geometry={GEO.upperArm} material={material(color, 0.78)} position={[0, -0.25, 0]} scale={[1, 2.1, 1]} />
+          </group>
+        ))}
       </group>
-      <group ref={legs} position={[0, 0.66, 0]}>
-        {[-0.135, 0.135].map((x) => (
-          <mesh
-            key={x}
-            castShadow
-            geometry={GEO.leg}
-            material={material(look.trousers, 0.85)}
-            position={[x, -0.3, 0]}
-          />
+      <group position={[0, 0.66, 0]}>
+        {([['left', -0.135], ['right', 0.135]] as const).map(([side, x]) => (
+          <group
+            key={side}
+            position={[x, 0, 0]}
+            ref={(node) => {
+              rig.current[side === 'left' ? 'leftHip' : 'rightHip'] = node ?? undefined
+            }}
+          >
+            <mesh castShadow geometry={GEO.thigh} material={trousers} position={[0, -0.15, 0]} />
+            <group
+              position={[0, -0.31, 0]}
+              ref={(node) => {
+                rig.current[side === 'left' ? 'leftKnee' : 'rightKnee'] = node ?? undefined
+              }}
+            >
+              <mesh castShadow geometry={GEO.shin} material={trousers} position={[0, -0.14, 0]} />
+            </group>
+          </group>
         ))}
       </group>
     </group>
@@ -309,52 +427,80 @@ function DistantBody({ color, look }: { color: string; look: AvatarLook }) {
 /* ------------------------------------------------------------------ */
 
 /**
- * The walk cycle, and a breath when standing still.
+ * The joints, as whichever of them a given level of detail actually built.
+ *
+ * All optional: the mid-detail body has shoulders but no elbows, and skipping
+ * a joint it does not have is cheaper than giving it one nobody can see.
+ */
+interface Rig {
+  root?: THREE.Group
+  upper?: THREE.Group
+  head?: THREE.Group
+  leftShoulder?: THREE.Group
+  rightShoulder?: THREE.Group
+  leftElbow?: THREE.Group
+  rightElbow?: THREE.Group
+  leftHip?: THREE.Group
+  rightHip?: THREE.Group
+  leftKnee?: THREE.Group
+  rightKnee?: THREE.Group
+}
+
+/**
+ * Drives the rig from `poseFrame`.
  *
  * Shared by both animated levels of detail so they cannot drift apart, and it
- * touches only rotations and one position — no allocation, nothing that has to
- * be cleaned up.
+ * touches only rotations and one position — no allocation, nothing to clean up.
+ * All of the actual reasoning lives in `avatarPose.ts`, where it can be tested
+ * without a canvas.
  */
-function useWalk({
-  legs,
-  arms,
-  upper,
-  head,
-  isMoving,
-}: {
-  legs: React.RefObject<THREE.Group | null>
-  arms?: React.RefObject<THREE.Group | null>
-  upper?: React.RefObject<THREE.Group | null>
-  head?: React.RefObject<THREE.Group | null>
-  isMoving: boolean
-}) {
-  useFrame((state) => {
-    const t = state.clock.elapsedTime * 9
-    const swing = isMoving ? Math.sin(t) * 0.55 : 0
+function usePose(rig: React.RefObject<Rig>, activity: Activity, speed: number) {
+  // Speed only changes when a new position frame arrives, so recomputing the
+  // gait per frame per avatar per level of detail is pure waste.
+  const gait = useMemo(() => gaitFor(speed), [speed])
 
-    if (legs.current) {
-      legs.current.children.forEach((leg, i) => {
-        leg.rotation.x = i === 0 ? swing : -swing
-      })
+  useFrame((state) => {
+    const parts = rig.current
+    if (!parts) return
+
+    const time = state.clock.elapsedTime
+    const frame = poseFrame(activity, time, speed)
+
+    apply(parts.leftHip, frame.leftHip)
+    apply(parts.rightHip, frame.rightHip)
+    apply(parts.leftKnee, frame.leftKnee)
+    apply(parts.rightKnee, frame.rightKnee)
+    apply(parts.leftElbow, frame.leftElbow)
+    apply(parts.rightElbow, frame.rightElbow)
+    apply(parts.leftShoulder, frame.leftShoulder, frame.leftShoulderZ)
+    apply(parts.rightShoulder, frame.rightShoulder, frame.rightShoulderZ)
+
+    if (parts.root) {
+      // Sitting drops the whole body by a seat height, so an avatar placed on
+      // the floor in front of a chair ends up on it.
+      parts.root.position.y = -frame.hipDrop
     }
-    if (arms?.current) {
-      arms.current.children.forEach((arm, i) => {
-        arm.rotation.x = i === 0 ? -swing * 0.75 : swing * 0.75
-      })
+
+    if (parts.upper) {
+      // A bob on each stride. Zero when the cadence is, so a standing student
+      // does not hover.
+      parts.upper.position.y =
+        gait.cadence > 0 ? Math.abs(Math.sin(time * gait.cadence)) * gait.bob : 0
+      parts.upper.rotation.x = frame.torsoLean
+      parts.upper.rotation.y = gait.cadence > 0 ? Math.sin(time * gait.cadence) * 0.06 : 0
     }
-    if (upper?.current) {
-      // A bob on each stride, and a slow breath when idle.
-      upper.current.position.y = isMoving
-        ? Math.abs(Math.sin(t)) * 0.045
-        : Math.sin(state.clock.elapsedTime * 1.5) * 0.012
-      upper.current.rotation.y = isMoving ? Math.sin(t) * 0.06 : 0
-    }
-    if (head?.current) {
-      // The head lags the shoulders very slightly, which is most of what makes
-      // a walk look like a walk rather than a slide.
-      head.current.rotation.y = isMoving ? -Math.sin(t) * 0.05 : 0
+
+    if (parts.head) {
+      parts.head.rotation.y = frame.headTurn
+      parts.head.rotation.x = frame.headNod
     }
   })
+}
+
+function apply(joint: THREE.Group | undefined, x: number, z = 0) {
+  if (!joint) return
+  joint.rotation.x = x
+  joint.rotation.z = z
 }
 
 export default CharacterModel

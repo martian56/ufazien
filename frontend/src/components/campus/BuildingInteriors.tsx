@@ -3,6 +3,26 @@ import * as THREE from 'three'
 
 import type { InteriorKind, Vec3 } from './campusLayout'
 import { mulberry32 } from './campusLayout'
+import {
+  BLEACHER_TIERS,
+  CAFE_HEAT_LAMP_Y,
+  FUME_CUPBOARDS,
+  LAB_AISLE,
+  LAB_BENCH_HALF,
+  LAB_BENCH_ROWS,
+  LOUNGE_CLUSTERS,
+  LOUNGE_SOFA_OFFSET,
+  SCOREBOARD_Y,
+  STACK_ROWS,
+  TABLE_FOOTBALL,
+  UFAZ_BENCH_Z,
+  UFAZ_DESK_X,
+  UFAZ_FLAGS,
+  UFAZ_STAIR,
+  VENDING_MACHINES,
+  libraryAisleHalf,
+} from './interiorPhysics'
+import { NoticeBoard, ScheduleBoard } from './CampusBoards'
 import { INTERIOR_SPECS, type FloorKind, type InteriorSpec } from './interiorSpecs'
 import { LECTURE_ROWS, LECTURE_SEATING } from './lectureSeating'
 import {
@@ -325,32 +345,32 @@ function UfazHall({ spec }: { spec: InteriorSpec }) {
         it read as a floating slab. A dark runner and a rail with real posts
         give it edges to catch the light.
       */}
-      <group position={[0, 0, -half + 12]}>
-        {Array.from({ length: 14 }, (_, i) => (
-          <group key={i} position={[0, 0.3 + i * 0.3, -i * 0.62]}>
+      <group position={[UFAZ_STAIR.x, 0, UFAZ_STAIR.z]}>
+        {Array.from({ length: UFAZ_STAIR.steps }, (_, i) => (
+          <group key={i} position={[0, 0.3 + i * UFAZ_STAIR.rise, -i * UFAZ_STAIR.going]}>
             <mesh castShadow receiveShadow>
-              <boxGeometry args={[11, 0.3, 0.66]} />
+              <boxGeometry args={[UFAZ_STAIR.halfW * 2, 0.3, 0.66]} />
               <meshStandardMaterial color="#e4dac4" roughness={0.35} metalness={0.05} />
             </mesh>
             {/* Runner */}
             <mesh position={[0, 0.16, 0.02]} receiveShadow>
-              <boxGeometry args={[5.2, 0.04, 0.66]} />
+              <boxGeometry args={[UFAZ_STAIR.halfW * 1.3, 0.04, 0.66]} />
               <meshStandardMaterial color="#8c3b32" roughness={0.95} />
             </mesh>
           </group>
         ))}
 
-        <mesh castShadow receiveShadow position={[0, 4.35, -9.4]}>
-          <boxGeometry args={[17, 0.4, 4.4]} />
+        <mesh castShadow receiveShadow position={[0, 4.35, UFAZ_STAIR.landing.z - UFAZ_STAIR.z]}>
+          <boxGeometry args={[UFAZ_STAIR.landing.halfW * 2, 0.4, UFAZ_STAIR.landing.halfD * 2]} />
           <meshStandardMaterial color="#e4dac4" roughness={0.35} />
         </mesh>
 
         {/* Balustrade: a solid stepped parapet with a brass cap, built from
             the same rise and going as the treads so it can never drift out of
             line with them the way a single raking rail did. */}
-        {[-5.5, 5.5].map((x) =>
-          Array.from({ length: 14 }, (_, i) => (
-            <group key={`${x}-${i}`} position={[x, 0.3 + i * 0.3, -i * 0.62]}>
+        {[-UFAZ_STAIR.halfW, UFAZ_STAIR.halfW].map((x) =>
+          Array.from({ length: UFAZ_STAIR.steps }, (_, i) => (
+            <group key={`${x}-${i}`} position={[x, 0.3 + i * UFAZ_STAIR.rise, -i * UFAZ_STAIR.going]}>
               <mesh castShadow receiveShadow position={[0, 0.62, 0]}>
                 <boxGeometry args={[0.36, 1.1, 0.66]} />
                 <meshStandardMaterial color="#e4dac4" roughness={0.45} />
@@ -364,7 +384,7 @@ function UfazHall({ spec }: { spec: InteriorSpec }) {
         )}
 
         {/* Newel posts at the foot of the flight */}
-        {[-5.5, 5.5].map((x) => (
+        {[-UFAZ_STAIR.halfW, UFAZ_STAIR.halfW].map((x) => (
           <mesh key={x} castShadow position={[x, 0.8, 0.7]}>
             <boxGeometry args={[0.7, 1.6, 0.7]} />
             <meshStandardMaterial color="#e4dac4" roughness={0.45} />
@@ -374,7 +394,7 @@ function UfazHall({ spec }: { spec: InteriorSpec }) {
 
       {/* Reception desk. The worktop was near-black, which in a cream marble
           hall read as a monolith rather than a counter. */}
-      <group position={[-13, 0, 8]}>
+      <group position={[UFAZ_DESK_X, 0, 8]}>
         <mesh castShadow receiveShadow position={[0, 0.55, 0]}>
           <boxGeometry args={[5.5, 1.1, 1.4]} />
           <meshStandardMaterial color="#6d5334" roughness={0.6} />
@@ -414,7 +434,7 @@ function UfazHall({ spec }: { spec: InteriorSpec }) {
       </group>
 
       {/* Flags on stands, as they stand in the real lobby */}
-      {([[-3.5, '#00b5e2'], [3.5, '#000091']] as [number, string][]).map(([x, flagColor]) => (
+      {([[UFAZ_FLAGS[0], '#00b5e2'], [UFAZ_FLAGS[1], '#000091']] as [number, string][]).map(([x, flagColor]) => (
         <group key={x} position={[x, 0, -half + 15]}>
           <mesh castShadow position={[0, 1.7, 0]}>
             <cylinderGeometry args={[0.05, 0.07, 3.4, 8]} />
@@ -432,8 +452,8 @@ function UfazHall({ spec }: { spec: InteriorSpec }) {
       ))}
 
       {/* Seating for people waiting, and greenery */}
-      {[-6, 0, 6].map((z) => (
-        <group key={z} position={[half - 6, 0, z]}>
+      {UFAZ_BENCH_Z.map((z) => (
+        <group key={z} position={[-half + 8, 0, z]}>
           <mesh castShadow receiveShadow position={[0, 0.45, 0]}>
             <boxGeometry args={[1.6, 0.25, 4.4]} />
             <meshStandardMaterial color="#6d5a45" roughness={0.75} />
@@ -466,9 +486,6 @@ function UfazHall({ spec }: { spec: InteriorSpec }) {
 /* ------------------------------------------------------------------ */
 /* Library                                                              */
 /* ------------------------------------------------------------------ */
-
-/** Where the stacks stand. Module scope, so the book layout memo is stable. */
-const STACK_ROWS = [-15, -9, -3, 3]
 
 /**
  * Books, instanced.
@@ -519,11 +536,21 @@ function LibraryInterior({ spec }: { spec: InteriorSpec }) {
     const random = mulberry32(1337)
     const items: { x: number; y: number; z: number; ry: number; w: number }[] = []
     for (const z of STACK_ROWS) {
+      // Books follow the shelves, which are now two runs either side of the
+      // sightline wedge. Generated across the full width they floated in the
+      // aisle with no shelf under them — and stood in the very gap the layout
+      // exists to keep clear.
+      const aisle = libraryAisleHalf(z)
+      const runHalf = ((half - 4) - aisle) / 2
+      if (runHalf <= 0.5) continue
+
       for (let shelf = 0; shelf < 5; shelf++) {
         const y = 0.75 + shelf * 1.05
+        for (const run of [-1, 1]) {
         for (const side of [-1, 1]) {
-          let x = -half + 4
-          while (x < half - 4) {
+          const runStart = run < 0 ? -(aisle + runHalf * 2) : aisle
+          let x = runStart
+          while (x < runStart + runHalf * 2) {
             const w = 0.28 + random() * 0.22
             // Leave the occasional gap: a shelf packed edge to edge looks
             // painted on, and someone always has a book out.
@@ -533,6 +560,7 @@ function LibraryInterior({ spec }: { spec: InteriorSpec }) {
             x += w + 0.02
           }
         }
+        }
       }
     }
     return items
@@ -540,29 +568,36 @@ function LibraryInterior({ spec }: { spec: InteriorSpec }) {
 
   return (
     <group>
-      {/* Stacks */}
-      {STACK_ROWS.map((z) => (
-        <group key={z} position={[0, 0, z]}>
-          <mesh castShadow receiveShadow position={[0, 2.9, 0]}>
-            <boxGeometry args={[(half - 4) * 2, 5.8, 0.7]} />
-            <meshStandardMaterial color="#6d4f32" roughness={0.8} />
-          </mesh>
-          {/* Shelf boards, both faces */}
-          {[0, 1, 2, 3, 4].map((shelf) =>
-            [-1, 1].map((side) => (
-              <mesh
-                key={`${shelf}-${side}`}
-                castShadow
-                receiveShadow
-                position={[0, 0.7 + shelf * 1.05, side * 0.5]}
-              >
-                <boxGeometry args={[(half - 4) * 2, 0.09, 0.35]} />
-                <meshStandardMaterial color="#7d5c3d" roughness={0.8} />
-              </mesh>
-            )),
-          )}
-        </group>
-      ))}
+      {/* Stacks, in two runs either side of a wedge-shaped aisle aimed at the
+          board. See `libraryAisleHalf`: the stacks used to run the full width
+          of the room and no reader could see the screen past them. */}
+      {STACK_ROWS.map((z) => {
+        const aisle = libraryAisleHalf(z)
+        const runHalf = ((half - 4) - aisle) / 2
+        if (runHalf <= 0.5) return null
+        return [-1, 1].map((run) => (
+          <group key={`${z}-${run}`} position={[run * (aisle + runHalf), 0, z]}>
+            <mesh castShadow receiveShadow position={[0, 2.9, 0]}>
+              <boxGeometry args={[runHalf * 2, 5.8, 0.7]} />
+              <meshStandardMaterial color="#6d4f32" roughness={0.8} />
+            </mesh>
+            {/* Shelf boards, both faces */}
+            {[0, 1, 2, 3, 4].map((shelf) =>
+              [-1, 1].map((side) => (
+                <mesh
+                  key={`${shelf}-${side}`}
+                  castShadow
+                  receiveShadow
+                  position={[0, 0.7 + shelf * 1.05, side * 0.5]}
+                >
+                  <boxGeometry args={[runHalf * 2, 0.09, 0.35]} />
+                  <meshStandardMaterial color="#7d5c3d" roughness={0.8} />
+                </mesh>
+              )),
+            )}
+          </group>
+        ))
+      })}
 
       <Books count={books.length} layout={books} />
 
@@ -631,23 +666,25 @@ function LabInterior({ spec }: { spec: InteriorSpec }) {
 
   return (
     <group>
-      {/* Island benches with sinks and taps */}
-      {[-9, -2, 5].map((z) => (
-        <group key={z} position={[0, 0, z]}>
+      {/* Island benches with sinks and taps, in two runs with a walkway down
+          the middle: a single twenty-two-metre bench walled the room in two. */}
+      {LAB_BENCH_ROWS.flatMap((z) =>
+        [-1, 1].map((run) => (
+        <group key={`${z}-${run}`} position={[run * (LAB_AISLE + LAB_BENCH_HALF), 0, z]}>
           <mesh castShadow receiveShadow position={[0, 0.45, 0]}>
-            <boxGeometry args={[22, 0.9, 2.2]} />
+            <boxGeometry args={[LAB_BENCH_HALF * 2, 0.9, 2.2]} />
             <meshStandardMaterial color="#e6e9ec" roughness={0.6} />
           </mesh>
           <mesh castShadow receiveShadow position={[0, 0.95, 0]}>
-            <boxGeometry args={[22.4, 0.14, 2.5]} />
+            <boxGeometry args={[LAB_BENCH_HALF * 2 + 0.4, 0.14, 2.5]} />
             <meshStandardMaterial color="#33393f" roughness={0.35} metalness={0.15} />
           </mesh>
           {/* Reagent shelf down the spine of the bench */}
           <mesh castShadow position={[0, 1.55, 0]}>
-            <boxGeometry args={[22, 0.08, 0.6]} />
+            <boxGeometry args={[LAB_BENCH_HALF * 2, 0.08, 0.6]} />
             <meshStandardMaterial color="#c3ccd3" roughness={0.5} />
           </mesh>
-          {[-9, -5, -1, 3, 7].map((x, i) => (
+          {[-3, 0, 3].map((x, i) => (
             <group key={x}>
               {/* Tap */}
               <mesh castShadow position={[x, 1.3, 0.7]}>
@@ -672,10 +709,12 @@ function LabInterior({ spec }: { spec: InteriorSpec }) {
             </group>
           ))}
         </group>
-      ))}
+        )),
+      )}
 
-      {/* Fume cupboards along the back wall */}
-      {[-13, -4.5, 4, 12.5].map((x) => (
+      {/* Fume cupboards along the back wall, moved out to leave the middle of
+          the screen wall clear */}
+      {FUME_CUPBOARDS.map((x) => (
         <group key={x} position={[x, 0, -half + 1.4]}>
           <mesh castShadow receiveShadow position={[0, 1.9, 0]}>
             <boxGeometry args={[7.6, 3.8, 2.2]} />
@@ -728,7 +767,7 @@ function LabInterior({ spec }: { spec: InteriorSpec }) {
 /* Amphitheatre                                                         */
 /* ------------------------------------------------------------------ */
 
-function LectureInterior({ spec }: { spec: InteriorSpec }) {
+function LectureInterior({ spec, whiteboard }: { spec: InteriorSpec; whiteboard?: React.ReactNode }) {
   const half = spec.halfExtent
 
   return (
@@ -791,13 +830,15 @@ function LectureInterior({ spec }: { spec: InteriorSpec }) {
         </mesh>
       </group>
 
-      {/* Whiteboards flanking the projector screen */}
-      {[-13, 13].map((x) => (
-        <mesh key={x} castShadow position={[x, 4.4, -half + 0.5]}>
+      {/* A whiteboard one side, today's real timetable the other. The board
+          used to be a second blank rectangle. */}
+      {whiteboard ?? (
+        <mesh castShadow position={[-13, 4.4, -half + 0.5]}>
           <boxGeometry args={[7.5, 4, 0.2]} />
           <meshStandardMaterial color="#f4f6f4" roughness={0.25} />
         </mesh>
-      ))}
+      )}
+      <ScheduleBoard position={[13, 4.4, -half + 0.65]} />
 
       {/* A dark band behind the screen, so a projected image has contrast */}
       <mesh position={[0, 5.6, -half + 0.42]} receiveShadow>
@@ -846,16 +887,16 @@ function StudentCentreInterior({ spec }: { spec: InteriorSpec }) {
   return (
     <group>
       {/* Lounge clusters */}
-      {([[-12, 10], [12, 10], [-12, -4], [12, -4], [0, 4]] as [number, number][]).map(([x, z], i) => (
+      {LOUNGE_CLUSTERS.map(([x, z], i) => (
         <group key={i} position={[x, 0, z]}>
-          <Sofa position={[0, 0, 2]} rotation={Math.PI} fabric={i === 1 ? '#8a5f7f' : '#3f8f7f'} />
-          <Sofa position={[0, 0, -2]} fabric={i === 1 ? '#8a5f7f' : '#3f8f7f'} />
+          <Sofa position={[0, 0, LOUNGE_SOFA_OFFSET]} rotation={Math.PI} fabric={i === 1 ? '#8a5f7f' : '#3f8f7f'} />
+          <Sofa position={[0, 0, -LOUNGE_SOFA_OFFSET]} fabric={i === 1 ? '#8a5f7f' : '#3f8f7f'} />
           <Table position={[0, 0, 0]} size={[2.2, 0.1, 1.1]} topColor="#4a4038" legColor="#2f3640" />
         </group>
       ))}
 
       {/* Table football, which is what a student centre is actually for */}
-      <group position={[8, 0, -14]}>
+      <group position={[TABLE_FOOTBALL[0], 0, TABLE_FOOTBALL[1]]}>
         <mesh castShadow receiveShadow position={[0, 0.5, 0]}>
           <boxGeometry args={[4.2, 1, 2.4]} />
           <meshStandardMaterial color="#2f4a3f" roughness={0.7} />
@@ -880,8 +921,9 @@ function StudentCentreInterior({ spec }: { spec: InteriorSpec }) {
         ))}
       </group>
 
-      {/* Vending machines */}
-      {[-6, -2.5].map((x) => (
+      {/* Vending machines, off the centre of the back wall so they are not
+          standing in front of the screen */}
+      {VENDING_MACHINES.map((x) => (
         <group key={x} position={[x, 0, -half + 1.2]}>
           <mesh castShadow receiveShadow position={[0, 1.5, 0]}>
             <boxGeometry args={[2.4, 3, 1.1]} />
@@ -956,7 +998,8 @@ function StudentCentreInterior({ spec }: { spec: InteriorSpec }) {
       <Plant position={[-half + 3, 0, -half + 5]} scale={1.3} />
       <Plant position={[-half + 3, 0, 4]} scale={1.1} />
 
-      <WallPanel position={[half - 0.4, 5, 6]} rotation={-Math.PI / 2} size={[5, 3]} panelColor="#eef3f6" frame={spec.accent} />
+      {/* The latest posts from the blog, rather than another blank panel. */}
+      <NoticeBoard position={[half - 0.55, 4.6, 6]} rotation={-Math.PI / 2} />
       <WallPanel position={[-half + 0.4, 5, 12]} rotation={Math.PI / 2} size={[5, 3]} panelColor="#eef3f6" frame={spec.accent} />
     </group>
   )
@@ -997,8 +1040,10 @@ function CafeteriaInterior({ spec }: { spec: InteriorSpec }) {
           </mesh>
         ))}
         {/* Heat lamps */}
+        {/* Heat lamps, hung below the bottom of the projector screen rather
+            than across it */}
         {[-8, -2, 4, 10].map((x) => (
-          <mesh key={x} position={[x, 2.7, 0]}>
+          <mesh key={x} position={[x, CAFE_HEAT_LAMP_Y, 0]}>
             <boxGeometry args={[3, 0.12, 0.8]} />
             <meshStandardMaterial color="#ffb066" emissive="#ff9a3c" emissiveIntensity={1.8} toneMapped={false} />
           </mesh>
@@ -1087,8 +1132,8 @@ function SportsInterior({ spec }: { spec: InteriorSpec }) {
       </group>
 
       {/* Bleachers down one side */}
-      {[0, 1, 2, 3].map((tier) => (
-        <group key={tier} position={[-half + 1.2 + tier * 1.4, tier * 0.7, 0]}>
+      {Array.from({ length: BLEACHER_TIERS }, (_, tier) => (
+        <group key={tier} position={[-half + 2.6 + tier * 1.4, tier * 0.7, 0]}>
           <mesh castShadow receiveShadow position={[0, 0.35, 0]}>
             <boxGeometry args={[1.4, 0.7, half * 1.5]} />
             <meshStandardMaterial color="#9aa2ab" roughness={0.9} />
@@ -1109,7 +1154,8 @@ function SportsInterior({ spec }: { spec: InteriorSpec }) {
       ))}
 
       {/* Scoreboard */}
-      <group position={[0, 9.5, -half + 0.6]}>
+      {/* Scoreboard, raised clear of the projector screen below it */}
+      <group position={[0, SCOREBOARD_Y, -half + 0.6]}>
         <mesh castShadow>
           <boxGeometry args={[9, 3.4, 0.4]} />
           <meshStandardMaterial color="#171c22" roughness={0.7} />
@@ -1149,7 +1195,13 @@ function SportsInterior({ spec }: { spec: InteriorSpec }) {
 
 /* ------------------------------------------------------------------ */
 
-const CONTENTS: Record<InteriorKind, (props: { spec: InteriorSpec }) => React.ReactElement> = {
+interface InteriorProps {
+  spec: InteriorSpec
+  /** The shared whiteboard, for the room that has one. */
+  whiteboard?: React.ReactNode
+}
+
+const CONTENTS: Record<InteriorKind, (props: InteriorProps) => React.ReactElement> = {
   ufaz: UfazHall,
   library: LibraryInterior,
   lab: LabInterior,
@@ -1168,16 +1220,19 @@ const CONTENTS: Record<InteriorKind, (props: { spec: InteriorSpec }) => React.Re
 export function BuildingInterior({
   kind = 'lecture',
   children,
+  whiteboard,
 }: {
   kind?: InteriorKind
   children?: React.ReactNode
+  /** Mounted by the page, which owns the socket the strokes travel over. */
+  whiteboard?: React.ReactNode
 }) {
   const spec = INTERIOR_SPECS[kind] ?? INTERIOR_SPECS.lecture
   const Contents = CONTENTS[kind] ?? LectureInterior
 
   return (
     <RoomShell spec={spec}>
-      <Contents spec={spec} />
+      <Contents spec={spec} whiteboard={whiteboard} />
       {children}
     </RoomShell>
   )

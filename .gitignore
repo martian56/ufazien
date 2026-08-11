@@ -24,3 +24,6 @@ id_ed25519*
 .github/skills/
 .github/agents/
 .github/hooks/
+
+# Installed dependencies and tooling caches, which are not source
+node_modules/

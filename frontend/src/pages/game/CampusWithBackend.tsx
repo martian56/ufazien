@@ -20,19 +20,45 @@ import {
   CampusProps,
   CampusBuildings,
   CampusSkyline,
+  ChatBubble,
   CharacterModel,
   NameTag,
+  SpeakingRing,
 } from '../../components/campus/CampusScenery'
+import {
+  BUBBLE_MS,
+  bubbleFor,
+  isSameParticipant,
+  isSpeaking,
+  statusFor,
+} from '../../components/campus/playerStatus'
 import { BuildingInterior } from '../../components/campus/BuildingInteriors'
+import Whiteboard from '../../components/campus/Whiteboard'
+import { isDrawableChat } from '../../components/campus/whiteboardStrokes'
+import {
+  SOLID_CAMPUS,
+  blockingPlatforms,
+  groundHeight,
+  resolveColliders,
+  type Collider,
+} from '../../components/campus/campusPhysics'
+import {
+  SEAT_REACH,
+  interiorColliders,
+  interiorPlatforms,
+  interiorSeats,
+  nearestSeat,
+  type Seat,
+} from '../../components/campus/interiorPhysics'
+import { EMOTE_SECONDS, type Activity } from '../../components/campus/avatarPose'
+import { takenSeatIds } from '../../components/campus/seatState'
 import { INTERIOR_SPECS, interiorHalfExtent } from '../../components/campus/interiorSpecs'
 import {
   CAMPUS_BUILDINGS,
   CAMPUS_LIMIT,
   OUTDOOR_COURT,
   SPAWN,
-  clampToCampus,
   nearestEntrance,
-  resolveCollision,
   type CampusBuilding,
   type TimeOfDay,
 } from '../../components/campus/campusLayout'
@@ -99,6 +125,21 @@ const keyMap = [
   { name: "run", keys: ["ShiftLeft"] },
   { name: "interact", keys: ["KeyE"] },
   { name: "action", keys: ["KeyF"] },
+  // Emotes. Number keys, because they are the ones nobody is holding down to
+  // walk with, and a radial menu cannot be opened while the pointer is locked.
+  { name: "sit", keys: ["KeyC"] },
+  { name: "wave", keys: ["Digit1"] },
+  { name: "clap", keys: ["Digit2"] },
+  { name: "raiseHand", keys: ["Digit3"] },
+  { name: "point", keys: ["Digit4"] },
+]
+
+/** Which control triggers which pose. */
+const EMOTE_KEYS: [string, Activity][] = [
+  ['wave', 'waving'],
+  ['clap', 'clapping'],
+  ['raiseHand', 'hand_raised'],
+  ['point', 'pointing'],
 ]
 
 /**
@@ -192,10 +233,16 @@ function ChatSystem({
   }, [chatMessages.length, isOpen, activeTab])
 
   // The badge counted every message ever received, so it sat on "9+" forever.
+  // Whiteboard strokes travel on the same channel and are not messages, so
+  // counting them would ring the chat badge every time somebody drew a line.
+  const spokenCount = useMemo(
+    () => chatMessages.reduce((total, msg) => total + (isDrawableChat(msg.message) ? 1 : 0), 0),
+    [chatMessages],
+  )
   useEffect(() => {
-    if (isOpen) seenCountRef.current = chatMessages.length
-  }, [isOpen, chatMessages.length])
-  const unread = Math.max(0, chatMessages.length - seenCountRef.current)
+    if (isOpen) seenCountRef.current = spokenCount
+  }, [isOpen, spokenCount])
+  const unread = Math.max(0, spokenCount - seenCountRef.current)
 
   // In backend units, and the campus is ten of those to the world unit. 400
   // covers the quad and the buildings around it, which is what "nearby" means
@@ -209,8 +256,10 @@ function ChatSystem({
     }
   }
 
-  // Filter messages by channel
+  // Filter messages by channel. Whiteboard strokes ride the same channel and
+  // are not things anybody said, so they never reach the panel.
   const filteredMessages = chatMessages.filter(msg => {
+    if (!isDrawableChat(msg.message)) return false
     if (activeTab === "global") return msg.channel === "global" || !msg.channel
     if (activeTab === "nearby") return nearbyUsers.some(user => user.userId === msg.user_id)
     return msg.channel === activeTab
@@ -353,22 +402,35 @@ function PlayerAvatar({
   position,
   userData,
   seed,
+  bubble,
+  speaking,
+  isPresenting,
 }: {
   position: { x: number; z: number }
   /** Loose: the same component renders both a socket payload and local state. */
   userData: Record<string, unknown>
   /** The player's user id, which decides everything about how they look. */
   seed: string | number
+  /** Their most recent chat message, while it is still fresh. */
+  bubble?: string | null
+  /** Whether proximity voice currently hears them. */
+  speaking?: boolean
+  /** Whether they are the one sharing a screen. */
+  isPresenting?: boolean
 }) {
   const meshRef = useRef<Group>(null)
   // Allocated once. The old version constructed a Vector3 every frame for every
   // player on the campus, which is a garbage collection pause on a schedule.
   const target = useRef(new Vector3())
 
-  useFrame(() => {
+  useFrame((_, delta) => {
     if (!meshRef.current) return
     target.current.set(position.x, 0, position.z)
-    meshRef.current.position.lerp(target.current, 0.15)
+    // Framerate-independent. A fixed 0.15 per frame closed the gap more than
+    // twice as fast on a 144Hz display as on a 60Hz one, so remote players
+    // moved at a speed that depended on the watcher's monitor.
+    const alpha = 1 - Math.exp(-REMOTE_LERP_RATE * Math.min(delta, 0.1))
+    meshRef.current.position.lerp(target.current, alpha)
   })
 
   const name = String(userData.full_name || userData.username || userData.name || "Student")
@@ -379,9 +441,22 @@ function PlayerAvatar({
         color={String(userData.color ?? "#4F46E5")}
         isMoving={Boolean(userData.is_moving)}
         direction={String(userData.direction ?? "down")}
+        heading={typeof userData.heading === 'number' ? userData.heading : undefined}
+        activity={String(userData.activity ?? "standing")}
+        speed={Boolean(userData.is_moving) ? 5.5 : 0}
         seed={seed}
       />
-      <NameTag name={name} accent={String(userData.color ?? "#8fd0ff")} />
+      <NameTag
+        name={name}
+        accent={String(userData.color ?? "#8fd0ff")}
+        status={statusFor({
+          activity: userData.activity as string | undefined,
+          currentRoom: userData.current_room as string | null | undefined,
+          isPresenting,
+        })}
+      />
+      {bubble && <ChatBubble text={bubble} />}
+      {speaking && <SpeakingRing accent={String(userData.color ?? "#6ee7a8")} />}
     </group>
   )
 }
@@ -522,14 +597,139 @@ function ActionKeyBridge({ action }: { action: React.RefObject<ActionInput> }) {
 }
 
 /** First person player controller with backend position sync. */
+/**
+ * Camera height above the floor the player is standing on.
+ *
+ * Was a bare 1.5 compared against `camera.position.y`, which only worked while
+ * the floor was a single plane at zero. With tiers and stairs the two have to
+ * be told apart: `feet + EYE_HEIGHT` is where the camera goes.
+ */
+const EYE_HEIGHT = 1.5
+
+/** Eye height above the seat pan, once you are sitting on it. */
+const SEATED_EYE = 1.15
+
+/**
+ * How quickly a remote player's avatar closes on the position last received.
+ *
+ * Positions arrive ten times a second, so this has to cover 100 ms of travel
+ * without visibly lagging or overshooting into a rubber band.
+ */
+const REMOTE_LERP_RATE = 12
+
+/**
+ * Which way the camera is facing, as an avatar heading.
+ *
+ * The camera looks down its own -Z, and the avatar's zero is +Z, so the two
+ * are half a turn apart. Reading `camera.rotation.y` directly points every
+ * standing player the opposite way to the one they are looking.
+ */
+function cameraHeading(camera: { rotation: { y: number } }): number {
+  return camera.rotation.y + Math.PI
+}
+
+/**
+ * Sitting down, standing up, and the emotes.
+ *
+ * Lives inside the canvas because it needs the camera's position every frame to
+ * know which chair the player is standing at, and outside `Player` because the
+ * page's DOM overlay needs the prompt too.
+ *
+ * The seat itself is never claimed here. `takeSeat` asks the server and the
+ * answer comes back as `ownSeat`, which is what actually sits the player down —
+ * two people can press the key in the same tick and only one of them gets the
+ * chair.
+ */
+function SeatController({
+  campusHook,
+  insideBuilding,
+  ownSeat,
+  onCandidate,
+  onEmote,
+}: {
+  campusHook: CampusHook
+  insideBuilding: CampusBuilding | null
+  ownSeat: string | null
+  onCandidate: (seat: Seat | null) => void
+  onEmote: (activity: Activity | null) => void
+}) {
+  const { camera } = useThree()
+  const [, get] = useKeyboardControls()
+  const { takeSeat, leaveSeat, seatedPlayers } = campusHook
+  const held = useRef({ sit: false, emote: '' })
+  const candidate = useRef<Seat | null>(null)
+  const emoteUntil = useRef(0)
+
+  // Seats other people are in. Offering an occupied chair and having the
+  // server refuse it reads as the key not working.
+  //
+  // Read from the hook's seating map rather than scanned out of the position
+  // frames: a frame is a snapshot of where somebody is, not a record of what
+  // they hold, and building the set from frames lost a chair every time its
+  // occupant did anything that sent one.
+  const taken = useMemo(() => takenSeatIds(seatedPlayers), [seatedPlayers])
+
+  useFrame((state) => {
+    const typing = isTypingInField()
+    const controls = get()
+
+    // What is within reach, so the prompt can name it.
+    const seats = insideBuilding ? interiorSeats(insideBuilding.interior) : []
+    const feet = camera.position.y - EYE_HEIGHT
+    const near = ownSeat
+      ? null
+      : nearestSeat(camera.position.x, camera.position.z, seats, SEAT_REACH, taken, feet)
+    if (near?.id !== candidate.current?.id) {
+      candidate.current = near
+      onCandidate(near)
+    }
+
+    // Edge-triggered: holding the key must not sit and stand every frame.
+    const sitPressed = !typing && controls.sit
+    if (sitPressed && !held.current.sit) {
+      if (ownSeat) leaveSeat()
+      else if (near) takeSeat(near.id)
+    }
+    held.current.sit = sitPressed
+
+    // Emotes are one-shot and release themselves, so a wave does not last
+    // until the player thinks to press something else.
+    let pressed: Activity | '' = ''
+    for (const [key, activity] of EMOTE_KEYS) {
+      if (!typing && controls[key as keyof typeof controls]) {
+        pressed = activity
+        break
+      }
+    }
+    if (pressed && pressed !== held.current.emote) {
+      emoteUntil.current = state.clock.elapsedTime + EMOTE_SECONDS
+      onEmote(pressed)
+    }
+    held.current.emote = pressed
+
+    if (emoteUntil.current && state.clock.elapsedTime > emoteUntil.current) {
+      emoteUntil.current = 0
+      onEmote(null)
+    }
+  })
+
+  return null
+}
+
 function Player({
   campusHook,
   insideBuilding,
   touch,
+  seated,
+  emote,
 }: {
   campusHook: CampusHook
   insideBuilding: CampusBuilding | null
   touch?: React.RefObject<TouchState | null>
+  /** The seat the player is in, if any. Movement is off while they are. */
+  seated: Seat | null
+  /** A one-shot pose, or null. Held poses come through `seated`. */
+  emote: Activity | null
 }) {
   const { camera } = useThree()
   const [, get] = useKeyboardControls()
@@ -564,6 +764,26 @@ function Player({
     const jumpForce = 8
 
     direction.current.set(0, 0, 0)
+
+    // Sitting down parks the camera on the chair and stops taking input. It
+    // still reports position every frame, so anyone watching sees the pose.
+    if (seated) {
+      camera.position.set(seated.x, seated.y + seated.seatHeight + SEATED_EYE, seated.z)
+      const backend = worldTo2D(camera.position.x, camera.position.z)
+      updatePosition({
+        x: backend.x,
+        y: backend.y,
+        direction: 'down',
+        heading: seated.ry,
+        // An emote wins over the seat. Raising a hand from a chair in a lecture
+        // is the whole point of having both; the server keeps the seat either
+        // way, because only leave_seat releases it.
+        activity: emote ?? 'sitting',
+        is_moving: false,
+        current_room: insideBuilding ? String(insideBuilding.id) : null,
+      })
+      return
+    }
 
     if (forward) direction.current.z -= 1
     if (backward) direction.current.z += 1
@@ -615,30 +835,49 @@ function Player({
 
     // Apply gravity
     velocity.current.y -= 20 * delta
-    if (camera.position.y <= 1.5 && velocity.current.y < 0) {
-      velocity.current.y = 0
-      camera.position.y = 1.5
-      isOnGround.current = true
-    }
 
     camera.position.add(direction.current)
     camera.position.y += velocity.current.y * delta
 
+    // What is solid here, and what can be stood on. Both change on the
+    // threshold of a building, which is why they are read per frame rather
+    // than captured once.
+    const platforms = insideBuilding ? interiorPlatforms(insideBuilding.interior) : []
+    const feet = camera.position.y - EYE_HEIGHT
+
+    // Anything too high to step onto is a wall rather than a ramp: a stage
+    // edge stops you from the floor, and once you are up there you walk about
+    // on top of it freely.
+    const solid: Collider[] = insideBuilding
+      ? [...interiorColliders(insideBuilding.interior), ...blockingPlatforms(platforms, feet)]
+      : SOLID_CAMPUS
+
     if (insideBuilding) {
-      // The room's own walls. There is no collision mesh inside, so the clamp
-      // is what stops the player walking out through them.
+      // The room's own walls, which are a clamp rather than geometry.
       const limit = interiorHalfExtent(insideBuilding.interior)
       camera.position.x = MathUtils.clamp(camera.position.x, -limit, limit)
       camera.position.z = MathUtils.clamp(camera.position.z, -limit, limit)
     } else {
-      // Outdoors the buildings are solid. This is new: you used to be able to
-      // walk straight through the library and out the far side.
-      const bounded = clampToCampus(camera.position.x, camera.position.z, CAMPUS_LIMIT)
-      const resolved = resolveCollision(bounded.x, bounded.z)
-      camera.position.x = resolved.x
-      camera.position.z = resolved.z
+      camera.position.x = MathUtils.clamp(camera.position.x, -CAMPUS_LIMIT, CAMPUS_LIMIT)
+      camera.position.z = MathUtils.clamp(camera.position.z, -CAMPUS_LIMIT, CAMPUS_LIMIT)
     }
-    camera.position.y = Math.max(camera.position.y, 1.5)
+
+    // Everything solid, indoors and out: buildings, trees, the fountain, and
+    // now every table, shelf and counter. None of it used to stop you.
+    const resolved = resolveColliders(camera.position.x, camera.position.z, solid)
+    camera.position.x = resolved.x
+    camera.position.z = resolved.z
+
+    // The floor under the player, which is not always zero: the amphitheatre
+    // is raked, the sports hall has bleachers, and the entrance hall has a
+    // staircase. All three used to pass straight through the player's head.
+    const floor = groundHeight(camera.position.x, camera.position.z, platforms, feet)
+    const standing = floor + EYE_HEIGHT
+    if (camera.position.y <= standing && velocity.current.y <= 0) {
+      velocity.current.y = 0
+      camera.position.y = standing
+      isOnGround.current = true
+    }
 
     // Always update backend position (even when not moving, to send final
     // position on stop). The hook throttles the sending.
@@ -653,10 +892,18 @@ function Player({
       }
     }
 
+    // The real angle, not one of four. Taken from the camera when standing
+    // still so that turning on the spot is visible to everyone else, and from
+    // the movement vector when walking so a player strafing is drawn facing
+    // the way they are actually travelling.
+    const heading = moving ? Math.atan2(headingX, headingZ) : cameraHeading(camera)
+
     updatePosition({
       x: backendCoords.x,
       y: backendCoords.y,
       direction: playerDirection,
+      heading,
+      activity: emote ?? 'standing',
       is_moving: moving,
       // Was hardcoded null, so the server never knew which building anyone
       // was standing in, and neither did anyone else's client. Sent as the
@@ -677,6 +924,29 @@ const CampusWithBackend = () => {
   const lobbyId = (rawLobbyId === 'null' || rawLobbyId === 'undefined') ? null : rawLobbyId;
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [insideBuilding, setInsideBuilding] = useState<CampusBuilding | null>(null)
+  /** The chair within reach, for the prompt. Not the one being sat in. */
+  const [seatCandidate, setSeatCandidate] = useState<Seat | null>(null)
+  const [emote, setEmote] = useState<Activity | null>(null)
+  /**
+   * A clock for expiring chat bubbles.
+   *
+   * Ticks once a second rather than per frame: a bubble that vanishes a second
+   * late is invisible, and re-deriving every avatar's bubble sixty times a
+   * second is the sort of thing this page has already been fixed for once.
+   */
+  /**
+   * Whether the pointer is captured.
+   *
+   * The whiteboard needs a cursor, and the campus is played with the pointer
+   * locked — which is also the only state in which the player could not aim at
+   * the board anyway. So drawing is live exactly when looking around is not.
+   */
+  const [pointerLocked, setPointerLocked] = useState(false)
+  const [bubbleClock, setBubbleClock] = useState(() => Date.now())
+  useEffect(() => {
+    const timer = setInterval(() => setBubbleClock(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [])
   const isTouchDevice = useIsTouchDevice()
   const touchState = useRef(createTouchState())
   const [isMenuOpen, setIsMenuOpen] = useState(false)
@@ -709,6 +979,37 @@ const CampusWithBackend = () => {
 
   // Initialize campus simulation hook
   const campusHook = useCampusSimulator(lobbyId)
+
+  /**
+   * The seat the player is actually in.
+   *
+   * Resolved from the id the server handed back rather than from the chair they
+   * walked up to: the two differ whenever somebody else got there first, and
+   * trusting the local one would sit them in an occupied chair.
+   */
+  const seatedOn = useMemo(() => {
+    if (!campusHook.ownSeat || !insideBuilding) return null
+    return interiorSeats(insideBuilding.interior).find((s) => s.id === campusHook.ownSeat) ?? null
+  }, [campusHook.ownSeat, insideBuilding])
+
+  // Walking out of the room gives up the chair. `seatedOn` goes null on its own
+  // when the building does, so the player stands up locally and gets their
+  // movement back — but the server holds a seat until it is released, and both
+  // ways out of a building (the button and walking through the door) went
+  // straight past that. The chair stayed occupied for everybody else until the
+  // tab closed, and the prompt that teaches C is hidden once you are outside.
+  const { ownSeat, leaveSeat } = campusHook
+  useEffect(() => {
+    if (!insideBuilding && ownSeat) leaveSeat()
+  }, [insideBuilding, ownSeat, leaveSeat])
+
+  // Whiteboard strokes ride the chat channel and are not things anybody said.
+  // The chat panel and the unread badge already filter them; without this the
+  // encoded payload appears in a speech bubble over whoever drew it.
+  const spokenMessages = useMemo(
+    () => campusHook.chatMessages.filter((m) => isDrawableChat(m.message)),
+    [campusHook.chatMessages],
+  )
 
   const {
     isConnected,
@@ -861,6 +1162,13 @@ const CampusWithBackend = () => {
           username: position.username,
           full_name: position.full_name || position.username,  // Use full_name, fallback to username
           direction: position.direction,
+          // Without these three, everything this page draws for a remote player
+          // falls back to standing and facing one of four ways: the heading is
+          // unused, every pose reads as 'standing', and the status line is
+          // always null. The socket carries them; only this mapping dropped them.
+          heading: position.heading,
+          activity: position.activity,
+          current_room: position.current_room,
           is_moving: position.is_moving,
           color: `hsl(${(Number(userId) * 137.5) % 360}, 70%, 60%)`, // Generate colour from user id
         }
@@ -959,6 +1267,21 @@ const CampusWithBackend = () => {
             <div className="text-xs text-gray-300 mt-0.5">{nearBuilding.blurb}</div>
             <div className="text-xs text-blue-300 mt-1">
               {isTouchDevice ? 'Tap Enter to go inside' : 'Press E to go inside'}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sitting down. The prompt names the chair you are actually standing at,
+          and only offers one nobody else is in. */}
+      {insideBuilding && !games.active && (seatCandidate || campusHook.ownSeat) && (
+        <div className="absolute left-1/2 -translate-x-1/2 bottom-32 sm:bottom-16 z-30 pointer-events-none max-w-[92vw]">
+          <div className="bg-black/80 backdrop-blur-sm border border-emerald-500/30 rounded-xl px-4 py-2.5 text-white text-center">
+            <div className="text-xs text-emerald-300">
+              {campusHook.ownSeat ? 'Press C to stand up' : 'Press C to sit down'}
+            </div>
+            <div className="text-[11px] text-gray-400 mt-1">
+              1 wave · 2 clap · 3 raise hand · 4 point
             </div>
           </div>
         </div>
@@ -1174,7 +1497,21 @@ const CampusWithBackend = () => {
 
           <Suspense fallback={null}>
             {insideBuilding && interiorSpec ? (
-              <BuildingInterior kind={insideBuilding.interior}>
+              <BuildingInterior
+                kind={insideBuilding.interior}
+                whiteboard={
+                  insideBuilding.interior === 'lecture' ? (
+                    <Whiteboard
+                      board="lecture"
+                      position={[-13, 4.4, -INTERIOR_SPECS.lecture.halfExtent + 0.65]}
+                      size={[7.5, 4]}
+                      messages={campusHook.chatMessages}
+                      onStroke={(encoded) => campusHook.sendChatMessage(encoded, 'global')}
+                      enabled={!pointerLocked}
+                    />
+                  ) : undefined
+                }
+              >
                 {/* No name plate in the scene: the page header already says
                     which building you are inside, and the way out is the
                     overlay button, because a marker behind the spawn point
@@ -1233,6 +1570,9 @@ const CampusWithBackend = () => {
                     position={avatar.position}
                     userData={avatar.userData}
                     seed={avatar.id}
+                    bubble={bubbleFor(avatar.id, spokenMessages, bubbleClock)}
+                    speaking={isSpeaking(avatar.id, voice.participants)}
+                    isPresenting={isSameParticipant(voice.screenShare?.identity, avatar.id)}
                   />
                 ))}
               </>
@@ -1247,11 +1587,30 @@ const CampusWithBackend = () => {
               touch={touchState}
             />
             <ActionKeyBridge action={actionInput} />
-            <Player campusHook={campusHook} insideBuilding={insideBuilding} touch={touchState} />
+            <Player
+              campusHook={campusHook}
+              insideBuilding={insideBuilding}
+              touch={touchState}
+              seated={seatedOn}
+              emote={emote}
+            />
+            <SeatController
+              campusHook={campusHook}
+              insideBuilding={insideBuilding}
+              ownSeat={campusHook.ownSeat}
+              onCandidate={setSeatCandidate}
+              onEmote={setEmote}
+            />
 
             {/* Without a selector drei binds the lock handler to document, so every
                 HUD click grabbed the pointer and the next click never landed. */}
-            {!isTouchDevice && <PointerLockControls selector="#campus-canvas" />}
+            {!isTouchDevice && (
+              <PointerLockControls
+                selector="#campus-canvas"
+                onLock={() => setPointerLocked(true)}
+                onUnlock={() => setPointerLocked(false)}
+              />
+            )}
           </Suspense>
         </Canvas>
       </KeyboardControls>

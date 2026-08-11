@@ -7,6 +7,14 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import campusWebSocket from '../services/campusWebSocket';
 import campusApi from '../services/campusApi';
 import { errorMessage } from '../lib/api/errors';
+import {
+    NO_SEATS,
+    seatAfterDenial,
+    seatsFromSnapshot,
+    withSeat,
+    withoutPlayer,
+    type SeatMap,
+} from '../components/campus/seatState';
 
 /**
  * Decode JWT token to get user ID
@@ -63,6 +71,12 @@ export interface PlayerPosition {
   x: number
   y: number
   direction?: string
+  /** Real facing angle in radians. `direction` is the four-way fallback. */
+  heading?: number
+  /** What the player is doing: sitting, waving, a hand up. */
+  activity?: string
+  /** The seat they hold, if any. Assigned by the server, never the client. */
+  seat?: string | null
   is_moving?: boolean
   current_room?: string | null
   username?: string
@@ -82,6 +96,32 @@ export interface PlayerPosition {
  * sharing worked right up until the presenter moved, and then went blank for
  * everyone watching.
  */
+/**
+ * How far the camera may turn before it is worth telling anybody.
+ *
+ * About three degrees. The heading comes off the camera, which never sits
+ * perfectly still, so an exact comparison would send a frame every tick for a
+ * player standing motionless.
+ */
+const HEADING_EPSILON = 0.05
+
+/**
+ * A frame as this hook sends it.
+ *
+ * Declared rather than inferred: the significance test compares `heading` and
+ * `activity`, and an inferred object literal has neither, which makes those
+ * comparisons a type error at best and silently constant at worst.
+ */
+interface SentPosition {
+    x: number
+    y: number
+    direction: string
+    heading?: number
+    activity?: string
+    is_moving?: boolean
+    current_room?: string | null
+}
+
 export function playerPositionFromUpdate(data: {
   position: PlayerPosition
   username?: string
@@ -93,6 +133,11 @@ export function playerPositionFromUpdate(data: {
     x: data.position.x,
     y: data.position.y,
     direction: data.position.direction || 'down',
+    // Nullish rather than `||`: a heading of exactly zero is due north, and
+    // `0 || fallback` throws it away. Same reasoning as `current_room`.
+    heading: data.position.heading ?? 0,
+    activity: data.position.activity || 'standing',
+    seat: data.position.seat ?? null,
     is_moving: data.position.is_moving || false,
     current_room: data.position.current_room ?? null,
     last_updated: data.last_updated ?? new Date().toISOString(),
@@ -116,6 +161,25 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
     const [currentLobby, setCurrentLobby] = useState<any>(null);
     const [lobbyMembers, setLobbyMembers] = useState<LobbyMember[]>([]);
     const [playerPositions, setPlayerPositions] = useState<Map<string | number, PlayerPosition>>(new Map());
+    /**
+     * The seat this player holds, as the server sees it.
+     *
+     * Set only from a `seat_update` addressed to us, never optimistically: the
+     * whole reason the server owns seating is that two clients can both believe
+     * a chair is free, and a client that sat down before hearing back would put
+     * the player in a chair somebody else is already in.
+     */
+    const [ownSeat, setOwnSeat] = useState<string | null>(null);
+    /**
+     * Where everybody else is sitting.
+     *
+     * Held apart from `playerPositions` because the two have different
+     * lifetimes: a seat lasts until it is released, a position frame lasts
+     * until the next one. Folding seating into the frames meant somebody who
+     * sat down and then waved lost their chair from this map, and the next
+     * person to walk up was offered it.
+     */
+    const [seatedPlayers, setSeatedPlayers] = useState<SeatMap>(NO_SEATS);
     const [studyRooms, setStudyRooms] = useState<any[]>([]);
 
     // Chat state
@@ -124,11 +188,14 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
 
     // User state
     const [currentUser, setCurrentUser] = useState<any>(null);
-    const [userPosition, setUserPosition] = useState({ x: 0, y: 0, direction: 'down', is_moving: false });
+    const [userPosition, setUserPosition] = useState<SentPosition>({
+        x: 0, y: 0, direction: 'down', is_moving: false,
+    });
 
     // Refs for preventing stale closures
     const positionRef = useRef(userPosition);
-    const lastSentPositionRef = useRef({ x: 0, y: 0, direction: 'down' });
+    /** The last frame actually put on the wire. */
+    const lastSentPositionRef = useRef<SentPosition>({ x: 0, y: 0, direction: 'down' });
     const positionThrottleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const positionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const isMovingRef = useRef(false);
@@ -232,6 +299,7 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
                 }
             });
             setPlayerPositions(positionsMap);
+            setSeatedPlayers(seatsFromSnapshot(data.positions || [], currentUserId));
         });
 
         // User joined lobby
@@ -258,6 +326,9 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
                 newPositions.delete(data.user_id);
                 return newPositions;
             });
+            // Their chair is free again. The server releases it on disconnect;
+            // this is the same fact reaching the people still in the room.
+            setSeatedPlayers(prev => withoutPlayer(prev, data.user_id));
         });
 
         // Position update received
@@ -273,6 +344,42 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
                 newPositions.set(data.user_id, playerPositionFromUpdate(data));
                 return newPositions;
             });
+            // The frame carries the seat the server row holds, not one the
+            // sender chose. Kept in step here so a player who sat down before
+            // we ever saw them still occupies their chair in this map.
+            setSeatedPlayers(prev => withSeat(prev, data.user_id, data.position?.seat));
+        });
+
+        // Somebody sat down or stood up. Carried separately from position
+        // because the server owns it: a seat is claimed, not announced.
+        campusWebSocket.on('seatUpdate', (data: any) => {
+            if (data.user_id === currentUserIdRef.current) {
+                setOwnSeat(data.seat ?? null);
+                return;
+            }
+            // Unconditionally, and before the pose: this is the record of who
+            // holds which chair, and it has to be right even for a player we
+            // have no position for yet.
+            setSeatedPlayers(prev => withSeat(prev, data.user_id, data.seat));
+            setPlayerPositions(prev => {
+                // Only the pose. Somebody with no position frame yet has
+                // nowhere to be drawn, and inventing coordinates for them
+                // would stand an avatar in the middle of the quad.
+                const existing = prev.get(data.user_id);
+                if (!existing) return prev;
+                const next = new Map(prev);
+                next.set(data.user_id, {
+                    ...existing,
+                    seat: data.seat ?? null,
+                    activity: data.activity || 'standing',
+                });
+                return next;
+            });
+        });
+
+        // Somebody else got the chair first.
+        campusWebSocket.on('seatDenied', (data: any) => {
+            setOwnSeat(prev => seatAfterDenial(prev, data?.seat));
         });
 
         // Chat message received
@@ -315,6 +422,20 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
         const isMoving = newPosition.is_moving || false;
         const wasMoving = isMovingRef.current;
 
+        // A pose is not a movement. The interval below only runs while the
+        // player is walking, so an emote pressed standing still — or a turn on
+        // the spot, which is what the heading is read from the camera for —
+        // produced no frame at all and stayed purely local.
+        if (!isMoving && !wasMoving) {
+            const last = lastSentPositionRef.current;
+            const posed = newPosition.activity !== last.activity;
+            const turned = Math.abs((newPosition.heading ?? 0) - (last.heading ?? 0)) > HEADING_EPSILON;
+            if ((posed || turned) && campusWebSocket.getConnectionStatus()) {
+                campusWebSocket.sendPositionUpdate(newPosition);
+                lastSentPositionRef.current = { ...newPosition };
+            }
+        }
+
         // Only manage interval when movement state changes (starting or stopping)
         if (isMoving && !wasMoving) {
             // Movement just started - send initial update and start interval
@@ -346,11 +467,16 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
                     return;
                 }
 
-                // Only send if position actually changed significantly
+                // Only send if position actually changed significantly.
+                // Heading is in here with a tolerance rather than an exact
+                // compare: it comes off the camera, which never sits perfectly
+                // still, so an equality test would send every single tick.
                 const hasMovedSignificantly = 
                     Math.abs(currentPos.x - lastPos.x) > 0.5 ||
                     Math.abs(currentPos.y - lastPos.y) > 0.5 ||
-                    currentPos.direction !== lastPos.direction;
+                    currentPos.direction !== lastPos.direction ||
+                    currentPos.activity !== lastPos.activity ||
+                    Math.abs((currentPos.heading ?? 0) - (lastPos.heading ?? 0)) > HEADING_EPSILON;
 
                 if (hasMovedSignificantly) {
                     campusWebSocket.sendPositionUpdate(currentPos);
@@ -391,6 +517,16 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
     /**
      * Join study room
      */
+    /** Ask for a seat. The answer arrives as `seat_update` or `seat_denied`. */
+    const takeSeat = useCallback((seat: string) => {
+        campusWebSocket.takeSeat(seat);
+    }, []);
+
+    const leaveSeat = useCallback(() => {
+        campusWebSocket.leaveSeat();
+        setOwnSeat(null);
+    }, []);
+
     const joinStudyRoom = useCallback((roomId: string) => {
         if (campusWebSocket.getConnectionStatus()) {
             campusWebSocket.joinStudyRoom(roomId);
@@ -425,6 +561,8 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
                 wsEverConnectedRef.current = false;
                 setLobbyMembers([]);
                 setPlayerPositions(new Map());
+                setSeatedPlayers(NO_SEATS);
+                setOwnSeat(null);
                 setChatMessages([]);
                 
                 // Disconnect WebSocket
@@ -462,6 +600,8 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
         wsEverConnectedRef.current = false;
         setLobbyMembers([]);
         setPlayerPositions(new Map());
+        setSeatedPlayers(NO_SEATS);
+        setOwnSeat(null);
         setChatMessages([]);
         setError(null);
     }, []);
@@ -591,6 +731,10 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
         sendChatMessage,
         joinStudyRoom,
         leaveStudyRoom,
+        ownSeat,
+        seatedPlayers,
+        takeSeat,
+        leaveSeat,
         getNearbyPlayers,
 
         // Utilities

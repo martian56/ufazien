@@ -6,13 +6,14 @@ import * as THREE from 'three'
 import {
   CAMPUS_BUILDINGS,
   GROUND_SIZE,
-  KEEP_CLEAR,
   PAVEMENTS,
   QUAD_CENTRE,
   QUAD_RADIUS,
   SCENERY_BLOCKS,
   daylight,
-  scatterProps,
+  campusBenches,
+  campusLamps,
+  campusTrees,
   type BuildingStyle,
   type DaylightConfig,
   type SceneryBlock,
@@ -26,6 +27,7 @@ import {
   courtTexture,
   facadeTexture,
   grassTexture,
+  chatBubbleTexture,
   nameTagTexture,
   pathTexture,
   stoneTexture,
@@ -638,36 +640,12 @@ export function CampusProps({
   treeCount?: number
   timeOfDay?: TimeOfDay | string
 }) {
-  const trees = useMemo(
-    () => scatterProps({ count: treeCount, seed: 20240917, blocked: KEEP_CLEAR, clearance: 5, variants: 3 }),
-    [treeCount],
-  )
-
-  // Lamps line the routes rather than scattering, because that is what lamps do.
-  const lamps = useMemo(() => {
-    const items: { x: number; z: number }[] = []
-    for (let z = -170; z <= 170; z += 22) {
-      items.push({ x: -9.5, z }, { x: 9.5, z })
-    }
-    for (let x = -160; x <= 160; x += 24) {
-      items.push({ x, z: -54.5 })
-    }
-    return items
-  }, [])
-
-  const benches = useMemo(() => {
-    const items: { x: number; z: number; ry: number }[] = []
-    // Around the quad, facing in.
-    for (let i = 0; i < 8; i++) {
-      const angle = (i / 8) * Math.PI * 2
-      items.push({
-        x: QUAD_CENTRE[0] + Math.cos(angle) * (QUAD_RADIUS - 2.5),
-        z: QUAD_CENTRE[1] + Math.sin(angle) * (QUAD_RADIUS - 2.5),
-        ry: -angle + Math.PI / 2,
-      })
-    }
-    return items
-  }, [])
+  // All three come from the layout module rather than being placed here. They
+  // are solid now, and a tree the renderer puts in one place and the collision
+  // system in another is worse than a tree you can walk through.
+  const trees = useMemo(() => campusTrees(treeCount), [treeCount])
+  const lamps = useMemo(() => campusLamps(), [])
+  const benches = useMemo(() => campusBenches(), [])
 
   const config = daylight(timeOfDay)
   const canopyColors = config.lampsOn ? CANOPY_DUSK : CANOPY_DAY
@@ -888,18 +866,82 @@ export function NameTag({
   name,
   accent,
   position = [0, 2.25, 0],
+  status,
 }: {
   name: string
   accent?: string
   position?: Vec3
+  /** What they are doing, under the name. Omitted when there is nothing to say. */
+  status?: string | null
 }) {
   const texture = nameTagTexture(name, accent)
+  // Only when there is something to say. Called unconditionally it built a
+  // 512-pixel canvas for an empty label and stored it in the bounded name-tag
+  // cache, where every status-less avatar then kept touching that one entry
+  // and pushing real name tags towards eviction.
+  const statusTexture = status ? nameTagTexture(`· ${status} ·`, '#7f8ea3') : null
   if (!texture) return null
 
   return (
-    <sprite position={position} scale={[1.6, 0.4, 1]}>
+    <group position={position}>
+      <sprite scale={[1.6, 0.4, 1]}>
+        <spriteMaterial map={texture} transparent depthTest depthWrite={false} toneMapped={false} />
+      </sprite>
+      {status && statusTexture && (
+        <sprite position={[0, -0.28, 0]} scale={[1.15, 0.29, 1]}>
+          <spriteMaterial
+            map={statusTexture}
+            transparent
+            opacity={0.85}
+            depthTest
+            depthWrite={false}
+            toneMapped={false}
+          />
+        </sprite>
+      )}
+    </group>
+  )
+}
+
+/**
+ * A chat message over its author's head.
+ *
+ * Chat was a DOM panel with no connection to the world, so a room full of
+ * people talking looked completely silent.
+ */
+export function ChatBubble({ text, position = [0, 2.95, 0] }: { text: string; position?: Vec3 }) {
+  const texture = chatBubbleTexture(text)
+  if (!texture) return null
+
+  return (
+    <sprite position={position} scale={[2.6, 1.3, 1]}>
       <spriteMaterial map={texture} transparent depthTest depthWrite={false} toneMapped={false} />
     </sprite>
+  )
+}
+
+/**
+ * A ring on the floor under whoever is talking.
+ *
+ * Proximity voice had no visible sign at all: you could hear somebody perfectly
+ * well and have no idea which of the twenty students in the quad it was.
+ */
+export function SpeakingRing({ accent = '#6ee7a8' }: { accent?: string }) {
+  const ring = useRef<THREE.Mesh>(null)
+
+  useFrame((state) => {
+    const mesh = ring.current
+    if (!mesh) return
+    // A slow pulse, so it reads as live rather than as a painted marker.
+    const pulse = 1 + Math.sin(state.clock.elapsedTime * 5) * 0.08
+    mesh.scale.set(pulse, pulse, 1)
+  })
+
+  return (
+    <mesh ref={ring} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]}>
+      <ringGeometry args={[0.52, 0.68, 32]} />
+      <meshBasicMaterial color={accent} transparent opacity={0.75} toneMapped={false} />
+    </mesh>
   )
 }
 
