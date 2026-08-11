@@ -31,6 +31,7 @@ import { api } from "../lib/api/client"
 import { getAccessToken } from "../lib/api/tokens"
 import { formatYearDisplay, getYearDisplay } from "../utils/majorUtils"
 import { useAppShell } from "../components/layout/appShellContext"
+import Spinner from "../components/ui/Spinner"
 
 export default function Profile() {
   const { userId } = useParams()
@@ -187,7 +188,7 @@ export default function Profile() {
         
         <div className="flex-1 lg:ml-64">
           <div className="flex items-center justify-center h-64">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+            <Spinner size="lg" />
           </div>
         </div>
       </div>
@@ -394,7 +395,7 @@ export default function Profile() {
                 <div>
                   {postsLoading ? (
                     <div className="flex justify-center py-8">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                      <Spinner size="md" />
                     </div>
                   ) : userPosts.length > 0 ? (
                     <>

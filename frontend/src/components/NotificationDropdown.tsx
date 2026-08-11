@@ -6,6 +6,7 @@ import { useToast, ToastContainer } from '../hooks/useToast';
 import type { Notification, NotificationPreferences } from '../lib/api/endpoints/notifications';
 import Switch from "./ui/Switch"
 import NotificationIcon from "../features/notifications/NotificationIcon"
+import Spinner from "../components/ui/Spinner"
 
 interface NotificationDropdownProps {
   unreadCount: number
@@ -184,7 +185,7 @@ export default function NotificationDropdown({ unreadCount, onCountUpdate }: Not
             <div className="max-h-[70vh] sm:max-h-96 overflow-y-auto">
               {loading ? (
                 <div className="p-4 text-center text-gray-500">
-                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto mb-2"></div>
+                  <Spinner size="md" className="mx-auto mb-2" />
                   Loading notifications...
                 </div>
               ) : notifications.length === 0 ? (

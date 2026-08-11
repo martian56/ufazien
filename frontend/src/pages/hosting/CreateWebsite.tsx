@@ -26,6 +26,7 @@ import { hostingApi } from "../../utils/hostingApi"
 import { useSubscription } from "../../hooks/useSubscription"
 import { useWebsites } from "../../hooks/useWebsites.js"
 import { useDomains } from "../../hooks/useDomains.js"
+import Spinner from "../../components/ui/Spinner"
 
 export default function CreateWebsite() {
   const navigate = useNavigate()
@@ -459,7 +460,7 @@ export default function CreateWebsite() {
                     >
                       {isSubmitting ? (
                         <>
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                          <Spinner size="sm" tone="onColor" />
                           <span>Creating...</span>
                         </>
                       ) : (

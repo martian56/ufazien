@@ -3,6 +3,7 @@ import { MessageCircle, MoreHorizontal, Send, Users } from "lucide-react"
 import { communityApi as communityAPI } from "../../../lib/api/endpoints/community"
 import type { ChatMessage, Group, PrivateChat } from "../../../lib/api/endpoints/community"
 import type { Paginated } from "../../../lib/api/types"
+import Spinner from "../../../components/ui/Spinner"
 
 interface ChatViewProps {
   groups: Group[]
@@ -353,7 +354,7 @@ export default function ChatView({
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {loadingMessages ? (
             <div className="text-center text-gray-500 py-8">
-              <div className="animate-spin w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full mx-auto mb-2"></div>
+              <Spinner size="md" className="mx-auto mb-2" />
               <p>Loading messages...</p>
             </div>
           ) : visibleMessages.length > 0 ? (

@@ -19,6 +19,7 @@ import { useToast, ToastContainer } from '../hooks/useToast';
 import Switch from "../components/ui/Switch"
 import NotificationIcon from "../features/notifications/NotificationIcon"
 import { useAppShell } from "../components/layout/appShellContext"
+import Spinner from "../components/ui/Spinner"
 
 export default function NotificationsPage() {
   const { notifications: toastNotifications, toast, removeNotification } = useToast();
@@ -164,7 +165,7 @@ export default function NotificationsPage() {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <Spinner size="lg" className="mx-auto mb-4" />
           <p className="text-gray-600">Loading notifications...</p>
         </div>
       </div>

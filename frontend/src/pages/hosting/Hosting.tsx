@@ -43,6 +43,7 @@ import { useSubscription } from "../../hooks/useSubscription"
 import { useWebsites } from "../../hooks/useWebsites"
 import { useDatabases } from "../../hooks/useDatabases"
 import { useDashboard } from "../../hooks/useDashboard"
+import Spinner from "../../components/ui/Spinner"
 
 export default function Hosting() {
   const navigate = useNavigate()
@@ -226,7 +227,7 @@ export default function Hosting() {
           <HostingSidebar />
           <div className="ml-64">
             <div className="flex items-center justify-center h-64">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+              <Spinner size="lg" />
             </div>
           </div>
         </div>
