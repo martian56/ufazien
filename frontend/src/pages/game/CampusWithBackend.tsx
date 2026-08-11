@@ -58,6 +58,13 @@ import {
 import { EMOTE_SECONDS, type Activity } from '../../components/campus/avatarPose'
 import { takenSeatIds } from '../../components/campus/seatState'
 import {
+  doorCrossed,
+  doorstep,
+  doorwayFor,
+  interiorDoorFor,
+  leavingThroughDoor,
+} from '../../components/campus/doorways'
+import {
   nearestProp,
   propsIn,
   throwTarget,
@@ -493,28 +500,35 @@ function PlayerAvatar({
  * Entering a building replaces the world with a room built at the origin.
  * Without moving the camera the player keeps their outdoor position, which is
  * usually outside that room, so they end up looking at the back of the walls.
+ *
+ * Both ends are placed at the door rather than at a remembered position. The
+ * old code restored wherever the player stood when they entered, which now
+ * means the point at which they crossed the facade — inside the alcove, on the
+ * far side of the plane that decides you are going in. Walking out put them
+ * back there and they walked straight in again.
  */
 function InteriorCameraPlacement({ insideBuilding }: { insideBuilding: CampusBuilding | null }) {
   const { camera } = useThree()
-  const outsidePosition = useRef<Vector3 | null>(null)
+  const previous = useRef<CampusBuilding | null>(null)
 
   useEffect(() => {
     if (insideBuilding) {
-      outsidePosition.current = camera.position.clone()
       const spec = INTERIOR_SPECS[insideBuilding.interior]
-      // Just inside the entrance, facing into the room.
-      camera.position.set(spec.spawn[0], spec.spawn[1], spec.spawn[2])
-      if (spec.spawnLookAt) {
-        // lookAt leaves roll at zero, so the pointer-lock controls pick this
-        // up as an ordinary heading and pitch.
-        camera.lookAt(spec.spawnLookAt[0], spec.spawnLookAt[1], spec.spawnLookAt[2])
-      } else {
-        camera.rotation.set(0, 0, 0)
-      }
-    } else if (outsidePosition.current) {
-      camera.position.copy(outsidePosition.current)
-      outsidePosition.current = null
+      const door = interiorDoorFor(insideBuilding.interior)
+      // Just inside the door you came through, which is now a real place in
+      // the room rather than a spawn point chosen per interior.
+      camera.position.set(door.x, spec.spawn[1], door.z - 1.5)
+      const look = spec.spawnLookAt ?? spec.projector
+      // lookAt leaves roll at zero, so the pointer-lock controls pick this up
+      // as an ordinary heading and pitch.
+      camera.lookAt(look[0], look[1], look[2])
+    } else if (previous.current) {
+      const door = doorstep(doorwayFor(previous.current))
+      camera.position.set(door.x, EYE_HEIGHT, door.z)
+      // Facing away from the building, which is the direction you were walking.
+      camera.lookAt(door.x, EYE_HEIGHT, door.z + 10)
     }
+    previous.current = insideBuilding
   }, [insideBuilding, camera])
 
   return null
@@ -564,54 +578,6 @@ function ProximitySensor({
       }
     }
     target.current.area = area
-  })
-
-  return null
-}
-
-/**
- * E to enter or leave a building.
- *
- * Entering by clicking a marker in the world does not work while the pointer is
- * locked for mouse-look, which is the normal way to play, so the doors are
- * opened from wherever the player is standing instead.
- */
-function ProximityInteraction({
-  insideBuilding,
-  onEnter,
-  onExit,
-  touch,
-  suppressed = false,
-}: {
-  insideBuilding: CampusBuilding | null
-  onEnter: (building: CampusBuilding) => void
-  onExit: () => void
-  touch?: React.RefObject<TouchState | null>
-  /**
-   * Something nearer has claimed the key.
-   *
-   * E is the one interact key, so standing at the library terminal would
-   * otherwise both open it and walk the player out of the building.
-   */
-  suppressed?: boolean
-}) {
-  const { camera } = useThree()
-  const [, get] = useKeyboardControls()
-  const wasPressed = useRef(false)
-
-  useFrame(() => {
-    const pressed = (Boolean(get().interact) && !isTypingInField()) || Boolean(touch?.current?.interact)
-    if (touch?.current?.interact) touch.current.interact = false
-    // Edge trigger: holding E must not toggle every frame.
-    if (pressed && !wasPressed.current && !suppressed) {
-      if (insideBuilding) {
-        onExit()
-      } else {
-        const found = nearestEntrance(camera.position.x, camera.position.z)
-        if (found) onEnter(found.building)
-      }
-    }
-    wasPressed.current = pressed
   })
 
   return null
@@ -911,6 +877,8 @@ function Player({
   emote,
   leaning,
   follow,
+  onEnter,
+  onLeave,
 }: {
   campusHook: CampusHook
   insideBuilding: CampusBuilding | null
@@ -921,6 +889,10 @@ function Player({
   emote: Activity | null
   /** Propped against a wall, which is a posture rather than an emote. */
   leaning: boolean
+  /** Walked in through a door. */
+  onEnter: (building: CampusBuilding) => void
+  /** Walked back out through one. */
+  onLeave: (building: CampusBuilding) => void
   /**
    * Somebody to walk towards, in world coordinates, or null.
    *
@@ -934,6 +906,8 @@ function Player({
   const velocity = useRef(new Vector3())
   const direction = useRef(new Vector3())
   const isOnGround = useRef(true)
+  /** Where the player was at the top of this frame, for the door test. */
+  const before = useRef({ x: 0, z: 0 })
 
   const { updatePosition, worldTo2D } = campusHook
 
@@ -1053,6 +1027,8 @@ function Player({
     // Apply gravity
     velocity.current.y -= 20 * delta
 
+    before.current.x = camera.position.x
+    before.current.z = camera.position.z
     camera.position.add(direction.current)
     camera.position.y += velocity.current.y * delta
 
@@ -1070,6 +1046,15 @@ function Player({
       : SOLID_CAMPUS
 
     if (insideBuilding) {
+      // Walking out through the door, which has to be asked before the clamp:
+      // afterwards the position has already been pulled back inside the room
+      // and there is nothing left to detect.
+      const door = interiorDoorFor(insideBuilding.interior)
+      if (leavingThroughDoor(camera.position.x, camera.position.z, door)) {
+        onLeave(insideBuilding)
+        return
+      }
+
       // The room's own walls, which are a clamp rather than geometry.
       const limit = interiorHalfExtent(insideBuilding.interior)
       camera.position.x = MathUtils.clamp(camera.position.x, -limit, limit)
@@ -1077,6 +1062,21 @@ function Player({
     } else {
       camera.position.x = MathUtils.clamp(camera.position.x, -CAMPUS_LIMIT, CAMPUS_LIMIT)
       camera.position.z = MathUtils.clamp(camera.position.z, -CAMPUS_LIMIT, CAMPUS_LIMIT)
+
+      // And walking in through one. Measured across the step rather than at
+      // the end of it, so a fast frame that clears the whole alcove still
+      // counts as going inside rather than stopping against the back wall.
+      const entered = doorCrossed(
+        { x: before.current.x, z: before.current.z },
+        { x: camera.position.x, z: camera.position.z },
+      )
+      if (entered) {
+        const building = CAMPUS_BUILDINGS.find((b) => b.id === entered.id)
+        if (building) {
+          onEnter(building)
+          return
+        }
+      }
     }
 
     // Everything solid, indoors and out: buildings, trees, the fountain, and
@@ -1626,7 +1626,7 @@ const CampusWithBackend = () => {
             </div>
             <div className="text-xs text-gray-300 mt-0.5">{nearBuilding.blurb}</div>
             <div className="text-xs text-blue-300 mt-1">
-              {isTouchDevice ? 'Tap Enter to go inside' : 'Press E to go inside'}
+              Walk in through the doors
             </div>
           </div>
         </div>
@@ -2065,13 +2065,6 @@ const CampusWithBackend = () => {
 
             <InteriorCameraPlacement insideBuilding={insideBuilding} />
             <ProximitySensor insideBuilding={insideBuilding} target={proximity} />
-            <ProximityInteraction
-              insideBuilding={insideBuilding}
-              onEnter={setInsideBuilding}
-              onExit={() => setInsideBuilding(null)}
-              touch={touchState}
-              suppressed={atTerminal || terminalOpen}
-            />
             <ActionKeyBridge action={actionInput} />
             <Player
               campusHook={campusHook}
@@ -2081,6 +2074,8 @@ const CampusWithBackend = () => {
               emote={emote}
               leaning={leaning}
               follow={followTarget}
+              onEnter={setInsideBuilding}
+              onLeave={() => setInsideBuilding(null)}
             />
             <SeatController
               campusHook={campusHook}

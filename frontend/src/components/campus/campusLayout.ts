@@ -407,15 +407,102 @@ export const SCENERY_COLLIDERS: Rect[] = [
   ...SCENERY_BLOCKS.filter((block) => block.style !== 'heritage').map(buildingRect),
 ]
 
-/** Everything solid on the campus: what you bump into rather than walk through. */
+/** Half-width of a doorway. A shade over two people wide. */
+export const DOOR_HALF_WIDTH = 1.7
+
+/**
+ * How far the opening is recessed into the facade.
+ *
+ * Only has to be deep enough for the player's centre to reach the face of the
+ * building, which is where going inside is decided — `PLAYER_RADIUS` is 0.45,
+ * so this is roughly twice what is needed and leaves the doorway reading as a
+ * doorway rather than as a scratch in the wall.
+ */
+export const ALCOVE_DEPTH = 1.2
+
+export interface Doorway {
+  /** The building this is the door of. */
+  id: number
+  /** Centre of the opening, in world x. */
+  x: number
+  /** The face of the building, in world z. Crossing this is going inside. */
+  z: number
+  halfW: number
+}
+
+/**
+ * The door of a building.
+ *
+ * Centred on the facade, on the +Z face like every entrance on this campus —
+ * the buildings all face down the spine, and proximity entry always measured
+ * to the same side.
+ */
+export function doorwayFor(building: CampusBuilding): Doorway {
+  const [x, , z] = building.position
+  return { id: building.id, x, z: z + building.size[2] / 2, halfW: DOOR_HALF_WIDTH }
+}
+
+/** Every door on the campus. */
+export const CAMPUS_DOORS: Doorway[] = CAMPUS_BUILDINGS.map(doorwayFor)
+
+/**
+ * A building's footprint with the doorway left open.
+ *
+ * Three boxes rather than one: the piers either side run the full depth, and a
+ * back wall closes the alcove so the opening is a doorway rather than a tunnel
+ * straight through the building.
+ */
+export function buildingCollidersWithDoor(building: CampusBuilding): Rect[] {
+  const [x, , z] = building.position
+  const halfW = building.size[0] / 2
+  const halfD = building.size[2] / 2
+  const door = doorwayFor(building)
+  const pierWidth = halfW - door.halfW
+
+  if (pierWidth <= 0 || halfD <= ALCOVE_DEPTH / 2) {
+    // A building narrower than its own doorway, or shallower than the alcove,
+    // has nothing left to build the opening out of. Solid, rather than
+    // silently open across the whole face.
+    return [{ x, z, halfW, halfD }]
+  }
+
+  return [
+    { x: x - door.halfW - pierWidth / 2, z, halfW: pierWidth / 2, halfD },
+    { x: x + door.halfW + pierWidth / 2, z, halfW: pierWidth / 2, halfD },
+    // The back of the alcove, running the *full* width of the building rather
+    // than just the width of the opening. Cut to the opening it would abut the
+    // piers exactly, and a shared edge is the one arrangement a
+    // least-penetration resolver cannot settle on: each box ejects the player
+    // into the other and no number of passes converges. The corner of the
+    // alcove is somewhere a player can stand, so that seam is reachable.
+    // Overlapping the piers deeply leaves no seam to stand on, and the alcove
+    // is still open because this box stops short of the facade in z.
+    { x, z: z - ALCOVE_DEPTH / 2, halfW, halfD: halfD - ALCOVE_DEPTH / 2 },
+  ]
+}
+
+/**
+ * Everything solid on the campus: what you bump into rather than walk through.
+ *
+ * The seven buildings are three boxes each rather than one, leaving an alcove
+ * in the middle of each facade that you can walk into — the doorway. A single
+ * box stops the player a radius short of the wall, which is a building you can
+ * only enter by pressing a key at it.
+ *
+ * `KEEP_CLEAR` below deliberately keeps the whole footprint: the scatter must
+ * not drop a tree into a doorway just because the doorway is not solid.
+ */
 export const CAMPUS_COLLIDERS: Rect[] = [
-  ...CAMPUS_BUILDINGS.map(buildingRect),
+  ...CAMPUS_BUILDINGS.flatMap(buildingCollidersWithDoor),
   ...SCENERY_COLLIDERS,
 ]
 
 /** Footprints the scatter must keep clear: buildings plus every paved surface. */
 export const KEEP_CLEAR: Rect[] = [
-  ...CAMPUS_COLLIDERS,
+  // The whole building footprint, doorway included: an opening you cannot walk
+  // into because a tree is standing in it is not an opening.
+  ...CAMPUS_BUILDINGS.map(buildingRect),
+  ...SCENERY_COLLIDERS,
   ...PAVEMENTS.map((p) => ({
     x: p.position[0],
     z: p.position[1],
