@@ -39,29 +39,23 @@ export interface InteriorSpec {
    * columns and a staircase in it.
    */
   ceilingKind?: 'tile' | 'deck' | 'plaster' | 'timber'
-  /**
-   * An opening in the ceiling, in room coordinates.
-   *
-   * The landmark is built round an internal courtyard, so its "room" is a
-   * gallery on four sides of an open court rather than a sealed box. Set this
-   * and the ceiling is drawn as a ring with sky over the hole.
-   */
-  courtyard?: { x: number; z: number; half: number }
 }
 
 export const INTERIOR_SPECS: Record<InteriorKind, InteriorSpec> = {
-  // Butter yellow walls, a boarded timber ceiling and a patterned tile floor.
-  // This was cream-grey render, cream marble and a suspended office ceiling,
-  // which was a guess at what a restored 1900s building ought to look like. The
-  // Ministry of Education's photographs of the opening show what it does look
-  // like, and it is warmer and plainer than the guess: yellow distemper, honey
-  // pine boards overhead on dark pendants, encaustic tile underfoot, and a deep
-  // grey-brown skirting running round it all.
+  // The entrance sequence, from photographs of the finished building: white
+  // walls, encaustic cement tile underfoot in a four-pointed star, and a flat
+  // white ceiling on suspended square light rings.
+  //
+  // This has now been wrong twice in opposite directions. It was cream marble
+  // and a colonnade — a guess at what a restored 1900s building ought to be,
+  // which guessed a palace. Then it was butter yellow with a boarded timber
+  // ceiling, off the 2017 opening photographs, which is a different part of the
+  // building. The hall you actually walk into is neither: it is white, and very
+  // plain, and everything in it is the floor.
   ufaz: {
-    halfExtent: 22, ceiling: 14, wall: '#f0dda6', accent: '#5b5147', floor: 'tile',
-    projector: [0, 6.4, -21.2], spawn: [0, 1.7, 16], lightColor: '#ffeec4', lightIntensity: 1.15,
-    ceilingKind: 'timber',
-    courtyard: { x: -3, z: -5, half: 8 },
+    halfExtent: 22, ceiling: 9, wall: '#eceef0', accent: '#5a5f66', floor: 'tile',
+    projector: [0, 5.6, -21.2], spawn: [0, 1.7, 18], lightColor: '#f2f6fa', lightIntensity: 1.2,
+    ceilingKind: 'plaster',
   },
   library: {
     halfExtent: 24, ceiling: 11, wall: '#e0d4bd', accent: '#6d4f32', floor: 'wood',

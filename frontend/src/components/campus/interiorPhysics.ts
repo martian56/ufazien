@@ -86,22 +86,32 @@ export const UFAZ_DESK_X = -11.8
 export const UFAZ_BENCH_Z = [-10, -4, 2]
 
 /**
- * The internal courtyard.
+ * The lift core.
  *
- * The building is built round one, and the opening ceremony was held in it.
- * Off-centre towards the back so the entrance end keeps its reception desk,
- * flags and benches, and clear of the staircase on the east side: the court
- * runs to x 5 and the flight starts at x 7.
+ * Two lifts side by side in a glazed shaft, at the far end of the hall with the
+ * corridor running off past them — walk in, cross the hall, and turn left,
+ * which is the route through the real building.
+ *
+ * Back and to one side rather than dead ahead, which is where the photographs
+ * put them relative to the doors. Dead ahead is where the projector screen
+ * hangs, and a three-metre glass shaft on that line blocks the sightline from
+ * every seat in the room: `interiorPhysics.test.ts` failed on the benches, on
+ * the centre line, and on the flag stand it was standing half a metre from, all
+ * three at once. Screen sharing is not worth a lift lobby. Tucked into the
+ * corner and shallower on the second attempt, too: at three metres out from the
+ * wall it still clipped the line from the west benches to the near edge of the
+ * board, which is the kind of half-blocked view nobody reports and everybody
+ * quietly moves away from.
+ *
+ * The courtyard that was here has gone. It is a real part of the building and
+ * the 2017 opening was held in it, but it is not on the route the player walks,
+ * and it sat squarely where the lifts and the stair have to be.
  */
-export const UFAZ_COURT = { x: -3, z: -5, half: 8 }
+export const UFAZ_LIFTS = { x: -15, z: -19, halfW: 3.4, halfD: 1.8 }
 
-/** Planters round the court, as the photographs show them. */
-export const UFAZ_PLANTERS = [
-  { x: UFAZ_COURT.x - 5.5, z: UFAZ_COURT.z - 5.5 },
-  { x: UFAZ_COURT.x + 5.5, z: UFAZ_COURT.z - 5.5 },
-  { x: UFAZ_COURT.x - 5.5, z: UFAZ_COURT.z + 5.5 },
-  { x: UFAZ_COURT.x + 5.5, z: UFAZ_COURT.z + 5.5 },
-]
+/** The speed gates across the entrance, as the photographs show them. */
+export const UFAZ_TURNSTILES = [-4.5, -1.5, 1.5, 4.5]
+export const UFAZ_TURNSTILE_Z = 13
 
 export const UFAZ_STAIR = {
   // Narrower and further in than the first attempt at moving it. At x 12.5
@@ -127,16 +137,20 @@ function ufazPhysics(): InteriorPhysics {
   // what is drawn — and it has to go from here too, or the hall keeps ten
   // invisible pillars that a player walks into and cannot see.
 
-  // The courtyard planters, which are solid. The court itself is open floor.
-  for (const planter of UFAZ_PLANTERS) {
-    colliders.push({ x: planter.x, z: planter.z, halfW: 1.1, halfD: 1.1, height: 0.85 })
+  // The lift shaft, which is solid glass and steel.
+  colliders.push({
+    x: UFAZ_LIFTS.x,
+    z: UFAZ_LIFTS.z,
+    halfW: UFAZ_LIFTS.halfW,
+    halfD: UFAZ_LIFTS.halfD,
+    height: 8.2,
+  })
+
+  // The speed gates. Waist height and narrow, with a person's width between
+  // them, so you walk through the line rather than round it.
+  for (const x of UFAZ_TURNSTILES) {
+    colliders.push({ x, z: UFAZ_TURNSTILE_Z, halfW: 0.24, halfD: 0.62, height: 1.05 })
   }
-  // The tree planted at the opening, off the centre line. Directly on it — at
-  // court.x + 3, which lands on x 0 — it stood between the whole room and the
-  // projector screen, and `interiorPhysics.test.ts` failed the moment it went
-  // in. A courtyard tree is worth having; a courtyard tree you have to lean
-  // round to watch a presentation is not.
-  colliders.push({ x: UFAZ_COURT.x - 2.5, z: UFAZ_COURT.z, radius: 0.45, height: 7 })
 
   // The flight, as steps you walk up rather than geometry you walk through.
   for (let i = 0; i < UFAZ_STAIR.steps; i++) {

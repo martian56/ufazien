@@ -21,7 +21,9 @@ import {
   UFAZ_BENCH_Z,
   UFAZ_DESK_X,
   UFAZ_FLAGS,
-  UFAZ_PLANTERS,
+  UFAZ_LIFTS,
+  UFAZ_TURNSTILES,
+  UFAZ_TURNSTILE_Z,
   UFAZ_STAIR,
   VENDING_MACHINES,
   libraryAisleHalf,
@@ -181,154 +183,6 @@ function InteriorDoorway({ spec }: { spec: InteriorSpec }) {
  * the lights are placed as a grid rather than as one bulb at the centre, which
  * is what made every old interior look like a cave with a torch in it.
  */
-/**
- * The ceiling as four rectangles round an opening.
- *
- * Returns `[centreX, centreZ, width, depth]` for each. North and south run the
- * full width; east and west fill only the court's own band, so the four meet at
- * its corners without overlapping — coplanar overlaps z-fight, and a flickering
- * seam across the ceiling is more distracting than no ceiling at all.
- */
-function ceilingRing(
-  size: number,
-  court: { x: number; z: number; half: number },
-): [number, number, number, number][] {
-  const edge = size / 2
-  const minX = court.x - court.half
-  const maxX = court.x + court.half
-  const minZ = court.z - court.half
-  const maxZ = court.z + court.half
-
-  return [
-    [0, (-edge + minZ) / 2, size, minZ + edge],
-    [0, (maxZ + edge) / 2, size, edge - maxZ],
-    [(-edge + minX) / 2, court.z, minX + edge, court.half * 2],
-    [(maxX + edge) / 2, court.z, edge - maxX, court.half * 2],
-  ]
-}
-
-/**
- * The internal courtyard, which the building is built round.
- *
- * Paved in small blocks, planted, and enclosed by the building's own
- * elevations with an iron-railed first-floor balcony running above the gallery.
- * The opening ceremony in September 2017 was held in this space, which is how
- * there are photographs of it at all.
- */
-function Courtyard({ spec }: { spec: InteriorSpec }) {
-  const court = spec.courtyard
-  if (!court) return null
-  const half = court.half
-
-  return (
-    <group position={[court.x, 0, court.z]}>
-      {/* Block paving, laid a shade above the gallery floor so the two do not
-          fight in the depth buffer. */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]} receiveShadow>
-        <planeGeometry args={[half * 2, half * 2]} />
-        <meshStandardMaterial color="#a9a396" roughness={0.95} />
-      </mesh>
-      {/* A kerb round the court, which is where the paving stops and the
-          covered gallery begins. */}
-      {[
-        [0, -half, half * 2 + 0.5, 0.5],
-        [0, half, half * 2 + 0.5, 0.5],
-        [-half, 0, 0.5, half * 2],
-        [half, 0, 0.5, half * 2],
-      ].map(([kx, kz, kw, kd], i) => (
-        <mesh key={i} position={[kx, 0.09, kz]} receiveShadow>
-          <boxGeometry args={[kw, 0.18, kd]} />
-          <meshStandardMaterial color="#8e887c" roughness={0.95} />
-        </mesh>
-      ))}
-
-      {/* Timber planters at the corners, as in the photographs. */}
-      {UFAZ_PLANTERS.map((planter, i) => (
-        <group key={i} position={[planter.x - court.x, 0, planter.z - court.z]}>
-          <mesh castShadow receiveShadow position={[0, 0.42, 0]}>
-            <boxGeometry args={[2.2, 0.84, 2.2]} />
-            <meshStandardMaterial color="#6f4b2c" roughness={0.9} />
-          </mesh>
-          <mesh position={[0, 0.95, 0]} castShadow>
-            <icosahedronGeometry args={[0.95, 0]} />
-            <meshStandardMaterial color="#3f6f34" roughness={0.95} flatShading />
-          </mesh>
-        </group>
-      ))}
-
-      {/* The tree planted at the opening. Off the centre line — see the note
-          on its collider in `interiorPhysics`. */}
-      <group position={[-2.5, 0, 0]}>
-        <mesh castShadow position={[0, 2.1, 0]}>
-          <cylinderGeometry args={[0.16, 0.24, 4.2, 6]} />
-          <meshStandardMaterial color="#5b432c" roughness={0.95} />
-        </mesh>
-        <mesh castShadow position={[0, 5, 0]}>
-          <icosahedronGeometry args={[1.9, 0]} />
-          <meshStandardMaterial color="#4a7f3a" roughness={0.95} flatShading />
-        </mesh>
-      </group>
-
-      {/* The balcony deck the railing stands on. Without it the rail hangs in
-          mid-air round the court, guarding nothing. */}
-      {[
-        [0, -half - 0.85, half * 2 + 1.7, 1.7],
-        [0, half + 0.85, half * 2 + 1.7, 1.7],
-        [-half - 0.85, 0, 1.7, half * 2],
-        [half + 0.85, 0, 1.7, half * 2],
-      ].map(([dx, dz, dw, dd], i) => (
-        <mesh key={i} position={[dx, 5.82, dz]} castShadow receiveShadow>
-          <boxGeometry args={[dw, 0.28, dd]} />
-          <meshStandardMaterial color="#d9cfae" roughness={0.9} />
-        </mesh>
-      ))}
-
-      {/* The first-floor balcony: a black wrought-iron railing running round
-          the court above the gallery, with the standards it hangs on. */}
-      {[
-        [0, -half, half * 2, true],
-        [0, half, half * 2, true],
-        [-half, 0, half * 2, false],
-        [half, 0, half * 2, false],
-      ].map(([rx, rz, run, alongX], side) => (
-        <group key={side} position={[rx as number, 6.4, rz as number]}>
-          <mesh castShadow>
-            <boxGeometry args={alongX ? [run as number, 0.12, 0.12] : [0.12, 0.12, run as number]} />
-            <meshStandardMaterial color="#1d2024" roughness={0.6} metalness={0.4} />
-          </mesh>
-          <mesh position={[0, -0.55, 0]}>
-            <boxGeometry args={alongX ? [run as number, 0.08, 0.08] : [0.08, 0.08, run as number]} />
-            <meshStandardMaterial color="#1d2024" roughness={0.6} metalness={0.4} />
-          </mesh>
-          {Array.from({ length: Math.round((run as number) / 0.85) }, (_, i) => {
-            const t = -(run as number) / 2 + (i + 0.5) * 0.85
-            return (
-              <mesh key={i} position={[alongX ? t : 0, -0.5, alongX ? 0 : t]}>
-                <boxGeometry args={[0.05, 1, 0.05]} />
-                <meshStandardMaterial color="#1d2024" roughness={0.6} metalness={0.4} />
-              </mesh>
-            )
-          })}
-        </group>
-      ))}
-
-      {/* Wall lanterns on the court elevations. */}
-      {[-1, 1].map((side) => (
-        <group key={side} position={[side * (half - 0.3), 4.6, 0]}>
-          <mesh castShadow>
-            <boxGeometry args={[0.34, 0.5, 0.34]} />
-            <meshStandardMaterial color="#1d2024" roughness={0.6} metalness={0.4} />
-          </mesh>
-          <mesh position={[0, -0.06, 0]}>
-            <boxGeometry args={[0.24, 0.34, 0.24]} />
-            <meshStandardMaterial color="#ffeec4" emissive="#ffd894" emissiveIntensity={0.7} />
-          </mesh>
-        </group>
-      ))}
-    </group>
-  )
-}
-
 function RoomShell({
   spec,
   lit = true,
@@ -433,39 +287,6 @@ function RoomShell({
           </mesh>
         ))}
 
-      {/* Sky over the courtyard. Behind the ring below, so the ceiling's edge
-          reads as the eaves of the court rather than as a hole cut in a lid. */}
-      {spec.courtyard && (
-        <>
-          <mesh
-            position={[spec.courtyard.x, spec.ceiling + 0.4, spec.courtyard.z]}
-            rotation={[Math.PI / 2, 0, 0]}
-          >
-            <planeGeometry args={[spec.courtyard.half * 2, spec.courtyard.half * 2]} />
-            <meshBasicMaterial color={lit ? '#cfe4f7' : '#26344c'} side={THREE.DoubleSide} />
-          </mesh>
-          {/* Daylight down the well, which is the whole point of a courtyard. */}
-          <pointLight
-            position={[spec.courtyard.x, spec.ceiling - 2, spec.courtyard.z]}
-            intensity={(lit ? 90 : 12) * spec.lightIntensity}
-            distance={46}
-            decay={2}
-            color={lit ? '#eaf3ff' : '#4c6a9c'}
-          />
-        </>
-      )}
-
-      {spec.courtyard ? (
-        // The ceiling as four slabs round the opening. One plane with a hole in
-        // it would need the hole cut into the geometry; four rectangles that
-        // meet at the court's corners are the same picture and stay planes.
-        ceilingRing(size, spec.courtyard).map(([cx, cz, cw, cd], i) => (
-          <mesh key={i} position={[cx, spec.ceiling, cz]} rotation={[Math.PI / 2, 0, 0]} receiveShadow>
-            <planeGeometry args={[cw, cd]} />
-            <meshStandardMaterial color="#c98b4b" roughness={0.85} side={THREE.DoubleSide} />
-          </mesh>
-        ))
-      ) : (
       <mesh position={[0, spec.ceiling, 0]} rotation={[Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[size, size]} />
         {spec.ceilingKind === 'deck' ? (
@@ -483,7 +304,6 @@ function RoomShell({
           />
         )}
       </mesh>
-      )}
 
       <ambientLight
         intensity={(lit ? 0.55 : 0.28) * level}
@@ -741,13 +561,173 @@ function HeritageWindows({ spec }: { spec: InteriorSpec }) {
   )
 }
 
+
+/**
+ * The speed gates across the entrance.
+ *
+ * Four of them in a line, stainless, with a card reader on the top face. You
+ * walk between them rather than round them: they are narrow and there is a
+ * person's width in each gap, which is the whole point of the arrangement and
+ * the reason their colliders are that shape too.
+ */
+function Turnstiles() {
+  return (
+    <group>
+      {UFAZ_TURNSTILES.map((x) => (
+        <group key={x} position={[x, 0, UFAZ_TURNSTILE_Z]}>
+          <mesh position={[0, 0.5, 0]} castShadow receiveShadow>
+            <boxGeometry args={[0.44, 1, 1.2]} />
+            {/* Brushed steel, not mirror steel. At metalness 0.85 with no
+                environment map to reflect there is nothing for the metal to
+                pick up and the gates came out black. */}
+            <meshStandardMaterial color="#c9d0d6" roughness={0.42} metalness={0.35} />
+          </mesh>
+          <mesh position={[0, 1.02, 0]} castShadow>
+            <boxGeometry args={[0.5, 0.06, 1.28]} />
+            <meshStandardMaterial color="#e6eaee" roughness={0.35} metalness={0.3} />
+          </mesh>
+          {/* The reader, which is the one bit of colour on them. */}
+          <mesh position={[0, 1.07, 0.34]} rotation={[-Math.PI / 2, 0, 0]}>
+            <planeGeometry args={[0.22, 0.3]} />
+            <meshStandardMaterial color="#2f6f4f" emissive="#2f6f4f" emissiveIntensity={0.5} />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  )
+}
+
+/**
+ * The lift core: two cars side by side in a glazed shaft.
+ *
+ * Straight ahead of the entrance, which is how you read the building walking
+ * in — cross the hall and this is what you are looking at, with the stair
+ * beside it and the corridor running off to the left.
+ *
+ * The glass is a single transparent box rather than framed panels. A real
+ * curtain wall here is a dozen mullions and four sheets of glass per face, and
+ * this room has already been the most expensive thing in the scene once.
+ */
+function LiftCore({ ceiling }: { ceiling: number }) {
+  const { x, z, halfW, halfD } = UFAZ_LIFTS
+  const shaft = Math.min(ceiling - 0.6, 8.2)
+
+  return (
+    <group position={[x, 0, z]}>
+      {/* The shaft. Drawn last-ish and transparent, so the steel inside reads
+          through it. */}
+      <mesh position={[0, shaft / 2, 0]}>
+        <boxGeometry args={[halfW * 2, shaft, halfD * 2]} />
+        <meshStandardMaterial
+          color="#8ea3ad"
+          transparent
+          opacity={0.28}
+          roughness={0.08}
+          metalness={0.5}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+      {/* Steel frame at the corners and the head. */}
+      {[-1, 1].map((sx) =>
+        [-1, 1].map((sz) => (
+          <mesh key={`${sx}${sz}`} position={[sx * halfW, shaft / 2, sz * halfD]} castShadow>
+            <boxGeometry args={[0.16, shaft, 0.16]} />
+            <meshStandardMaterial color="#6d7a83" roughness={0.5} metalness={0.6} />
+          </mesh>
+        )),
+      )}
+      <mesh position={[0, shaft, 0]} castShadow>
+        <boxGeometry args={[halfW * 2 + 0.2, 0.2, halfD * 2 + 0.2]} />
+        <meshStandardMaterial color="#6d7a83" roughness={0.5} metalness={0.6} />
+      </mesh>
+
+      {/* The two cars, doors facing the hall. */}
+      {[-1, 1].map((side) => (
+        <group key={side} position={[side * 2.1, 0, halfD]}>
+          <mesh position={[0, 1.2, 0.02]} castShadow>
+            <boxGeometry args={[1.8, 2.4, 0.12]} />
+            <meshStandardMaterial color="#c3cad0" roughness={0.28} metalness={0.9} />
+          </mesh>
+          {/* The joint down the middle, which is what makes it read as doors. */}
+          <mesh position={[0, 1.2, 0.09]}>
+            <boxGeometry args={[0.05, 2.4, 0.03]} />
+            <meshStandardMaterial color="#8f979e" roughness={0.4} metalness={0.7} />
+          </mesh>
+          <mesh position={[0, 2.62, 0.06]}>
+            <planeGeometry args={[0.34, 0.14]} />
+            <meshStandardMaterial color="#c0392b" emissive="#c0392b" emissiveIntensity={0.7} />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  )
+}
+
+/**
+ * The arcade along the west corridor.
+ *
+ * A run of round-headed openings in a pier wall, which is what the corridor
+ * photographs show and what stops that side of the hall being twenty metres of
+ * blank plaster. Built as piers with a filled spandrel over each opening rather
+ * than as an arch cut out of a wall: the hole is the shape between the piers,
+ * so there is nothing to boolean.
+ */
+function Arcade({ half, ceiling }: { half: number; ceiling: number }) {
+  const head = 4.2
+  // Stops short of the lift core in the back corner rather than running the
+  // full depth of the room and standing inside it.
+  const bays = [-10, -4, 2, 8, 14]
+  const pier = 1.1
+
+  return (
+    <group position={[-half + 7, 0, 0]}>
+      {bays.map((z) => (
+        <mesh key={z} position={[0, head / 2, z]} castShadow receiveShadow>
+          <boxGeometry args={[0.9, head, pier]} />
+          <meshStandardMaterial color="#e9ebee" roughness={0.94} />
+        </mesh>
+      ))}
+      {/* The wall above the openings, carried on the piers. */}
+      <mesh position={[0, head + (ceiling - head) / 2, 2]} castShadow receiveShadow>
+        <boxGeometry args={[0.9, ceiling - head, 32]} />
+        <meshStandardMaterial color="#e9ebee" roughness={0.94} />
+      </mesh>
+      {/* Spandrels: the curve of each head, as a half disc between two piers. */}
+      {bays.slice(0, -1).map((z, i) => (
+        <mesh
+          key={`s${z}`}
+          position={[0, head, (z + bays[i + 1]) / 2]}
+          rotation={[0, Math.PI / 2, 0]}
+        >
+          <circleGeometry args={[(bays[i + 1] - z) / 2 - 0.45, 18, 0, Math.PI]} />
+          <meshStandardMaterial color="#e9ebee" roughness={0.94} side={THREE.DoubleSide} />
+        </mesh>
+      ))}
+    </group>
+  )
+}
+
 function UfazHall({ spec }: { spec: InteriorSpec }) {
   const half = spec.halfExtent
 
   return (
     <group>
       <HeritageWindows spec={spec} />
-      <Courtyard spec={spec} />
+      <Turnstiles />
+      <LiftCore ceiling={spec.ceiling} />
+      <Arcade half={half} ceiling={spec.ceiling} />
+
+      {/* The corridor floor west of the arcade: dark boards, not the tile of
+          the entrance hall. The two surfaces meeting at the arcade is the
+          clearest thing in the corridor photographs. */}
+      <mesh
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[-half + 3.2, 0.02, 2]}
+        receiveShadow
+      >
+        <planeGeometry args={[7.6, 32]} />
+        <meshStandardMaterial color="#4a3f39" roughness={0.55} />
+      </mesh>
 
       {/*
         Framed photographs along the walls, hung in a line at head height.
@@ -790,21 +770,19 @@ function UfazHall({ spec }: { spec: InteriorSpec }) {
       <group position={[UFAZ_STAIR.x, 0, UFAZ_STAIR.z]}>
         {Array.from({ length: UFAZ_STAIR.steps }, (_, i) => (
           <group key={i} position={[0, 0.3 + i * UFAZ_STAIR.rise, -i * UFAZ_STAIR.going]}>
+            {/* Grey stone treads. They were cream with a red carpet runner up
+                the middle, which is a country house; the stair in the building
+                is granite with a black iron balustrade and a timber rail. */}
             <mesh castShadow receiveShadow>
               <boxGeometry args={[UFAZ_STAIR.halfW * 2, 0.3, 0.66]} />
-              <meshStandardMaterial color="#e4dac4" roughness={0.35} metalness={0.05} />
-            </mesh>
-            {/* Runner */}
-            <mesh position={[0, 0.16, 0.02]} receiveShadow>
-              <boxGeometry args={[UFAZ_STAIR.halfW * 1.3, 0.04, 0.66]} />
-              <meshStandardMaterial color="#8c3b32" roughness={0.95} />
+              <meshStandardMaterial color="#9a9a99" roughness={0.6} />
             </mesh>
           </group>
         ))}
 
         <mesh castShadow receiveShadow position={[0, 4.35, UFAZ_STAIR.landing.z - UFAZ_STAIR.z]}>
           <boxGeometry args={[UFAZ_STAIR.landing.halfW * 2, 0.4, UFAZ_STAIR.landing.halfD * 2]} />
-          <meshStandardMaterial color="#e4dac4" roughness={0.35} />
+          <meshStandardMaterial color="#9a9a99" roughness={0.6} />
         </mesh>
 
         {/* Balustrade: a solid stepped parapet with a brass cap, built from
@@ -813,13 +791,17 @@ function UfazHall({ spec }: { spec: InteriorSpec }) {
         {[-UFAZ_STAIR.halfW, UFAZ_STAIR.halfW].map((x) =>
           Array.from({ length: UFAZ_STAIR.steps }, (_, i) => (
             <group key={`${x}-${i}`} position={[x, 0.3 + i * UFAZ_STAIR.rise, -i * UFAZ_STAIR.going]}>
-              <mesh castShadow receiveShadow position={[0, 0.62, 0]}>
-                <boxGeometry args={[0.36, 1.1, 0.66]} />
-                <meshStandardMaterial color="#e4dac4" roughness={0.45} />
+              {/* An iron baluster per tread rather than a solid stepped
+                  parapet, which is what the photographs show — you can see the
+                  hall through the stair. */}
+              <mesh castShadow position={[0, 0.62, 0]}>
+                <boxGeometry args={[0.05, 1.05, 0.05]} />
+                <meshStandardMaterial color="#1c1f23" roughness={0.55} metalness={0.4} />
               </mesh>
-              <mesh castShadow position={[0, 1.22, 0]}>
-                <boxGeometry args={[0.46, 0.12, 0.66]} />
-                <meshStandardMaterial color="#c9a227" roughness={0.3} metalness={0.8} />
+              {/* Timber handrail, which is the one warm thing on it. */}
+              <mesh castShadow position={[0, 1.2, 0]}>
+                <boxGeometry args={[0.1, 0.09, 0.68]} />
+                <meshStandardMaterial color="#6b4227" roughness={0.6} />
               </mesh>
             </group>
           )),
@@ -828,8 +810,8 @@ function UfazHall({ spec }: { spec: InteriorSpec }) {
         {/* Newel posts at the foot of the flight */}
         {[-UFAZ_STAIR.halfW, UFAZ_STAIR.halfW].map((x) => (
           <mesh key={x} castShadow position={[x, 0.8, 0.7]}>
-            <boxGeometry args={[0.7, 1.6, 0.7]} />
-            <meshStandardMaterial color="#e4dac4" roughness={0.45} />
+            <cylinderGeometry args={[0.07, 0.09, 1.6, 8]} />
+            <meshStandardMaterial color="#1c1f23" roughness={0.55} metalness={0.4} />
           </mesh>
         ))}
       </group>
