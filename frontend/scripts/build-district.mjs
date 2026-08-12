@@ -52,18 +52,26 @@ const ORIGIN = { lat: 40.3765033, lon: 49.8515587 }
 const LANDMARK = { x: 0, z: -86 }
 
 /**
- * How far north of the landmark to keep. This reaches 28 May küçəsi, which is
- * the next street parallel to Nizami and closes the block behind the
- * university. Past it the district is further away than the fog, and every
- * block costs draw calls.
+ * How far north of the landmark to keep.
+ *
+ * This reached 28 May küçəsi at -200 — the next street parallel to Nizami —
+ * which closed the block behind the university and looked right from the air.
+ * On the ground it was unplayable: the extra depth roughly doubled the street
+ * network, and the street network is what the trees, the lamps and the
+ * frontage terrace are all generated from. Everything past this line is
+ * further away than the fog anyway.
  */
-const NORTH_LIMIT = -246
+const NORTH_LIMIT = -180
 
 /**
- * How far east and west to keep, which reaches Azadlıq prospekti one way and
- * past Puşkin küçəsi the other.
+ * How far east and west to keep.
+ *
+ * Reaches Fikrət Əmirov one way and Puşkin the other, which are the two cross
+ * streets that actually bound the university's block. Azadlıq prospekti at
+ * x 211 was in range before and cost a whole extra avenue of frontage for
+ * something visible only as a smudge in the fog.
  */
-const EAST_WEST_LIMIT = 232
+const EAST_WEST_LIMIT = 170
 
 /**
  * The near edge of the district, for buildings.

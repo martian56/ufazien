@@ -1,4 +1,5 @@
 import { useLayoutEffect, useMemo } from 'react'
+import { Instance, Instances } from '@react-three/drei'
 import * as THREE from 'three'
 
 import { daylight, type CampusBuilding, type TimeOfDay } from './campusLayout'
@@ -170,63 +171,120 @@ function Gable({
   )
 }
 
+/** One window's placement on the building. */
+interface WindowSpot {
+  x: number
+  y: number
+  z: number
+  ry: number
+  w: number
+  h: number
+  lit: boolean
+}
+
 /**
- * One window: the glass, and the cream architrave around it.
+ * Every window on the building, as five instanced meshes.
+ *
+ * This was a `DressedWindow` component drawing five meshes each — surround,
+ * sill, glass, and two glazing bars — for forty-five windows, which is two
+ * hundred and twenty-five draw calls from one building and was most of why the
+ * campus froze when the landmark came into view. The picture is identical; it
+ * is one mesh per *kind* of part now instead of one per part.
+ *
+ * The geometries are unit-sized and each instance carries its own scale, which
+ * is what lets the wide front windows and the narrower ones on the returns
+ * share a mesh.
  *
  * The architrave is what carries the building. On a grey render every opening
  * is outlined in pale stone, and it is that contrast rather than the window
- * itself that you read from across the street.
- *
- * Square-headed, on every floor. The first pass arched the top floor on the
- * assumption that a building of this date would; the photographs say the
- * opposite — every window in the wall is rectangular and the only arches on the
- * building are the paired attic lights inside the gables and the entrance
- * itself. Arching the top floor made it read as a different, later building.
+ * itself that you read from across the street. Square-headed on every floor:
+ * the first pass arched the top floor on the assumption that a building of this
+ * date would, and the photographs say the opposite — the only arches on it are
+ * the paired attic lights inside the gables and the entrance.
  */
-function DressedWindow({
-  width,
-  height,
-  position,
-  rotation = 0,
-  lit = false,
-}: {
-  width: number
-  height: number
-  position: [number, number, number]
-  rotation?: number
-  lit?: boolean
-}) {
-  return (
-    <group position={position} rotation={[0, rotation, 0]}>
-      {/* Surround, proud of the wall. */}
-      <mesh position={[0, 0, 0.06]} castShadow>
-        <boxGeometry args={[width + 0.46, height + 0.5, 0.16]} />
-        <meshStandardMaterial color={DRESSING} roughness={0.85} />
-      </mesh>
-      {/* A sill, heavier than the rest of the surround. */}
-      <mesh position={[0, -height / 2 - 0.28, 0.13]} castShadow>
-        <boxGeometry args={[width + 0.7, 0.16, 0.3]} />
-        <meshStandardMaterial color={DRESSING} roughness={0.85} />
-      </mesh>
-      <mesh position={[0, 0, 0.15]}>
-        <planeGeometry args={[width, height]} />
+function DressedWindows({ spots }: { spots: WindowSpot[] }) {
+  const dark = spots.filter((spot) => !spot.lit)
+  const glowing = spots.filter((spot) => spot.lit)
+
+  const place = (spot: WindowSpot, depth: number): [number, number, number] => [
+    spot.x + Math.sin(spot.ry) * depth,
+    spot.y,
+    spot.z + Math.cos(spot.ry) * depth,
+  ]
+
+  const glass = (list: WindowSpot[], key: string, isLit: boolean) =>
+    list.length ? (
+      <Instances key={key} limit={list.length} range={list.length}>
+        <planeGeometry args={[1, 1]} />
         <meshStandardMaterial
-          color={lit ? '#f6e2b4' : '#2f3742'}
-          emissive={lit ? '#ffd98a' : '#0d1218'}
-          emissiveIntensity={lit ? 0.85 : 0.12}
+          color={isLit ? '#f6e2b4' : '#2f3742'}
+          emissive={isLit ? '#ffd98a' : '#0d1218'}
+          emissiveIntensity={isLit ? 0.85 : 0.12}
           roughness={0.25}
           metalness={0.35}
         />
-      </mesh>
-      {/* Glazing bars, so a window is not one flat pane. */}
-      <mesh position={[0, 0, 0.17]}>
-        <boxGeometry args={[0.07, height, 0.03]} />
+        {list.map((spot, i) => (
+          <Instance
+            key={i}
+            position={place(spot, 0.15)}
+            rotation={[0, spot.ry, 0]}
+            scale={[spot.w, spot.h, 1]}
+          />
+        ))}
+      </Instances>
+    ) : null
+
+  return (
+    <group>
+      {/* Surround, proud of the wall. */}
+      <Instances limit={spots.length} range={spots.length} castShadow>
+        <boxGeometry args={[1, 1, 0.16]} />
+        <meshStandardMaterial color={DRESSING} roughness={0.85} />
+        {spots.map((spot, i) => (
+          <Instance
+            key={i}
+            position={place(spot, 0.06)}
+            rotation={[0, spot.ry, 0]}
+            scale={[spot.w + 0.46, spot.h + 0.5, 1]}
+          />
+        ))}
+      </Instances>
+
+      {/* A sill, heavier than the rest of the surround. */}
+      <Instances limit={spots.length} range={spots.length} castShadow>
+        <boxGeometry args={[1, 0.16, 0.3]} />
+        <meshStandardMaterial color={DRESSING} roughness={0.85} />
+        {spots.map((spot, i) => {
+          const at = place(spot, 0.13)
+          return (
+            <Instance
+              key={i}
+              position={[at[0], spot.y - spot.h / 2 - 0.28, at[2]]}
+              rotation={[0, spot.ry, 0]}
+              scale={[spot.w + 0.7, 1, 1]}
+            />
+          )
+        })}
+      </Instances>
+
+      {glass(dark, 'dark', false)}
+      {glass(glowing, 'lit', true)}
+
+      {/* A mullion, so a window is not one flat pane. The transom the old
+          component also drew has gone: a second instanced mesh across the whole
+          building to draw a horizontal line nobody reads from the street. */}
+      <Instances limit={spots.length} range={spots.length}>
+        <boxGeometry args={[0.07, 1, 0.03]} />
         <meshStandardMaterial color="#3d444d" roughness={0.6} />
-      </mesh>
-      <mesh position={[0, height * 0.18, 0.17]}>
-        <boxGeometry args={[width, 0.07, 0.03]} />
-        <meshStandardMaterial color="#3d444d" roughness={0.6} />
-      </mesh>
+        {spots.map((spot, i) => (
+          <Instance
+            key={i}
+            position={place(spot, 0.17)}
+            rotation={[0, spot.ry, 0]}
+            scale={[1, spot.h, 1]}
+          />
+        ))}
+      </Instances>
     </group>
   )
 }
@@ -252,6 +310,44 @@ export default function UfazBuilding({ building, timeOfDay = 'day' }: UfazBuildi
    */
   const isLit = (bayIndex: number, floor: number) =>
     lit && (bayIndex * 7 + floor * 3) % 5 < 2
+
+  /**
+   * Every window on the building, collected before anything is drawn.
+   *
+   * Front elevation bay by bay and floor by floor, then two down each return so
+   * the building does not read as a flat. Gathered into one list rather than
+   * rendered where they are computed, because they are drawn instanced and an
+   * instanced mesh needs to know how many of them there are.
+   */
+  const windows = useMemo(() => {
+    const spots: WindowSpot[] = []
+    for (let floor = 0; floor < FLOORS; floor++) {
+      const y = PLINTH + floorHeight * (floor + 0.55)
+      const h = floorHeight * 0.52
+      for (let i = 0; i < BAYS; i++) {
+        const x = -halfW + bay * (i + 0.5)
+        // Not through the entrance.
+        if (Math.abs(x) < OPENING_HALF_W + 0.8 && floor === 0) continue
+        spots.push({ x, y, z: halfD + 0.02, ry: 0, w: bay * 0.52, h, lit: isLit(i, floor) })
+      }
+      for (const side of [-1, 1]) {
+        for (const [j, t] of [-0.28, 0.1].entries()) {
+          spots.push({
+            x: side * (halfW + 0.02),
+            y,
+            z: depth * t,
+            ry: (side * Math.PI) / 2,
+            w: bay * 0.46,
+            h,
+            lit: isLit(j + 3, floor),
+          })
+        }
+      }
+    }
+    return spots
+    // `isLit` is a closure over `lit`, which is the only thing that changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [halfW, halfD, bay, depth, floorHeight, lit])
 
   // The row of small gables along the front, one every other bay, skipping the
   // centre where the two big ones meet.
@@ -344,42 +440,8 @@ export default function UfazBuilding({ building, timeOfDay = 'day' }: UfazBuildi
         </mesh>
       ))}
 
-      {/* Windows, bay by bay and floor by floor. */}
-      {Array.from({ length: FLOORS }, (_, floor) => {
-        const y = PLINTH + floorHeight * (floor + 0.55)
-        const tall = floorHeight * 0.52
-        return Array.from({ length: BAYS }, (_, i) => {
-          const x = -halfW + bay * (i + 0.5)
-          const overDoor = Math.abs(x) < OPENING_HALF_W + 0.8
-          if (overDoor && floor === 0) return null
-          return (
-            <DressedWindow
-              key={`${floor}-${i}`}
-              width={bay * 0.52}
-              height={tall}
-              position={[x, y, halfD + 0.02]}
-              lit={isLit(i, floor)}
-            />
-          )
-        })
-      })}
-
-      {/* And down both returns, so the building does not read as a flat. */}
-      {[-1, 1].map((side) =>
-        Array.from({ length: FLOORS }, (_, floor) => {
-          const y = PLINTH + floorHeight * (floor + 0.55)
-          return [-0.28, 0.1].map((t, j) => (
-            <DressedWindow
-              key={`${side}-${floor}-${j}`}
-              width={bay * 0.46}
-              height={floorHeight * 0.52}
-              position={[side * (halfW + 0.02), y, depth * t]}
-              rotation={side * Math.PI / 2}
-              lit={isLit(j + 3, floor)}
-            />
-          ))
-        }),
-      )}
+      {/* Every window on the building, in one instanced pass. */}
+      <DressedWindows spots={windows} />
 
       {/* A pitched tiled roof running the length of the building. The first
           pass had a shallow slab tucked behind the gables on the assumption

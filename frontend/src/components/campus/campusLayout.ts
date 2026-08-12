@@ -28,11 +28,12 @@ export type Vec3 = [number, number, number]
  *
  * Was 50, which put the whole world inside one screen: you could see every
  * building from the spawn point and cross the campus in twelve seconds. Then
- * 185, which was the campus; it reaches 240 now because the real district north
- * of Nizami Street runs out to Azadlıq prospekti and 28 May küçəsi, and a world
- * that stopped at 185 would have cut both of them in half.
+ * 185, the campus; then 240, to fit a district that reached 28 May küçəsi and
+ * Azadlıq prospekti. That district turned out to be what made the game freeze,
+ * so it has been pulled back to the block the university actually stands on and
+ * this with it — far enough to hold the scenery blocks at z 176, no further.
  */
-export const CAMPUS_LIMIT = 240
+export const CAMPUS_LIMIT = 200
 
 /** The ground plane. Comfortably past the fog, so the world has no visible edge. */
 export const GROUND_SIZE = 1000

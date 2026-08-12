@@ -187,7 +187,10 @@ function Block({ building, index }: { building: DistrictBuilding; index: number 
 
   return (
     <group>
-      <mesh geometry={geometry} castShadow receiveShadow>
+      {/* Receives shadow, does not cast it. Every casting mesh is re-drawn
+          into the shadow map each frame, and a backdrop of city blocks whose
+          shadows fall on other city blocks is pure cost. */}
+      <mesh geometry={geometry} receiveShadow>
         <meshStandardMaterial
           color={wall}
           roughness={building.style === 'tower' ? 0.3 : 0.94}
@@ -196,7 +199,7 @@ function Block({ building, index }: { building: DistrictBuilding; index: number 
       </mesh>
       {/* The cornice, sitting just under the eaves rather than on top of them,
           so the roofline reads as a moulding and not as a hat. */}
-      <mesh geometry={cornice} position={[0, building.height - 0.9, 0]} castShadow>
+      <mesh geometry={cornice} position={[0, building.height - 0.9, 0]}>
         <meshStandardMaterial color={CORNICE} roughness={0.9} />
       </mesh>
       <mesh geometry={cornice} position={[0, 0, 0]} receiveShadow>
@@ -355,7 +358,7 @@ function streetFurniture(streets: readonly DistrictStreet[]) {
       const uz = (z2 - z1) / run
       const offset = street.width / 2 + 2.2
 
-      const count = Math.floor(run / 13)
+      const count = Math.floor(run / 22)
       for (let n = 0; n < count; n++) {
         const t = ((n + 0.5) / count) * run
         for (const side of [-1, 1]) {
@@ -374,52 +377,72 @@ function streetFurniture(streets: readonly DistrictStreet[]) {
   return { trees, lamps }
 }
 
-/** A plane tree, as the street is planted with. */
-function StreetTree({ x, z, scale, canopy }: { x: number; z: number; scale: number; canopy: string }) {
+/**
+ * The street planting, as three instanced meshes rather than three per tree.
+ *
+ * Drawn as individual meshes this was four hundred and twenty-six draw calls
+ * for the trees and lamps alone, every one of them casting a shadow, and the
+ * campus dropped to a slideshow the moment the district came into view. Trunks,
+ * canopies and lamps are each one instanced mesh now.
+ */
+function StreetTrees({
+  trees,
+  canopy,
+}: {
+  trees: { x: number; z: number; scale: number }[]
+  canopy: string
+}) {
+  if (!trees.length) return null
   return (
-    <group position={[x, 0, z]} scale={scale}>
-      <mesh position={[0, 2.4, 0]} castShadow>
+    <group>
+      <Instances limit={trees.length} range={trees.length} castShadow>
         <cylinderGeometry args={[0.22, 0.34, 4.8, 6]} />
         <meshStandardMaterial color="#5b432c" roughness={0.95} />
-      </mesh>
-      <mesh position={[0, 5.9, 0]} castShadow>
+        {trees.map((tree, i) => (
+          <Instance key={i} position={[tree.x, 2.4 * tree.scale, tree.z]} scale={tree.scale} />
+        ))}
+      </Instances>
+      <Instances limit={trees.length} range={trees.length} castShadow>
         <icosahedronGeometry args={[2.5, 0]} />
         <meshStandardMaterial color={canopy} roughness={0.95} flatShading />
-      </mesh>
-      <mesh position={[1.1, 4.9, 0.5]} castShadow>
-        <icosahedronGeometry args={[1.6, 0]} />
-        <meshStandardMaterial color={canopy} roughness={0.95} flatShading />
-      </mesh>
+        {trees.map((tree, i) => (
+          <Instance key={i} position={[tree.x, 5.9 * tree.scale, tree.z]} scale={tree.scale} />
+        ))}
+      </Instances>
     </group>
   )
 }
 
 /**
- * A Baku lamp standard: a fluted column on a swelled base with a globe.
+ * The lamp standards, instanced: a column and a globe.
  *
- * The campus lamps are a pole and a ball. These are the ones that actually
- * stand on Nizami Street, and the base is most of what distinguishes them.
+ * The swelled cast-iron base the real ones have was a third mesh each and is
+ * not readable from anywhere a player stands, so it has gone with the rest of
+ * the per-object drawing.
  */
-function StreetLamp({ x, z, lit }: { x: number; z: number; lit: boolean }) {
+function StreetLamps({ lamps, lit }: { lamps: { x: number; z: number }[]; lit: boolean }) {
+  if (!lamps.length) return null
   return (
-    <group position={[x, 0, z]}>
-      <mesh position={[0, 0.45, 0]} castShadow>
-        <cylinderGeometry args={[0.32, 0.46, 0.9, 8]} />
+    <group>
+      <Instances limit={lamps.length} range={lamps.length}>
+        <cylinderGeometry args={[0.1, 0.2, 4.4, 6]} />
         <meshStandardMaterial color="#232830" roughness={0.7} metalness={0.35} />
-      </mesh>
-      <mesh position={[0, 2.6, 0]} castShadow>
-        <cylinderGeometry args={[0.1, 0.16, 3.4, 8]} />
-        <meshStandardMaterial color="#232830" roughness={0.7} metalness={0.35} />
-      </mesh>
-      <mesh position={[0, 4.55, 0]}>
-        <sphereGeometry args={[0.42, 12, 10]} />
+        {lamps.map((lamp, i) => (
+          <Instance key={i} position={[lamp.x, 2.2, lamp.z]} />
+        ))}
+      </Instances>
+      <Instances limit={lamps.length} range={lamps.length}>
+        <sphereGeometry args={[0.42, 10, 8]} />
         <meshStandardMaterial
           color={lit ? '#fff0c8' : '#d8d8d2'}
           emissive={lit ? '#ffdc96' : '#000000'}
           emissiveIntensity={lit ? 1.5 : 0}
           roughness={0.3}
         />
-      </mesh>
+        {lamps.map((lamp, i) => (
+          <Instance key={i} position={[lamp.x, 4.55, lamp.z]} />
+        ))}
+      </Instances>
     </group>
   )
 }
@@ -441,12 +464,8 @@ export function NizamiDistrict({ timeOfDay = 'day' }: DistrictProps) {
         <Street key={i} street={street} />
       ))}
 
-      {trees.map((tree, i) => (
-        <StreetTree key={`t${i}`} {...tree} canopy={canopy} />
-      ))}
-      {lamps.map((lamp, i) => (
-        <StreetLamp key={`l${i}`} {...lamp} lit={lampsOn} />
-      ))}
+      <StreetTrees trees={trees} canopy={canopy} />
+      <StreetLamps lamps={lamps} lit={lampsOn} />
 
       {DISTRICT_BUILDINGS.map((building, i) => (
         <Apron key={`a${i}`} footprint={building.footprint} />
