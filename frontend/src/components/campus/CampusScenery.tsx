@@ -519,7 +519,7 @@ function DoorLobby({ trim, accent, sill }: { trim: string; accent: string; sill:
  * panel on an unbroken facade. The opening is real now, and `Building` builds
  * the wall around it rather than as one box.
  */
-function Entrance({ depth, trim, accent }: { depth: number; trim: string; accent: string }) {
+export function Entrance({ depth, trim, accent }: { depth: number; trim: string; accent: string }) {
   return (
     <group position={[0, 0, depth / 2 + 0.06]}>
       {/* Steps up to the threshold */}
