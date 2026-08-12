@@ -7,6 +7,19 @@ import type { Group } from "three"
 import { useNavigate, useParams } from "react-router-dom"
 import { MessageCircle, Users, Settings, LogOut, MonitorUp, Sun, Sunset, Moon } from "lucide-react"
 import { useCampusSimulator } from '../../hooks/useCampusSimulator'
+import {
+  DOOR_REACH,
+  closedDoorColliders,
+  doorSwing,
+  doorWithinReach,
+  exteriorDoorId,
+  interiorDoorId,
+  isDoorOpen,
+  openDoor,
+  pruneDoors,
+  type DoorState,
+} from '../../components/campus/doorState'
+import DoorLeaf from '../../components/campus/DoorLeaf'
 import { useCampusVoice } from '../../hooks/useCampusVoice'
 import VoicePanel, { ScreenShareStage } from '../../components/campus/VoicePanel'
 import ProjectorScreen from '../../components/campus/ProjectorScreen'
@@ -58,6 +71,7 @@ import {
 import { EMOTE_SECONDS, type Activity } from '../../components/campus/avatarPose'
 import { takenSeatIds } from '../../components/campus/seatState'
 import {
+  CAMPUS_DOORS,
   doorCrossed,
   doorstep,
   doorwayFor,
@@ -869,6 +883,74 @@ function SeatController({
   return null
 }
 
+/**
+ * The inside face of a room's door, as a collider while it is shut.
+ *
+ * The room boundary is a clamp rather than geometry, so without this the
+ * player would be stopped by the wall either way and a shut door would feel
+ * identical to an open one from inside.
+ */
+/**
+ * Every door on the campus, and the one inside the room you are in.
+ *
+ * Rendered from the same state the collisions read, so what you see is what
+ * stops you: a leaf that looks shut is shut.
+ */
+function CampusDoors({
+  doors,
+  insideBuilding,
+}: {
+  doors: DoorState
+  insideBuilding: CampusBuilding | null
+}) {
+  const [, force] = useState(0)
+
+  // The swing is a function of elapsed time, so this has to be sampled per
+  // frame rather than only when the door state changes.
+  useFrame(() => {
+    if (Object.keys(doors).length > 0) force((n) => (n + 1) % 1000)
+  })
+
+  const now = performance.now()
+
+  if (insideBuilding) {
+    const inner = interiorDoorFor(insideBuilding.interior)
+    return (
+      <DoorLeaf
+        x={inner.x}
+        z={inner.z}
+        halfWidth={inner.halfW}
+        swing={doorSwing(doors, interiorDoorId(insideBuilding.id), now)}
+        facing={-1}
+      />
+    )
+  }
+
+  return (
+    <>
+      {CAMPUS_DOORS.map((door) => (
+        <DoorLeaf
+          key={door.id}
+          x={door.x}
+          z={door.z}
+          halfWidth={door.halfW}
+          swing={doorSwing(doors, exteriorDoorId(door.id), now)}
+        />
+      ))}
+    </>
+  )
+}
+
+function interiorClosedDoor(
+  building: CampusBuilding,
+  doors: DoorState,
+  now: number,
+): Collider[] {
+  if (isDoorOpen(doors, interiorDoorId(building.id), now)) return []
+  const door = interiorDoorFor(building.interior)
+  return [{ x: door.x, z: door.z, halfW: door.halfW, halfD: 0.2 }]
+}
+
 function Player({
   campusHook,
   insideBuilding,
@@ -879,6 +961,8 @@ function Player({
   follow,
   onEnter,
   onLeave,
+  doors,
+  onOpenDoor,
 }: {
   campusHook: CampusHook
   insideBuilding: CampusBuilding | null
@@ -893,6 +977,10 @@ function Player({
   onEnter: (building: CampusBuilding) => void
   /** Walked back out through one. */
   onLeave: (building: CampusBuilding) => void
+  /** Which doors are open, and since when. */
+  doors: DoorState
+  /** Work the handle on a door in reach. */
+  onOpenDoor: (id: string) => void
   /**
    * Somebody to walk towards, in world coordinates, or null.
    *
@@ -908,6 +996,8 @@ function Player({
   const isOnGround = useRef(true)
   /** Where the player was at the top of this frame, for the door test. */
   const before = useRef({ x: 0, z: 0 })
+  /** Edge detection: holding E must not re-open a door every frame. */
+  const doorHeld = useRef(false)
 
   const { updatePosition, worldTo2D } = campusHook
 
@@ -1032,6 +1122,26 @@ function Player({
     camera.position.add(direction.current)
     camera.position.y += velocity.current.y * delta
 
+    // The handle. A door has to be opened before it can be walked through,
+    // and only from arm's reach: the key that used to teleport you inside
+    // worked from anywhere along a fifty metre facade, which is what made it
+    // feel like a menu rather than a door.
+    const wantsDoor = Boolean(raw.interact) || Boolean(touch?.current?.interact)
+    if (wantsDoor && !doorHeld.current && !typing) {
+      const now = performance.now()
+      if (insideBuilding) {
+        const inner = interiorDoorFor(insideBuilding.interior)
+        const near =
+          Math.abs(camera.position.x - inner.x) <= inner.halfW + DOOR_REACH &&
+          Math.abs(camera.position.z - inner.z) <= DOOR_REACH
+        if (near) onOpenDoor(interiorDoorId(insideBuilding.id))
+      } else {
+        const door = doorWithinReach(camera.position.x, camera.position.z)
+        if (door) onOpenDoor(exteriorDoorId(door.id))
+      }
+    }
+    doorHeld.current = wantsDoor
+
     // What is solid here, and what can be stood on. Both change on the
     // threshold of a building, which is why they are read per frame rather
     // than captured once.
@@ -1041,16 +1151,26 @@ function Player({
     // Anything too high to step onto is a wall rather than a ramp: a stage
     // edge stops you from the floor, and once you are up there you walk about
     // on top of it freely.
+    // A shut door fills its own opening. Without this the key would be
+    // decoration and you could walk through a door you never opened.
+    const doorNow = performance.now()
     const solid: Collider[] = insideBuilding
-      ? [...interiorColliders(insideBuilding.interior), ...blockingPlatforms(platforms, feet)]
-      : SOLID_CAMPUS
+      ? [
+          ...interiorColliders(insideBuilding.interior),
+          ...blockingPlatforms(platforms, feet),
+          ...interiorClosedDoor(insideBuilding, doors, doorNow),
+        ]
+      : [...SOLID_CAMPUS, ...closedDoorColliders(doors, doorNow)]
 
     if (insideBuilding) {
       // Walking out through the door, which has to be asked before the clamp:
       // afterwards the position has already been pulled back inside the room
       // and there is nothing left to detect.
       const door = interiorDoorFor(insideBuilding.interior)
-      if (leavingThroughDoor(camera.position.x, camera.position.z, door)) {
+      if (
+        isDoorOpen(doors, interiorDoorId(insideBuilding.id), doorNow) &&
+        leavingThroughDoor(camera.position.x, camera.position.z, door)
+      ) {
         onLeave(insideBuilding)
         return
       }
@@ -1070,7 +1190,7 @@ function Player({
         { x: before.current.x, z: before.current.z },
         { x: camera.position.x, z: camera.position.z },
       )
-      if (entered) {
+      if (entered && isDoorOpen(doors, exteriorDoorId(entered.id), doorNow)) {
         const building = CAMPUS_BUILDINGS.find((b) => b.id === entered.id)
         if (building) {
           onEnter(building)
@@ -1143,6 +1263,26 @@ const CampusWithBackend = () => {
   const lobbyId = (rawLobbyId === 'null' || rawLobbyId === 'undefined') ? null : rawLobbyId;
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [insideBuilding, setInsideBuilding] = useState<CampusBuilding | null>(null)
+  /**
+   * Which doors are open. Held here rather than in the scene because both the
+   * player's collisions and the door meshes need it, and they live in
+   * different parts of the tree.
+   */
+  const [doors, setDoors] = useState<DoorState>({})
+  const openDoorById = useCallback((id: string) => {
+    setDoors((current) => openDoor(current, id, performance.now()))
+  }, [])
+
+  // Doors close themselves. Polled rather than timed per door: one interval
+  // for all of them, and pruneDoors returns the same object when nothing
+  // expired so this does not re-render the scene every second.
+  useEffect(() => {
+    if (Object.keys(doors).length === 0) return
+    const id = window.setInterval(() => {
+      setDoors((current) => pruneDoors(current, performance.now()))
+    }, 250)
+    return () => window.clearInterval(id)
+  }, [doors])
   /** The chair within reach, for the prompt. Not the one being sat in. */
   const [seatCandidate, setSeatCandidate] = useState<Seat | null>(null)
   const [emote, setEmote] = useState<Activity | null>(null)
@@ -2063,6 +2203,7 @@ const CampusWithBackend = () => {
               </>
             )}
 
+            <CampusDoors doors={doors} insideBuilding={insideBuilding} />
             <InteriorCameraPlacement insideBuilding={insideBuilding} />
             <ProximitySensor insideBuilding={insideBuilding} target={proximity} />
             <ActionKeyBridge action={actionInput} />
@@ -2076,6 +2217,8 @@ const CampusWithBackend = () => {
               follow={followTarget}
               onEnter={setInsideBuilding}
               onLeave={() => setInsideBuilding(null)}
+              doors={doors}
+              onOpenDoor={openDoorById}
             />
             <SeatController
               campusHook={campusHook}
