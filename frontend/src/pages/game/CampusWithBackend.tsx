@@ -5,7 +5,7 @@ import { KeyboardControls, useKeyboardControls, PointerLockControls, Performance
 import { Vector3, MathUtils, ACESFilmicToneMapping } from "three"
 import type { Group } from "three"
 import { useNavigate, useParams } from "react-router-dom"
-import { Globe, MapPin, MessageCircle, MonitorUp, Send, Users, X } from "lucide-react"
+import { BookOpen, Clock, DoorOpen, Globe, MapPin, MessageCircle, MonitorUp, Send, Users, X } from "lucide-react"
 import { useCampusSimulator } from '../../hooks/useCampusSimulator'
 import {
   DOOR_REACH,
@@ -1792,26 +1792,24 @@ const CampusWithBackend = () => {
               }`}
             />
             <span className="truncate text-xs font-medium text-white">
-              {currentLobby?.name || 'Campus'}
+              {insideBuilding ? insideBuilding.name : currentLobby?.name || 'Campus'}
             </span>
-            <span className="flex shrink-0 items-center gap-1 border-l border-white/10 pl-2 text-xs tabular-nums text-slate-400">
-              <Users className="h-3 w-3" />
-              {lobbyMembers.length}
-            </span>
+            {insideBuilding ? (
+              <button
+                onClick={() => setInsideBuilding(null)}
+                className="flex shrink-0 items-center gap-1 border-l border-white/10 pl-2 text-xs text-slate-400 transition hover:text-white"
+              >
+                <DoorOpen className="h-3.5 w-3.5" />
+                Leave
+              </button>
+            ) : (
+              <span className="flex shrink-0 items-center gap-1 border-l border-white/10 pl-2 text-xs tabular-nums text-slate-400">
+                <Users className="h-3 w-3" />
+                {lobbyMembers.length}
+              </span>
+            )}
           </div>
         </div>
-
-      {insideBuilding && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 pointer-events-auto flex items-center gap-3 bg-black/80 text-white px-4 py-2 rounded-xl border border-blue-500/30">
-          <span className="text-sm">Inside {insideBuilding.icon} {insideBuilding.name}</span>
-          <button
-            onClick={() => setInsideBuilding(null)}
-            className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-500 text-xs"
-          >
-            Leave building
-          </button>
-        </div>
-      )}
 
       {/* Walking up to a door offers to open it. This used to be a floating
           HTML button in the 3D scene, which could not be clicked at all while
@@ -2008,13 +2006,20 @@ const CampusWithBackend = () => {
       {/* Standing in a study area offers to join it. Also DOM rather than a
           panel in the scene, for the same pointer-lock reason as the doors. */}
       {nearArea && !games.active && !nearBuilding && (
-        <div className="absolute right-4 top-32 z-20 pointer-events-auto w-[min(18rem,80vw)]">
-          <div className="bg-black/85 backdrop-blur-sm border border-blue-500/30 rounded-xl p-4 text-white">
-            <div className="text-2xl">{nearArea.icon}</div>
-            <h3 className="font-bold text-blue-400">{nearArea.name}</h3>
-            <p className="text-xs text-gray-300 mt-1 leading-relaxed">{nearArea.description}</p>
-            <p className="text-[11px] text-blue-300 mt-2">
-              📚 {nearArea.subject} · ⏱️ {nearArea.duration} · up to {nearArea.maxUsers}
+        <div className="pointer-events-auto absolute bottom-32 left-1/2 z-20 w-[min(18rem,86vw)] -translate-x-1/2 sm:bottom-16">
+          <div className="rounded-xl border border-white/10 bg-slate-950/90 p-3 text-white backdrop-blur">
+            <h3 className="text-sm font-semibold text-white">{nearArea.name}</h3>
+            <p className="mt-0.5 text-xs leading-relaxed text-slate-400">{nearArea.description}</p>
+            <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-400">
+              <span className="flex items-center gap-1">
+                <BookOpen className="h-3 w-3" />
+                {nearArea.subject}
+              </span>
+              <span className="flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                {nearArea.duration}
+              </span>
+              <span>up to {nearArea.maxUsers}</span>
             </p>
             <button
               onClick={() => {
@@ -2022,7 +2027,7 @@ const CampusWithBackend = () => {
                 joinedArea.current = nearArea.id
                 setJoinedAreaId(nearArea.id)
               }}
-              className="mt-3 w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg text-sm font-medium"
+              className="mt-3 w-full rounded-lg bg-blue-600 py-2 text-sm font-medium text-white transition hover:bg-blue-500"
             >
               {joinedAreaId === nearArea.id ? 'Joined' : 'Join study'}
             </button>
