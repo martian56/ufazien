@@ -9,12 +9,12 @@ import {
   type DistrictBuilding,
   type DistrictStreet,
   type Footprint,
-} from './nizamiDistrict'
+} from './districtSurvey'
 
 /**
  * The city around the university.
  *
- * Draws the district in `nizamiDistrict.ts` — surveyed street centrelines and
+ * Draws the district in `districtSurvey.ts` — surveyed street centrelines and
  * building footprints from OpenStreetMap, projected into world metres. What
  * stood here before was one asphalt strip and six identical terrace boxes, and
  * the thing it most obviously was not was Baku: the real quarter is a dense

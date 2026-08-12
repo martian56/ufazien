@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { Keyboard, LogOut, Maximize, Minimize, Monitor, Moon, Sun, Sunset, Volume2, X } from 'lucide-react'
 import { KEY_GROUPS, bindingsIn } from './keyBindings'
-import { DISTRICT_ATTRIBUTION } from './nizamiDistrict'
+import { DISTRICT_ATTRIBUTION } from './districtSurvey'
 
 export type TimeOfDay = 'day' | 'dusk' | 'night'
 

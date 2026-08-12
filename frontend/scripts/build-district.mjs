@@ -16,13 +16,13 @@
  * 3. Translates so the real UFAZ footprint's centroid lands on the landmark.
  * 4. Keeps only what is on UFAZ's own side of Nizami Street. The other side is
  *    where the invented campus stands, and the campus is not being demolished
- *    for this; see the note in `nizamiDistrict.ts`.
+ *    for this; see the note in `districtSurvey.ts`.
  * 5. Emits footprints, heights and street centrelines as a TypeScript module.
  *
  * ## Running it
  *
  *     node scripts/build-district.mjs <overpass.json> > \
- *       src/components/campus/nizamiDistrict.ts
+ *       src/components/campus/districtSurvey.ts
  *
  * The Overpass query that produced the input:
  *

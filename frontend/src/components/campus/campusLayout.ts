@@ -18,7 +18,7 @@
  * campus behind it. It reads as UFAZ rather than as Generic University #4.
  */
 
-import { DISTRICT_BUILDINGS, DISTRICT_STREETS } from './nizamiDistrict'
+import { DISTRICT_BUILDINGS, DISTRICT_STREETS } from './districtSurvey'
 
 /** r3f accepts a plain number[] at runtime, but its types want the length. */
 export type Vec3 = [number, number, number]
@@ -261,7 +261,7 @@ export interface SceneryBlock {
 
 export const SCENERY_BLOCKS: SceneryBlock[] = [
   // The Nizami Street terrace used to be six invented facades here, three
-  // either side of the landmark. It is now the real one: `nizamiDistrict.ts`
+  // either side of the landmark. It is now the real one: `districtSurvey.ts`
   // carries the surveyed footprints, and `NizamiDistrict` draws them.
 
   // Halls of residence, well back on the west side.
@@ -291,7 +291,7 @@ export interface Pavement {
 export const PAVEMENTS: Pavement[] = [
   // Nizami Street used to be a single 400-metre asphalt strip here with a
   // pavement either side. It is drawn from its surveyed centreline now, along
-  // with the four streets that cross it; see `nizamiDistrict.ts`.
+  // with the four streets that cross it; see `districtSurvey.ts`.
 
   // The forecourt between the street and the main building's steps.
   { position: [0, -70], size: [70, 8], kind: 'stone' },
