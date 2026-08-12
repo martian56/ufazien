@@ -272,6 +272,8 @@ function RoomShell({
         <planeGeometry args={[size, size]} />
         {spec.ceilingKind === 'deck' ? (
           <meshStandardMaterial color="#6f7681" roughness={0.85} metalness={0.2} side={THREE.DoubleSide} />
+        ) : spec.ceilingKind === 'plaster' ? (
+          <meshStandardMaterial color="#f2ece0" roughness={1} side={THREE.DoubleSide} />
         ) : (
           <meshStandardMaterial
             map={ceiling ?? undefined}
@@ -439,11 +441,112 @@ function Plant({ position, scale = 1 }: { position: Vec3; scale?: number }) {
 /* UFAZ main building: the entrance hall                                */
 /* ------------------------------------------------------------------ */
 
+/**
+ * The window wall of the landmark, seen from inside.
+ *
+ * The hall had no windows at all. A restored 1900s building on a street in
+ * central Baku, lit entirely by downlights, with four blank walls — the one
+ * thing you cannot mistake about the real building is that it is full of tall
+ * openings, and standing inside a sealed box directly contradicted the facade
+ * the player had just walked past.
+ *
+ * The rhythm here is the facade's, not an invention: square-headed openings in
+ * two tiers on the floor heights the exterior uses, in deep reveals, with the
+ * same cream dressings around them. Drawn in front of the wall rather than cut
+ * through it — the room's shell is a plane and the daylight behind these is a
+ * panel, so nothing has to be booleaned and the wall stays one draw call.
+ */
+function HeritageWindows({ spec }: { spec: InteriorSpec }) {
+  const half = spec.halfExtent
+  const bays = [-16.5, -11, -5.5, 5.5, 11, 16.5]
+  // Two tiers on the exterior's floor heights, so a player looking out of an
+  // upstairs window is looking out of one that exists on the outside too.
+  const tiers = [1.6, 7.4]
+
+  return (
+    <group>
+      {[-1, 1].map((side) =>
+        bays.map((along) =>
+          tiers.map((sill) => (
+            <group
+              key={`${side}-${along}-${sill}`}
+              position={[side * (half - 0.15), sill + 2.1, along]}
+              rotation={[0, side * -Math.PI / 2, 0]}
+            >
+              {/* The reveal: the opening is set into a wall two feet thick, and
+                  the depth of it is most of what you read at this scale. Far
+                  enough back that its front face is behind the glass — at half
+                  this depth it stood in front of the daylight and the window
+                  went dark again, one layer further in than the architrave did. */}
+              <mesh position={[0, 0, -0.5]}>
+                <boxGeometry args={[3.3, 5, 0.6]} />
+                <meshStandardMaterial color="#cdc3ac" roughness={0.9} />
+              </mesh>
+              {/* Cream architrave, as every opening on the outside has. Four
+                  members around the opening rather than one panel across it: a
+                  solid box here covers the glass completely, which is exactly
+                  what the first pass did — six blank cream slabs a side, in a
+                  wall that was supposed to have just been given windows. */}
+              {[
+                [0, 2.5, 3.7, 0.4],
+                [0, -2.5, 3.7, 0.4],
+                [-1.65, 0, 0.4, 5.4],
+                [1.65, 0, 0.4, 5.4],
+              ].map(([mx, my, mw, mh]) => (
+                <mesh key={`${mx}-${my}`} position={[mx, my, -0.06]}>
+                  <boxGeometry args={[mw, mh, 0.2]} />
+                  <meshStandardMaterial color="#e0d5bd" roughness={0.86} />
+                </mesh>
+              ))}
+              {/* Daylight. Emissive rather than a light: six windows a side
+                  with real lights in them is twenty-four shadow maps, and the
+                  room already has its own lighting. */}
+              <mesh position={[0, 0, -0.16]}>
+                <planeGeometry args={[2.9, 4.6]} />
+                <meshStandardMaterial
+                  color="#eaf3fb"
+                  emissive="#dcebf9"
+                  emissiveIntensity={1.6}
+                  roughness={0.15}
+                  metalness={0.2}
+                />
+              </mesh>
+              {/* Glazing bars and a transom, so the opening is not one pane. */}
+              <mesh position={[0, 0, -0.13]}>
+                <boxGeometry args={[0.09, 4.6, 0.04]} />
+                <meshStandardMaterial color="#6c6252" roughness={0.7} />
+              </mesh>
+              <mesh position={[0, 1.1, -0.13]}>
+                <boxGeometry args={[2.9, 0.09, 0.04]} />
+                <meshStandardMaterial color="#6c6252" roughness={0.7} />
+              </mesh>
+              {/* Sill, and the panel radiator that sits under every window in
+                  a building heated through a Baku winter. */}
+              <mesh position={[0, -2.5, 0.16]}>
+                <boxGeometry args={[3.9, 0.2, 0.5]} />
+                <meshStandardMaterial color="#e0d5bd" roughness={0.86} />
+              </mesh>
+              {sill < 4 && (
+                <mesh position={[0, -3.3, 0.2]}>
+                  <boxGeometry args={[2.6, 0.9, 0.16]} />
+                  <meshStandardMaterial color="#f2f0ea" roughness={0.6} metalness={0.1} />
+                </mesh>
+              )}
+            </group>
+          )),
+        ),
+      )}
+    </group>
+  )
+}
+
 function UfazHall({ spec }: { spec: InteriorSpec }) {
   const half = spec.halfExtent
 
   return (
     <group>
+      <HeritageWindows spec={spec} />
+
       {/* Columns down both sides, which is what a hall of this period has */}
       {[-1, 1].map((side) =>
         [-14, -7, 0, 7, 14].map((z) => (

@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { Keyboard, LogOut, Maximize, Minimize, Monitor, Moon, Sun, Sunset, Volume2, X } from 'lucide-react'
 import { KEY_GROUPS, bindingsIn } from './keyBindings'
+import { DISTRICT_ATTRIBUTION } from './nizamiDistrict'
 
 export type TimeOfDay = 'day' | 'dusk' | 'night'
 
@@ -170,6 +171,22 @@ export default function CampusSettings({
               ))}
             </div>
           )}
+        </div>
+
+        {/* The streets and footprints around the university are OpenStreetMap
+            data. ODbL requires the attribution to be visible to anyone using
+            the work, so it goes on screen rather than in a source comment. */}
+        <div className="shrink-0 border-t border-white/10 px-3 py-2 text-[11px] text-slate-500">
+          Nizami Street and the surrounding blocks are drawn from{' '}
+          <a
+            href="https://www.openstreetmap.org/copyright"
+            target="_blank"
+            rel="noreferrer"
+            className="underline decoration-slate-600 underline-offset-2 hover:text-slate-300"
+          >
+            {DISTRICT_ATTRIBUTION}
+          </a>
+          , used under the ODbL.
         </div>
 
         <div className="shrink-0 border-t border-white/10 p-2">

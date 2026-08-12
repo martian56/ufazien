@@ -33,16 +33,19 @@ export interface InteriorSpec {
   lightColor: string
   lightIntensity: number
   /**
-   * Suspended office tiles, or an exposed structural deck. A sixteen-metre
-   * sports hall with a tiled ceiling reads as an open-plan office.
+   * Suspended office tiles, an exposed structural deck, or flat plaster. A
+   * sixteen-metre sports hall with a tiled ceiling reads as an open-plan
+   * office, and so — just as wrongly — did a fourteen-metre heritage hall with
+   * columns and a staircase in it.
    */
-  ceilingKind?: 'tile' | 'deck'
+  ceilingKind?: 'tile' | 'deck' | 'plaster'
 }
 
 export const INTERIOR_SPECS: Record<InteriorKind, InteriorSpec> = {
   ufaz: {
     halfExtent: 22, ceiling: 14, wall: '#e5dcc8', accent: '#b99a5c', floor: 'marble',
     projector: [0, 6.4, -21.2], spawn: [0, 1.7, 16], lightColor: '#fff3dc', lightIntensity: 1.1,
+    ceilingKind: 'plaster',
   },
   library: {
     halfExtent: 24, ceiling: 11, wall: '#e0d4bd', accent: '#6d4f32', floor: 'wood',
