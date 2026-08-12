@@ -4,6 +4,7 @@ import { SubscriptionProvider } from "./hooks/useSubscription"
 import ProtectedRoute from "./pages/auth/ProtectedRoute"
 import RouteFallback from "./components/ui/RouteFallback"
 import { DialogProvider } from "./components/ui/Dialogs"
+import SearchProvider from "./features/search/SearchProvider"
 import AppShell from "./components/layout/AppShell"
 import Home from "./pages/Home"
 import NotFound from "./pages/NotFound"
@@ -78,6 +79,7 @@ function App() {
   return (
     <Router>
       <DialogProvider>
+        <SearchProvider>
         <Suspense fallback={<RouteFallback />}>
           <Routes>
             <Route path="/" element={<Home />} />
@@ -116,6 +118,7 @@ function App() {
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>
+        </SearchProvider>
       </DialogProvider>
     </Router>
   )

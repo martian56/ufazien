@@ -23,7 +23,7 @@ import {Calculator, TrendingUp,MessageCircle,
   Award,Target,Activity,BookMarked,
   Menu,X } from "lucide-react"
 import NotificationDropdown from "../components/NotificationDropdown"
-import GlobalSearch from "../features/search/GlobalSearch"
+import SearchTrigger from "../features/search/SearchTrigger"
 import notificationsAPI from "../lib/api/endpoints/notifications"
 import type { Notification } from "../lib/api/endpoints/notifications"
 import calendarApi, { type CalendarEvent } from "../services/calendarApi"
@@ -249,9 +249,7 @@ useEffect(() => {
             </div>
 
             <div className="flex items-center gap-2 sm:gap-4">
-              <div className="hidden sm:block">
-                <GlobalSearch />
-              </div>
+              <SearchTrigger />
 
               {/* Notifications */}
               <div className="flex items-center gap-2">
