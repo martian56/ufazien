@@ -85,6 +85,24 @@ export const UFAZ_DESK_X = -11.8
  */
 export const UFAZ_BENCH_Z = [-10, -4, 2]
 
+/**
+ * The internal courtyard.
+ *
+ * The building is built round one, and the opening ceremony was held in it.
+ * Off-centre towards the back so the entrance end keeps its reception desk,
+ * flags and benches, and clear of the staircase on the east side: the court
+ * runs to x 5 and the flight starts at x 7.
+ */
+export const UFAZ_COURT = { x: -3, z: -5, half: 8 }
+
+/** Planters round the court, as the photographs show them. */
+export const UFAZ_PLANTERS = [
+  { x: UFAZ_COURT.x - 5.5, z: UFAZ_COURT.z - 5.5 },
+  { x: UFAZ_COURT.x + 5.5, z: UFAZ_COURT.z - 5.5 },
+  { x: UFAZ_COURT.x - 5.5, z: UFAZ_COURT.z + 5.5 },
+  { x: UFAZ_COURT.x + 5.5, z: UFAZ_COURT.z + 5.5 },
+]
+
 export const UFAZ_STAIR = {
   // Narrower and further in than the first attempt at moving it. At x 12.5
   // with a four-metre half-width its balustrade landed at 16.7, which is
@@ -104,12 +122,21 @@ function ufazPhysics(): InteriorPhysics {
   const platforms: Platform[] = []
   const seats: Seat[] = []
 
-  // Columns down both sides. Round, because they are.
-  for (const side of [-1, 1]) {
-    for (const z of [-14, -7, 0, 7, 14]) {
-      colliders.push({ x: side * (half - 5), z, radius: 1.05, height: INTERIOR_SPECS.ufaz.ceiling })
-    }
+  // The colonnade used to be here, ten round colliders down the sides. The
+  // photographs of the building show no columns anywhere, so it has gone from
+  // what is drawn — and it has to go from here too, or the hall keeps ten
+  // invisible pillars that a player walks into and cannot see.
+
+  // The courtyard planters, which are solid. The court itself is open floor.
+  for (const planter of UFAZ_PLANTERS) {
+    colliders.push({ x: planter.x, z: planter.z, halfW: 1.1, halfD: 1.1, height: 0.85 })
   }
+  // The tree planted at the opening, off the centre line. Directly on it — at
+  // court.x + 3, which lands on x 0 — it stood between the whole room and the
+  // projector screen, and `interiorPhysics.test.ts` failed the moment it went
+  // in. A courtyard tree is worth having; a courtyard tree you have to lean
+  // round to watch a presentation is not.
+  colliders.push({ x: UFAZ_COURT.x - 2.5, z: UFAZ_COURT.z, radius: 0.45, height: 7 })
 
   // The flight, as steps you walk up rather than geometry you walk through.
   for (let i = 0; i < UFAZ_STAIR.steps; i++) {

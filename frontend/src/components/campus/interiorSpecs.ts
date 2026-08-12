@@ -39,6 +39,14 @@ export interface InteriorSpec {
    * columns and a staircase in it.
    */
   ceilingKind?: 'tile' | 'deck' | 'plaster' | 'timber'
+  /**
+   * An opening in the ceiling, in room coordinates.
+   *
+   * The landmark is built round an internal courtyard, so its "room" is a
+   * gallery on four sides of an open court rather than a sealed box. Set this
+   * and the ceiling is drawn as a ring with sky over the hole.
+   */
+  courtyard?: { x: number; z: number; half: number }
 }
 
 export const INTERIOR_SPECS: Record<InteriorKind, InteriorSpec> = {
@@ -53,6 +61,7 @@ export const INTERIOR_SPECS: Record<InteriorKind, InteriorSpec> = {
     halfExtent: 22, ceiling: 14, wall: '#f0dda6', accent: '#5b5147', floor: 'tile',
     projector: [0, 6.4, -21.2], spawn: [0, 1.7, 16], lightColor: '#ffeec4', lightIntensity: 1.15,
     ceilingKind: 'timber',
+    courtyard: { x: -3, z: -5, half: 8 },
   },
   library: {
     halfExtent: 24, ceiling: 11, wall: '#e0d4bd', accent: '#6d4f32', floor: 'wood',
