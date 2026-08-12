@@ -383,6 +383,32 @@ export function lettersTexture(text: string, color = '#6b5b40') {
  * it is a texture the expression can vary per person for free.
  */
 /**
+ * A colour moved towards black, or towards a tint.
+ *
+ * Used to keep every feature legible against whatever skin it is drawn on:
+ * brows, creases and lips are all the wearer's own colour darkened, so they
+ * have the same contrast on every student rather than disappearing on some.
+ */
+function shade(hex: string, factor: number, towards = '#000000'): string {
+  const from = parseHex(hex)
+  const to = parseHex(towards)
+  const mix = (a: number, b: number) => Math.round(a * factor + b * (1 - factor))
+  return `rgb(${mix(from[0], to[0])},${mix(from[1], to[1])},${mix(from[2], to[2])})`
+}
+
+function withAlpha(rgb: string, alpha: number): string {
+  return rgb.replace('rgb(', 'rgba(').replace(')', `,${alpha})`)
+}
+
+function parseHex(hex: string): [number, number, number] {
+  const clean = hex.replace('#', '')
+  const full = clean.length === 3 ? clean.split('').map((c) => c + c).join('') : clean
+  const value = Number.parseInt(full, 16)
+  if (!Number.isFinite(value)) return [0, 0, 0]
+  return [(value >> 16) & 255, (value >> 8) & 255, value & 255]
+}
+
+/**
  * What a face is doing.
  *
  * Separate from the activity enum on purpose: several activities share one
@@ -410,8 +436,13 @@ export function toExpression(value: unknown): Expression {
  * is what they are doing at this moment, so one student has five faces and the
  * cache holds fifteen textures rather than three.
  */
-export function faceTexture(variant: 0 | 1 | 2, expression: Expression = 'neutral') {
-  const key = `face:${variant}:${expression}`
+export function faceTexture(
+  variant: 0 | 1 | 2,
+  expression: Expression = 'neutral',
+  skin = '#c98b62',
+  hair = '#2f2118',
+) {
+  const key = `face:${variant}:${expression}:${skin}:${hair}`
   const hit = cache.get(key)
   if (hit) return hit
   if (typeof document === 'undefined') return null
@@ -426,6 +457,17 @@ export function faceTexture(variant: 0 | 1 | 2, expression: Expression = 'neutra
   ctx.lineCap = 'round'
   ctx.lineJoin = 'round'
 
+  // Features are drawn relative to the face they sit on. A fixed brown brow is
+  // invisible on dark skin — which is exactly what happened: half the campus
+  // had no eyebrows at all, and a face without brows reads as a mask.
+  //
+  // The brows follow the hair rather than the skin, which is both what brows
+  // do and the only thing that guarantees contrast: darkening the skin cannot
+  // stand out against the skin it came from.
+  const brow = shade(hair, 0.82)
+  const crease = shade(skin, 0.62)
+  const lip = shade(skin, 0.55)
+
   const wide = expression === 'surprise'
   const narrowed = expression === 'focus'
   const eyeY = 54
@@ -435,7 +477,7 @@ export function faceTexture(variant: 0 | 1 | 2, expression: Expression = 'neutra
   for (const [i, x] of [44, 84].entries()) {
     // The socket: a hair of shadow under the brow, which is what stops the
     // eye reading as a sticker laid on a sphere.
-    ctx.fillStyle = 'rgba(90,66,50,0.22)'
+    ctx.fillStyle = withAlpha(crease, 0.3)
     ctx.beginPath()
     ctx.ellipse(x, eyeY - 1, eyeRx + 3, eyeRy + 3.5, 0, 0, Math.PI * 2)
     ctx.fill()
@@ -463,7 +505,7 @@ export function faceTexture(variant: 0 | 1 | 2, expression: Expression = 'neutra
     ctx.fill()
 
     // A lash line along the top lid, heavier than the lid itself.
-    ctx.strokeStyle = 'rgba(38,26,18,0.55)'
+    ctx.strokeStyle = withAlpha(brow, 0.6)
     ctx.lineWidth = 2
     ctx.beginPath()
     ctx.ellipse(x, eyeY, eyeRx, eyeRy, 0, Math.PI * 1.05, Math.PI * 1.95)
@@ -473,8 +515,8 @@ export function faceTexture(variant: 0 | 1 | 2, expression: Expression = 'neutra
   // Brows. Height and tilt are where the expression actually lives.
   const browLift = wide ? 8 : expression === 'smile' ? 3 : 0
   const browTilt = narrowed ? 5 : expression === 'smile' ? -3 : variant === 2 ? 4 : -2
-  ctx.strokeStyle = 'rgba(48,33,23,0.9)'
-  ctx.lineWidth = 5
+  ctx.strokeStyle = brow
+  ctx.lineWidth = 5.5
   for (const [x, tilt] of [
     [44, browTilt],
     [84, -browTilt],
@@ -487,7 +529,7 @@ export function faceTexture(variant: 0 | 1 | 2, expression: Expression = 'neutra
 
   // The nose. Two strokes: the bridge shadow and the base. Its absence is
   // most of why the old face read as a balloon with dots drawn on it.
-  ctx.strokeStyle = 'rgba(96,64,46,0.5)'
+  ctx.strokeStyle = withAlpha(crease, 0.65)
   ctx.lineWidth = 3.5
   ctx.beginPath()
   ctx.moveTo(63, eyeY + 4)
@@ -497,17 +539,17 @@ export function faceTexture(variant: 0 | 1 | 2, expression: Expression = 'neutra
 
   // Mouth.
   const mouthY = 88
-  ctx.strokeStyle = 'rgba(120,62,52,0.95)'
+  ctx.strokeStyle = lip
   ctx.lineWidth = 5
   ctx.beginPath()
   if (expression === 'talk') {
     // Open, and filled, because a talking mouth is a hole rather than a line.
-    ctx.fillStyle = 'rgba(86,40,36,0.95)'
+    ctx.fillStyle = shade(skin, 0.34)
     ctx.ellipse(64, mouthY, 9, 7.5, 0, 0, Math.PI * 2)
     ctx.fill()
     ctx.stroke()
   } else if (expression === 'surprise') {
-    ctx.fillStyle = 'rgba(86,40,36,0.95)'
+    ctx.fillStyle = shade(skin, 0.34)
     ctx.ellipse(64, mouthY, 7, 9.5, 0, 0, Math.PI * 2)
     ctx.fill()
     ctx.stroke()
@@ -528,7 +570,7 @@ export function faceTexture(variant: 0 | 1 | 2, expression: Expression = 'neutra
   }
 
   // A little warmth on the cheeks, which reads as skin rather than plastic.
-  ctx.fillStyle = 'rgba(196,108,88,0.16)'
+  ctx.fillStyle = withAlpha(shade(skin, 0.8, '#e08a6a'), 0.3)
   for (const x of [36, 92]) {
     ctx.beginPath()
     ctx.ellipse(x, 74, 10, 7, 0, 0, Math.PI * 2)
