@@ -188,6 +188,62 @@ function InteriorDoorway({ spec }: { spec: InteriorSpec }) {
  * is what made every old interior look like a cave with a torch in it.
  */
 /**
+ * A flat coffered ceiling: a dark grid over white panels, with linear tubes.
+ *
+ * The conference hall's ceiling is a deep rectangular lattice of dark bars with
+ * white infill and strip lights running in some of the bays. It is the most
+ * recognisable thing in the room after the arched windows, and for a while it
+ * was the library's trussed roof, which is a different room in the same
+ * building.
+ */
+function CofferedCeiling({ size, ceiling }: { size: number; ceiling: number }) {
+  const bays = 6
+  const pitch = size / bays
+  const lines = Array.from({ length: bays + 1 }, (_, i) => -size / 2 + i * pitch)
+
+  return (
+    <group>
+      {/* The white panels the grid sits under. */}
+      <mesh position={[0, ceiling, 0]} rotation={[Math.PI / 2, 0, 0]} receiveShadow>
+        <planeGeometry args={[size, size]} />
+        <meshStandardMaterial color="#f4f5f6" roughness={1} side={THREE.DoubleSide} />
+      </mesh>
+
+      {/* The grid, hanging below the panels so the coffers have depth. A flat
+          painted lattice reads as wallpaper; the shadow in the reveal is the
+          whole effect. */}
+      {lines.map((t) => (
+        <group key={t}>
+          <mesh position={[t, ceiling - 0.22, 0]} castShadow>
+            <boxGeometry args={[0.18, 0.44, size]} />
+            <meshStandardMaterial color="#2a2d31" roughness={0.7} />
+          </mesh>
+          <mesh position={[0, ceiling - 0.22, t]} castShadow>
+            <boxGeometry args={[size, 0.44, 0.18]} />
+            <meshStandardMaterial color="#2a2d31" roughness={0.7} />
+          </mesh>
+        </group>
+      ))}
+
+      {/* Strip lights, one run down every other bay. */}
+      {lines.slice(0, -1).map((t, i) =>
+        i % 2 === 0 ? null : (
+          <mesh key={`l${t}`} position={[t + pitch / 2, ceiling - 0.08, 0]}>
+            <boxGeometry args={[0.34, 0.06, size * 0.82]} />
+            <meshStandardMaterial
+              color="#ffffff"
+              emissive="#ffffff"
+              emissiveIntensity={1.5}
+              toneMapped={false}
+            />
+          </mesh>
+        ),
+      )}
+    </group>
+  )
+}
+
+/**
  * A pitched roof on exposed trusses, seen from inside.
  *
  * The library is in the attic and the roof is most of the room: a steep pitch,
@@ -405,8 +461,9 @@ function RoomShell({
         ))}
 
       {spec.ceilingKind === 'truss' && <TrussedRoof size={size} ceiling={spec.ceiling} />}
+      {spec.ceilingKind === 'coffered' && <CofferedCeiling size={size} ceiling={spec.ceiling} />}
 
-      {spec.ceilingKind !== 'truss' && (
+      {spec.ceilingKind !== 'truss' && spec.ceilingKind !== 'coffered' && (
       <mesh position={[0, spec.ceiling, 0]} rotation={[Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[size, size]} />
         {spec.ceilingKind === 'deck' ? (
@@ -1445,6 +1502,52 @@ function LabInterior({ spec }: { spec: InteriorSpec }) {
 /* Amphitheatre                                                         */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Full-height curtains either side of each window.
+ *
+ * The conference hall's windows are hung with long grey-brown curtains from a
+ * rail near the ceiling to the floor, and they are half of what the wall looks
+ * like — the arched openings read as openings partly because of the vertical
+ * dark bands framing them.
+ *
+ * A gathered curtain is a lathe of folds; these are a shallow scallop of four
+ * boxes, which at the distance anybody stands from them is the same picture.
+ */
+function Curtains({ half, ceiling, at }: { half: number; ceiling: number; at: number[] }) {
+  const top = ceiling - 0.9
+  return (
+    <group>
+      {[-1, 1].map((wall) =>
+        at.map((z) => (
+          <group key={`${wall}-${z}`} position={[wall * (half - 0.35), 0, z]}>
+            {/* Rail. */}
+            <mesh position={[0, top + 0.2, 0]}>
+              <boxGeometry args={[0.1, 0.08, 5.4]} />
+              <meshStandardMaterial color="#b9a98c" roughness={0.6} metalness={0.3} />
+            </mesh>
+            {[-1, 1].map((side) =>
+              [0, 1, 2, 3].map((fold) => (
+                <mesh
+                  key={`${side}-${fold}`}
+                  position={[
+                    -wall * (0.06 + (fold % 2) * 0.07),
+                    top / 2,
+                    side * (1.9 + fold * 0.26),
+                  ]}
+                  castShadow
+                >
+                  <boxGeometry args={[0.16, top, 0.26]} />
+                  <meshStandardMaterial color="#6f6a60" roughness={0.98} />
+                </mesh>
+              )),
+            )}
+          </group>
+        )),
+      )}
+    </group>
+  )
+}
+
 function LectureInterior({ spec, whiteboard }: { spec: InteriorSpec; whiteboard?: React.ReactNode }) {
   const half = spec.halfExtent
 
@@ -1453,6 +1556,8 @@ function LectureInterior({ spec, whiteboard }: { spec: InteriorSpec; whiteboard?
       {/* Raked seating: each row on its own step, rising towards the back.
           The old room put flat desks on a flat floor, which is not what an
           amphitheatre is. */}
+      <Curtains half={half} ceiling={spec.ceiling} at={[-8, 0, 8]} />
+
       {LECTURE_ROWS.map((row) => {
         const z = LECTURE_SEATING.frontZ + row * LECTURE_SEATING.rowDepth
         const y = row * LECTURE_SEATING.riser
@@ -1464,26 +1569,36 @@ function LectureInterior({ spec, whiteboard }: { spec: InteriorSpec; whiteboard?
               <meshStandardMaterial color="#8f8a7c" roughness={0.95} />
             </mesh>
             {/* Continuous desk */}
+            {/* A dark timber shelf on a dark metal frame, which is what the
+                rows are: a mid-oak desk with a matching modesty panel made the
+                hall read as a school. */}
             <mesh castShadow receiveShadow position={[0, 0.75, -1.5]}>
               <boxGeometry args={[half * 1.7, 0.1, 1.3]} />
-              <meshStandardMaterial color="#8a6742" roughness={0.75} />
+              <meshStandardMaterial color="#6a4a30" roughness={0.6} />
             </mesh>
             <mesh castShadow position={[0, 0.4, -2.1]}>
-              <boxGeometry args={[half * 1.7, 0.7, 0.08]} />
-              <meshStandardMaterial color="#7a5c3d" roughness={0.8} />
+              <boxGeometry args={[half * 1.7, 0.7, 0.06]} />
+              <meshStandardMaterial color="#26292d" roughness={0.7} metalness={0.25} />
             </mesh>
             {/* Tip-up seats */}
             {Array.from({ length: 9 }, (_, i) => {
               const x = -half * 0.78 + i * ((half * 1.56) / 8)
               return (
                 <group key={i} position={[x, 0, 0.4]}>
-                  <mesh castShadow position={[0, 0.45, 0]}>
-                    <boxGeometry args={[0.66, 0.1, 0.6]} />
-                    <meshStandardMaterial color={spec.accent} roughness={0.85} />
+                  {/* Upholstered, in the taupe the hall is seated in, on a
+                      dark frame. Padded rather than flat boards: a tip-up seat
+                      is mostly the cushion. */}
+                  <mesh castShadow position={[0, 0.46, 0]}>
+                    <boxGeometry args={[0.66, 0.16, 0.62]} />
+                    <meshStandardMaterial color="#8b8579" roughness={0.95} />
                   </mesh>
-                  <mesh castShadow position={[0, 0.82, 0.3]}>
-                    <boxGeometry args={[0.66, 0.75, 0.1]} />
-                    <meshStandardMaterial color={spec.accent} roughness={0.85} />
+                  <mesh castShadow position={[0, 0.86, 0.3]}>
+                    <boxGeometry args={[0.66, 0.8, 0.16]} />
+                    <meshStandardMaterial color="#8b8579" roughness={0.95} />
+                  </mesh>
+                  <mesh castShadow position={[0, 0.2, 0.28]}>
+                    <boxGeometry args={[0.1, 0.4, 0.1]} />
+                    <meshStandardMaterial color="#26292d" roughness={0.7} metalness={0.3} />
                   </mesh>
                 </group>
               )

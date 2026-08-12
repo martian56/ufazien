@@ -46,7 +46,7 @@ export interface InteriorSpec {
    * office, and so — just as wrongly — did a fourteen-metre heritage hall with
    * columns and a staircase in it.
    */
-  ceilingKind?: 'tile' | 'deck' | 'plaster' | 'timber' | 'truss'
+  ceilingKind?: 'tile' | 'deck' | 'plaster' | 'timber' | 'truss' | 'coffered'
 }
 
 export const INTERIOR_SPECS: Record<InteriorKind, InteriorSpec> = {
@@ -98,9 +98,12 @@ export const INTERIOR_SPECS: Record<InteriorKind, InteriorSpec> = {
     halfExtent: 22, ceiling: 12, wall: '#edeeec', accent: '#4a4640', floor: 'wood',
     projector: [0, 6.2, -21.2], spawn: [-11, 1.7, -10], spawnLookAt: [3, 4.5, -19],
     lightColor: '#fff6e8', lightIntensity: 0.95,
-    floorTint: '#5b4636',
-    // Dark steel trusses over the raked seating, which is what the hall has.
-    ceilingKind: 'truss',
+    floorTint: '#4e3b2e',
+    // A flat dark grid over white panels with linear tubes in it. This was
+    // briefly trusses, which is the library's roof applied to the wrong room:
+    // the conference hall's ceiling is flat and coffered, and the photographs
+    // are unambiguous about it.
+    ceilingKind: 'coffered',
   },
   'student-center': {
     halfExtent: 22, ceiling: 10, wall: '#e6ebee', accent: '#3f8f7f', floor: 'carpet',
