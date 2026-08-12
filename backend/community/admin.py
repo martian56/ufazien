@@ -5,7 +5,8 @@ from django.utils.safestring import mark_safe
 from django.db.models import Count
 from .models import (
     Group, GroupMembership, GroupMessage, Forum, ForumPost, 
-    PostLike, PostReply, PrivateChat, PrivateMessage, UserActivity
+    PostLike, PostReply, PrivateChat, PrivateMessage, UserActivity,
+    PostAttachment
 )
 
 
@@ -304,3 +305,24 @@ class UserActivityAdmin(admin.ModelAdmin):
 admin.site.site_header = "Ufazien Community Administration"
 admin.site.site_title = "Ufazien Admin"
 admin.site.index_title = "Community Management"
+
+
+@admin.register(PostAttachment)
+class PostAttachmentAdmin(admin.ModelAdmin):
+    """Images hung off a forum post, in the order they are shown."""
+
+    list_display = ['post', 'caption', 'position', 'created_at']
+    list_filter = ['created_at']
+    search_fields = ['caption', 'post__title']
+    readonly_fields = ['id', 'created_at', 'updated_at']
+    list_select_related = ['post']
+    ordering = ['post', 'position']
+
+
+@admin.register(PostLike)
+class PostLikeAdmin(admin.ModelAdmin):
+    list_display = ['user', 'post', 'created_at']
+    list_filter = ['created_at']
+    search_fields = ['user__username', 'post__title']
+    readonly_fields = ['created_at', 'updated_at']
+    list_select_related = ['user', 'post']

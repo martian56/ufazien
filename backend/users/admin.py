@@ -5,6 +5,8 @@ from django.urls import reverse
 from django.utils.safestring import mark_safe
 from django.db.models import Count
 
+from .models import UserSettings
+
 User = get_user_model()
 
 @admin.register(User)
@@ -121,3 +123,39 @@ class UserAdmin(admin.ModelAdmin):
         updated = queryset.update(is_staff=False)
         self.message_user(request, f'{updated} users were successfully removed from staff.')
     remove_staff.short_description = "Remove staff status from selected users"
+
+
+@admin.register(UserSettings)
+class UserSettingsAdmin(admin.ModelAdmin):
+    """
+    Per-user preferences.
+
+    Grouped rather than listed flat: there are twenty fields covering four
+    unrelated concerns, and a single column of checkboxes gives no clue which
+    ones belong together.
+    """
+
+    list_display = ['user', 'grade_system', 'theme', 'profile_visibility', 'updated_at']
+    list_filter = ['grade_system', 'theme', 'profile_visibility', 'language', 'updated_at']
+    search_fields = ['user__username', 'user__email', 'user__first_name', 'user__last_name']
+    readonly_fields = ['updated_at']
+    list_select_related = ['user']
+    fieldsets = (
+        ('Student', {'fields': ('user',)}),
+        ('Academic', {
+            'fields': ('grade_system', 'default_credits', 'semester_goal',
+                       'show_gpa', 'study_goal_hours'),
+        }),
+        ('Notifications', {
+            'fields': ('email_notifications', 'assignment_reminders', 'grade_updates',
+                       'community_messages', 'event_reminders', 'weekly_reports'),
+        }),
+        ('Privacy', {
+            'fields': ('profile_visibility', 'show_schedule', 'allow_messages',
+                       'show_online_status'),
+        }),
+        ('Appearance', {
+            'fields': ('theme', 'language', 'date_format', 'time_format'),
+        }),
+        ('Bookkeeping', {'fields': ('updated_at',)}),
+    )
