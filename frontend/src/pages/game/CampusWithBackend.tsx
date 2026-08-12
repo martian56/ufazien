@@ -1,11 +1,11 @@
-import React, { useState, useRef, Suspense, useCallback, useEffect, useMemo } from "react"
+import React, { useState, useRef, Suspense, useCallback, useEffect, useMemo, type MutableRefObject } from "react"
 import { Helmet } from "react-helmet"
 import { Canvas, useFrame, useThree } from "@react-three/fiber"
 import { KeyboardControls, useKeyboardControls, PointerLockControls, PerformanceMonitor } from "@react-three/drei"
 import { Vector3, MathUtils, ACESFilmicToneMapping } from "three"
 import type { Group } from "three"
 import { useNavigate, useParams } from "react-router-dom"
-import { MessageCircle, Users, Settings, LogOut, MonitorUp, Sun, Sunset, Moon } from "lucide-react"
+import { Globe, MapPin, MessageCircle, MonitorUp, Send, Users, X } from "lucide-react"
 import { useCampusSimulator } from '../../hooks/useCampusSimulator'
 import {
   DOOR_REACH,
@@ -22,6 +22,11 @@ import {
 import DoorLeaf from '../../components/campus/DoorLeaf'
 import { useCampusVoice } from '../../hooks/useCampusVoice'
 import VoicePanel, { ScreenShareStage } from '../../components/campus/VoicePanel'
+import HudDock from '../../components/campus/HudDock'
+import CampusSettings from '../../components/campus/CampusSettings'
+import { CAMPUS_KEY_MAP, hudActionFor } from '../../components/campus/keyBindings'
+import type { Pose } from '../../components/campus/mapProjection'
+import { useFullscreen } from '../../hooks/useFullscreen'
 import ProjectorScreen from '../../components/campus/ProjectorScreen'
 import { api } from '../../lib/api/client'
 import { isAuthenticated } from '../../lib/api/tokens'
@@ -155,31 +160,6 @@ const getCurrentUser = (): CampusPlayer => {
   }
 }
 
-// Key controls for player movement. `action` is the mini-games' hold key; it is
-// separate from `interact` so charging a shot cannot also open a door.
-const keyMap = [
-  { name: "forward", keys: ["ArrowUp", "KeyW"] },
-  { name: "backward", keys: ["ArrowDown", "KeyS"] },
-  { name: "leftward", keys: ["ArrowLeft", "KeyA"] },
-  { name: "rightward", keys: ["ArrowRight", "KeyD"] },
-  { name: "jump", keys: ["Space"] },
-  { name: "run", keys: ["ShiftLeft"] },
-  { name: "interact", keys: ["KeyE"] },
-  { name: "action", keys: ["KeyF"] },
-  // Emotes. Number keys, because they are the ones nobody is holding down to
-  // walk with, and a radial menu cannot be opened while the pointer is locked.
-  { name: "sit", keys: ["KeyC"] },
-  // Leaning is a posture rather than an emote, so it sits next to sitting
-  // rather than on the number row, and holds until pressed again.
-  { name: "lean", keys: ["KeyV"] },
-  // Pick up and put down whatever is within reach; hold to throw it further.
-  { name: "grab", keys: ["KeyG"] },
-  { name: "light", keys: ["KeyL"] },
-  { name: "wave", keys: ["Digit1"] },
-  { name: "clap", keys: ["Digit2"] },
-  { name: "raiseHand", keys: ["Digit3"] },
-  { name: "point", keys: ["Digit4"] },
-]
 
 /** Which control triggers which pose. */
 const EMOTE_KEYS: [string, Activity][] = [
@@ -257,17 +237,22 @@ function ChatSystem({
   isOpen,
   onToggle,
   campusHook,
-  isTouchDevice = false,
+  focusToken = 0,
 }: {
   isOpen: boolean
   onToggle: () => void
   campusHook: CampusHook
-  isTouchDevice?: boolean
+  focusToken?: number
 }) {
   const [newMessage, setNewMessage] = useState("")
   const [activeTab, setActiveTab] = useState("global")
   const scrollRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
   const seenCountRef = useRef(0)
+
+  useEffect(() => {
+    if (isOpen && focusToken > 0) inputRef.current?.focus()
+  }, [isOpen, focusToken])
 
   const { chatMessages, sendChatMessage, getNearbyPlayers } = campusHook
 
@@ -314,14 +299,16 @@ function ChatSystem({
 
   if (!isOpen) {
     return (
-      <div className={`absolute z-30 pointer-events-auto ${isTouchDevice ? "bottom-5 right-24" : "bottom-24 right-4"}`}>
+      <div className="pointer-events-auto absolute bottom-0 right-0 z-30 p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pr-[max(0.5rem,env(safe-area-inset-right))] sm:p-4 short:left-0 short:right-auto short:pl-[max(0.5rem,env(safe-area-inset-left))]">
         <button
           onClick={onToggle}
-          className="bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-full shadow-lg transition-all transform hover:scale-105"
+          aria-label="Open the chat"
+          title="Chat (T)"
+          className="relative flex h-9 w-9 items-center justify-center rounded-lg border border-white/15 bg-slate-950/70 text-slate-200 shadow-lg shadow-black/40 backdrop-blur transition hover:border-white/35 hover:bg-slate-900/80 sm:h-10 sm:w-10"
         >
-          <MessageCircle className="w-6 h-6" />
+          <MessageCircle className="h-4 w-4 sm:h-[18px] sm:w-[18px]" />
           {unread > 0 && (
-            <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-6 h-6 flex items-center justify-center">
+            <span className="absolute -right-1 -top-1 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-blue-500 px-1 text-[10px] font-semibold text-white">
               {unread > 9 ? "9+" : unread}
             </span>
           )}
@@ -331,23 +318,19 @@ function ChatSystem({
   }
 
   return (
-    // z-40 puts it above the touch controls. Without a layer of its own it
-    // sat under the joystick and the jump and enter buttons, which are z-30,
-    // so they were drawn across the message list and the input.
-    <div className="absolute inset-x-2 bottom-2 h-[min(70vh,500px)] sm:inset-x-auto sm:right-4 sm:bottom-4 sm:w-96 sm:h-[min(80vh,500px)] z-40 bg-black bg-opacity-95 backdrop-blur-sm border border-blue-500/30 rounded-xl pointer-events-auto shadow-2xl">
-      {/* Chat Header */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-700 bg-gradient-to-r from-blue-600/20 to-purple-600/20">
-        <div className="flex space-x-2">
+    <div className="pointer-events-auto absolute bottom-2 left-2 right-2 z-40 flex max-h-[min(58dvh,26rem)] flex-col overflow-hidden rounded-xl border border-white/10 bg-slate-950/95 shadow-2xl backdrop-blur sm:bottom-4 sm:left-auto sm:right-4 sm:max-h-[min(80dvh,32rem)] sm:w-96 short:right-auto short:top-12 short:max-h-none short:w-[min(19rem,46vw)] short:sm:left-2 short:sm:right-auto">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/10 px-2 py-1.5">
+        <div className="flex gap-1">
           {[
             {
               key: "global",
-              icon: "🌍",
+              Icon: Globe,
               label: "Global",
               count: filteredMessages.filter((m) => m.channel === "global").length,
             },
             {
               key: "nearby",
-              icon: "📍",
+              Icon: MapPin,
               label: "Nearby",
               count: nearbyUsers.length,
             },
@@ -355,15 +338,18 @@ function ChatSystem({
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
-              className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+              aria-selected={activeTab === tab.key}
+              role="tab"
+              className={`flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition ${
                 activeTab === tab.key
-                  ? "bg-blue-600 text-white shadow-lg"
-                  : "text-gray-400 hover:text-white hover:bg-gray-700"
+                  ? "bg-white/10 text-white"
+                  : "text-slate-400 hover:bg-white/5 hover:text-slate-200"
               }`}
             >
-              {tab.icon} {tab.label}
+              <tab.Icon className="h-3.5 w-3.5" />
+              {tab.label}
               {tab.count > 0 && (
-                <span className="ml-1 bg-blue-500 text-white text-xs rounded-full px-1">
+                <span className="rounded-full bg-white/15 px-1.5 text-[10px] tabular-nums">
                   {tab.count}
                 </span>
               )}
@@ -372,14 +358,15 @@ function ChatSystem({
         </div>
         <button
           onClick={onToggle}
-          className="text-gray-400 hover:text-white transition-colors"
+          aria-label="Close the chat"
+          className="rounded-md p-1.5 text-slate-400 transition hover:bg-white/10 hover:text-white"
         >
-          ✕
+          <X className="h-4 w-4" />
         </button>
       </div>
 
       {/* Messages Area */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3 h-[calc(min(70vh,500px)-9.5rem)] sm:h-[calc(min(80vh,500px)-9.5rem)]">
+      <div ref={scrollRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
         {filteredMessages.length === 0 ? (
           <div className="text-center text-gray-500 py-8">
             <MessageCircle className="w-8 h-8 mx-auto mb-2 opacity-50" />
@@ -410,28 +397,25 @@ function ChatSystem({
         )}
       </div>
 
-      {/* Message Input */}
-      <div className="p-4 border-t border-gray-700 bg-gray-900/50">
-        <div className="flex space-x-2">
+      <div className="shrink-0 border-t border-white/10 p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+        <div className="flex gap-1.5">
           <input
+            ref={inputRef}
             type="text"
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleSend() } }}
-            placeholder={`Message ${activeTab === "global" ? "everyone" : activeTab}...`}
-            className="flex-1 bg-gray-800 text-white px-4 py-3 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+            placeholder={`Message ${activeTab === "global" ? "everyone" : activeTab}`}
+            className="min-w-0 flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-500"
           />
           <button
             onClick={handleSend}
             disabled={!newMessage.trim()}
-            className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white px-4 py-3 rounded-lg text-sm transition-all transform hover:scale-105 disabled:transform-none"
+            aria-label="Send"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white transition hover:bg-blue-500 disabled:bg-white/10 disabled:text-slate-500"
           >
-            Send
+            <Send className="h-4 w-4" />
           </button>
-        </div>
-        <div className="flex items-center justify-between mt-2 text-xs text-gray-400">
-          <span>Press Enter to send</span>
-          <span>{nearbyUsers.length} nearby users</span>
         </div>
       </div>
     </div>
@@ -963,6 +947,7 @@ function Player({
   onLeave,
   doors,
   onOpenDoor,
+  poseRef,
 }: {
   campusHook: CampusHook
   insideBuilding: CampusBuilding | null
@@ -981,6 +966,8 @@ function Player({
   doors: DoorState
   /** Work the handle on a door in reach. */
   onOpenDoor: (id: string) => void
+  /** Where the player is, for the map, written rather than rendered. */
+  poseRef: MutableRefObject<Pose>
   /**
    * Somebody to walk towards, in world coordinates, or null.
    *
@@ -1032,6 +1019,12 @@ function Player({
     if (seated) {
       camera.position.set(seated.x, seated.y + seated.seatHeight + SEATED_EYE, seated.z)
       const backend = worldTo2D(camera.position.x, camera.position.z)
+      poseRef.current = {
+        x: camera.position.x,
+        z: camera.position.z,
+        heading: seated.ry,
+        room: insideBuilding ? String(insideBuilding.id) : null,
+      }
       updatePosition({
         x: backend.x,
         y: backend.y,
@@ -1235,6 +1228,13 @@ function Player({
     // the way they are actually travelling.
     const heading = moving ? Math.atan2(headingX, headingZ) : cameraHeading(camera)
 
+    poseRef.current = {
+      x: camera.position.x,
+      z: camera.position.z,
+      heading: cameraHeading(camera),
+      room: insideBuilding ? String(insideBuilding.id) : null,
+    }
+
     updatePosition({
       x: backendCoords.x,
       y: backendCoords.y,
@@ -1330,6 +1330,10 @@ const CampusWithBackend = () => {
   const isTouchDevice = useIsTouchDevice()
   const touchState = useRef(createTouchState())
   const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [isMapOpen, setIsMapOpen] = useState(false)
+  const [chatFocus, setChatFocus] = useState(0)
+  const selfPose = useRef<Pose>({ x: 0, z: 0, heading: 0, room: null })
+  const fullscreen = useFullscreen()
   const [shareExpanded, setShareExpanded] = useState(false)
   const [currentUser, setCurrentUser] = useState<CampusPlayer>(getCurrentUser())
   const [timeOfDay, setTimeOfDay] = useState<TimeOfDay>('day')
@@ -1418,11 +1422,12 @@ const CampusWithBackend = () => {
 
   // Release the pointer when any panel opens: while it is locked the cursor is
   // hidden and clicks go to the 3D view instead of the UI.
+
   useEffect(() => {
-    if ((isChatOpen || isMenuOpen || games.result) && document.pointerLockElement) {
+    if ((isChatOpen || isMenuOpen || isMapOpen || games.result) && document.pointerLockElement) {
       document.exitPointerLock()
     }
-  }, [isChatOpen, isMenuOpen, games.result])
+  }, [isChatOpen, isMenuOpen, isMapOpen, games.result])
 
   // Leaving the area you joined should also leave the room on the server.
   const joinedArea = useRef<string | null>(null)
@@ -1592,6 +1597,56 @@ const CampusWithBackend = () => {
     [playerAvatars, myRoom],
   )
 
+  const mapPeers = useMemo(
+    () =>
+      visibleAvatars.map((avatar) => ({
+        id: avatar.id,
+        room: avatar.room,
+        position: avatar.position,
+        color: typeof avatar.userData.color === 'string' ? avatar.userData.color : undefined,
+      })),
+    [visibleAvatars],
+  )
+
+  // Every panel has a key, and every key closes what it opened. Bound here
+  // rather than through drei because these are not movement: KeyboardControls
+  // reports a held state, and a panel wants the press.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat || event.altKey || event.ctrlKey || event.metaKey) return
+
+      if (event.key === 'Escape') {
+        setIsMapOpen(false)
+        setIsMenuOpen(false)
+        setIsChatOpen(false)
+        return
+      }
+
+      // Typing must never reach a binding, or writing "type" in chat opens the
+      // map twice and mutes you.
+      if (isTypingInField()) return
+
+      const action = hudActionFor(event.code)
+      if (!action) return
+      event.preventDefault()
+
+      if (action === 'chat') {
+        setIsChatOpen(true)
+        setChatFocus((token) => token + 1)
+      } else if (action === 'map') {
+        setIsMapOpen((open) => !open)
+      } else if (action === 'settings') {
+        setIsMenuOpen((open) => !open)
+      } else if (action === 'mute') {
+        voice.toggleMic()
+      } else if (action === 'fullscreen') {
+        fullscreen.toggle()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [voice, fullscreen])
+
   /**
    * The loose objects in this room, wherever they have got to.
    *
@@ -1723,25 +1778,28 @@ const CampusWithBackend = () => {
         <meta name="description" content="Explore a 3D UFAZ campus with friends in real time: walk the Nizami Street frontage, go inside the buildings, and play." />
       </Helmet>
       <div className="h-screen w-screen relative overflow-hidden">
-        {/* Connection status. A dot on touch, where the label wastes scarce width. */}
-        <div className="absolute top-4 left-4 z-10 pointer-events-auto">
-          {isTouchDevice ? (
+        {/* Where you are, who is here, and whether the socket is up. One strip
+            rather than three floating cards, which on a phone stacked on top of
+            each other. */}
+        <div className="pointer-events-auto absolute left-0 top-0 z-20 flex max-w-[52vw] items-center gap-2 p-2 pl-[max(0.5rem,env(safe-area-inset-left))] pt-[max(0.5rem,env(safe-area-inset-top))] sm:max-w-sm sm:p-3">
+          <div className="flex min-w-0 items-center gap-2 rounded-lg border border-white/15 bg-slate-950/70 px-2.5 py-1.5 shadow-lg shadow-black/40 backdrop-blur">
             <span
-              title={isConnected ? 'Connected' : 'Disconnected'}
-              className={`block w-3 h-3 rounded-full ring-2 ring-black/40 ${
-                isConnected ? 'bg-green-400' : 'bg-red-400'
+              role="status"
+              aria-label={isConnected ? 'Connected' : 'Disconnected'}
+              title={isConnected ? 'Connected' : 'Reconnecting'}
+              className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                isConnected ? 'bg-emerald-400' : 'animate-pulse bg-amber-400'
               }`}
             />
-          ) : (
-            <div className={`px-4 py-2 rounded-lg text-sm font-medium ${
-              isConnected
-                ? 'bg-green-900/80 text-green-200 border border-green-500/50'
-                : 'bg-red-900/80 text-red-200 border border-red-500/50'
-            }`}>
-              {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
-            </div>
-          )}
-      </div>
+            <span className="truncate text-xs font-medium text-white">
+              {currentLobby?.name || 'Campus'}
+            </span>
+            <span className="flex shrink-0 items-center gap-1 border-l border-white/10 pl-2 text-xs tabular-nums text-slate-400">
+              <Users className="h-3 w-3" />
+              {lobbyMembers.length}
+            </span>
+          </div>
+        </div>
 
       {insideBuilding && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 pointer-events-auto flex items-center gap-3 bg-black/80 text-white px-4 py-2 rounded-xl border border-blue-500/30">
@@ -1832,26 +1890,6 @@ const CampusWithBackend = () => {
         />
       )}
 
-      {/* Voice, screen share and host controls. On touch these live inside the
-          settings menu instead, so the playfield stays clear. */}
-      {!isTouchDevice && (
-      <div className="absolute z-20 pointer-events-auto bottom-4 left-4">
-        <VoicePanel
-          connected={voice.connected}
-          error={voice.error}
-          participants={voice.participants}
-          micEnabled={voice.micEnabled}
-          mayScreenShare={voice.mayScreenShare}
-          isHost={voice.isHost}
-          permissions={voice.permissions}
-          onToggleMic={voice.toggleMic}
-          onToggleScreenShare={voice.toggleScreenShare}
-          onSetMemberMuted={voice.setMemberMuted}
-          onSetMemberScreenShare={voice.setMemberScreenShare}
-        />
-      </div>
-      )}
-
       {/* A share belongs on the projector screen inside a building, not pasted
           over the player's view. Out on the campus there is no screen to put it
           on, so all they get is a nudge to go and watch it. */}
@@ -1889,35 +1927,30 @@ const CampusWithBackend = () => {
         onClose={() => setShareExpanded(false)}
       />
 
-      {/* Lobby info. One compact line on touch; the full card wastes the width. */}
-      <div className="absolute top-4 right-4 z-10 pointer-events-auto max-w-[45vw]">
-        {isTouchDevice ? (
-          <div className="bg-black/70 backdrop-blur-sm text-white px-2.5 py-1 rounded-lg border border-blue-500/30 flex items-center gap-1.5 text-xs">
-            <span className="truncate max-w-[26vw] text-blue-300 font-medium">
-              {currentLobby?.name || 'Campus'}
-            </span>
-            <span className="flex items-center gap-1 text-gray-300 shrink-0">
-              <Users className="w-3 h-3" />
-              {lobbyMembers.length}
-            </span>
-          </div>
-        ) : (
-          <div className="bg-black bg-opacity-80 backdrop-blur-sm text-white p-4 rounded-xl border border-blue-500/30">
-            <h3 className="font-bold text-lg text-blue-400">{currentLobby?.name || 'Campus Lobby'}</h3>
-            <p className="text-sm text-gray-300 flex items-center gap-2">
-              <Users className="w-4 h-4" />
-              {lobbyMembers.length} students online
-            </p>
-          </div>
-        )}
-      </div>
+      <HudDock
+        poseRef={selfPose}
+        peers={mapPeers}
+        mapOpen={isMapOpen}
+        onToggleMap={() => setIsMapOpen((open) => !open)}
+        onCloseMap={() => setIsMapOpen(false)}
+        voiceConnected={voice.connected}
+        micEnabled={voice.micEnabled}
+        onToggleMic={voice.toggleMic}
+        mayScreenShare={voice.mayScreenShare}
+        isSharing={Boolean(voice.screenShare?.isLocal)}
+        onToggleScreenShare={voice.toggleScreenShare}
+        onOpenSettings={() => setIsMenuOpen(true)}
+        isFullscreen={fullscreen.isFullscreen}
+        fullscreenSupported={fullscreen.supported}
+        onToggleFullscreen={fullscreen.toggle}
+      />
 
       {/* Who is here with you, and the follow button.
           DOM rather than a panel in the scene for the same pointer-lock reason
           as the doors: a click in the world never lands while the pointer is
           locked, which is the normal way to play. */}
       {visibleAvatars.length > 0 && !games.active && (
-        <div className="absolute top-4 left-4 z-10 pointer-events-auto w-[min(15rem,52vw)]">
+        <div className="pointer-events-auto absolute left-2 top-14 z-10 w-[min(15rem,52vw)] sm:left-3 sm:top-16 short:hidden">
           <div className="bg-black/75 backdrop-blur-sm border border-blue-500/25 rounded-xl px-3 py-2 text-white">
             <div className="text-[11px] uppercase tracking-wide text-blue-300/80 mb-1">
               {myRoom ? 'In this room' : 'On the campus'}
@@ -1997,77 +2030,35 @@ const CampusWithBackend = () => {
         </div>
       )}
 
-      {/* Game Menu */}
-      {/* Top-left, under the connection pill: bottom-left belongs to the voice
-          panel, and the two overlapped each other. */}
-      <div className="absolute top-16 left-4 z-20 pointer-events-auto">
-        <div className="flex flex-col gap-2 items-start">
-          <button
-            onClick={() => setIsMenuOpen(!isMenuOpen)}
-            aria-label="Campus menu"
-            className="bg-gray-800 hover:bg-gray-700 text-white p-2.5 rounded-full shadow-lg transition-all"
-          >
-            <Settings className="w-5 h-5" />
-          </button>
-
-          {isMenuOpen && (
-            <div className="bg-black bg-opacity-90 backdrop-blur-sm border border-gray-600 rounded-lg p-3 w-[min(17rem,80vw)] max-h-[70vh] overflow-y-auto space-y-3">
-              {/* Time of day. The lighting rig has three presets and they
-                  change the campus completely, so they are worth exposing. */}
-              <div>
-                <div className="text-xs text-gray-400 mb-1.5">Time of day</div>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {([
-                    ['day', Sun, 'Day'],
-                    ['dusk', Sunset, 'Dusk'],
-                    ['night', Moon, 'Night'],
-                  ] as [TimeOfDay, typeof Sun, string][]).map(([key, Icon, label]) => (
-                    <button
-                      key={key}
-                      onClick={() => setTimeOfDay(key)}
-                      className={`flex flex-col items-center gap-1 py-2 rounded text-[11px] transition-colors ${
-                        timeOfDay === key
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-                      }`}
-                    >
-                      <Icon className="w-4 h-4" />
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {isTouchDevice && (
-                <VoicePanel
-                  connected={voice.connected}
-                  error={voice.error}
-                  participants={voice.participants}
-                  micEnabled={voice.micEnabled}
-                  mayScreenShare={voice.mayScreenShare}
-                  isHost={voice.isHost}
-                  permissions={voice.permissions}
-                  onToggleMic={voice.toggleMic}
-                  onToggleScreenShare={voice.toggleScreenShare}
-                  onSetMemberMuted={voice.setMemberMuted}
-                  onSetMemberScreenShare={voice.setMemberScreenShare}
-                  embedded
-                />
-              )}
-              <button
-                onClick={handleDisconnect}
-                className="w-full text-left px-3 py-2 text-red-400 hover:bg-red-900/30 rounded flex items-center gap-2 text-sm"
-              >
-                <LogOut className="w-4 h-4" />
-                Leave Campus
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
+      <CampusSettings
+        open={isMenuOpen}
+        onClose={() => setIsMenuOpen(false)}
+        timeOfDay={timeOfDay}
+        onTimeOfDay={setTimeOfDay}
+        isFullscreen={fullscreen.isFullscreen}
+        fullscreenSupported={fullscreen.supported}
+        onToggleFullscreen={fullscreen.toggle}
+        onLeave={handleDisconnect}
+        voice={
+          <VoicePanel
+            connected={voice.connected}
+            error={voice.error}
+            participants={voice.participants}
+            micEnabled={voice.micEnabled}
+            mayScreenShare={voice.mayScreenShare}
+            isHost={voice.isHost}
+            permissions={voice.permissions}
+            onToggleMic={voice.toggleMic}
+            onToggleScreenShare={voice.toggleScreenShare}
+            onSetMemberMuted={voice.setMemberMuted}
+            onSetMemberScreenShare={voice.setMemberScreenShare}
+            embedded
+          />
+        }
+      />
 
       {/* 3D Canvas */}
-      <KeyboardControls map={keyMap}>
+      <KeyboardControls map={CAMPUS_KEY_MAP}>
         <Canvas
           id="campus-canvas"
           shadows
@@ -2219,6 +2210,7 @@ const CampusWithBackend = () => {
               onLeave={() => setInsideBuilding(null)}
               doors={doors}
               onOpenDoor={openDoorById}
+              poseRef={selfPose}
             />
             <SeatController
               campusHook={campusHook}
@@ -2265,18 +2257,9 @@ const CampusWithBackend = () => {
         isOpen={isChatOpen}
         onToggle={() => setIsChatOpen(!isChatOpen)}
         campusHook={campusHook}
-        isTouchDevice={isTouchDevice}
+        focusToken={chatFocus}
       />
 
-      {/* Instructions */}
-      {!games.active && (
-        <div className={`absolute left-1/2 transform -translate-x-1/2 pointer-events-none z-10 max-w-[90vw] ${isTouchDevice ? "hidden" : "bottom-4"}`}>
-          <div className="bg-black bg-opacity-75 text-white px-4 py-2 rounded-lg text-sm">
-            <span className="hidden sm:inline">WASD to move • Shift to run • Space to jump • Click to look • E to enter a building • F to play</span>
-            <span className="sm:hidden">Drag to look • Joystick to move</span>
-          </div>
-        </div>
-      )}
     </div>
     </>
   )
