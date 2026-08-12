@@ -36,6 +36,7 @@ import {
   carpetTexture,
   ceilingTexture,
   marbleTexture,
+  encausticTexture,
   tileTexture,
   woodTexture,
 } from './campusTextures'
@@ -68,6 +69,8 @@ function floorMaterial(kind: FloorKind) {
       return { texture: carpetTexture(), color: '#3f4a5c', roughness: 1, metalness: 0 }
     case 'tile':
       return { texture: tileTexture(), color: '#d9d5cc', roughness: 0.35, metalness: 0 }
+    case 'encaustic':
+      return { texture: encausticTexture(), color: '#ffffff', roughness: 0.34, metalness: 0.02 }
     case 'court':
       return { texture: woodTexture(), color: '#c19a5f', roughness: 0.4, metalness: 0 }
     case 'epoxy':
@@ -902,6 +905,69 @@ function UfazFloor({ spec }: { spec: InteriorSpec }) {
   )
 }
 
+/**
+ * Suspended square light rings.
+ *
+ * A hollow square of light on two thin drops. Built from four bars rather than
+ * a ring geometry so the corners are mitred squares rather than a rounded
+ * lozenge, which is what the difference between this fitting and a generic
+ * circular pendant comes down to.
+ *
+ * Turned a few degrees off the room's axes and hung at two heights, because in
+ * the photographs they are: a grid of them square to the walls reads as a
+ * suspended ceiling with the tiles left out.
+ */
+function LightRings({ ceiling }: { ceiling: number }) {
+  const rings: { x: number; z: number; size: number; drop: number; spin: number }[] = [
+    { x: -6, z: 12, size: 2.6, drop: 2.2, spin: 0.18 },
+    { x: 4, z: 8, size: 3.4, drop: 3.0, spin: -0.12 },
+    { x: -2, z: 0, size: 2.9, drop: 2.4, spin: 0.26 },
+    { x: 8, z: -4, size: 2.4, drop: 3.2, spin: -0.2 },
+    { x: -9, z: -8, size: 3.1, drop: 2.6, spin: 0.1 },
+    { x: 2, z: -14, size: 2.7, drop: 3.0, spin: -0.24 },
+  ]
+
+  return (
+    <group>
+      {rings.map((ring, i) => {
+        const y = ceiling - ring.drop
+        const half = ring.size / 2
+        return (
+          <group key={i} position={[ring.x, y, ring.z]} rotation={[0, ring.spin, 0]}>
+            {/* The four bars. Two run the full width, two fill between them, so
+                the corners close without overlapping and double-brightening. */}
+            {([
+              [0, -half, ring.size, 0.12],
+              [0, half, ring.size, 0.12],
+              [-half, 0, 0.12, ring.size - 0.24],
+              [half, 0, 0.12, ring.size - 0.24],
+            ] as [number, number, number, number][]).map(([bx, bz, bw, bd]) => (
+              <mesh key={`${bx}-${bz}`} position={[bx, 0, bz]}>
+                <boxGeometry args={[bw, 0.09, bd]} />
+                <meshStandardMaterial
+                  color="#ffffff"
+                  emissive="#ffffff"
+                  emissiveIntensity={1.6}
+                  toneMapped={false}
+                />
+              </mesh>
+            ))}
+            {/* The drops, which are what makes it read as suspended rather than
+                as a shape painted on the ceiling. */}
+            {[-half * 0.6, half * 0.6].map((t) => (
+              <mesh key={t} position={[t, ring.drop / 2, 0]}>
+                <cylinderGeometry args={[0.012, 0.012, ring.drop, 4]} />
+                <meshStandardMaterial color="#9aa0a6" />
+              </mesh>
+            ))}
+            <pointLight intensity={9} distance={16} decay={2} color="#f4f8ff" />
+          </group>
+        )
+      })}
+    </group>
+  )
+}
+
 function UfazHall({ spec }: { spec: InteriorSpec }) {
   const half = spec.halfExtent
 
@@ -1029,28 +1095,14 @@ function UfazHall({ spec }: { spec: InteriorSpec }) {
         </mesh>
       </group>
 
-      {/* A pendant over the middle of the hall, which is what a room this tall
-          needs to stop the ceiling reading as a lid. */}
-      <group position={[0, spec.ceiling - 3.6, 0]}>
-        {/* A tiered brass fitting rather than one big glowing disc, which read
-            as a hole in the ceiling. */}
-        {([[1.3, 0], [0.95, 0.45], [0.6, 0.85]] as [number, number][]).map(([radius, y]) => (
-          <mesh key={y} castShadow position={[0, y, 0]}>
-            <cylinderGeometry args={[radius, radius + 0.16, 0.22, 20]} />
-            <meshStandardMaterial
-              color="#f6e8c8"
-              emissive="#ffdfa8"
-              emissiveIntensity={0.7}
-              toneMapped={false}
-            />
-          </mesh>
-        ))}
-        <mesh position={[0, 2.2, 0]}>
-          <cylinderGeometry args={[0.05, 0.05, 3, 8]} />
-          <meshStandardMaterial color={spec.accent} roughness={0.35} metalness={0.7} />
-        </mesh>
-        <pointLight intensity={32} distance={26} color="#ffe9c4" />
-      </group>
+      {/* The light rings.
+
+          Thin squares of light on hairline drops, hung at angles across the
+          hall — which is the fitting the building uses and the only thing on
+          that ceiling. A tiered brass chandelier stood here before, which is a
+          hotel lobby; the room is white and modern above the cornice line and
+          the lighting is the clearest statement of that. */}
+      <LightRings ceiling={spec.ceiling} />
 
       {/* Flags on stands, as they stand in the real lobby */}
       {([[UFAZ_FLAGS[0], '#00b5e2'], [UFAZ_FLAGS[1], '#000091']] as [number, string][]).map(([x, flagColor]) => (
@@ -1079,15 +1131,10 @@ function UfazHall({ spec }: { spec: InteriorSpec }) {
           </mesh>
         </group>
       ))}
-      {/* An inlaid medallion, so the floor is not an unbroken sheet */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.012, 2]} receiveShadow>
-        <ringGeometry args={[3.4, 4.2, 48]} />
-        <meshStandardMaterial color={spec.accent} roughness={0.3} metalness={0.25} />
-      </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.012, 2]} receiveShadow>
-        <ringGeometry args={[0, 1.2, 32]} />
-        <meshStandardMaterial color={spec.accent} roughness={0.3} metalness={0.25} />
-      </mesh>
+      {/* The inlaid medallion that used to be here has gone with the marble.
+          It existed so an unbroken sheet of stone had something in it; the
+          floor is patterned tile now and a dark ring stamped across the pattern
+          is one motif too many. */}
 
       <Plant position={[-half + 3, 0, half - 4]} scale={1.5} />
       <Plant position={[half - 3, 0, half - 4]} scale={1.5} />
@@ -1196,9 +1243,14 @@ function LibraryInterior({ spec }: { spec: InteriorSpec }) {
         if (runHalf <= 0.5) return null
         return [-1, 1].map((run) => (
           <group key={`${z}-${run}`} position={[run * (aisle + runHalf), 0, z]}>
+            {/* White shelving. The stacks were dark oak, which with the green
+                lamps made this a nineteenth-century reading room; the library
+                in the roof at Nizami Street is white units, white desks and
+                laptops. The books keep their colours — they are the only thing
+                in the room that has any. */}
             <mesh castShadow receiveShadow position={[0, 2.9, 0]}>
               <boxGeometry args={[runHalf * 2, 5.8, 0.7]} />
-              <meshStandardMaterial color="#6d4f32" roughness={0.8} />
+              <meshStandardMaterial color="#e7eaec" roughness={0.75} />
             </mesh>
             {/* Shelf boards, both faces */}
             {[0, 1, 2, 3, 4].map((shelf) =>
@@ -1210,7 +1262,7 @@ function LibraryInterior({ spec }: { spec: InteriorSpec }) {
                   position={[0, 0.7 + shelf * 1.05, side * 0.5]}
                 >
                   <boxGeometry args={[runHalf * 2, 0.09, 0.35]} />
-                  <meshStandardMaterial color="#7d5c3d" roughness={0.8} />
+                  <meshStandardMaterial color="#d8dcdf" roughness={0.75} />
                 </mesh>
               )),
             )}
@@ -1225,33 +1277,37 @@ function LibraryInterior({ spec }: { spec: InteriorSpec }) {
         <group key={z}>
           {[-9, 9].map((x) => (
             <group key={x} position={[x, 0, z]}>
-              <Table position={[0, 0, 0]} size={[5, 0.12, 2]} topColor="#7d5c3d" />
-              <Chair position={[-1.3, 0, 1.5]} rotation={Math.PI} seat="#5a4630" />
-              <Chair position={[1.3, 0, 1.5]} rotation={Math.PI} seat="#5a4630" />
-              <Chair position={[-1.3, 0, -1.5]} seat="#5a4630" />
-              <Chair position={[1.3, 0, -1.5]} seat="#5a4630" />
-              {/* Banker's lamp */}
-              <group position={[0, 0.82, 0]}>
-                <mesh castShadow>
-                  <cylinderGeometry args={[0.18, 0.22, 0.08, 12]} />
-                  <meshStandardMaterial color="#c9a227" roughness={0.3} metalness={0.8} />
-                </mesh>
-                <mesh position={[0, 0.28, 0]}>
-                  <cylinderGeometry args={[0.03, 0.03, 0.5, 6]} />
-                  <meshStandardMaterial color="#c9a227" roughness={0.3} metalness={0.8} />
-                </mesh>
-                <mesh position={[0, 0.55, 0]} rotation={[Math.PI, 0, 0]}>
-                  <cylinderGeometry args={[0.34, 0.2, 0.24, 14, 1, true]} />
-                  <meshStandardMaterial
-                    color="#1f6b3f"
-                    side={THREE.DoubleSide}
-                    emissive="#8fffc0"
-                    emissiveIntensity={0.35}
-                    roughness={0.5}
-                  />
-                </mesh>
-                <pointLight position={[0, 0.4, 0]} intensity={7} distance={5.5} color="#ffe9b0" />
-              </group>
+              <Table position={[0, 0, 0]} size={[5, 0.12, 2]} topColor="#eef0f1" />
+              <Chair position={[-1.3, 0, 1.5]} rotation={Math.PI} seat="#3b3f45" />
+              <Chair position={[1.3, 0, 1.5]} rotation={Math.PI} seat="#3b3f45" />
+              <Chair position={[-1.3, 0, -1.5]} seat="#3b3f45" />
+              <Chair position={[1.3, 0, -1.5]} seat="#3b3f45" />
+              {/* The low screen down the middle of each desk, which is what
+                  divides a long table into study places. */}
+              <mesh castShadow position={[0, 1.02, 0]}>
+                <boxGeometry args={[4.8, 0.42, 0.06]} />
+                <meshStandardMaterial color="#f2f4f5" roughness={0.85} />
+              </mesh>
+              {/* A laptop at each place. */}
+              {([[-1.3, 1], [1.3, 1], [-1.3, -1], [1.3, -1]] as [number, number][]).map(
+                ([lx, side]) => (
+                  <group key={`${lx}-${side}`} position={[lx, 0.83, side * 0.55]}>
+                    <mesh castShadow rotation={[-Math.PI / 2, 0, 0]}>
+                      <boxGeometry args={[0.42, 0.3, 0.02]} />
+                      <meshStandardMaterial color="#c9ced2" roughness={0.5} metalness={0.3} />
+                    </mesh>
+                    <mesh position={[0, 0.14, -side * 0.15]} rotation={[side * 0.28, 0, 0]}>
+                      <boxGeometry args={[0.42, 0.28, 0.015]} />
+                      <meshStandardMaterial
+                        color="#1b2027"
+                        emissive="#3f5f7f"
+                        emissiveIntensity={0.35}
+                        roughness={0.3}
+                      />
+                    </mesh>
+                  </group>
+                ),
+              )}
             </group>
           ))}
         </group>
@@ -1263,11 +1319,11 @@ function LibraryInterior({ spec }: { spec: InteriorSpec }) {
         <group key={x} position={[x, 0, half - 4]}>
           <mesh castShadow receiveShadow position={[0, 0.6, 0]}>
             <boxGeometry args={[LIBRARY_DESK_HALF * 2, 1.2, 1.5]} />
-            <meshStandardMaterial color="#5d452c" roughness={0.7} />
+            <meshStandardMaterial color="#e7eaec" roughness={0.75} />
           </mesh>
           <mesh castShadow position={[0, 1.26, 0]}>
             <boxGeometry args={[LIBRARY_DESK_HALF * 2 + 0.4, 0.12, 1.9]} />
-            <meshStandardMaterial color="#3a2f24" roughness={0.5} />
+            <meshStandardMaterial color="#b8bec3" roughness={0.5} />
           </mesh>
         </group>
       ))}

@@ -9,7 +9,7 @@ import type { InteriorKind, Vec3 } from './campusLayout'
  * fast refresh.
  */
 
-export type FloorKind = 'marble' | 'wood' | 'carpet' | 'tile' | 'court' | 'epoxy'
+export type FloorKind = 'marble' | 'wood' | 'carpet' | 'tile' | 'court' | 'epoxy' | 'encaustic'
 
 export interface InteriorSpec {
   /** The room is 2×halfExtent square. The player is clamped just inside it. */
@@ -61,7 +61,7 @@ export const INTERIOR_SPECS: Record<InteriorKind, InteriorSpec> = {
   // building. The hall you actually walk into is neither: it is white, and very
   // plain, and everything in it is the floor.
   ufaz: {
-    halfExtent: 22, ceiling: 9, wall: '#eceef0', accent: '#5a5f66', floor: 'tile',
+    halfExtent: 22, ceiling: 9, wall: '#eceef0', accent: '#5a5f66', floor: 'encaustic',
     projector: [0, 5.6, -21.2], spawn: [0, 1.7, 18], lightColor: '#f2f6fa', lightIntensity: 1.2,
     ceilingKind: 'plaster',
   },

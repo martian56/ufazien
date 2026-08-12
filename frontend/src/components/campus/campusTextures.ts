@@ -697,6 +697,65 @@ export function tileTexture(a = '#d9d5cc', b = '#a8a49a') {
   })
 }
 
+/**
+ * Encaustic cement tile, which is what the entrance hall is floored in.
+ *
+ * A four-pointed star repeated on a square grid, in cream, grey and a warm
+ * ochre, with a fine grey grout. The hall had a plain two-tone chequer, and in
+ * the photographs of the building the floor is the most decorated thing in the
+ * room by a distance — plain squares read as a public swimming baths.
+ *
+ * Drawn as one tile of the pattern and repeated, which is how the real thing is
+ * made: the motif is symmetric about both axes, so it meets itself at every
+ * edge without any seam to line up.
+ */
+export function encausticTexture() {
+  // Repeated hard: `RoomShell` scales the repeat by the room's size over a
+  // hundred, so at 24 a "tile" came out four metres across and the hall looked
+  // like a mosaic in a swimming baths. At 100 they are about a metre, which is
+  // still generous and reads as tile at eye height.
+  return build('encaustic', 128, 100, (ctx, size) => {
+    const half = size / 2
+    ctx.fillStyle = '#e8e4d9'
+    ctx.fillRect(0, 0, size, size)
+
+    // The star, as four kites meeting at the centre of the tile. Each corner of
+    // the tile carries a quarter of the neighbouring star, which is what makes
+    // the repeat continuous.
+    const star = (cx: number, cy: number, r: number, fill: string) => {
+      ctx.fillStyle = fill
+      ctx.beginPath()
+      for (let i = 0; i < 8; i++) {
+        const angle = (i / 8) * Math.PI * 2 - Math.PI / 2
+        const reach = i % 2 === 0 ? r : r * 0.38
+        const x = cx + Math.cos(angle) * reach
+        const y = cy + Math.sin(angle) * reach
+        if (i === 0) ctx.moveTo(x, y)
+        else ctx.lineTo(x, y)
+      }
+      ctx.closePath()
+      ctx.fill()
+    }
+
+    star(half, half, half * 0.86, '#9aa0a6')
+    star(half, half, half * 0.4, '#c7b78d')
+    for (const [cx, cy] of [
+      [0, 0],
+      [size, 0],
+      [0, size],
+      [size, size],
+    ]) {
+      star(cx, cy, half * 0.86, '#b9bdc2')
+    }
+
+    // Grout between tiles, thin and cool.
+    ctx.strokeStyle = 'rgba(120,120,116,0.55)'
+    ctx.lineWidth = 2
+    ctx.strokeRect(1, 1, size - 2, size - 2)
+    speckle(ctx, size, 500, ['rgba(255,255,255,0.06)', 'rgba(0,0,0,0.05)'], 91, 1.1)
+  })
+}
+
 /** Institutional carpet tile for the student centre. */
 export function carpetTexture() {
   return build('carpet', 128, 26, (ctx, size) => {
