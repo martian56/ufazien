@@ -268,12 +268,30 @@ function RoomShell({
         </group>
       ))}
 
+      {/* Beams across the boarding. A flat brown plane reads as a brown
+          ceiling; what the photographs show is boards running one way with
+          joists crossing them, and the shadow lines between are the whole
+          reason the ceiling is the first thing you notice in that building. */}
+      {spec.ceilingKind === 'timber' &&
+        Array.from({ length: Math.round(size / 2.6) }, (_, i) => (
+          <mesh
+            key={i}
+            position={[0, spec.ceiling - 0.22, -size / 2 + (i + 0.5) * 2.6]}
+            castShadow
+          >
+            <boxGeometry args={[size, 0.34, 0.3]} />
+            <meshStandardMaterial color="#6b4526" roughness={0.9} />
+          </mesh>
+        ))}
+
       <mesh position={[0, spec.ceiling, 0]} rotation={[Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[size, size]} />
         {spec.ceilingKind === 'deck' ? (
           <meshStandardMaterial color="#6f7681" roughness={0.85} metalness={0.2} side={THREE.DoubleSide} />
         ) : spec.ceilingKind === 'plaster' ? (
           <meshStandardMaterial color="#f2ece0" roughness={1} side={THREE.DoubleSide} />
+        ) : spec.ceilingKind === 'timber' ? (
+          <meshStandardMaterial color="#c98b4b" roughness={0.85} side={THREE.DoubleSide} />
         ) : (
           <meshStandardMaterial
             map={ceiling ?? undefined}
@@ -547,22 +565,31 @@ function UfazHall({ spec }: { spec: InteriorSpec }) {
     <group>
       <HeritageWindows spec={spec} />
 
-      {/* Columns down both sides, which is what a hall of this period has */}
+      {/*
+        Framed photographs along the walls, hung in a line at head height.
+
+        There used to be a colonnade here — five columns a side with capitals
+        and bases, on the reasoning that a hall of this period has one. The
+        Ministry of Education's photographs of the building show no columns
+        anywhere: the circulation is plain yellow wall, a boarded ceiling, and a
+        run of framed pictures down one side. The colonnade was the single thing
+        making this room read as a marble palace rather than as the restored
+        townhouse it is, so it has gone and the pictures have taken its place.
+      */}
       {[-1, 1].map((side) =>
-        [-14, -7, 0, 7, 14].map((z) => (
-          <group key={`${side}-${z}`} position={[side * (half - 5), 0, z]}>
-            <mesh castShadow receiveShadow position={[0, spec.ceiling / 2, 0]}>
-              <cylinderGeometry args={[0.75, 0.85, spec.ceiling, 20]} />
-              <meshStandardMaterial color="#efe6d2" roughness={0.5} />
+        [-15, -9, -3, 3, 9, 15].map((z, i) => (
+          <group
+            key={`${side}-${z}`}
+            position={[side * (half - 1.45), 4.2, z]}
+            rotation={[0, side * -Math.PI / 2, 0]}
+          >
+            <mesh castShadow>
+              <boxGeometry args={[i % 2 ? 1.5 : 1.1, i % 2 ? 1.1 : 1.5, 0.09]} />
+              <meshStandardMaterial color="#2a2724" roughness={0.6} />
             </mesh>
-            {/* Capital and base */}
-            <mesh castShadow position={[0, spec.ceiling - 0.5, 0]}>
-              <boxGeometry args={[2.1, 0.7, 2.1]} />
-              <meshStandardMaterial color={spec.accent} roughness={0.55} metalness={0.2} />
-            </mesh>
-            <mesh castShadow position={[0, 0.35, 0]}>
-              <boxGeometry args={[2, 0.7, 2]} />
-              <meshStandardMaterial color={spec.accent} roughness={0.6} />
+            <mesh position={[0, 0, 0.06]}>
+              <planeGeometry args={[i % 2 ? 1.28 : 0.9, i % 2 ? 0.9 : 1.28]} />
+              <meshStandardMaterial color="#e8e2d4" roughness={0.85} />
             </mesh>
           </group>
         )),

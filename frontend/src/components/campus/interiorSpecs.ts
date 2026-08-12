@@ -38,14 +38,21 @@ export interface InteriorSpec {
    * office, and so — just as wrongly — did a fourteen-metre heritage hall with
    * columns and a staircase in it.
    */
-  ceilingKind?: 'tile' | 'deck' | 'plaster'
+  ceilingKind?: 'tile' | 'deck' | 'plaster' | 'timber'
 }
 
 export const INTERIOR_SPECS: Record<InteriorKind, InteriorSpec> = {
+  // Butter yellow walls, a boarded timber ceiling and a patterned tile floor.
+  // This was cream-grey render, cream marble and a suspended office ceiling,
+  // which was a guess at what a restored 1900s building ought to look like. The
+  // Ministry of Education's photographs of the opening show what it does look
+  // like, and it is warmer and plainer than the guess: yellow distemper, honey
+  // pine boards overhead on dark pendants, encaustic tile underfoot, and a deep
+  // grey-brown skirting running round it all.
   ufaz: {
-    halfExtent: 22, ceiling: 14, wall: '#e5dcc8', accent: '#b99a5c', floor: 'marble',
-    projector: [0, 6.4, -21.2], spawn: [0, 1.7, 16], lightColor: '#fff3dc', lightIntensity: 1.1,
-    ceilingKind: 'plaster',
+    halfExtent: 22, ceiling: 14, wall: '#f0dda6', accent: '#5b5147', floor: 'tile',
+    projector: [0, 6.4, -21.2], spawn: [0, 1.7, 16], lightColor: '#ffeec4', lightIntensity: 1.15,
+    ceilingKind: 'timber',
   },
   library: {
     halfExtent: 24, ceiling: 11, wall: '#e0d4bd', accent: '#6d4f32', floor: 'wood',
@@ -55,10 +62,14 @@ export const INTERIOR_SPECS: Record<InteriorKind, InteriorSpec> = {
     halfExtent: 20, ceiling: 8.5, wall: '#dfe6ea', accent: '#7fa8bd', floor: 'epoxy',
     projector: [0, 5.0, -19.2], spawn: [0, 1.7, 15], lightColor: '#f2fbff', lightIntensity: 1.3,
   },
+  // White walls, a wood floor and a dark beamed ceiling, which is what UFAZ's
+  // teaching rooms are. It was beige walls over a dark blue carpet — a hotel
+  // conference suite, not a classroom in a restored Baku townhouse.
   lecture: {
-    halfExtent: 22, ceiling: 12, wall: '#d8d2c4', accent: '#3f4a5c', floor: 'carpet',
+    halfExtent: 22, ceiling: 12, wall: '#edeeec', accent: '#4a4640', floor: 'wood',
     projector: [0, 6.2, -21.2], spawn: [-11, 1.7, -10], spawnLookAt: [3, 4.5, -19],
-    lightColor: '#fff6e8', lightIntensity: 0.9,
+    lightColor: '#fff6e8', lightIntensity: 0.95,
+    ceilingKind: 'timber',
   },
   'student-center': {
     halfExtent: 22, ceiling: 10, wall: '#e6ebee', accent: '#3f8f7f', floor: 'carpet',
