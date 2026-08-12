@@ -182,10 +182,22 @@ describe('nearestEntrance', () => {
   })
 
   it('prefers the closer of two candidates', () => {
-    const near = CAMPUS_BUILDINGS[1]
+    // Explicit list: only one building stands outdoors now, so the default
+    // has nothing to choose between and this is testing the choosing.
+    const [near, far] = [CAMPUS_BUILDINGS[1], CAMPUS_BUILDINGS[2]]
     const doorZ = near.position[2] + near.size[2] / 2
-    const found = nearestEntrance(near.position[0], doorZ + 1)
+    const found = nearestEntrance(near.position[0], doorZ + 1, [far, near])
     expect(found?.building.id).toBe(near.id)
+  })
+
+  it('only offers a door to something that has one', () => {
+    // The rooms inside the main building have no exterior. Walking across the
+    // lawn where the library used to stand must not offer to open it.
+    for (const building of CAMPUS_BUILDINGS.filter((b) => !b.outdoor)) {
+      const doorZ = building.position[2] + building.size[2] / 2
+      const found = nearestEntrance(building.position[0], doorZ + 1)
+      expect(found?.building.outdoor ?? true).toBe(true)
+    }
   })
 })
 
@@ -195,9 +207,20 @@ describe('campus data', () => {
     expect(new Set(ids).size).toBe(ids.length)
   })
 
-  it('gives every building its own interior', () => {
-    const interiors = CAMPUS_BUILDINGS.map((b) => b.interior)
-    expect(new Set(interiors).size).toBe(interiors.length)
+  it('gives every room its own interior, except the floors that share one', () => {
+    // The three upper corridors are deliberately the same room design — in the
+    // building they are the same corridor. Everything else is its own place.
+    const shared = CAMPUS_BUILDINGS.filter((b) => b.interior === 'ufaz-floor')
+    const rest = CAMPUS_BUILDINGS.filter((b) => b.interior !== 'ufaz-floor')
+    expect(new Set(rest.map((b) => b.interior)).size).toBe(rest.length)
+    expect(shared.length).toBeGreaterThan(1)
+  })
+
+  it('gives every room a distinct id, because ids travel as current_room', () => {
+    // Two rooms sharing an id put their occupants in each other's screen
+    // share, which is the one thing in this file that reaches other people.
+    const ids = CAMPUS_BUILDINGS.map((b) => b.id)
+    expect(new Set(ids).size).toBe(ids.length)
   })
 
   it('keeps ids numeric, because they travel as current_room', () => {
@@ -207,7 +230,12 @@ describe('campus data', () => {
   })
 
   it('does not overlap any two footprints', () => {
-    const rects = [...CAMPUS_BUILDINGS, ...SCENERY_BLOCKS].map(buildingRect)
+    // Outdoor buildings only. The rooms inside the main building carry its
+    // footprint so that anything asking for a rect gets a sane one, and of
+    // course they overlap it — they are inside it.
+    const rects = [...CAMPUS_BUILDINGS.filter((b) => b.outdoor), ...SCENERY_BLOCKS].map(
+      buildingRect,
+    )
     for (let i = 0; i < rects.length; i++) {
       for (let j = i + 1; j < rects.length; j++) {
         const a = rects[i]

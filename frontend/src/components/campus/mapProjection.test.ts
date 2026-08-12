@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CAMPUS_BUILDINGS } from './campusLayout'
+import { OUTDOOR_BUILDINGS, type CampusBuilding } from './campusLayout'
 import {
   CAMPUS_SPAN,
   buildingsInView,
@@ -46,7 +46,7 @@ describe('the whole-campus view', () => {
   it('fits every building inside the square', () => {
     const size = 400
     const view = fitCampus(size)
-    for (const building of CAMPUS_BUILDINGS) {
+    for (const building of OUTDOOR_BUILDINGS) {
       const [x, , z] = building.position
       const at = project(x, z, view)
       expect(at.x, building.name).toBeGreaterThanOrEqual(0)
@@ -58,8 +58,8 @@ describe('the whole-campus view', () => {
 
   it('spans more than the campus is wide', () => {
     const widest = Math.max(
-      ...CAMPUS_BUILDINGS.map((b) => Math.abs(b.position[0]) + b.size[0] / 2),
-      ...CAMPUS_BUILDINGS.map((b) => Math.abs(b.position[2]) + b.size[2] / 2),
+      ...OUTDOOR_BUILDINGS.map((b) => Math.abs(b.position[0]) + b.size[0] / 2),
+      ...OUTDOOR_BUILDINGS.map((b) => Math.abs(b.position[2]) + b.size[2] / 2),
     )
     expect(CAMPUS_SPAN / 2).toBeGreaterThan(widest)
   })
@@ -67,8 +67,8 @@ describe('the whole-campus view', () => {
   it('does not waste the square on empty grass', () => {
     const view = fitCampus(400)
     const spread = Math.max(
-      ...CAMPUS_BUILDINGS.map((b) => Math.abs(b.position[0] - view.cx) + b.size[0] / 2),
-      ...CAMPUS_BUILDINGS.map((b) => Math.abs(b.position[2] - view.cz) + b.size[2] / 2),
+      ...OUTDOOR_BUILDINGS.map((b) => Math.abs(b.position[0] - view.cx) + b.size[0] / 2),
+      ...OUTDOOR_BUILDINGS.map((b) => Math.abs(b.position[2] - view.cz) + b.size[2] / 2),
     )
     expect(view.span).toBeLessThan(spread * 2 + FIT_MARGIN * 2 + 1)
     expect(view.span).toBeLessThan(CAMPUS_SPAN)
@@ -84,7 +84,7 @@ describe('building labels', () => {
 
   it('names every building when there is room', () => {
     const labels = placeLabels(fitCampus(900), width)
-    expect(labels).toHaveLength(CAMPUS_BUILDINGS.length)
+    expect(labels).toHaveLength(OUTDOOR_BUILDINGS.length)
   })
 
   it('never lets two labels touch', () => {
@@ -101,16 +101,18 @@ describe('building labels', () => {
   })
 
   it('drops a label rather than running it off the edge', () => {
-    const labels = placeLabels(fitCampus(120), width)
+    // A synthetic row, because only one building stands on the campus now and
+    // the thing under test is what happens when labels compete for room.
+    const labels = placeLabels(fitCampus(120), width, CROWD)
     for (const label of labels) {
       expect(label.x - width(label.text) / 2).toBeGreaterThanOrEqual(0)
       expect(label.x + width(label.text) / 2).toBeLessThanOrEqual(120)
     }
-    expect(labels.length).toBeLessThan(CAMPUS_BUILDINGS.length)
+    expect(labels.length).toBeLessThan(CROWD.length)
   })
 
   it('gives the biggest buildings first refusal on a spot', () => {
-    const biggest = [...CAMPUS_BUILDINGS].sort(
+    const biggest = [...OUTDOOR_BUILDINGS].sort(
       (a, b) => b.size[0] * b.size[2] - a.size[0] * a.size[2],
     )[0]
     const labels = placeLabels(fitCampus(240), width)
@@ -120,19 +122,19 @@ describe('building labels', () => {
 
 describe('which buildings are worth drawing', () => {
   it('includes everything at full campus zoom', () => {
-    expect(buildingsInView(fitCampus(300))).toHaveLength(CAMPUS_BUILDINGS.length)
+    expect(buildingsInView(fitCampus(300))).toHaveLength(OUTDOOR_BUILDINGS.length)
   })
 
   it('drops the ones off the edge when zoomed in', () => {
-    const first = CAMPUS_BUILDINGS[0]
+    const first = CROWD[0]
     const view = windowAround(first.position[0], first.position[2], 200, 40)
-    const visible = buildingsInView(view)
+    const visible = buildingsInView(view, CROWD)
     expect(visible).toContain(first)
-    expect(visible.length).toBeLessThan(CAMPUS_BUILDINGS.length)
+    expect(visible.length).toBeLessThan(CROWD.length)
   })
 
   it('keeps a building whose centre is outside but whose wall is not', () => {
-    const wide = CAMPUS_BUILDINGS.reduce((a, b) => (a.size[0] > b.size[0] ? a : b))
+    const wide = OUTDOOR_BUILDINGS.reduce((a, b) => (a.size[0] > b.size[0] ? a : b))
     const justPast = wide.position[0] + wide.size[0] / 2 + 4
     const view = windowAround(justPast, wide.position[2], 200, 10)
     expect(buildingsInView(view)).toContain(wide)
@@ -179,11 +181,40 @@ describe('players off the edge of the map', () => {
 
 describe('the nearest building', () => {
   it('finds the one you are standing on', () => {
-    const target = CAMPUS_BUILDINGS[2]
-    expect(nearestBuilding(target.position[0], target.position[2])).toBe(target)
+    const target = CROWD[2]
+    expect(nearestBuilding(target.position[0], target.position[2], CROWD)).toBe(target)
   })
 
   it('returns nothing when there are no buildings', () => {
     expect(nearestBuilding(0, 0, [])).toBeNull()
   })
 })
+
+/**
+ * A row of buildings to test the label and culling logic against.
+ *
+ * The campus has one building standing on it since the rest became rooms
+ * inside it, and a list of one cannot demonstrate labels colliding, labels
+ * being dropped, or anything being culled. These are what the campus used to
+ * be, near enough, and they exercise the logic rather than the data.
+ */
+const CROWD: CampusBuilding[] = [
+  ['Library', -64, -8, 32, 24],
+  ['Laboratory Building', 62, -10, 32, 24],
+  ['Amphitheatre', 0, 66, 36, 28],
+  ['Student Centre', -70, 64, 32, 26],
+  ['Cafeteria', 68, 62, 30, 22],
+  ['Sports Hall', -10, 128, 44, 32],
+].map(([name, x, z, w, d], i) => ({
+  id: 100 + i,
+  name: name as string,
+  position: [x as number, 0, z as number],
+  size: [w as number, 14, d as number],
+  color: '#cccccc',
+  trim: '#888888',
+  icon: '🏢',
+  style: 'modern',
+  interior: 'lecture',
+  blurb: '',
+  outdoor: true,
+}))

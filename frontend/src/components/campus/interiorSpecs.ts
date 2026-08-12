@@ -29,6 +29,14 @@ export interface InteriorSpec {
    * the whole view, and you cannot see the hall you just walked into.
    */
   spawnLookAt?: Vec3
+  /**
+   * Tints the floor texture.
+   *
+   * The corridors and the teaching rooms are the same boards as each other and
+   * much darker than the library's; without this they all come out the one
+   * mid-oak the wood texture ships with.
+   */
+  floorTint?: string
   /** Light colour and strength, which is most of a room's character. */
   lightColor: string
   lightIntensity: number
@@ -55,6 +63,18 @@ export const INTERIOR_SPECS: Record<InteriorKind, InteriorSpec> = {
   ufaz: {
     halfExtent: 22, ceiling: 9, wall: '#eceef0', accent: '#5a5f66', floor: 'tile',
     projector: [0, 5.6, -21.2], spawn: [0, 1.7, 18], lightColor: '#f2f6fa', lightIntensity: 1.2,
+    ceilingKind: 'plaster',
+  },
+  // The upper floors, all three the same. In the real building the corridor on
+  // the second floor is the corridor on the third and the fourth: white walls,
+  // an arcade of round-headed openings down one side, dark boards underfoot,
+  // deep window reveals with a panel radiator under each and framed portraits
+  // between them.
+  'ufaz-floor': {
+    halfExtent: 22, ceiling: 6.2, wall: '#eceef0', accent: '#4a4640', floor: 'wood',
+    projector: [0, 4.2, -21.2], spawn: [10.5, 1.7, -5], spawnLookAt: [-2, 2.6, -16],
+    lightColor: '#f4f7fa', lightIntensity: 1.1,
+    floorTint: '#4b3b31',
     ceilingKind: 'plaster',
   },
   library: {

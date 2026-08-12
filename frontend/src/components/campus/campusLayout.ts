@@ -44,6 +44,7 @@ export const PLAYER_RADIUS = 0.55
 /** Which interior a building opens into. One design per building. */
 export type InteriorKind =
   | 'ufaz'
+  | 'ufaz-floor'
   | 'library'
   | 'lab'
   | 'lecture'
@@ -74,6 +75,23 @@ export interface CampusBuilding {
   trim: string
   /** Shown on the approach prompt, so walking up to a door tells you something. */
   blurb: string
+  /**
+   * Whether this room is a building standing on the campus, or a room inside
+   * one.
+   *
+   * Only the main building is outdoors now. The library, the labs, the
+   * amphitheatre, the student centre, the cafeteria and the sports hall used to
+   * be six separate blocks scattered across a lawn; they are rooms off the
+   * corridors of 183 Nizami Street, which is where the university actually
+   * puts them. Their ids have not changed — the id is what travels as
+   * `current_room` — so a presenter in the library is still visible to
+   * everybody in the library.
+   *
+   * Everything that draws a facade, cuts a doorway or makes a footprint solid
+   * reads this. An indoor room has no exterior to draw and no ground to stand
+   * on.
+   */
+  outdoor: boolean
 }
 
 /**
@@ -95,6 +113,7 @@ export const CAMPUS_BUILDINGS: CampusBuilding[] = [
     style: 'heritage',
     interior: 'ufaz',
     blurb: '183 Nizami Street — the restored 1900s building UFAZ actually occupies',
+    outdoor: true,
   },
   {
     id: 2,
@@ -106,6 +125,7 @@ export const CAMPUS_BUILDINGS: CampusBuilding[] = [
     icon: '📚',
     style: 'brick',
     interior: 'library',
+    outdoor: false,
     blurb: 'Reading room, stacks, and a book-sorting challenge on the desk',
   },
   {
@@ -118,6 +138,7 @@ export const CAMPUS_BUILDINGS: CampusBuilding[] = [
     icon: '🔬',
     style: 'modern',
     interior: 'lab',
+    outdoor: false,
     blurb: 'Strasbourg-standard labs — the titration bench is open',
   },
   {
@@ -130,6 +151,7 @@ export const CAMPUS_BUILDINGS: CampusBuilding[] = [
     icon: '🎓',
     style: 'modern',
     interior: 'lecture',
+    outdoor: false,
     blurb: 'Tiered lecture hall with the projector screen',
   },
   {
@@ -142,6 +164,7 @@ export const CAMPUS_BUILDINGS: CampusBuilding[] = [
     icon: '🏢',
     style: 'glass',
     interior: 'student-center',
+    outdoor: false,
     blurb: 'Sofas, table football and somewhere to actually sit down',
   },
   {
@@ -154,6 +177,7 @@ export const CAMPUS_BUILDINGS: CampusBuilding[] = [
     icon: '🍽️',
     style: 'brick',
     interior: 'cafeteria',
+    outdoor: false,
     blurb: 'Counters, trays, and the smell of reheated plov',
   },
   {
@@ -166,9 +190,57 @@ export const CAMPUS_BUILDINGS: CampusBuilding[] = [
     icon: '🏀',
     style: 'modern',
     interior: 'sports',
+    outdoor: false,
     blurb: 'Indoor court — free throws on the far hoop',
   },
+
+  // The three floors above the entrance hall. They are rooms rather than
+  // buildings: no facade, no footprint, reached by the stair and the lift. Ids
+  // continue the sequence because an id is a `current_room`, and two rooms
+  // sharing one would put their occupants in each other's screen share.
+  {
+    id: 8,
+    name: 'Second Floor',
+    position: [0, 0, -86],
+    size: [54, 25, 22],
+    color: '#e0d2b4',
+    trim: '#cdba99',
+    icon: '🚪',
+    style: 'heritage',
+    interior: 'ufaz-floor',
+    blurb: 'Corridor, with the laboratories and the cafeteria off it',
+    outdoor: false,
+  },
+  {
+    id: 9,
+    name: 'Third Floor',
+    position: [0, 0, -86],
+    size: [54, 25, 22],
+    color: '#e0d2b4',
+    trim: '#cdba99',
+    icon: '🚪',
+    style: 'heritage',
+    interior: 'ufaz-floor',
+    blurb: 'Corridor, with the student centre and the sports hall off it',
+    outdoor: false,
+  },
+  {
+    id: 10,
+    name: 'Fourth Floor',
+    position: [0, 0, -86],
+    size: [54, 25, 22],
+    color: '#e0d2b4',
+    trim: '#cdba99',
+    icon: '🚪',
+    style: 'heritage',
+    interior: 'ufaz-floor',
+    blurb: 'Corridor, and the library in the roof',
+    outdoor: false,
+  },
 ]
+
+/** The buildings that actually stand on the campus and can be walked up to. */
+export const OUTDOOR_BUILDINGS: CampusBuilding[] = CAMPUS_BUILDINGS.filter((b) => b.outdoor)
 
 /**
  * Buildings you cannot walk into.
@@ -518,7 +590,7 @@ export function doorwayFor(building: CampusBuilding): Doorway {
 }
 
 /** Every door on the campus. */
-export const CAMPUS_DOORS: Doorway[] = CAMPUS_BUILDINGS.map(doorwayFor)
+export const CAMPUS_DOORS: Doorway[] = OUTDOOR_BUILDINGS.map(doorwayFor)
 
 /**
  * A building's footprint with the doorway left open.
@@ -568,7 +640,7 @@ export function buildingCollidersWithDoor(building: CampusBuilding): Rect[] {
  * not drop a tree into a doorway just because the doorway is not solid.
  */
 export const CAMPUS_COLLIDERS: Rect[] = [
-  ...CAMPUS_BUILDINGS.flatMap(buildingCollidersWithDoor),
+  ...OUTDOOR_BUILDINGS.flatMap(buildingCollidersWithDoor),
   ...SCENERY_COLLIDERS,
 ]
 
@@ -597,7 +669,7 @@ export const KEEP_CLEAR: Rect[] = [
   ...DISTRICT_STREET_RECTS,
   // The whole building footprint, doorway included: an opening you cannot walk
   // into because a tree is standing in it is not an opening.
-  ...CAMPUS_BUILDINGS.map(buildingRect),
+  ...OUTDOOR_BUILDINGS.map(buildingRect),
   ...SCENERY_COLLIDERS,
   ...PAVEMENTS.map((p) => ({
     x: p.position[0],
@@ -682,7 +754,7 @@ export interface NearbyBuilding {
 export function nearestEntrance(
   x: number,
   z: number,
-  buildings: CampusBuilding[] = CAMPUS_BUILDINGS,
+  buildings: CampusBuilding[] = OUTDOOR_BUILDINGS,
   reach = 9,
 ): NearbyBuilding | null {
   let best: NearbyBuilding | null = null

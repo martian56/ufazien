@@ -29,6 +29,7 @@ import {
   libraryAisleHalf,
 } from './interiorPhysics'
 import { NoticeBoard, ScheduleBoard, SitesBoard } from './CampusBoards'
+import { CORRIDOR_DOORS } from './verticalCirculation'
 import { INTERIOR_SPECS, type FloorKind, type InteriorSpec } from './interiorSpecs'
 import { LECTURE_ROWS, LECTURE_SEATING } from './lectureSeating'
 import {
@@ -246,7 +247,7 @@ function RoomShell({
         <planeGeometry args={[size, size]} />
         <meshStandardMaterial
           map={floorMap ?? undefined}
-          color={floorMap ? '#ffffff' : floor.color}
+          color={spec.floorTint ?? (floorMap ? '#ffffff' : floor.color)}
           roughness={floor.roughness}
           metalness={floor.metalness}
         />
@@ -703,6 +704,83 @@ function Arcade({ half, ceiling }: { half: number; ceiling: number }) {
           <meshStandardMaterial color="#e9ebee" roughness={0.94} side={THREE.DoubleSide} />
         </mesh>
       ))}
+    </group>
+  )
+}
+
+/**
+ * An upper floor: the corridor, repeated.
+ *
+ * The same arcade, the same window bays, the same stair and lift in the same
+ * corners as the entrance hall — which is what the building does. What changes
+ * per floor is the doors along the arcade and what is behind them, and those
+ * come from `verticalCirculation`.
+ */
+function UfazFloor({ spec }: { spec: InteriorSpec }) {
+  const half = spec.halfExtent
+
+  return (
+    <group>
+      <HeritageWindows spec={spec} />
+      <Arcade half={half} ceiling={spec.ceiling} />
+      <LiftCore ceiling={spec.ceiling} />
+
+      {/* The classroom doors along the arcade. Drawn on every floor in the same
+          places; which rooms they lead to is the floor's business, not this
+          component's. */}
+      {CORRIDOR_DOORS.map((z) => (
+        <group key={z} position={[-half + 7.4, 0, z]}>
+          <mesh position={[0, 1.6, 0]} castShadow>
+            <boxGeometry args={[0.12, 3.2, 2.2]} />
+            <meshStandardMaterial color="#5a3b25" roughness={0.6} />
+          </mesh>
+          {/* Architrave behind the leaf, not in front of it. Drawn proud it
+              is a blank panel the size of the opening and the door disappears
+              behind it — which is the third time this has bitten in this
+              codebase, after the gable coping and the window surrounds. */}
+          <mesh position={[-0.06, 1.7, 0]}>
+            <boxGeometry args={[0.1, 3.5, 2.6]} />
+            <meshStandardMaterial color="#dcdfe3" roughness={0.9} />
+          </mesh>
+          <mesh position={[-0.08, 1.1, 0.85]}>
+            <sphereGeometry args={[0.07, 8, 6]} />
+            <meshStandardMaterial color="#b8a25c" roughness={0.4} metalness={0.7} />
+          </mesh>
+        </group>
+      ))}
+
+      {/* Corridor benches in the window bays. */}
+      {[-8, 0, 8].map((z) => (
+        <group key={z} position={[19.4, 0, z]}>
+          <mesh position={[0, 0.5, 0]} castShadow receiveShadow>
+            <boxGeometry args={[1.1, 0.12, 3.2]} />
+            <meshStandardMaterial color="#5a4433" roughness={0.7} />
+          </mesh>
+          {[-1.3, 1.3].map((t) => (
+            <mesh key={t} position={[0, 0.22, t]} castShadow>
+              <boxGeometry args={[0.9, 0.44, 0.12]} />
+              <meshStandardMaterial color="#2b2e33" roughness={0.6} metalness={0.3} />
+            </mesh>
+          ))}
+        </group>
+      ))}
+
+      {/* The stair, arriving from below. Same flight as the hall's, turned so
+          you come up at the head of it and walk down the other way. */}
+      <group position={[UFAZ_STAIR.x, 0, UFAZ_STAIR.z]} rotation={[0, Math.PI, 0]}>
+        {Array.from({ length: 6 }, (_, i) => (
+          <mesh key={i} position={[0, 0.15 - i * 0.3, -i * 0.62]} castShadow receiveShadow>
+            <boxGeometry args={[UFAZ_STAIR.halfW * 2, 0.3, 0.66]} />
+            <meshStandardMaterial color="#9a9a99" roughness={0.6} />
+          </mesh>
+        ))}
+        {[-UFAZ_STAIR.halfW, UFAZ_STAIR.halfW].map((x) => (
+          <mesh key={x} castShadow position={[x, 0.6, -1.9]}>
+            <boxGeometry args={[0.08, 1.05, 4]} />
+            <meshStandardMaterial color="#1c1f23" roughness={0.55} metalness={0.4} />
+          </mesh>
+        ))}
+      </group>
     </group>
   )
 }
@@ -1633,6 +1711,7 @@ interface InteriorProps {
 
 const CONTENTS: Record<InteriorKind, (props: InteriorProps) => React.ReactElement> = {
   ufaz: UfazHall,
+  'ufaz-floor': UfazFloor,
   library: LibraryInterior,
   lab: LabInterior,
   lecture: LectureInterior,

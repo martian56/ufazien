@@ -4,7 +4,7 @@ import { Sky } from '@react-three/drei'
 import * as THREE from 'three'
 
 import {
-  CAMPUS_BUILDINGS,
+  OUTDOOR_BUILDINGS,
   GROUND_SIZE,
   PAVEMENTS,
   QUAD_CENTRE,
@@ -1121,7 +1121,10 @@ export function SpeakingRing({ accent = '#6ee7a8' }: { accent?: string }) {
 export function CampusBuildings({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay | string }) {
   return (
     <group>
-      {CAMPUS_BUILDINGS.map((building) =>
+      {/* Only what stands on the campus. The library, the labs, the
+          amphitheatre, the student centre, the cafeteria and the sports hall
+          are rooms inside the main building now, and a room has no facade. */}
+      {OUTDOOR_BUILDINGS.map((building) =>
         building.interior === 'ufaz' ? (
           <UfazBuilding key={building.id} building={building} timeOfDay={timeOfDay} />
         ) : (

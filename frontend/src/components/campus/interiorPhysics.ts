@@ -126,6 +126,55 @@ export const UFAZ_STAIR = {
   landing: { z: -19.4, halfW: 4.5, halfD: 2.2, top: 4.55 },
 }
 
+/**
+ * An upper floor: a corridor with the arcade down one side.
+ *
+ * The stair and the lift are the same objects in the same places as the ground
+ * floor — that is what "the corridors are the same on every floor" means — so
+ * the flight is here too, running the other way: you arrive at its head and go
+ * down. Its platforms are the ground floor's mirrored in z, which keeps the two
+ * ends of a journey at the same place on both floors.
+ */
+function ufazFloorPhysics(): InteriorPhysics {
+  const colliders: Collider[] = []
+  const platforms: Platform[] = []
+  const seats: Seat[] = []
+
+  // The lift shaft, in the same corner it occupies downstairs.
+  colliders.push({
+    x: UFAZ_LIFTS.x,
+    z: UFAZ_LIFTS.z,
+    halfW: UFAZ_LIFTS.halfW,
+    halfD: UFAZ_LIFTS.halfD,
+    height: 5.6,
+  })
+
+  // The arcade piers. Solid, with the openings between them walkable — which
+  // is the whole point of an arcade and the reason these are separate boxes
+  // rather than one wall.
+  for (const z of [-10, -4, 2, 8, 14]) {
+    colliders.push({ x: -15, z, halfW: 0.45, halfD: 0.55, height: 4.2 })
+  }
+
+  // A bench in each window bay, which is what the corridors are furnished with.
+  for (const z of [-8, 0, 8]) {
+    const id = `ufaz-floor-bench-${z}`
+    colliders.push({ id, x: 19.4, z, halfW: 0.55, halfD: 1.6, height: 0.6 })
+    seats.push({
+      id,
+      x: 19.4,
+      z,
+      y: 0,
+      ry: -Math.PI / 2,
+      seatHeight: 0.55,
+      kind: 'bench',
+      on: id,
+    })
+  }
+
+  return { colliders, platforms, seats }
+}
+
 function ufazPhysics(): InteriorPhysics {
   const half = INTERIOR_SPECS.ufaz.halfExtent
   const colliders: Collider[] = []
@@ -669,6 +718,7 @@ function sportsPhysics(): InteriorPhysics {
 
 const PHYSICS: Record<InteriorKind, InteriorPhysics> = {
   ufaz: ufazPhysics(),
+  'ufaz-floor': ufazFloorPhysics(),
   library: libraryPhysics(),
   lab: labPhysics(),
   lecture: lecturePhysics(),
