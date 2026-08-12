@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useLayoutEffect, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Group, MathUtils } from 'three'
 
@@ -40,14 +40,23 @@ export default function DoorLeaf({
   const right = useRef<Group>(null)
   const placed = useRef(false)
 
-  // Seeded once, for the same reason the target above carries the half-turn:
+  // Seeded once, for the same reason the target below carries the half-turn:
   // the first frame would otherwise lerp up from zero and the door would be
   // seen to assemble itself.
-  if (!placed.current && left.current && right.current) {
+  //
+  // In a layout effect rather than the render body. React attaches refs during
+  // commit, so on the first render both were still null, the guard failed, and
+  // `placed` stayed false — by the time the refs existed `useFrame` had already
+  // lerped the leaves up from zero, which is the exact artefact this prevents.
+  // It also mutated refs during render, which Strict Mode runs twice.
+  useLayoutEffect(() => {
+    if (placed.current || !left.current || !right.current) return
     placed.current = true
     left.current.rotation.y = -DOOR_SWING * swing * facing
     right.current.rotation.y = Math.PI + DOOR_SWING * swing * facing
-  }
+    // Mount only: every later change is what the lerp is for.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useFrame(() => {
     // Driven per frame rather than through React state: the swing changes

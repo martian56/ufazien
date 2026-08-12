@@ -255,12 +255,17 @@ export function GltfCharacter({
     })
   }, [scene, color])
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    // A new mixer has nothing playing on it, so the name of the clip the
+    // previous one was running must not survive into the frame loop. It is a
+    // ref, so it does: changing `variant` swaps the URL, the scene, the mixer
+    // and the actions, and the frame loop then saw `want === current` and
+    // started nothing. The new model stood in its bind pose.
+    current.current = null
+    return () => {
       mixer.stopAllAction()
-    },
-    [mixer],
-  )
+    }
+  }, [mixer])
 
   useFrame((_, delta) => {
     const want = clipFor(pose, ground, isMoving)

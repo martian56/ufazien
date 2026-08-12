@@ -35,9 +35,6 @@ import {
   stoneTexture,
 } from './campusTextures'
 import CampusWindows from './CampusWindows'
-import { CharacterModel } from './CharacterModel'
-
-export { CharacterModel }
 
 /**
  * Procedural campus scenery.
@@ -425,7 +422,11 @@ export const OPENING_HEIGHT = 4.4
  * the reveal, the leaves and the lobby floor — is measured from here, because
  * a doorway that starts at ground level starts below the step you walk up.
  */
-export const THRESHOLD = 0.74
+// The top *surface* of the top step, not its centre. The steps are boxes of
+// height 0.3 at 0.18 + i * 0.28, so the top one is centred at 0.74 and you walk
+// on 0.89 — at 0.74 the lobby floor, the reveal and the door leaves all sat a
+// hand's width below the step outside them.
+export const THRESHOLD = 0.89
 
 /**
  * The lobby you can see through an open door.

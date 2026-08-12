@@ -125,14 +125,28 @@ function prune(gltf, bin) {
   // Only meshes something still points at. A node that lost its mesh above
   // leaves that mesh unreferenced, and walking `json.meshes` blindly would keep
   // every byte of the pistol we just detached.
+  //
+  // Dropped from `json.meshes` as well, not merely skipped. A mesh left in the
+  // array keeps the accessor indices it had before the renumbering below, and
+  // those then point at unrelated accessors or past the end of the shortened
+  // list. `GLTFLoader` parses meshes on demand so the campus still renders, but
+  // the file is invalid and any validator walking `meshes` reads nonsense.
   const liveMeshes = new Set(
     (json.nodes ?? []).filter((n) => n.mesh !== undefined).map((n) => n.mesh),
   )
+  const meshIndex = new Map()
+  const meshes = []
+  for (const old of [...liveMeshes].sort((a, b) => a - b)) {
+    meshIndex.set(old, meshes.length)
+    meshes.push(json.meshes[old])
+  }
+  for (const node of json.nodes ?? []) {
+    if (node.mesh !== undefined) node.mesh = meshIndex.get(node.mesh)
+  }
 
   // Every accessor still reachable from something that is drawn or played.
   const liveAccessors = new Set()
-  for (const index of liveMeshes) {
-    const mesh = json.meshes[index]
+  for (const mesh of meshes) {
     for (const prim of mesh.primitives ?? []) {
       for (const accessor of Object.values(prim.attributes ?? {})) liveAccessors.add(accessor)
       if (prim.indices !== undefined) liveAccessors.add(prim.indices)
@@ -192,8 +206,7 @@ function prune(gltf, bin) {
     return next
   }
 
-  for (const index of liveMeshes) {
-    const mesh = json.meshes[index]
+  for (const mesh of meshes) {
     for (const prim of mesh.primitives ?? []) {
       for (const key of Object.keys(prim.attributes ?? {})) {
         prim.attributes[key] = remap(prim.attributes[key])
@@ -218,6 +231,7 @@ function prune(gltf, bin) {
 
   const buffer = Buffer.concat(chunks)
   json.accessors = accessors
+  json.meshes = meshes
   json.bufferViews = views
   json.buffers = [{ byteLength: buffer.length }]
   // Nothing here has textures, and a stray image would break the single-buffer

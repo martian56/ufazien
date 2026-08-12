@@ -268,6 +268,7 @@ function frontage(streets, real) {
           if (box.minX < -EAST_WEST_LIMIT || box.maxX > EAST_WEST_LIMIT) continue
           if (overlapsLandmark([box.minX, box.maxX], [box.minZ, box.maxZ])) continue
           if (placed.some((p) => overlaps(p, box, 1.5))) continue
+          if (onStreet(streets, box)) continue
 
           placed.push(box)
           out.push({
@@ -289,6 +290,51 @@ function frontage(streets, real) {
     }
   }
   return out
+}
+
+/**
+ * Distance from a point to a segment.
+ *
+ * Point-to-segment rather than a segment's bounding box: every street here runs
+ * a few degrees off the axes, and a box round a diagonal one is far wider than
+ * the street, which would reject frontage that is nowhere near the road.
+ */
+function segmentDistance([ax, az], [bx, bz], px, pz) {
+  const dx = bx - ax
+  const dz = bz - az
+  const len2 = dx * dx + dz * dz
+  const t = len2 ? Math.max(0, Math.min(1, ((px - ax) * dx + (pz - az) * dz) / len2)) : 0
+  return Math.hypot(px - (ax + dx * t), pz - (az + dz * t))
+}
+
+/**
+ * Whether a candidate block stands in any carriageway.
+ *
+ * `frontage` marches down one street at a time and only knew about that street,
+ * the landmark and the blocks already placed. Nothing stopped a block marched
+ * along one street from landing in the one crossing it — and `campusLayout`
+ * turns every district footprint into a collider, so those blocks were walls
+ * across a road.
+ */
+function onStreet(streets, box) {
+  const probes = [
+    [(box.minX + box.maxX) / 2, (box.minZ + box.maxZ) / 2],
+    [box.minX, box.minZ],
+    [box.maxX, box.minZ],
+    [box.maxX, box.maxZ],
+    [box.minX, box.maxZ],
+  ]
+  return streets.some((street) =>
+    street.points.some(
+      (_, i) =>
+        i < street.points.length - 1 &&
+        probes.some(
+          (p) =>
+            segmentDistance(street.points[i], street.points[i + 1], p[0], p[1]) <
+            street.width / 2 + 1,
+        ),
+    ),
+  )
 }
 
 function bbox(building) {

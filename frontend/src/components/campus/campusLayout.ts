@@ -520,7 +520,12 @@ function union(a: Rect, b: Rect): Rect {
  */
 function mergeWedges(rects: Rect[]): Rect[] {
   const boxes = [...rects]
-  for (let guard = 0; guard < boxes.length * 4; guard++) {
+  // Fixed before the first merge. `boxes` loses an entry every time a pair
+  // joins, so a bound that reads its length falls as the work is done and can
+  // stop short of the fixed point this promises. `if (!joined) break` is the
+  // real exit; this is only a backstop.
+  const limit = rects.length * 4
+  for (let guard = 0; guard < limit; guard++) {
     let joined = false
     search: for (let i = 0; i < boxes.length; i++) {
       for (let j = i + 1; j < boxes.length; j++) {

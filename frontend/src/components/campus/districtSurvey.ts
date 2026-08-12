@@ -65,10 +65,7 @@ export const DISTRICT_BUILDINGS: readonly DistrictBuilding[] = [
   { footprint: [[81.9,-96],[82.6,-71],[49.9,-70],[48.9,-108.6],[72.4,-109.3],[72.7,-95.7]], height: 3.6, style: 'infill', source: 'osm' },
   { footprint: [[97.3,-124],[97.9,-106.8],[86.5,-106.3],[85.9,-123.5]], height: 3.6, style: 'infill', source: 'osm' },
   { footprint: [[46.5,-155.2754123641219],[68.5,-155.2754123641219],[68.5,-132.5245876358781],[46.5,-132.5245876358781]], height: 18, style: 'limestone', source: 'infill' },
-  { footprint: [[3.5,-154.8754123641219],[25.5,-154.8754123641219],[25.5,-132.1245876358781],[3.5,-132.1245876358781]], height: 14.4, style: 'limestone', source: 'infill' },
   { footprint: [[3.6999999999999993,-130.5754123641219],[25.7,-130.5754123641219],[25.7,-107.8245876358781],[3.6999999999999993,-107.8245876358781]], height: 18, style: 'limestone', source: 'infill' },
-  { footprint: [[134.63834800510412,-96.5],[157.56165199489587,-96.5],[157.56165199489587,-74.5],[134.63834800510412,-74.5]], height: 21.6, style: 'limestone', source: 'infill' },
-  { footprint: [[85.83834800510412,-94.4],[108.76165199489587,-94.4],[108.76165199489587,-72.4],[85.83834800510412,-72.4]], height: 18, style: 'limestone', source: 'infill' },
 ]
 
 export const DISTRICT_STREETS: readonly DistrictStreet[] = [
