@@ -184,6 +184,119 @@ function InteriorDoorway({ spec }: { spec: InteriorSpec }) {
  * the lights are placed as a grid rather than as one bulb at the centre, which
  * is what made every old interior look like a cave with a torch in it.
  */
+/**
+ * A pitched roof on exposed trusses, seen from inside.
+ *
+ * The library is in the attic and the roof is most of the room: a steep pitch,
+ * white boarding between dark steel rafters, collars and king posts, and
+ * conical pendants on long cables hanging between them. The conference hall has
+ * the same structure over its raked seating.
+ *
+ * The eaves start well down the wall, which is what makes an attic an attic —
+ * a pitch that begins at ceiling height reads as a lid on a normal room.
+ */
+function TrussedRoof({ size, ceiling }: { size: number; ceiling: number }) {
+  const half = size / 2
+  const eaves = ceiling * 0.42
+  const rise = ceiling - eaves
+  const slope = Math.hypot(half, rise)
+  const pitch = Math.atan2(rise, half)
+  // A truss every few metres down the length of the room.
+  const frames = Array.from({ length: Math.round(size / 5) }, (_, i) => -half + (i + 0.5) * (size / Math.round(size / 5)))
+
+  return (
+    <group>
+      {/* The two slopes of boarding.
+          A group carries the pitch and the mesh inside it is laid flat, because
+          composing "lie down" and "tilt" into one Euler triple depends on the
+          rotation order and the first attempt got a flat grey lid: the angle
+          was computed and then never applied. Laying the plane down with a
+          quarter turn about X points its normal at the floor, which is the
+          side of it anybody is going to see. */}
+      {[-1, 1].map((side) => (
+        <group
+          key={side}
+          position={[(side * half) / 2, eaves + rise / 2, 0]}
+          rotation={[0, 0, -side * pitch]}
+        >
+          <mesh rotation={[Math.PI / 2, 0, 0]} receiveShadow>
+            <planeGeometry args={[slope, size]} />
+            <meshStandardMaterial color="#eceff2" roughness={0.95} side={THREE.DoubleSide} />
+          </mesh>
+        </group>
+      ))}
+      {/* Gable ends, so the roof does not open onto nothing. */}
+      {[-1, 1].map((side) => (
+        <mesh key={`g${side}`} position={[0, eaves, side * half]} rotation={[0, side > 0 ? 0 : Math.PI, 0]}>
+          <shapeGeometry args={[gableEnd(half, rise)]} />
+          <meshStandardMaterial color="#eceff2" roughness={0.95} side={THREE.DoubleSide} />
+        </mesh>
+      ))}
+
+      {frames.map((z) => (
+        <group key={z} position={[0, 0, z]}>
+          {/* Rafters. */}
+          {[-1, 1].map((side) => (
+            <mesh
+              key={side}
+              position={[(side * half) / 2, eaves + rise / 2, 0]}
+              rotation={[0, 0, -side * pitch]}
+              castShadow
+            >
+              <boxGeometry args={[slope, 0.26, 0.26]} />
+              <meshStandardMaterial color="#5a6067" roughness={0.6} metalness={0.25} />
+            </mesh>
+          ))}
+          {/* Collar tie and king post, which is what makes it read as a truss
+              rather than as two sticks leaning together. */}
+          <mesh position={[0, eaves + rise * 0.45, 0]} castShadow>
+            <boxGeometry args={[half * 1.05, 0.22, 0.22]} />
+            <meshStandardMaterial color="#5a6067" roughness={0.6} metalness={0.25} />
+          </mesh>
+          <mesh position={[0, eaves + rise * 0.72, 0]} castShadow>
+            <boxGeometry args={[0.2, rise * 0.55, 0.2]} />
+            <meshStandardMaterial color="#5a6067" roughness={0.6} metalness={0.25} />
+          </mesh>
+        </group>
+      ))}
+
+      {/* Conical pendants on long cables, with the copper collar they have. */}
+      {frames.flatMap((z) =>
+        [-half * 0.55, 0, half * 0.55].map((x) => (
+          <group key={`${z}-${x}`} position={[x, 0, z]}>
+            <mesh position={[0, ceiling * 0.86, 0]}>
+              <cylinderGeometry args={[0.012, 0.012, ceiling * 0.28, 4]} />
+              <meshStandardMaterial color="#23262a" />
+            </mesh>
+            <mesh position={[0, ceiling * 0.71, 0]}>
+              <cylinderGeometry args={[0.09, 0.09, 0.12, 10]} />
+              <meshStandardMaterial color="#b06a3c" roughness={0.4} metalness={0.6} />
+            </mesh>
+            <mesh position={[0, ceiling * 0.66, 0]} castShadow>
+              <coneGeometry args={[0.42, 0.5, 14, 1, true]} />
+              <meshStandardMaterial color="#8d949b" roughness={0.6} side={THREE.DoubleSide} />
+            </mesh>
+            <mesh position={[0, ceiling * 0.62, 0]}>
+              <sphereGeometry args={[0.14, 8, 6]} />
+              <meshStandardMaterial color="#fff4d8" emissive="#ffe9b8" emissiveIntensity={1.1} />
+            </mesh>
+          </group>
+        )),
+      )}
+    </group>
+  )
+}
+
+/** The triangle that closes each end of a pitched roof. */
+function gableEnd(half: number, rise: number): THREE.Shape {
+  const shape = new THREE.Shape()
+  shape.moveTo(-half, 0)
+  shape.lineTo(half, 0)
+  shape.lineTo(0, rise)
+  shape.closePath()
+  return shape
+}
+
 function RoomShell({
   spec,
   lit = true,
@@ -288,6 +401,9 @@ function RoomShell({
           </mesh>
         ))}
 
+      {spec.ceilingKind === 'truss' && <TrussedRoof size={size} ceiling={spec.ceiling} />}
+
+      {spec.ceilingKind !== 'truss' && (
       <mesh position={[0, spec.ceiling, 0]} rotation={[Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[size, size]} />
         {spec.ceilingKind === 'deck' ? (
@@ -305,6 +421,7 @@ function RoomShell({
           />
         )}
       </mesh>
+      )}
 
       <ambientLight
         intensity={(lit ? 0.55 : 0.28) * level}

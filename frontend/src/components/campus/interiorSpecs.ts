@@ -46,7 +46,7 @@ export interface InteriorSpec {
    * office, and so — just as wrongly — did a fourteen-metre heritage hall with
    * columns and a staircase in it.
    */
-  ceilingKind?: 'tile' | 'deck' | 'plaster' | 'timber'
+  ceilingKind?: 'tile' | 'deck' | 'plaster' | 'timber' | 'truss'
 }
 
 export const INTERIOR_SPECS: Record<InteriorKind, InteriorSpec> = {
@@ -77,9 +77,15 @@ export const INTERIOR_SPECS: Record<InteriorKind, InteriorSpec> = {
     floorTint: '#4b3b31',
     ceilingKind: 'plaster',
   },
+  // The library is in the roof, and the roof is the room: a steep pitch with
+  // dark steel trusses across a white boarded soffit, conical pendants on long
+  // cables between them, and a dark walnut floor. It was cream walls under a
+  // flat ceiling, which is a reading room in a different building.
   library: {
-    halfExtent: 24, ceiling: 11, wall: '#e0d4bd', accent: '#6d4f32', floor: 'wood',
-    projector: [0, 5.4, -23.2], spawn: [0, 1.7, 18], lightColor: '#ffe9c4', lightIntensity: 0.85,
+    halfExtent: 24, ceiling: 11, wall: '#eef0f2', accent: '#5c6167', floor: 'wood',
+    projector: [0, 5.4, -23.2], spawn: [0, 1.7, 18], lightColor: '#eef4fa', lightIntensity: 1.45,
+    floorTint: '#463830',
+    ceilingKind: 'truss',
   },
   lab: {
     halfExtent: 20, ceiling: 8.5, wall: '#dfe6ea', accent: '#7fa8bd', floor: 'epoxy',
@@ -92,7 +98,9 @@ export const INTERIOR_SPECS: Record<InteriorKind, InteriorSpec> = {
     halfExtent: 22, ceiling: 12, wall: '#edeeec', accent: '#4a4640', floor: 'wood',
     projector: [0, 6.2, -21.2], spawn: [-11, 1.7, -10], spawnLookAt: [3, 4.5, -19],
     lightColor: '#fff6e8', lightIntensity: 0.95,
-    ceilingKind: 'timber',
+    floorTint: '#5b4636',
+    // Dark steel trusses over the raked seating, which is what the hall has.
+    ceilingKind: 'truss',
   },
   'student-center': {
     halfExtent: 22, ceiling: 10, wall: '#e6ebee', accent: '#3f8f7f', floor: 'carpet',
