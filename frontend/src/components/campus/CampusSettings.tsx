@@ -186,7 +186,16 @@ export default function CampusSettings({
           >
             {DISTRICT_ATTRIBUTION}
           </a>
-          , used under the ODbL.
+          , used under the ODbL. Characters by{' '}
+          <a
+            href="https://quaternius.com"
+            target="_blank"
+            rel="noreferrer"
+            className="underline decoration-slate-600 underline-offset-2 hover:text-slate-300"
+          >
+            Quaternius
+          </a>
+          , released under CC0.
         </div>
 
         <div className="shrink-0 border-t border-white/10 p-2">

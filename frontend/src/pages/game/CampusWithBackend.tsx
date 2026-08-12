@@ -41,11 +41,11 @@ import {
   CampusBuildings,
   CampusSkyline,
   ChatBubble,
-  CharacterModel,
   NameTag,
   SpeakingRing,
   THRESHOLD,
 } from '../../components/campus/CampusScenery'
+import { GltfCharacter } from '../../components/campus/GltfCharacter'
 import {
   BUBBLE_MS,
   bubbleFor,
@@ -470,18 +470,17 @@ function PlayerAvatar({
 
   return (
     <group ref={meshRef} position={[position.x, 0, position.z]}>
-      <CharacterModel
+      <GltfCharacter
         color={String(userData.color ?? "#4F46E5")}
         isMoving={Boolean(userData.is_moving)}
         direction={String(userData.direction ?? "down")}
         heading={typeof userData.heading === 'number' ? userData.heading : undefined}
         activity={String(userData.activity ?? "standing")}
         speed={Boolean(userData.is_moving) ? 5.5 : 0}
-        // The mouth moves while they are on the microphone. The ring on the
-        // floor already said who was talking; this says it on the person,
-        // which is where you are looking anyway.
-        speaking={speaking}
-        seed={seed}
+        // Which of the CC0 packs this player wears. Derived from the same seed
+        // the old model used for its appearance, so a given player keeps the
+        // same look between sessions instead of being reshuffled on reconnect.
+        variant={seed}
       />
       <NameTag
         name={name}
