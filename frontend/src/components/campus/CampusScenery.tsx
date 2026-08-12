@@ -21,6 +21,7 @@ import {
   type TimeOfDay,
   type Vec3,
 } from './campusLayout'
+import NizamiDistrict from './NizamiDistrict'
 import UfazBuilding from './UfazBuilding'
 import {
   asphaltTexture,
@@ -778,6 +779,9 @@ export function SceneryBuilding({
 export function CampusSkyline({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay | string }) {
   return (
     <group>
+      {/* The real city on UFAZ's side of Nizami Street: surveyed streets and
+          footprints, none of them enterable. */}
+      <NizamiDistrict timeOfDay={timeOfDay} />
       {SCENERY_BLOCKS.map((block, i) => (
         <SceneryBuilding key={i} block={block} timeOfDay={timeOfDay} />
       ))}

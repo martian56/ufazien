@@ -44,9 +44,14 @@ const FLOORS = 3
 /** How high the plinth stands, with its small square windows. */
 const PLINTH = 2.4
 
-const RENDER_COLOUR = '#c6c6cf'
-const DRESSING = '#ded2b8'
-const ROOF_TILE = '#7e463a'
+// Near-white with a lavender cast, which is what the render actually is. The
+// first pass read it as mid-grey off a single overcast photograph; the flank
+// elevation in better light is much lighter than that.
+const RENDER_COLOUR = '#d5d6dd'
+const DRESSING = '#e0d5bd'
+const ROOF_TILE = '#a24b34'
+/** The semi-basement, a shade down from the wall above but the same render. */
+const PLINTH_COLOUR = '#c4c5ce'
 
 interface UfazBuildingProps {
   building: CampusBuilding
@@ -133,7 +138,11 @@ function Gable({
 
   return (
     <group position={position} rotation={[0, rotation, 0]}>
-      <mesh geometry={coping} position={[0, -0.17, -0.34]} castShadow>
+      {/* Behind the face, not in front of it. Extruded slightly larger, the
+          coping is meant to show as a band following the outline; drawn proud
+          of the face it covered the render completely and every gable on the
+          building came out solid cream. */}
+      <mesh geometry={coping} position={[0, -0.17, -0.62]} castShadow>
         <meshStandardMaterial color={DRESSING} roughness={0.85} />
       </mesh>
       <mesh geometry={face} position={[0, 0, -0.25]} castShadow receiveShadow>
@@ -167,20 +176,24 @@ function Gable({
  * The architrave is what carries the building. On a grey render every opening
  * is outlined in pale stone, and it is that contrast rather than the window
  * itself that you read from across the street.
+ *
+ * Square-headed, on every floor. The first pass arched the top floor on the
+ * assumption that a building of this date would; the photographs say the
+ * opposite — every window in the wall is rectangular and the only arches on the
+ * building are the paired attic lights inside the gables and the entrance
+ * itself. Arching the top floor made it read as a different, later building.
  */
 function DressedWindow({
   width,
   height,
   position,
   rotation = 0,
-  arched = false,
   lit = false,
 }: {
   width: number
   height: number
   position: [number, number, number]
   rotation?: number
-  arched?: boolean
   lit?: boolean
 }) {
   return (
@@ -205,18 +218,6 @@ function DressedWindow({
           metalness={0.35}
         />
       </mesh>
-      {arched && (
-        <mesh position={[0, height / 2, 0.15]}>
-          <circleGeometry args={[width / 2, 16, 0, Math.PI]} />
-          <meshStandardMaterial
-            color={lit ? '#f6e2b4' : '#2f3742'}
-            emissive={lit ? '#ffd98a' : '#0d1218'}
-            emissiveIntensity={lit ? 0.85 : 0.12}
-            roughness={0.25}
-            metalness={0.35}
-          />
-        </mesh>
-      )}
       {/* Glazing bars, so a window is not one flat pane. */}
       <mesh position={[0, 0, 0.17]}>
         <boxGeometry args={[0.07, height, 0.03]} />
@@ -256,7 +257,7 @@ export default function UfazBuilding({ building, timeOfDay = 'day' }: UfazBuildi
   // centre where the two big ones meet.
   const flankGables = useMemo(() => {
     const out: number[] = []
-    for (let i = 1; i < BAYS - 1; i += 2) {
+    for (let i = 1; i < BAYS - 1; i += 3) {
       const x = -halfW + bay * (i + 0.5)
       if (Math.abs(x) < bay * 1.6) continue
       out.push(x)
@@ -266,21 +267,32 @@ export default function UfazBuilding({ building, timeOfDay = 'day' }: UfazBuildi
 
   return (
     <group position={building.position}>
-      {/* The plinth: a darker band at pavement level with square basement
-          lights, which is how the building meets the street. */}
+      {/* The plinth at pavement level, with its row of small square basement
+          lights. Rendered the same colour as the wall above rather than a grey
+          band: the real plinth is not a different material, it is the same
+          render carried down, and only the cream sill course at its head marks
+          where the semi-basement ends. */}
       <mesh position={[0, PLINTH / 2, 0]} castShadow receiveShadow>
         <boxGeometry args={[width + 0.3, PLINTH, depth + 0.3]} />
-        <meshStandardMaterial color="#8d8d96" roughness={0.95} />
+        <meshStandardMaterial color={PLINTH_COLOUR} roughness={0.95} />
       </mesh>
       {Array.from({ length: BAYS }, (_, i) => {
         const x = -halfW + bay * (i + 0.5)
         // Not across the doorway.
         if (Math.abs(x) < OPENING_HALF_W + 0.8) return null
         return (
-          <mesh key={`b${i}`} position={[x, PLINTH * 0.55, halfD + 0.2]}>
-            <planeGeometry args={[0.8, 0.7]} />
-            <meshStandardMaterial color="#22282f" roughness={0.5} />
-          </mesh>
+          <group key={`b${i}`} position={[x, PLINTH * 0.5, halfD + 0.18]}>
+            {/* Cream surround, because every opening on this building has one,
+                down to the basement lights at ankle height. */}
+            <mesh castShadow>
+              <boxGeometry args={[1.16, 1.02, 0.14]} />
+              <meshStandardMaterial color={DRESSING} roughness={0.86} />
+            </mesh>
+            <mesh position={[0, 0, 0.09]}>
+              <planeGeometry args={[0.84, 0.7]} />
+              <meshStandardMaterial color="#22282f" roughness={0.5} />
+            </mesh>
+          </group>
         )
       })}
 
@@ -343,10 +355,9 @@ export default function UfazBuilding({ building, timeOfDay = 'day' }: UfazBuildi
           return (
             <DressedWindow
               key={`${floor}-${i}`}
-              width={bay * 0.44}
+              width={bay * 0.52}
               height={tall}
               position={[x, y, halfD + 0.02]}
-              arched={floor === FLOORS - 1}
               lit={isLit(i, floor)}
             />
           )
@@ -360,23 +371,76 @@ export default function UfazBuilding({ building, timeOfDay = 'day' }: UfazBuildi
           return [-0.28, 0.1].map((t, j) => (
             <DressedWindow
               key={`${side}-${floor}-${j}`}
-              width={bay * 0.4}
+              width={bay * 0.46}
               height={floorHeight * 0.52}
               position={[side * (halfW + 0.02), y, depth * t]}
               rotation={side * Math.PI / 2}
-              arched={floor === FLOORS - 1}
               lit={isLit(j + 3, floor)}
             />
           ))
         }),
       )}
 
-      {/* The roof behind the gables. Shallow, and only just visible from the
-          street, which is exactly how much of it you see in life. */}
-      <mesh position={[0, height + 1.1, -0.4]} rotation={[-0.42, 0, 0]} castShadow>
-        <boxGeometry args={[width - 1, 0.3, depth * 0.62]} />
-        <meshStandardMaterial color={ROOF_TILE} roughness={0.95} />
+      {/* A pitched tiled roof running the length of the building. The first
+          pass had a shallow slab tucked behind the gables on the assumption
+          that little of the roof shows; the flank elevation says otherwise —
+          it is a full red-tile roof and it reads from across the street. */}
+      {[-1, 1].map((side) => (
+        <mesh
+          key={side}
+          position={[0, height + 1.5, side * depth * 0.24]}
+          rotation={[side * 0.62, 0, 0]}
+          castShadow
+        >
+          <boxGeometry args={[width + 0.4, 0.26, depth * 0.62]} />
+          <meshStandardMaterial color={ROOF_TILE} roughness={0.95} />
+        </mesh>
+      ))}
+      {/* The ridge. */}
+      <mesh position={[0, height + 3.05, 0]} castShadow>
+        <boxGeometry args={[width + 0.5, 0.28, 0.5]} />
+        <meshStandardMaterial color="#8d3f2c" roughness={0.9} />
       </mesh>
+
+      {/* The turret. A conical red-tiled spire on an octagonal drum at the end
+          of the flank, with a finial on top — the single most recognisable
+          thing on the building after the gables, and entirely absent before. */}
+      <group position={[halfW - bay * 1.1, height - 0.6, halfD - depth * 0.26]}>
+        {/* Tall enough that the drum stands clear of the roof slope it comes
+            through. At the first height the eaves swallowed it and only the
+            spire showed, which reads as a cone dropped on a roof rather than a
+            turret rising out of the corner. */}
+        <mesh position={[0, 1.9, 0]} castShadow receiveShadow>
+          <cylinderGeometry args={[1.5, 1.6, 3.8, 8]} />
+          <meshStandardMaterial color={RENDER_COLOUR} roughness={0.92} />
+        </mesh>
+        {/* Narrow arched lights round the drum, on the two faces you can see. */}
+        {[0, 0.7].map((t) => (
+          <group key={t} rotation={[0, t, 0]}>
+            <mesh position={[0, 2.5, 1.48]}>
+              <planeGeometry args={[0.5, 1.1]} />
+              <meshStandardMaterial color="#2b3138" roughness={0.35} metalness={0.3} />
+            </mesh>
+          </group>
+        ))}
+        {/* A cream band round the drum, as every opening and edge here has. */}
+        <mesh position={[0, 3.86, 0]} castShadow>
+          <cylinderGeometry args={[1.68, 1.68, 0.24, 8]} />
+          <meshStandardMaterial color={DRESSING} roughness={0.86} />
+        </mesh>
+        <mesh position={[0, 5.6, 0]} castShadow>
+          <coneGeometry args={[1.8, 3.3, 8]} />
+          <meshStandardMaterial color={ROOF_TILE} roughness={0.92} />
+        </mesh>
+        <mesh position={[0, 7.55, 0]} castShadow>
+          <cylinderGeometry args={[0.05, 0.05, 0.9, 6]} />
+          <meshStandardMaterial color="#3a3f46" roughness={0.5} metalness={0.6} />
+        </mesh>
+        <mesh position={[0, 8.05, 0]}>
+          <sphereGeometry args={[0.15, 10, 8]} />
+          <meshStandardMaterial color="#c9a227" roughness={0.35} metalness={0.75} />
+        </mesh>
+      </group>
 
       {/* The signature: two tall gables over the entrance, and a row of
           smaller ones along the front. */}
@@ -391,6 +455,20 @@ export default function UfazBuilding({ building, timeOfDay = 'day' }: UfazBuildi
       {flankGables.map((x) => (
         <Gable key={x} width={bay * 1.5} height={2.6} position={[x, height - 0.4, halfD + 0.05]} />
       ))}
+      {/* And down both returns. The photographs taken from along the street
+          show the same row of ogee dormers on the side elevation; leaving them
+          off made the building read as a facade with a plain shed behind it. */}
+      {[-1, 1].map((side) =>
+        [-0.3, 0.02, 0.3].map((t) => (
+          <Gable
+            key={`${side}-${t}`}
+            width={bay * 1.4}
+            height={2.4}
+            position={[side * (halfW + 0.05), height - 0.4, depth * t]}
+            rotation={side * Math.PI / 2}
+          />
+        )),
+      )}
 
       {/* Cast-iron downpipes, which the corner of the real building has a pair
           of and which break up an otherwise blank expanse of render. */}
