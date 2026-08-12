@@ -14,7 +14,7 @@ import {
   type Activity,
   type PoseFrame,
 } from './avatarPose'
-import { faceTexture } from './campusTextures'
+import { faceTexture, type Expression } from './campusTextures'
 
 /**
  * A student.
@@ -45,9 +45,9 @@ import { faceTexture } from './campusTextures'
 const GEO = {
   // Shoulders roughly two and a half heads wide. The first pass had a 0.46
   // head on a 0.54 torso, which is a toddler's proportions, and it showed.
-  torso: new THREE.CapsuleGeometry(0.28, 0.52, 4, 14),
+  torso: new THREE.CapsuleGeometry(0.24, 0.24, 5, 16),
   hips: new THREE.CapsuleGeometry(0.235, 0.14, 4, 12),
-  neck: new THREE.CylinderGeometry(0.085, 0.105, 0.14, 10),
+  neck: new THREE.CylinderGeometry(0.086, 0.108, 0.2, 12),
   head: new THREE.SphereGeometry(0.21, 20, 16),
   face: new THREE.PlaneGeometry(0.28, 0.28),
   // Hair sits on the crown, not over the face. Swept to a hemisphere it
@@ -59,6 +59,11 @@ const GEO = {
   // Split at the elbow and the knee. A single-segment limb cannot sit down:
   // rotating one capsule at the hip puts the whole leg out horizontally in
   // front, like a doll propped against a wall.
+  // The cap over the shoulder joint. Without it the arm starts below the
+  // socket and the gap between it and the torso is visible from the front.
+  shoulder: new THREE.SphereGeometry(0.095, 12, 10),
+  // The collar, closing the shirt around the neck.
+  collar: new THREE.CylinderGeometry(0.145, 0.185, 0.1, 14),
   upperArm: new THREE.CapsuleGeometry(0.082, 0.2, 4, 10),
   foreArm: new THREE.CapsuleGeometry(0.075, 0.2, 4, 10),
   hand: new THREE.SphereGeometry(0.08, 10, 8),
@@ -66,6 +71,8 @@ const GEO = {
   shin: new THREE.CapsuleGeometry(0.093, 0.2, 4, 10),
   // Kept for the mid-detail body, which has no joints.
   leg: new THREE.CapsuleGeometry(0.105, 0.42, 4, 10),
+  // A belt at the waist, which is where the shirt and the trousers meet.
+  belt: new THREE.CylinderGeometry(0.262, 0.25, 0.11, 16),
   shoe: new THREE.BoxGeometry(0.16, 0.1, 0.26),
   backpack: new THREE.BoxGeometry(0.38, 0.46, 0.18),
   strap: new THREE.BoxGeometry(0.06, 0.36, 0.05),
@@ -90,17 +97,41 @@ function material(color: string, roughness = 0.8, metalness = 0): THREE.MeshStan
   return made
 }
 
-const faceMaterials = new Map<number, THREE.MeshBasicMaterial>()
+const faceMaterials = new Map<string, THREE.MeshBasicMaterial>()
 
-function faceMaterial(variant: 0 | 1 | 2): THREE.MeshBasicMaterial | null {
-  const hit = faceMaterials.get(variant)
+/**
+ * Which face somebody wears while doing a given thing.
+ *
+ * Two students clapping look pleased, somebody pointing is concentrating, and
+ * a raised hand is a question. The pose alone carried all of this before, and
+ * an unchanging face under a waving arm is most of what made the avatars read
+ * as mannequins.
+ */
+export function expressionFor(activity: Activity, speaking = false): Expression {
+  if (speaking) return 'talk'
+  switch (activity) {
+    case 'waving':
+    case 'clapping':
+      return 'smile'
+    case 'pointing':
+      return 'focus'
+    case 'hand_raised':
+      return 'surprise'
+    default:
+      return 'neutral'
+  }
+}
+
+function faceMaterial(variant: 0 | 1 | 2, expression: Expression): THREE.MeshBasicMaterial | null {
+  const key = `${variant}:${expression}`
+  const hit = faceMaterials.get(key)
   if (hit) return hit
-  const map = faceTexture(variant)
+  const map = faceTexture(variant, expression)
   if (!map) return null
   // Basic, not standard: a face drawn as a texture should not also be shaded,
   // or the eyes go dark whenever the student turns away from the sun.
   const made = new THREE.MeshBasicMaterial({ map, transparent: true, depthWrite: false })
-  faceMaterials.set(variant, made)
+  faceMaterials.set(key, made)
   return made
 }
 
@@ -135,6 +166,13 @@ export interface CharacterModelProps {
   /** Ground speed, which decides whether this is a walk or a run. */
   speed?: number
   /**
+   * Whether they are talking on the proximity voice.
+   *
+   * Drives the mouth. The speaking ring on the floor already said who was
+   * making the noise; this says it on the person, which is where you look.
+   */
+  speaking?: boolean
+  /**
    * The user id. Everything except the shirt is derived from it, so a student
    * looks the same to everyone and stays the same between sessions.
    */
@@ -148,6 +186,7 @@ export function CharacterModel({
   heading,
   activity = 'standing',
   speed,
+  speaking = false,
   seed = 0,
 }: CharacterModelProps) {
   const look = useMemo(() => avatarLook(seed), [seed])
@@ -195,7 +234,7 @@ export function CharacterModel({
   return (
     <group ref={body} scale={look.height}>
       <Detailed distances={[0, 22, 55]}>
-        <FullBody color={color} look={look} activity={pose} speed={ground} />
+        <FullBody color={color} look={look} activity={pose} speed={ground} speaking={speaking} />
         <SimpleBody color={color} look={look} activity={pose} speed={ground} />
         <DistantBody color={color} look={look} />
       </Detailed>
@@ -212,18 +251,20 @@ function FullBody({
   look,
   activity,
   speed,
+  speaking,
 }: {
   color: string
   look: AvatarLook
   activity: Activity
   speed: number
+  speaking: boolean
 }) {
   const rig = useRef<Rig>({})
   usePose(rig, activity, speed)
 
   const shirt = material(color, 0.78)
   const skin = material(look.skin, 0.85)
-  const face = faceMaterial(look.face)
+  const face = faceMaterial(look.face, expressionFor(activity, speaking))
   const trousers = material(look.trousers, 0.85)
 
   return (
@@ -233,8 +274,8 @@ function FullBody({
           castShadow
           geometry={GEO.torso}
           material={shirt}
-          position={[0, 1.05, 0]}
-          scale={[1, 1, 0.72]}
+          position={[0, 1.15, 0]}
+          scale={[1.16, 1, 0.72]}
         />
         <mesh
           castShadow
@@ -243,24 +284,38 @@ function FullBody({
           position={[0, 0.71, 0]}
           scale={[1, 1, 0.78]}
         />
-        <mesh castShadow geometry={GEO.neck} material={skin} position={[0, 1.5, 0]} />
+        {/* The neck was buried: the torso capsule's top sat above the head's
+            bottom, so the head grew straight out of the collar. */}
+        <mesh castShadow geometry={GEO.neck} material={skin} position={[0, 1.53, 0]} />
+        {/* A collar, which is what a shirt has where it meets a neck. */}
+        <mesh castShadow geometry={GEO.collar} material={shirt} position={[0, 1.45, 0]} scale={[1.1, 1, 0.72]} />
 
-        <group ref={(node) => { rig.current.head = node ?? undefined }} position={[0, 1.7, 0]}>
+        <group ref={(node) => { rig.current.head = node ?? undefined }} position={[0, 1.79, 0]}>
           <mesh castShadow geometry={GEO.head} material={skin} scale={[1, 1.1, 0.95]} />
           {face && <mesh geometry={GEO.face} material={face} position={[0, 0.012, 0.207]} />}
           <Hair look={look} />
         </group>
 
+        {/* The waist. The shirt and the trousers are different silhouettes as
+            well as different colours, so where they met there was a visible
+            step; a belt is what a person has there anyway. */}
+        <mesh castShadow geometry={GEO.belt} material={material(look.shoes, 0.55)} position={[0, 0.845, 0]} scale={[1.06, 1, 0.72]} />
+
         {/* Shoulders and elbows. Both arms are built the same way and told
-            apart by which ref they take, so a wave only moves one of them. */}
-        {([['left', -0.325], ['right', 0.325]] as const).map(([side, x]) => (
+            apart by which ref they take, so a wave only moves one of them.
+            Brought in from 0.325 to the surface of the torso: at the old
+            offset the upper arms hung in the air beside the body with a
+            visible gap between. */}
+        {([['left', -0.295], ['right', 0.295]] as const).map(([side, x]) => (
           <group
             key={side}
-            position={[x, 1.3, 0]}
+            position={[x, 1.32, 0]}
             ref={(node) => {
               rig.current[side === 'left' ? 'leftShoulder' : 'rightShoulder'] = node ?? undefined
             }}
           >
+            {/* The deltoid, which closes the joint at the top of the arm. */}
+            <mesh castShadow geometry={GEO.shoulder} material={shirt} />
             <mesh castShadow geometry={GEO.upperArm} material={shirt} position={[0, -0.14, 0]} />
             <group
               position={[0, -0.28, 0]}
@@ -364,8 +419,8 @@ function SimpleBody({
           castShadow
           geometry={GEO.torso}
           material={material(color, 0.78)}
-          position={[0, 1.05, 0]}
-          scale={[1, 1, 0.72]}
+          position={[0, 1.15, 0]}
+          scale={[1.16, 1, 0.72]}
         />
         <mesh castShadow geometry={GEO.head} material={material(look.skin, 0.85)} position={[0, 1.7, 0]} />
         <mesh
@@ -378,7 +433,7 @@ function SimpleBody({
         {([['left', -0.3], ['right', 0.3]] as const).map(([side, x]) => (
           <group
             key={side}
-            position={[x, 1.3, 0]}
+            position={[x, 1.32, 0]}
             ref={(node) => {
               rig.current[side === 'left' ? 'leftShoulder' : 'rightShoulder'] = node ?? undefined
             }}

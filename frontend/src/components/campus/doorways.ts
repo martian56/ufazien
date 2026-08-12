@@ -25,7 +25,7 @@ import {
   type Doorway,
 } from './campusLayout'
 import type { InteriorKind } from './campusLayout'
-import { interiorHalfExtent } from './interiorSpecs'
+import { INTERIOR_SPECS, interiorHalfExtent } from './interiorSpecs'
 
 /**
  * The facade geometry lives in `campusLayout`, which is the root of this
@@ -89,9 +89,33 @@ export interface InteriorDoor {
  * On the +Z wall of every room, opposite the projector — which is where the
  * spawn already put the player, so walking in and turning round has always led
  * back this way.
+ *
+ * In the wall itself, not at the clamp. The clamp stands a metre and a half
+ * short of the wall so that nobody presses their eye against it, and putting
+ * the door there left a pair of leaves standing free in the middle of the
+ * room with a blank wall behind them — attached to nothing, opening onto
+ * nothing, and in the library growing out of the issue desk.
  */
 export function interiorDoorFor(kind: InteriorKind | undefined): InteriorDoor {
-  return { x: 0, z: interiorHalfExtent(kind), halfW: DOOR_HALF_WIDTH }
+  const spec = kind ? INTERIOR_SPECS[kind] : INTERIOR_SPECS.lecture
+  return { x: 0, z: spec.halfExtent, halfW: DOOR_HALF_WIDTH }
+}
+
+/**
+ * How far the player may walk towards the wall at a given point.
+ *
+ * The room's boundary, except in the doorway — where the clamp opens out to
+ * the wall itself so the player can walk into the opening rather than being
+ * stopped in front of it by an invisible line.
+ */
+export function interiorLimit(
+  kind: InteriorKind | undefined,
+  x: number,
+  z: number,
+): number {
+  const door = interiorDoorFor(kind)
+  const inDoorway = z > 0 && Math.abs(x - door.x) <= door.halfW
+  return inDoorway ? door.z : interiorHalfExtent(kind)
 }
 
 /**
@@ -102,5 +126,5 @@ export function interiorDoorFor(kind: InteriorKind | undefined): InteriorDoor {
  * been pulled back inside and there is nothing left to detect.
  */
 export function leavingThroughDoor(x: number, z: number, door: InteriorDoor): boolean {
-  return z > door.z && Math.abs(x - door.x) <= door.halfW
+  return z >= door.z && Math.abs(x - door.x) <= door.halfW
 }

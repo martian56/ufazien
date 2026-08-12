@@ -5,11 +5,14 @@ import type { InteriorKind, Vec3 } from './campusLayout'
 import { mulberry32 } from './campusLayout'
 import {
   BLEACHER_TIERS,
+  CAFE_BINS,
   CAFE_HEAT_LAMP_Y,
   FUME_CUPBOARDS,
   LAB_AISLE,
   LAB_BENCH_HALF,
   LAB_BENCH_ROWS,
+  LIBRARY_DESK_HALF,
+  LIBRARY_DESK_X,
   LOUNGE_CLUSTERS,
   LOUNGE_SOFA_OFFSET,
   SCOREBOARD_Y,
@@ -71,6 +74,105 @@ function floorMaterial(kind: FloorKind) {
   }
 }
 
+/** The clear opening of an interior door, matching the collider gap. */
+const INNER_DOOR_HALF_W = 1.7
+const INNER_DOOR_HEIGHT = 4.4
+
+/**
+ * The way out, as a hole in the wall.
+ *
+ * The interior door used to be two leaves hanging in mid-air a metre and a
+ * half in front of an unbroken wall — attached to nothing, opening onto
+ * nothing, and in the library standing in the issue desk. The wall it belongs
+ * in is built here in four pieces around the opening, with a reveal showing
+ * the thickness and daylight beyond it, so that the leaves have something to
+ * hang in and the way out is somewhere you can see from across the room.
+ */
+function InteriorDoorway({ spec }: { spec: InteriorSpec }) {
+  const z = spec.halfExtent
+  const half = INNER_DOOR_HALF_W
+  const pier = spec.halfExtent - half
+
+  return (
+    <group position={[0, 0, z]} rotation={[0, Math.PI, 0]}>
+      {/* The wall, in pieces: two piers and a head. */}
+      {[-1, 1].map((side) => (
+        <mesh key={side} position={[(side * (half + pier / 2)), spec.ceiling / 2, 0]} receiveShadow>
+          <planeGeometry args={[pier, spec.ceiling]} />
+          <meshStandardMaterial color={spec.wall} roughness={0.95} side={THREE.DoubleSide} />
+        </mesh>
+      ))}
+      <mesh
+        position={[0, INNER_DOOR_HEIGHT + (spec.ceiling - INNER_DOOR_HEIGHT) / 2, 0]}
+        receiveShadow
+      >
+        <planeGeometry args={[half * 2, spec.ceiling - INNER_DOOR_HEIGHT]} />
+        <meshStandardMaterial color={spec.wall} roughness={0.95} side={THREE.DoubleSide} />
+      </mesh>
+
+      {/* Skirting and picture rail, carried across the piers so the doorway
+          does not break the line the rest of the room runs at. */}
+      {[-1, 1].map((side) => (
+        <group key={`t${side}`}>
+          <mesh position={[side * (half + pier / 2), 0.2, 0]}>
+            <boxGeometry args={[pier, 0.4, 0.3]} />
+            <meshStandardMaterial color={spec.accent} roughness={0.8} />
+          </mesh>
+          <mesh position={[side * (half + pier / 2), spec.ceiling - 0.35, 0]}>
+            <boxGeometry args={[pier, 0.3, 0.35]} />
+            <meshStandardMaterial color={spec.accent} roughness={0.8} />
+          </mesh>
+        </group>
+      ))}
+
+      {/* The frame, which is what makes it read as a door rather than a gap. */}
+      {[-1, 1].map((side) => (
+        <mesh key={`f${side}`} position={[side * (half + 0.22), INNER_DOOR_HEIGHT / 2, 0.12]} castShadow>
+          <boxGeometry args={[0.44, INNER_DOOR_HEIGHT + 0.44, 0.36]} />
+          <meshStandardMaterial color={spec.accent} roughness={0.7} />
+        </mesh>
+      ))}
+      <mesh position={[0, INNER_DOOR_HEIGHT + 0.22, 0.12]} castShadow>
+        <boxGeometry args={[half * 2 + 0.88, 0.44, 0.36]} />
+        <meshStandardMaterial color={spec.accent} roughness={0.7} />
+      </mesh>
+
+      {/* The reveal: the thickness of the wall, seen from inside. */}
+      {[-1, 1].map((side) => (
+        <mesh key={`r${side}`} position={[side * half, INNER_DOOR_HEIGHT / 2, -0.45]} rotation={[0, side * Math.PI / 2, 0]}>
+          <planeGeometry args={[0.9, INNER_DOOR_HEIGHT]} />
+          <meshStandardMaterial color="#cfc8bb" roughness={0.9} side={THREE.DoubleSide} />
+        </mesh>
+      ))}
+
+      {/* Daylight beyond. Not the campus itself — that is a whole scene, and
+          the point of the interiors being their own scene is that it is not
+          resident here. A bright panel at the end of the reveal reads as
+          outside, which is all the doorway has to say. */}
+      <mesh position={[0, INNER_DOOR_HEIGHT / 2, -0.9]}>
+        <planeGeometry args={[half * 2, INNER_DOOR_HEIGHT]} />
+        <meshStandardMaterial
+          color="#b9cfe4"
+          emissive="#9fc0dd"
+          emissiveIntensity={0.65}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+
+      {/* An exit sign over it, so the way out is findable with the lights off. */}
+      <mesh position={[0, INNER_DOOR_HEIGHT + 0.7, 0.2]}>
+        <planeGeometry args={[1.1, 0.34]} />
+        <meshStandardMaterial
+          color="#0f2a17"
+          emissive="#57e08a"
+          emissiveIntensity={1.6}
+          toneMapped={false}
+        />
+      </mesh>
+    </group>
+  )
+}
+
 /**
  * Walls, floor, ceiling, skirting and the light rig.
  *
@@ -112,9 +214,10 @@ function RoomShell({
 
   useLayoutEffect(() => () => floorMap?.dispose(), [floorMap])
 
+  // Every wall but the one with the door in it, which is built in pieces
+  // around the opening below.
   const walls: [number, number, number, number][] = [
     [0, spec.ceiling / 2, -spec.halfExtent, 0],
-    [0, spec.ceiling / 2, spec.halfExtent, Math.PI],
     [-spec.halfExtent, spec.ceiling / 2, 0, Math.PI / 2],
     [spec.halfExtent, spec.ceiling / 2, 0, -Math.PI / 2],
   ]
@@ -217,6 +320,8 @@ function RoomShell({
           </mesh>
         </group>
       ))}
+
+      <InteriorDoorway spec={spec} />
 
       {children}
     </group>
@@ -661,17 +766,20 @@ function LibraryInterior({ spec }: { spec: InteriorSpec }) {
         </group>
       ))}
 
-      {/* Issue desk by the door */}
-      <group position={[0, 0, half - 4]}>
-        <mesh castShadow receiveShadow position={[0, 0.6, 0]}>
-          <boxGeometry args={[7, 1.2, 1.5]} />
-          <meshStandardMaterial color="#5d452c" roughness={0.7} />
-        </mesh>
-        <mesh castShadow position={[0, 1.26, 0]}>
-          <boxGeometry args={[7.4, 0.12, 1.9]} />
-          <meshStandardMaterial color="#3a2f24" roughness={0.5} />
-        </mesh>
-      </group>
+      {/* Issue desk, in two runs either side of the doorway. One counter on
+          the centre line put the way out of the library through the desk. */}
+      {LIBRARY_DESK_X.map((x) => (
+        <group key={x} position={[x, 0, half - 4]}>
+          <mesh castShadow receiveShadow position={[0, 0.6, 0]}>
+            <boxGeometry args={[LIBRARY_DESK_HALF * 2, 1.2, 1.5]} />
+            <meshStandardMaterial color="#5d452c" roughness={0.7} />
+          </mesh>
+          <mesh castShadow position={[0, 1.26, 0]}>
+            <boxGeometry args={[LIBRARY_DESK_HALF * 2 + 0.4, 0.12, 1.9]} />
+            <meshStandardMaterial color="#3a2f24" roughness={0.5} />
+          </mesh>
+        </group>
+      ))}
 
       <Plant position={[-half + 2.5, 0, half - 3]} scale={1.3} />
       <Plant position={[half - 2.5, 0, half - 3]} scale={1.3} />
@@ -1106,8 +1214,8 @@ function CafeteriaInterior({ spec }: { spec: InteriorSpec }) {
         />
       ))}
 
-      {/* Bins and a water station by the door */}
-      {[-3, 0, 3].map((x) => (
+      {/* Bins and a water station beside the door, not across it. */}
+      {CAFE_BINS.map((x) => (
         <mesh key={x} castShadow receiveShadow position={[x, 0.6, half - 2.5]}>
           <boxGeometry args={[1, 1.2, 1]} />
           <meshStandardMaterial color={x === 0 ? '#3f7f4a' : x < 0 ? '#3f6f9f' : '#7f6f3f'} roughness={0.8} />

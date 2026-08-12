@@ -44,6 +44,7 @@ import {
   CharacterModel,
   NameTag,
   SpeakingRing,
+  THRESHOLD,
 } from '../../components/campus/CampusScenery'
 import {
   BUBBLE_MS,
@@ -81,6 +82,7 @@ import {
   doorstep,
   doorwayFor,
   interiorDoorFor,
+  interiorLimit,
   leavingThroughDoor,
 } from '../../components/campus/doorways'
 import {
@@ -475,6 +477,10 @@ function PlayerAvatar({
         heading={typeof userData.heading === 'number' ? userData.heading : undefined}
         activity={String(userData.activity ?? "standing")}
         speed={Boolean(userData.is_moving) ? 5.5 : 0}
+        // The mouth moves while they are on the microphone. The ring on the
+        // floor already said who was talking; this says it on the person,
+        // which is where you are looking anyway.
+        speaking={speaking}
         seed={seed}
       />
       <NameTag
@@ -918,6 +924,7 @@ function CampusDoors({
           x={door.x}
           z={door.z}
           halfWidth={door.halfW}
+          sill={THRESHOLD}
           swing={doorSwing(doors, exteriorDoorId(door.id), now)}
         />
       ))}
@@ -1168,10 +1175,14 @@ function Player({
         return
       }
 
-      // The room's own walls, which are a clamp rather than geometry.
-      const limit = interiorHalfExtent(insideBuilding.interior)
-      camera.position.x = MathUtils.clamp(camera.position.x, -limit, limit)
-      camera.position.z = MathUtils.clamp(camera.position.z, -limit, limit)
+      // The room's own walls, which are a clamp rather than geometry. The
+      // limit opens out to the wall inside the doorway, so a player can walk
+      // into the opening instead of stopping at an invisible line in front of
+      // it — which is what the door being in the wall means.
+      const side = interiorHalfExtent(insideBuilding.interior)
+      const ahead = interiorLimit(insideBuilding.interior, camera.position.x, camera.position.z)
+      camera.position.x = MathUtils.clamp(camera.position.x, -side, side)
+      camera.position.z = MathUtils.clamp(camera.position.z, -side, ahead)
     } else {
       camera.position.x = MathUtils.clamp(camera.position.x, -CAMPUS_LIMIT, CAMPUS_LIMIT)
       camera.position.z = MathUtils.clamp(camera.position.z, -CAMPUS_LIMIT, CAMPUS_LIMIT)

@@ -189,6 +189,15 @@ export const STACK_ROWS = [-15, -9, -3, 3]
  */
 export const LIBRARY_TERMINAL: [number, number] = [-13.5, 12]
 
+/**
+ * The two runs of the issue desk, either side of the doorway.
+ *
+ * Between the door and the reading tables at ±9: the tables reach in to 6.5,
+ * and the doorway needs a person's width of clearance either side of centre.
+ */
+export const LIBRARY_DESK_X = [-4, 4]
+export const LIBRARY_DESK_HALF = 1.3
+
 /** Where the reading tables stand, and how the chairs sit around them. */
 export const LIBRARY_TABLE_X = [-9, 9]
 export const LIBRARY_TABLE_Z = [10, 15, 20]
@@ -286,8 +295,14 @@ function libraryPhysics(): InteriorPhysics {
     }
   }
 
-  // Issue desk by the door.
-  colliders.push({ x: 0, z: half - 4, halfW: 3.5, halfD: 0.95, height: 1.35 })
+  // Issue desk by the door, in two runs either side of it.
+  //
+  // It used to be one seven-metre counter on the centre line, which is where
+  // the door is: the way out of the library ran straight through the desk.
+  // `doorways.test.ts` holds the approach clear now.
+  for (const x of LIBRARY_DESK_X) {
+    colliders.push({ x, z: half - 4, halfW: LIBRARY_DESK_HALF, halfD: 0.95, height: 1.35 })
+  }
 
   // The calculator terminal, against the west wall clear of the reading
   // tables. Turned to face into the room, so its footprint is deep rather
@@ -497,6 +512,15 @@ function studentCentrePhysics(): InteriorPhysics {
 /* Cafeteria                                                            */
 /* ------------------------------------------------------------------ */
 
+/**
+ * The bins by the cafeteria door, either side of the way out.
+ *
+ * There were three, at -3, 0 and 3. The one on the centre line stood in the
+ * doorway itself: leaving the cafeteria meant walking round a bin placed in
+ * the only way out.
+ */
+export const CAFE_BINS = [-5.2, -3, 3]
+
 export const CAFE_TABLE_X = [-11, -3.5, 4, 11.5]
 export const CAFE_TABLE_Z = [-8, -1, 6, 13]
 /**
@@ -549,7 +573,10 @@ function cafeteriaPhysics(): InteriorPhysics {
     }
   }
 
-  for (const x of [-3, 0, 3]) {
+  // Bins and a water station by the door — beside it, not across it. The
+  // middle one stood in the doorway, so leaving the cafeteria meant walking
+  // round a bin placed in the only way out.
+  for (const x of CAFE_BINS) {
     colliders.push({ x, z: half - 2.5, halfW: 0.5, halfD: 0.5, height: 1.2 })
   }
 

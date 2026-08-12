@@ -8,11 +8,13 @@ import {
   doorstep,
   doorwayFor,
   interiorDoorFor,
+  interiorLimit,
   leavingThroughDoor,
 } from './doorways'
 import { CAMPUS_BUILDINGS, PLAYER_RADIUS, type InteriorKind } from './campusLayout'
-import { interiorHalfExtent } from './interiorSpecs'
+import { INTERIOR_SPECS, interiorHalfExtent } from './interiorSpecs'
 import { insideCollider, resolveColliders, type Collider } from './campusPhysics'
+import { interiorColliders } from './interiorPhysics'
 
 const KINDS = CAMPUS_BUILDINGS.map((b) => b.interior)
 
@@ -124,11 +126,36 @@ describe('walking through', () => {
 })
 
 describe('the door on the inside', () => {
-  it('sits on the boundary the player is clamped to', () => {
-    // A door in front of the clamp is one you walk into; behind it, one you
-    // can never reach.
+  it('sits in the wall, not at the clamp in front of it', () => {
+    // The clamp stands a metre and a half short of the wall so nobody presses
+    // their eye against it. A door there hangs in mid-air with a blank wall
+    // behind it — which is exactly what it did, and in the library it stood in
+    // the issue desk.
     for (const kind of KINDS as InteriorKind[]) {
-      expect(interiorDoorFor(kind).z).toBeCloseTo(interiorHalfExtent(kind))
+      expect(interiorDoorFor(kind).z).toBeCloseTo(INTERIOR_SPECS[kind].halfExtent)
+      expect(interiorDoorFor(kind).z).toBeGreaterThan(interiorHalfExtent(kind))
+    }
+  })
+
+  it('opens the clamp out to the wall inside the doorway', () => {
+    // Otherwise the door is in the wall and the player still stops short of
+    // it: you would walk up to an invisible line and watch the way out from
+    // there.
+    for (const kind of KINDS as InteriorKind[]) {
+      const door = interiorDoorFor(kind)
+      expect(interiorLimit(kind, 0, door.z - 1)).toBeCloseTo(door.z)
+      // And nowhere else: the wall is still a wall a pace to the side.
+      expect(interiorLimit(kind, door.halfW + 1, door.z - 1)).toBeCloseTo(
+        interiorHalfExtent(kind),
+      )
+    }
+  })
+
+  it('keeps the far side of the room clamped', () => {
+    // The doorway is on +Z only. An opening at the back as well would let a
+    // player walk out through the projector wall.
+    for (const kind of KINDS as InteriorKind[]) {
+      expect(interiorLimit(kind, 0, -5)).toBeCloseTo(interiorHalfExtent(kind))
     }
   })
 
@@ -155,3 +182,55 @@ describe('the door on the inside', () => {
     expect(leavingThroughDoor(0, door.z - 2, door)).toBe(false)
   })
 })
+
+describe('the way out is clear', () => {
+  /**
+   * Nothing solid may stand in the doorway or the approach to it.
+   *
+   * The library's issue desk was directly across its door — the way out ran
+   * through the counter, so leaving the room meant walking round a desk you
+   * could not see past to a door you could not see. A room you cannot leave by
+   * the door you came in by is worse than one with no door drawn at all.
+   */
+  it('leaves the doorway and its approach walkable in every room', () => {
+    for (const kind of KINDS as InteriorKind[]) {
+      const door = interiorDoorFor(kind)
+      const colliders = interiorColliders(kind)
+
+      // From the door back into the room, along its centre line.
+      for (let back = 0; back <= APPROACH; back += 0.5) {
+        const z = door.z - back
+        const blocker = colliders.find((c) => insideCollider(door.x, z, c, PLAYER_RADIUS))
+        expect(
+          blocker,
+          `${kind}: the way out is blocked ${back}m inside the door by ${JSON.stringify(blocker)}`,
+        ).toBeUndefined()
+      }
+    }
+  })
+
+  it('lets a player walk from the middle of the room to the door', () => {
+    // Resolving each step must not push them off the centre line and into the
+    // jamb: a corridor a person cannot walk down is not a corridor.
+    for (const kind of KINDS as InteriorKind[]) {
+      const door = interiorDoorFor(kind)
+      for (let back = 0.5; back <= APPROACH; back += 0.5) {
+        const settled = resolveColliders(door.x, door.z - back, interiorColliders(kind), PLAYER_RADIUS)
+        expect(
+          Math.abs(settled.x - door.x),
+          `${kind}: pushed ${Math.abs(settled.x - door.x).toFixed(2)}m sideways ${back}m from the door`,
+        ).toBeLessThan(door.halfW)
+      }
+    }
+  })
+})
+
+/**
+ * How far back from a door the approach has to stay clear.
+ *
+ * Enough to stand in front of it and step through, not a corridor all the way
+ * across the room. The amphitheatre's rows run the full width by design and
+ * its back desk is four metres in — you reach the door along the back of the
+ * hall rather than straight down the middle, which is how a raked hall works.
+ */
+const APPROACH = 2.5
