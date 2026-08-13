@@ -151,200 +151,159 @@ export const TURN_RATE = 9
 /* ------------------------------------------------------------------ */
 
 /**
- * Everything the rig needs for one frame.
+ * One rotation applied to one joint of the rig the campus ships.
  *
- * Angles are radians about X unless named otherwise. The rig has a hip and a
- * knee per leg and a shoulder and an elbow per arm, which is the minimum that
- * lets somebody sit down: with a single-segment leg, sitting puts both legs out
- * horizontally in front like a doll.
+ * ## Why poses are described this way now
+ *
+ * There used to be a `PoseFrame` here: a hip, a knee, a shoulder and an elbow
+ * per side, with a `clap`, a `handRaised` and a `point` written against it. It
+ * described the avatar the campus used to draw, which was built out of cones
+ * and spheres. When that was replaced by Quaternius's rigged characters,
+ * nothing consumed any of it any more, and it was never noticed because the
+ * whole file is pure and its tests kept passing — twenty-six of them, on code
+ * no frame ever ran.
+ *
+ * What players got instead was `clipFor` picking the nearest baked clip: a
+ * clap played `Interact`, which is a reach, and a raised hand played `Wave`,
+ * which is a wave. Those are the two the emote menu is most often used for, and
+ * both of them plainly did something else. The pack has twenty-four clips and
+ * not one of them is a clap, a raised hand or a point — the rest are combat —
+ * so no amount of rebuilding the assets fixes it.
+ *
+ * So an emote is a handful of joint rotations laid over a still idle, which is
+ * the technique sitting already used. Angles are in the joint's own frame,
+ * applied in the order listed, and they are measured against the pack's actual
+ * A-pose rest orientation rather than guessed: an arm bone here points down its
+ * own +Y and neither arm's frame is world-aligned, so "rotate the shoulder
+ * back by two radians" means nothing until you know which axis that is.
  */
-export interface PoseFrame {
-  /** How far the whole body drops, for sitting. */
-  hipDrop: number
-  torsoLean: number
-  headTurn: number
-  headNod: number
-  leftHip: number
-  rightHip: number
-  leftKnee: number
-  rightKnee: number
-  leftShoulder: number
-  rightShoulder: number
-  /** Outward swing of the arms, about Z. Used by waving and clapping. */
-  leftShoulderZ: number
-  rightShoulderZ: number
-  leftElbow: number
-  rightElbow: number
+export interface JointTurn {
+  /** The joint, spelled as the pack spells it. */
+  joint: string
+  axis: 'x' | 'y' | 'z'
+  /** Radians. */
+  angle: number
+  /**
+   * Whose frame the axis is in.
+   *
+   * `local` — the joint's own, which is a hinge: a knee, an elbow.
+   * `parent` — the bone above it, which is a swing: a hip.
+   *
+   * The distinction is not cosmetic. Folding both knees in the parent's frame
+   * bends the two legs in opposite directions and crosses them over, which is
+   * a yoga pose rather than a person on a chair.
+   */
+  frame?: 'parent' | 'local'
 }
 
-const REST: PoseFrame = {
-  hipDrop: 0,
-  torsoLean: 0,
-  headTurn: 0,
-  headNod: 0,
-  leftHip: 0,
-  rightHip: 0,
-  leftKnee: 0,
-  rightKnee: 0,
-  leftShoulder: 0,
-  rightShoulder: 0,
-  leftShoulderZ: 0,
-  rightShoulderZ: 0,
-  leftElbow: 0,
-  rightElbow: 0,
-}
-
-/** How far the hips drop when sitting: roughly the height of a chair seat. */
-export const SIT_DROP = 0.42
+const DEG = Math.PI / 180
 
 /**
- * The pose for one frame.
+ * Sitting: hips folded forward, knees bent, ankles eased.
  *
- * `time` is seconds — the animation clock, not a delta. `speed` is ground speed
- * in world units per second, and is what decides whether this is a walk, a run
- * or a stand.
+ * The pack has no sitting clip, so this goes over `Idle_Neutral`. A seated
+ * character playing the animated idle sways from the waist as though standing.
  */
-export function poseFrame(activity: Activity, time: number, speed: number): PoseFrame {
-  if (activity === 'sitting') return sitPose(time)
-  // Leaning is a whole-body pose like sitting rather than something laid over
-  // a gait: you cannot walk while propped against a wall, and blending the two
-  // gives a player sliding along it at a angle.
-  if (activity === 'leaning') return leanPose(time)
+export const SEATED_TURNS: readonly JointTurn[] = [
+  // Hips swing in the parent's frame, which for a thigh is the pelvis and is
+  // near enough world-aligned.
+  { joint: 'UpperLeg.L', axis: 'x', angle: -1.45, frame: 'parent' },
+  { joint: 'UpperLeg.R', axis: 'x', angle: -1.45, frame: 'parent' },
+  { joint: 'LowerLeg.L', axis: 'x', angle: 1.5 },
+  { joint: 'LowerLeg.R', axis: 'x', angle: 1.5 },
+  { joint: 'Foot.L', axis: 'x', angle: 0.25 },
+  { joint: 'Foot.R', axis: 'x', angle: 0.25 },
+]
 
-  const gait = gaitFor(speed)
-  const base = gait.cadence > 0 ? walkPose(gait, time) : idlePose(time)
+/** How far apart the palms get between claps, as an elbow angle in degrees. */
+const CLAP_OPEN = 62
+const CLAP_SHUT = 100
 
+/** Claps per second. Applause, not a slow hand. */
+const CLAP_RATE = 12
+
+/**
+ * The emotes that are posed from the rig rather than played from a clip.
+ *
+ * Waving is not among them: the pack ships a wave and it is a better one than
+ * six joint angles would be.
+ */
+export const POSED_EMOTES: readonly Activity[] = ['clapping', 'hand_raised', 'pointing']
+
+export function isPosedEmote(activity: Activity): boolean {
+  return POSED_EMOTES.includes(activity)
+}
+
+/**
+ * The joint rotations for what a player is doing, if it is posed rather than
+ * played.
+ *
+ * `time` is the animation clock in seconds, not a delta. Anything not posed
+ * returns nothing, and the baked clip is left to do its job untouched.
+ */
+export function poseTurns(activity: Activity, time: number): readonly JointTurn[] {
   switch (activity) {
-    case 'waving':
-      return { ...base, ...wave(time) }
+    case 'sitting':
+      return SEATED_TURNS
     case 'clapping':
-      return { ...base, ...clap(time) }
+      return clapTurns(time)
     case 'hand_raised':
-      return { ...base, ...handRaised() }
+      return raisedTurns(time)
     case 'pointing':
-      return { ...base, ...point() }
+      return POINT_TURNS
     default:
-      return base
+      return NO_TURNS
   }
 }
 
-function walkPose(gait: Gait, time: number): PoseFrame {
-  const phase = time * gait.cadence
-  const swing = Math.sin(phase) * gait.swing
+const NO_TURNS: readonly JointTurn[] = []
 
-  return {
-    ...REST,
-    torsoLean: gait.lean,
-    // The head lags the shoulders slightly, which is most of what makes a walk
-    // look like a walk rather than a slide.
-    headTurn: -Math.sin(phase) * 0.05,
-    leftHip: swing,
-    rightHip: -swing,
-    // A knee only bends one way, and only on the leg that is travelling
-    // forward. Rectified, so the shin never hyperextends through the thigh.
-    leftKnee: Math.max(0, -Math.sin(phase)) * gait.swing * 1.15,
-    rightKnee: Math.max(0, Math.sin(phase)) * gait.swing * 1.15,
-    leftShoulder: -swing * gait.armRatio,
-    rightShoulder: swing * gait.armRatio,
-    leftElbow: Math.max(0, swing) * 0.5,
-    rightElbow: Math.max(0, -swing) * 0.5,
-  }
-}
+/**
+ * Clapping: both hands meeting on the centre line in front of the chest.
+ *
+ * The upper arms are fixed and only the elbows move, which is what a clap
+ * actually is — swinging at the shoulder throws the hands past each other. The
+ * two arms take different numbers because the rig's left and right joints are
+ * mirrored rather than identical, so the same angle on each gives one hand in
+ * front of the sternum and the other up by the ear.
+ */
+function clapTurns(time: number): JointTurn[] {
+  const close = (Math.sin(time * CLAP_RATE) + 1) / 2
+  const elbow = (CLAP_OPEN + close * (CLAP_SHUT - CLAP_OPEN)) * DEG
 
-function idlePose(time: number): PoseFrame {
-  // A slow breath, so a student standing still is not a statue.
-  return { ...REST, headNod: Math.sin(time * 1.5) * 0.02 }
+  return [
+    { joint: 'UpperArm.R', axis: 'x', angle: 165 * DEG },
+    { joint: 'UpperArm.R', axis: 'z', angle: 95 * DEG },
+    { joint: 'LowerArm.R', axis: 'x', angle: elbow },
+    { joint: 'UpperArm.L', axis: 'x', angle: -165 * DEG },
+    { joint: 'UpperArm.L', axis: 'y', angle: 15 * DEG },
+    { joint: 'UpperArm.L', axis: 'z', angle: -90 * DEG },
+    { joint: 'LowerArm.L', axis: 'x', angle: elbow },
+  ]
 }
 
 /**
- * Sitting.
+ * A hand up, held.
  *
- * Thighs forward and level, shins down, torso upright with the faintest
- * settle. The hips drop by a seat height so that placing the avatar at floor
- * level in front of a chair puts them *on* it.
+ * The right arm all but straight, wrist level with the top of the head and
+ * outboard of the shoulder rather than across the face. `hand_raised` is a held
+ * activity — it stays up until the player drops it — so the only movement is a
+ * slight sway, because an arm frozen to the tenth of a degree reads as a
+ * crashed animation.
  */
-function sitPose(time: number): PoseFrame {
-  const settle = Math.sin(time * 1.2) * 0.012
-  return {
-    ...REST,
-    hipDrop: SIT_DROP,
-    torsoLean: 0.06 + settle,
-    headNod: settle,
-    leftHip: -Math.PI / 2,
-    rightHip: -Math.PI / 2,
-    leftKnee: Math.PI / 2,
-    rightKnee: Math.PI / 2,
-    // Hands resting on the thighs rather than hanging through the seat.
-    leftShoulder: -0.45,
-    rightShoulder: -0.45,
-    leftElbow: 0.7,
-    rightElbow: 0.7,
-  }
+function raisedTurns(time: number): JointTurn[] {
+  const sway = Math.sin(time * 1.6) * 1.5
+
+  return [
+    { joint: 'UpperArm.R', axis: 'x', angle: 155 * DEG },
+    { joint: 'UpperArm.R', axis: 'z', angle: (-25 + sway) * DEG },
+    { joint: 'LowerArm.R', axis: 'x', angle: 12 * DEG },
+  ]
 }
 
-/**
- * Propped against a wall.
- *
- * The lean is backwards, away from the direction the avatar faces, because the
- * wall is behind them — a forward lean reads as being about to fall over. One
- * ankle crossed over the other is what separates it from standing still at a
- * slight angle, and is most of why it looks deliberate.
- */
-export const LEAN_ANGLE = -0.22
-
-function leanPose(time: number): PoseFrame {
-  // Slower than the standing idle: somebody leaning is settled, and breathing
-  // at walking pace against a wall looks like fidgeting.
-  const breathe = Math.sin(time * 0.9) * 0.015
-
-  return {
-    ...REST,
-    torsoLean: LEAN_ANGLE + breathe,
-    headNod: -breathe,
-    // The near leg straight and taking the weight, the far one crossed in
-    // front of it.
-    leftHip: 0.06,
-    rightHip: -0.22,
-    rightKnee: 0.3,
-    // Arms folded, which is what hands do when the hips are not free.
-    leftShoulder: -0.5,
-    rightShoulder: -0.5,
-    leftElbow: 1.5,
-    rightElbow: 1.5,
-    leftShoulderZ: 0.18,
-    rightShoulderZ: -0.18,
-  }
-}
-
-function wave(time: number): Partial<PoseFrame> {
-  const swing = Math.sin(time * 9) * 0.5
-  return {
-    rightShoulder: -2.5,
-    rightShoulderZ: -0.5 + swing * 0.5,
-    rightElbow: 0.3,
-    headTurn: 0.1,
-  }
-}
-
-function clap(time: number): Partial<PoseFrame> {
-  // Hands meet in front of the chest and part again, twice a second.
-  const close = (Math.sin(time * 12) + 1) / 2
-  const spread = 0.42 - close * 0.34
-  return {
-    leftShoulder: -1.3,
-    rightShoulder: -1.3,
-    leftShoulderZ: spread,
-    rightShoulderZ: -spread,
-    leftElbow: 1.1,
-    rightElbow: 1.1,
-  }
-}
-
-function handRaised(): Partial<PoseFrame> {
-  // Straight up and held, which is what a raised hand in a lecture is.
-  return { rightShoulder: -2.9, rightShoulderZ: -0.12, rightElbow: 0.05 }
-}
-
-function point(): Partial<PoseFrame> {
-  return { rightShoulder: -1.55, rightElbow: 0.08, headTurn: -0.12 }
-}
+/** Pointing: right arm out in front, level, elbow nearly straight. */
+const POINT_TURNS: readonly JointTurn[] = [
+  { joint: 'UpperArm.R', axis: 'x', angle: -85 * DEG },
+  { joint: 'UpperArm.R', axis: 'z', angle: 60 * DEG },
+  { joint: 'LowerArm.R', axis: 'x', angle: 12 * DEG },
+]

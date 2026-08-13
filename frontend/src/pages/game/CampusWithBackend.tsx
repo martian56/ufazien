@@ -43,10 +43,15 @@ import {
   ChatBubble,
   NameTag,
   SpeakingRing,
+  ARCH_SPRING,
   THRESHOLD,
 } from '../../components/campus/CampusScenery'
 import { GltfCharacter } from '../../components/campus/GltfCharacter'
-import { exitOf, portalAt } from '../../components/campus/verticalCirculation'
+import {
+  exitOf,
+  portalAt,
+  stairwellClamp,
+} from '../../components/campus/verticalCirculation'
 import {
   BUBBLE_MS,
   bubbleFor,
@@ -942,6 +947,10 @@ function CampusDoors({
           z={door.z}
           halfWidth={door.halfW}
           sill={THRESHOLD}
+          // Only up to the springing: the arch above the leaves is a fanlight,
+          // and a leaf the full height of the opening would swing through it.
+          height={ARCH_SPRING}
+          style="screen"
           swing={doorSwing(doors, exteriorDoorId(door.id), now)}
         />
       ))}
@@ -1257,6 +1266,24 @@ function Player({
     const resolved = resolveColliders(camera.position.x, camera.position.z, solid)
     camera.position.x = resolved.x
     camera.position.z = resolved.z
+
+    // And the outside of the stair, which is a radius rather than geometry for
+    // the same reason a room's walls are: a balustrade made of colliders is a
+    // ring of boxes half a metre apart, and a gap narrower than a player is a
+    // slot they get wedged in. After the resolver, so it has the last word —
+    // being pushed off a stair by a collider is the thing it exists to stop.
+    if (insideBuilding) {
+      const held = stairwellClamp(
+        insideBuilding.interior,
+        camera.position.x,
+        camera.position.z,
+        camera.position.y - EYE_HEIGHT,
+      )
+      if (held) {
+        camera.position.x = held.x
+        camera.position.z = held.z
+      }
+    }
 
     // The floor under the player, which is not always zero: the amphitheatre
     // is raked, the sports hall has bleachers, and the entrance hall has a

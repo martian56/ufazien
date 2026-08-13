@@ -2,6 +2,9 @@ import { useLayoutEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Sky } from '@react-three/drei'
 import * as THREE from 'three'
+// From three itself rather than `three-stdlib`, which is only here as a
+// transitive dependency of drei and could vanish under a minor bump.
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 
 import {
   OUTDOOR_BUILDINGS,
@@ -413,7 +416,10 @@ export const PORCH_DEPTH = 3.4
 
 /** The clear opening, matching the gap left in the collider exactly. */
 export const OPENING_HALF_W = DOOR_HALF_WIDTH
-export const OPENING_HEIGHT = 4.4
+// Taller than it is wide, which a door of this period is. At 4.4 against a
+// 3.4 m opening the screen came out square, and a square front door on a
+// four-storey elevation reads as a loading bay.
+export const OPENING_HEIGHT = 5.0
 
 /**
  * Height of the threshold above the ground.
@@ -427,6 +433,26 @@ export const OPENING_HEIGHT = 4.4
 // on 0.89 — at 0.74 the lobby floor, the reveal and the door leaves all sat a
 // hand's width below the step outside them.
 export const THRESHOLD = 0.89
+
+/**
+ * Where the arch springs, above the threshold.
+ *
+ * The opening is round-headed: a semicircle of the opening's own half-width
+ * sitting on two straight jambs. So the doors themselves only reach this high
+ * and the arch above them is a fanlight, which is what the photographs of the
+ * real entrance show and is most of why it reads as the door of a nineteen
+ * hundreds townhouse rather than as a hole with a lintel over it.
+ */
+export const ARCH_SPRING = OPENING_HEIGHT - OPENING_HALF_W
+
+/**
+ * The timber of the entrance screen.
+ *
+ * Stained walnut, warm and dark — the one strong colour anywhere on a facade
+ * that is otherwise pale render and cream stone, and the reason the door is
+ * what you look at from across the street.
+ */
+export const TIMBER_DOOR = '#6b4526'
 
 /**
  * The lobby you can see through an open door.
@@ -515,51 +541,222 @@ function DoorLobby({ trim, accent, sill }: { trim: string; accent: string; sill:
 }
 
 /**
- * Steps, a surround, a canopy — and a hole in the wall behind them.
+ * The two shapes an arched opening needs.
  *
- * The glazed slab that used to sit here was the whole of the "door": a flat
- * panel on an unbroken facade. The opening is real now, and `Building` builds
- * the wall around it rather than as one box.
+ * `spandrel` is what is left of the wall once a semicircle is taken out of the
+ * rectangular hole the facade actually has: two corners, as one shape with a
+ * hole in it. Extruded through the full depth of the wall rather than stuck on
+ * the front as a plane, or the corner of the arch is see-through from any angle
+ * off the axis.
+ *
+ * `archivolt` is the band of stone that follows the curve. This is the fourth
+ * time in this file a surround has had to be made as a band rather than as a
+ * slab: drawn as a filled semicircle in front of the opening it is not an arch,
+ * it is a blank stone tympanum with a door hidden behind it.
+ */
+function archShapes(radius: number, band: number) {
+  const spandrel = new THREE.Shape()
+  spandrel.moveTo(-radius, 0)
+  spandrel.lineTo(-radius, radius)
+  spandrel.lineTo(radius, radius)
+  spandrel.lineTo(radius, 0)
+  spandrel.closePath()
+  const hole = new THREE.Path()
+  hole.absarc(0, 0, radius, 0, Math.PI, false)
+  spandrel.holes.push(hole)
+
+  const archivolt = new THREE.Shape()
+  archivolt.absarc(0, 0, radius + band, 0, Math.PI, false)
+  archivolt.absarc(0, 0, radius, Math.PI, 0, true)
+  archivolt.closePath()
+
+  return { spandrel, archivolt }
+}
+
+/**
+ * The timber of the fanlight: nine radiating bars, the curved head they meet,
+ * and the transom they stand on, merged into one geometry.
+ *
+ * Built about the springing point, so the group it goes in sits there and
+ * everything is measured from the same origin the arch is.
+ */
+function fanlightGeometry(radius: number): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = []
+  const bars = 9
+
+  for (let i = 1; i <= bars; i++) {
+    const angle = (Math.PI * i) / (bars + 1)
+    const bar = new THREE.BoxGeometry(radius, 0.07, 0.05)
+    bar.rotateZ(angle)
+    bar.translate((Math.cos(angle) * radius) / 2, (Math.sin(angle) * radius) / 2, 0.03)
+    parts.push(bar)
+  }
+
+  // A torus lies in the XY plane already, so half of one is the arch as drawn.
+  const head = new THREE.TorusGeometry(radius + 0.01, 0.075, 6, 22, Math.PI)
+  head.translate(0, 0, 0.03)
+  parts.push(head)
+
+  const transom = new THREE.BoxGeometry(radius * 2, 0.15, 0.09)
+  transom.translate(0, 0.02, 0.03)
+  parts.push(transom)
+
+  return mergeGeometries(parts, false)!
+}
+
+/**
+ * The entrance: a round-headed opening in a stone surround, with a fanlight.
+ *
+ * Rebuilt from the photograph of the real door at 183 Nizami Street. What was
+ * here was a rectangle with three slabs of trim round it — two jambs and a head
+ * — which is a doorway in the abstract and not this one. The real one is:
+ *
+ * - **round-arched**, springing about two thirds of the way up, in a plain
+ *   cream stone surround that follows the curve right round and stops on a
+ *   square plinth block at each foot;
+ * - filled with a **fanlight of radiating bars** in the arch head;
+ * - and closed by a **dark timber screen** glazed with a grid of small square
+ *   panes over solid fielded panels at the bottom — which `DoorLeaf` draws,
+ *   because the leaves are the part that opens.
+ *
+ * Either side of it, on the render, the two enamelled plaques the university
+ * has in Azerbaijani and in French; on the threshold, the pair of tapered
+ * planters with clipped box in them.
  */
 export function Entrance({ depth, trim, accent }: { depth: number; trim: string; accent: string }) {
+  const radius = OPENING_HALF_W
+  const band = 0.44
+  const spring = THRESHOLD + ARCH_SPRING
+
+  const { spandrel, archivolt } = useMemo(() => archShapes(radius, band), [radius])
+  const geometry = useMemo(() => {
+    return {
+      spandrel: new THREE.ExtrudeGeometry(spandrel, {
+        depth: PORCH_DEPTH,
+        bevelEnabled: false,
+        curveSegments: 24,
+      }),
+      archivolt: new THREE.ExtrudeGeometry(archivolt, {
+        depth: 0.42,
+        bevelEnabled: false,
+        curveSegments: 24,
+      }),
+      // The fanlight's radiating bars, its curved head and its transom, as one
+      // geometry. Thirteen small meshes for one doorway is thirteen draw calls
+      // on a campus whose whole budget is about two hundred.
+      fanlight: fanlightGeometry(radius - 0.08),
+    }
+  }, [spandrel, archivolt, radius])
+
+  useLayoutEffect(
+    () => () => {
+      geometry.spandrel.dispose()
+      geometry.archivolt.dispose()
+      geometry.fanlight.dispose()
+    },
+    [geometry],
+  )
+
   return (
     <group position={[0, 0, depth / 2 + 0.06]}>
-      {/* Steps up to the threshold */}
+      {/* Steps up to the threshold. Grey, and only a little wider than the
+          opening: in the dressing stone and seven metres across they read as a
+          monumental plinth, and the photograph has grey block paving running
+          almost to the door. */}
       {[0, 1, 2].map((i) => (
-        <mesh key={i} receiveShadow castShadow position={[0, 0.18 + i * 0.28, 1.5 - i * 0.5]}>
-          <boxGeometry args={[7.5 - i * 0.6, 0.3, 1.1]} />
-          <meshStandardMaterial color={trim} roughness={0.95} />
+        <mesh key={i} receiveShadow castShadow position={[0, 0.18 + i * 0.28, 1.15 - i * 0.34]}>
+          <boxGeometry args={[4.9 - i * 0.25, 0.3, 0.8]} />
+          <meshStandardMaterial color={i === 2 ? trim : '#a9a9a6'} roughness={0.95} />
         </mesh>
       ))}
 
-      {/* Surround, as a frame around the opening rather than a slab across it:
-          two slim jambs and a head, so the doorway stays clear. */}
+      {/* The jambs, from the plinth up to the springing, and the plinth block
+          at the foot of each — which is what stops the surround looking like a
+          strip of paint down the wall. */}
       {[-1, 1].map((side) => (
-        <mesh
-          key={side}
-          castShadow
-          position={[side * (OPENING_HALF_W + 0.35), THRESHOLD + OPENING_HEIGHT / 2, 0.05]}
-        >
-          <boxGeometry args={[0.7, OPENING_HEIGHT + 0.7, 0.45]} />
-          <meshStandardMaterial color={trim} roughness={0.85} />
-        </mesh>
+        <group key={side} position={[side * (radius + band / 2), 0, 0.05]}>
+          <mesh castShadow position={[0, (spring + 0.3) / 2, 0]}>
+            <boxGeometry args={[band, spring + 0.3, 0.42]} />
+            <meshStandardMaterial color={trim} roughness={0.85} />
+          </mesh>
+          <mesh castShadow position={[0, THRESHOLD * 0.7, 0.03]}>
+            <boxGeometry args={[band + 0.16, THRESHOLD * 1.4, 0.48]} />
+            <meshStandardMaterial color={trim} roughness={0.82} />
+          </mesh>
+        </group>
       ))}
-      <mesh castShadow position={[0, THRESHOLD + OPENING_HEIGHT + 0.35, 0.05]}>
-        <boxGeometry args={[OPENING_HALF_W * 2 + 1.4, 0.7, 0.45]} />
+
+      {/* The arch itself: the stone band, and the wall in the corners behind. */}
+      <mesh geometry={geometry.archivolt} position={[0, spring, 0.05]} castShadow>
         <meshStandardMaterial color={trim} roughness={0.85} />
       </mesh>
+      <mesh
+        geometry={geometry.spandrel}
+        position={[0, spring, -PORCH_DEPTH - 0.06]}
+        castShadow
+        receiveShadow
+      >
+        <meshStandardMaterial color={accent} roughness={0.92} />
+      </mesh>
+
+      {/* The fanlight. Radiating bars over the glazed head, with a timber
+          curve round the outside of them, exactly as the photograph has it. */}
+      <group position={[0, spring, -0.02]}>
+        <mesh>
+          <circleGeometry args={[radius - 0.08, 28, 0, Math.PI]} />
+          <meshStandardMaterial color="#8fb2c6" roughness={0.18} metalness={0.12} />
+        </mesh>
+        <mesh geometry={geometry.fanlight} castShadow>
+          <meshStandardMaterial color={TIMBER_DOOR} roughness={0.6} />
+        </mesh>
+      </group>
 
       {/* The reveal: the thickness of the wall, seen from outside. */}
       {[-1, 1].map((side) => (
-        <mesh key={`r${side}`} position={[side * OPENING_HALF_W, THRESHOLD + OPENING_HEIGHT / 2, -PORCH_DEPTH / 2]} rotation={[0, side * -Math.PI / 2, 0]}>
-          <planeGeometry args={[PORCH_DEPTH, OPENING_HEIGHT]} />
-          <meshStandardMaterial color="#c8c1b4" roughness={0.9} side={THREE.DoubleSide} />
+        <mesh key={`r${side}`} position={[side * OPENING_HALF_W, THRESHOLD + ARCH_SPRING / 2, -PORCH_DEPTH / 2]} rotation={[0, side * -Math.PI / 2, 0]}>
+          <planeGeometry args={[PORCH_DEPTH, ARCH_SPRING]} />
+          <meshStandardMaterial color="#e6e1d6" roughness={0.9} side={THREE.DoubleSide} />
         </mesh>
       ))}
       <mesh position={[0, THRESHOLD + OPENING_HEIGHT, -PORCH_DEPTH / 2]} rotation={[Math.PI / 2, 0, 0]}>
         <planeGeometry args={[OPENING_HALF_W * 2, PORCH_DEPTH]} />
-        <meshStandardMaterial color="#bdb6a9" roughness={0.9} side={THREE.DoubleSide} />
+        <meshStandardMaterial color="#ded8cc" roughness={0.9} side={THREE.DoubleSide} />
       </mesh>
+
+      {/* The two plaques, one either side, which is how the building is named
+          on the street — there is no sign over the door. */}
+      {[-1, 1].map((side) => (
+        <group key={`p${side}`} position={[side * (radius + band + 0.72), THRESHOLD + 2.5, -0.02]}>
+          <mesh castShadow>
+            <boxGeometry args={[0.64, 0.78, 0.05]} />
+            <meshStandardMaterial color="#dfe2e4" roughness={0.35} metalness={0.12} />
+          </mesh>
+          <mesh position={[0, 0.21, 0.03]}>
+            <circleGeometry args={[0.085, 16]} />
+            <meshStandardMaterial color="#20416b" roughness={0.5} />
+          </mesh>
+          {[0.01, -0.08, -0.17].map((y) => (
+            <mesh key={y} position={[0, y, 0.03]}>
+              <planeGeometry args={[0.38, 0.04]} />
+              <meshStandardMaterial color="#3d434a" roughness={0.7} />
+            </mesh>
+          ))}
+        </group>
+      ))}
+
+      {/* Planters on the threshold: tapered grey pots with clipped box. */}
+      {[-1, 1].map((side) => (
+        <group key={`t${side}`} position={[side * (radius - 0.5), THRESHOLD, 0.35]}>
+          <mesh castShadow receiveShadow position={[0, 0.42, 0]}>
+            <cylinderGeometry args={[0.3, 0.19, 0.84, 12]} />
+            <meshStandardMaterial color="#b6b8b7" roughness={0.85} />
+          </mesh>
+          <mesh castShadow position={[0, 1.06, 0]}>
+            <sphereGeometry args={[0.31, 12, 10]} />
+            <meshStandardMaterial color="#4a6b39" roughness={0.9} />
+          </mesh>
+        </group>
+      ))}
 
       <DoorLobby trim={trim} accent={accent} sill={THRESHOLD} />
 

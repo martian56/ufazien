@@ -1,4 +1,5 @@
 import { useLayoutEffect, useMemo, useRef } from 'react'
+import { Instance, Instances } from '@react-three/drei'
 import * as THREE from 'three'
 
 import type { InteriorKind, Vec3 } from './campusLayout'
@@ -24,12 +25,18 @@ import {
   UFAZ_LIFTS,
   UFAZ_TURNSTILES,
   UFAZ_TURNSTILE_Z,
-  UFAZ_STAIR,
   VENDING_MACHINES,
   libraryAisleHalf,
 } from './interiorPhysics'
 import { NoticeBoard, ScheduleBoard, SitesBoard } from './CampusBoards'
-import { ARCADE_PIERS, CORRIDOR_DOORS } from './verticalCirculation'
+import {
+  ARCADE_PIERS,
+  CORRIDOR_DOORS,
+  STAIR,
+  STAIR_LANDING,
+  STAIR_RISE,
+  stairTreads,
+} from './verticalCirculation'
 import { INTERIOR_SPECS, type FloorKind, type InteriorSpec } from './interiorSpecs'
 import { LECTURE_ROWS, LECTURE_SEATING } from './lectureSeating'
 import {
@@ -782,61 +789,185 @@ function Turnstiles() {
  * in — cross the hall and this is what you are looking at, with the stair
  * beside it and the corridor running off to the left.
  *
- * The glass is a single transparent box rather than framed panels. A real
- * curtain wall here is a dozen mullions and four sheets of glass per face, and
- * this room has already been the most expensive thing in the scene once.
+ * ## What it looked like before
+ *
+ * One transparent box with two flat panels stuck on the front. The photographs
+ * are of something quite specific: a *framed* shaft, grey-tinted glass in a
+ * gunmetal steel grid of posts and rails with the panel joints and their
+ * fixings clearly visible, and the frame is most of what you read — it is why
+ * the thing looks like a lift shaft and not a vitrine. Behind the glass you can
+ * see the guides and the cars moving. In front of it, two sets of brushed
+ * stainless doors, each with a tall glazed panel in either leaf and a small
+ * indicator over the head showing the floor in red.
+ *
+ * A curtain wall is a lot of mullions, so the posts and the rails are each one
+ * instanced mesh: eighteen members drawn as two.
  */
+/**
+ * Gunmetal for the frame, brushed stainless for the doors.
+ *
+ * Both are metal and neither is given much `metalness`, for the reason the
+ * speed gates below already carry a note about: a `meshStandardMaterial` at
+ * high metalness has almost no diffuse term and reflects an environment map to
+ * make up the difference. There is no environment map in these rooms, so it
+ * reflects nothing, and a lift lobby of polished steel renders as a lift lobby
+ * of black plastic. Which is exactly what the first pass at this looked like.
+ */
+const LIFT_STEEL = '#6f7c85'
+const LIFT_DOOR = '#ccd2d7'
+
+/**
+ * The glazing grid: mullions across each face as a fraction of its half-width,
+ * and transoms at these heights up it.
+ */
+const LIFT_MULLIONS = [-1, -0.34, 0.34, 1]
+const LIFT_TRANSOMS = [2.85, 5.1]
+
 function LiftCore({ ceiling }: { ceiling: number }) {
   const { x, z, halfW, halfD } = UFAZ_LIFTS
   const shaft = Math.min(ceiling - 0.6, 8.2)
+  const frame = useMemo(() => {
+    const members: { at: [number, number, number]; size: [number, number, number] }[] = []
+    // Corner posts, and the intermediate ones on the two faces you can see.
+    for (const sz of [-1, 1]) {
+      for (const t of LIFT_MULLIONS) {
+        members.push({ at: [t * halfW, shaft / 2, sz * halfD], size: [0.11, shaft, 0.13] })
+      }
+    }
+    for (const sx of [-1, 1]) {
+      members.push({ at: [sx * halfW, shaft / 2, 0], size: [0.13, shaft, halfD * 0.9] })
+    }
+    return members
+  }, [halfW, halfD, shaft])
+
+  const transoms = useMemo(() => {
+    const members: { at: [number, number, number]; size: [number, number, number] }[] = []
+    for (const y of LIFT_TRANSOMS) {
+      for (const sz of [-1, 1]) {
+        members.push({ at: [0, y, sz * halfD], size: [halfW * 2, 0.1, 0.13] })
+      }
+      for (const sx of [-1, 1]) {
+        members.push({ at: [sx * halfW, y, 0], size: [0.13, 0.1, halfD * 2] })
+      }
+    }
+    return members
+  }, [halfW, halfD])
 
   return (
     <group position={[x, 0, z]}>
-      {/* The shaft. Drawn last-ish and transparent, so the steel inside reads
-          through it. */}
+      {/* The glass: grey-tinted and reflective rather than clear, which is what
+          makes the shaft read as an object in the room instead of a wireframe. */}
       <mesh position={[0, shaft / 2, 0]}>
         <boxGeometry args={[halfW * 2, shaft, halfD * 2]} />
         <meshStandardMaterial
-          color="#8ea3ad"
+          color="#93a6b0"
           transparent
-          opacity={0.28}
+          opacity={0.32}
           roughness={0.08}
-          metalness={0.5}
+          metalness={0.22}
           side={THREE.DoubleSide}
         />
       </mesh>
-      {/* Steel frame at the corners and the head. */}
-      {[-1, 1].map((sx) =>
-        [-1, 1].map((sz) => (
-          <mesh key={`${sx}${sz}`} position={[sx * halfW, shaft / 2, sz * halfD]} castShadow>
-            <boxGeometry args={[0.16, shaft, 0.16]} />
-            <meshStandardMaterial color="#6d7a83" roughness={0.5} metalness={0.6} />
-          </mesh>
-        )),
-      )}
+
+      <Instances limit={frame.length} range={frame.length} castShadow>
+        <boxGeometry args={[1, 1, 1]} />
+        <meshStandardMaterial color={LIFT_STEEL} roughness={0.5} metalness={0.3} />
+        {frame.map((member, i) => (
+          <Instance key={i} position={member.at} scale={member.size} />
+        ))}
+      </Instances>
+      <Instances limit={transoms.length} range={transoms.length} castShadow>
+        <boxGeometry args={[1, 1, 1]} />
+        <meshStandardMaterial color={LIFT_STEEL} roughness={0.5} metalness={0.3} />
+        {transoms.map((member, i) => (
+          <Instance key={i} position={member.at} scale={member.size} />
+        ))}
+      </Instances>
+
+      {/* The head of the shaft. */}
       <mesh position={[0, shaft, 0]} castShadow>
-        <boxGeometry args={[halfW * 2 + 0.2, 0.2, halfD * 2 + 0.2]} />
-        <meshStandardMaterial color="#6d7a83" roughness={0.5} metalness={0.6} />
+        <boxGeometry args={[halfW * 2 + 0.22, 0.22, halfD * 2 + 0.22]} />
+        <meshStandardMaterial color={LIFT_STEEL} roughness={0.5} metalness={0.3} />
       </mesh>
+
+      {/* The guide rails inside, which is what you actually see through the
+          glass and the reason for glazing a shaft in the first place. */}
+      {[-2.1, -1.1, 1.1, 2.1].map((t) => (
+        <mesh key={t} position={[t, shaft / 2, -halfD * 0.45]}>
+          <boxGeometry args={[0.09, shaft, 0.09]} />
+          <meshStandardMaterial color="#565f66" roughness={0.6} metalness={0.28} />
+        </mesh>
+      ))}
 
       {/* The two cars, doors facing the hall. */}
       {[-1, 1].map((side) => (
         <group key={side} position={[side * 2.1, 0, halfD]}>
-          <mesh position={[0, 1.2, 0.02]} castShadow>
-            <boxGeometry args={[1.8, 2.4, 0.12]} />
-            <meshStandardMaterial color="#c3cad0" roughness={0.28} metalness={0.9} />
+          {/* The architrave the doors sit in. */}
+          <mesh position={[0, 1.3, 0.03]} castShadow>
+            <boxGeometry args={[2.14, 2.6, 0.1]} />
+            <meshStandardMaterial color="#b9c0c6" roughness={0.42} metalness={0.3} />
           </mesh>
-          {/* The joint down the middle, which is what makes it read as doors. */}
-          <mesh position={[0, 1.2, 0.09]}>
-            <boxGeometry args={[0.05, 2.4, 0.03]} />
-            <meshStandardMaterial color="#8f979e" roughness={0.4} metalness={0.7} />
+          {/* Two leaves, centre-opening, each with the tall glazed panel the
+              photographs show — without it a lift door is a blank steel slab
+              and reads as a cupboard. */}
+          {[-1, 1].map((leaf) => (
+            <group key={leaf} position={[leaf * 0.47, 0, 0.09]}>
+              <mesh position={[0, 1.2, 0]} castShadow>
+                <boxGeometry args={[0.92, 2.4, 0.08]} />
+                <meshStandardMaterial color={LIFT_DOOR} roughness={0.32} metalness={0.32} />
+              </mesh>
+              <mesh position={[0, 1.42, 0.05]}>
+                <planeGeometry args={[0.56, 1.5]} />
+                <meshStandardMaterial
+                  color="#7c909b"
+                  roughness={0.12}
+                  metalness={0.18}
+                  transparent
+                  opacity={0.72}
+                />
+              </mesh>
+              {/* The pull, on the meeting stile. */}
+              <mesh position={[leaf * -0.4, 1.05, 0.06]}>
+                <boxGeometry args={[0.05, 0.62, 0.05]} />
+                <meshStandardMaterial color="#9aa2a8" roughness={0.36} metalness={0.34} />
+              </mesh>
+            </group>
+          ))}
+          {/* Floor indicator over the head: a dark panel with a red digit. */}
+          <mesh position={[0, 2.72, 0.09]}>
+            <planeGeometry args={[0.42, 0.16]} />
+            <meshStandardMaterial color="#14181c" roughness={0.4} />
           </mesh>
-          <mesh position={[0, 2.62, 0.06]}>
-            <planeGeometry args={[0.34, 0.14]} />
-            <meshStandardMaterial color="#c0392b" emissive="#c0392b" emissiveIntensity={0.7} />
+          <mesh position={[0, 2.72, 0.1]}>
+            <planeGeometry args={[0.1, 0.1]} />
+            <meshStandardMaterial
+              color="#e04b3a"
+              emissive="#e04b3a"
+              emissiveIntensity={1.4}
+              toneMapped={false}
+            />
           </mesh>
         </group>
       ))}
+
+      {/* The call panel between the two, which is where you press. */}
+      <group position={[0, 0, halfD + 0.06]}>
+        <mesh position={[0, 1.25, 0]}>
+          <boxGeometry args={[0.2, 0.44, 0.04]} />
+          <meshStandardMaterial color="#b9c0c6" roughness={0.4} metalness={0.3} />
+        </mesh>
+        {[1.35, 1.15].map((y) => (
+          <mesh key={y} position={[0, y, 0.03]}>
+            <circleGeometry args={[0.045, 12]} />
+            <meshStandardMaterial
+              color="#f0c46a"
+              emissive="#f0c46a"
+              emissiveIntensity={0.7}
+              toneMapped={false}
+            />
+          </mesh>
+        ))}
+      </group>
     </group>
   )
 }
@@ -967,64 +1098,257 @@ function LightRings({ ceiling }: { ceiling: number }) {
   )
 }
 
+/* ------------------------------------------------------------------ */
+/* The stair                                                            */
+/* ------------------------------------------------------------------ */
+
+/** Stone, iron and timber, from the photographs of the entrance hall. */
+const STONE = '#a8a7a3'
+const IRON = '#191c20'
+const TIMBER = '#5b3722'
+
+/** How thick a tread is, and how high the rail stands above its nose. */
+const TREAD_THICK = 0.17
+const RAIL_HEIGHT = 0.96
+/** How far in from the outer edge the balusters stand. */
+const RAIL_INSET = 0.16
+
 /**
- * The main flight: granite treads, iron balusters, a timber handrail.
+ * One tread, as an annular sector lying flat with its thickness upwards.
  *
- * One component for the entrance hall and every corridor above it, matching
- * `mainStair` in `interiorPhysics` — they are the same stair in the same place
- * on every floor, and drawing two different ones was how the upper floors ended
- * up with steps that nothing could stand on.
+ * A wedge rather than a box. Twenty-four boxes arranged round a circle leave a
+ * gap at the outside of every joint and overlap at the inside of it, and at
+ * this radius that is a visible saw edge all the way up the flight.
+ *
+ * Built centred on the shape's -Y so that, once laid flat, the wedge points
+ * along world +Z — which is where a mesh turned by the tread's own angle
+ * expects it to be, and saves nesting a group inside every instance.
+ */
+function treadGeometry(): THREE.ExtrudeGeometry {
+  const half = Math.abs(STAIR.turn) / 2
+  const from = -Math.PI / 2 - half
+  const to = -Math.PI / 2 + half
+
+  const shape = new THREE.Shape()
+  shape.absarc(0, 0, STAIR.well, from, to, false)
+  shape.absarc(0, 0, STAIR.outer, to, from, true)
+  shape.closePath()
+
+  const geometry = new THREE.ExtrudeGeometry(shape, {
+    depth: TREAD_THICK,
+    bevelEnabled: false,
+    curveSegments: 8,
+  })
+  geometry.rotateX(-Math.PI / 2)
+  return geometry
+}
+
+/**
+ * A helix, as a curve: the line a hand runs along going up.
+ *
+ * `lift` is how far above each tread's nose the line sits, and `extend` how far
+ * past the first and last tread it carries on, so a rail does not stop dead
+ * over the edge of the stair.
+ */
+function helixCurve(radius: number, lift: number, extend = 0.6): THREE.CatmullRomCurve3 {
+  const treads = stairTreads()
+  const first = treads[0]
+  const last = treads[treads.length - 1]
+  const step = STAIR.turn
+
+  const points: THREE.Vector3[] = []
+  for (let t = -extend; t <= treads.length - 1 + extend; t += 0.25) {
+    const angle = first.angle + step * t
+    const top = first.top + STAIR.rise * t
+    points.push(
+      new THREE.Vector3(
+        STAIR.x + Math.sin(angle) * radius,
+        top + lift,
+        STAIR.z + Math.cos(angle) * radius,
+      ),
+    )
+  }
+  // The rail runs level for the last stretch, over the landing, rather than
+  // carrying on climbing into it.
+  points[points.length - 1].y = Math.min(points[points.length - 1].y, last.top + lift)
+
+  return new THREE.CatmullRomCurve3(points, false, 'catmullrom', 0.4)
+}
+
+/**
+ * The main flight: stone treads, a black iron balustrade, a timber handrail.
+ *
+ * One component for the entrance hall and every corridor above it, driven by
+ * the same `stairTreads()` that `interiorPhysics` turns into platforms — they
+ * are the same stair in the same place on every floor, and drawing two
+ * different ones was how the upper floors ended up with steps that nothing
+ * could stand on.
+ *
+ * Drawn instanced: twenty-four treads, twenty-four balusters and twenty-four
+ * cast panels between them is seventy-two meshes drawn as three, on top of a
+ * building that has been the most expensive thing in this scene before.
  */
 function MainStair() {
+  const treads = useMemo(() => stairTreads(), [])
+  const tread = useMemo(() => treadGeometry(), [])
+  const rail = useMemo(
+    () => new THREE.TubeGeometry(helixCurve(STAIR.outer - RAIL_INSET, RAIL_HEIGHT), 120, 0.05, 7),
+    [],
+  )
+  const coreRail = useMemo(
+    () => new THREE.TubeGeometry(helixCurve(STAIR.well + 0.14, RAIL_HEIGHT), 120, 0.045, 7),
+    [],
+  )
+  // The string: the band that follows the noses round underneath them, which is
+  // what stops the flight reading as a stack of floating slabs.
+  const string = useMemo(
+    () => new THREE.TubeGeometry(helixCurve(STAIR.outer, -0.12, 0.3), 120, 0.11, 7),
+    [],
+  )
+
+  useLayoutEffect(
+    () => () => {
+      tread.dispose()
+      rail.dispose()
+      coreRail.dispose()
+      string.dispose()
+    },
+    [tread, rail, coreRail, string],
+  )
+
+  const balusterR = STAIR.outer - RAIL_INSET
+  const at = (angle: number, radius: number): [number, number] => [
+    STAIR.x + Math.sin(angle) * radius,
+    STAIR.z + Math.cos(angle) * radius,
+  ]
+
   return (
-      <group position={[UFAZ_STAIR.x, 0, UFAZ_STAIR.z]}>
-        {Array.from({ length: UFAZ_STAIR.steps }, (_, i) => (
-          <group key={i} position={[0, 0.3 + i * UFAZ_STAIR.rise, -i * UFAZ_STAIR.going]}>
-            {/* Grey stone treads. They were cream with a red carpet runner up
-                the middle, which is a country house; the stair in the building
-                is granite with a black iron balustrade and a timber rail. */}
-            <mesh castShadow receiveShadow>
-              <boxGeometry args={[UFAZ_STAIR.halfW * 2, 0.3, 0.66]} />
-              <meshStandardMaterial color="#9a9a99" roughness={0.6} />
+    <group>
+      {/* The treads. */}
+      <Instances geometry={tread} limit={treads.length} range={treads.length} castShadow receiveShadow>
+        <meshStandardMaterial color={STONE} roughness={0.62} />
+        {treads.map((step) => (
+          <Instance
+            key={step.index}
+            position={[STAIR.x, step.top - TREAD_THICK, STAIR.z]}
+            rotation={[0, step.angle, 0]}
+          />
+        ))}
+      </Instances>
+
+      {/* An iron baluster per tread, and the cast panel between each pair —
+          the balustrade in the photographs is not plain bar, it carries a
+          repeated motif, and at this distance the motif is the read. */}
+      <Instances limit={treads.length} range={treads.length} castShadow>
+        <boxGeometry args={[0.045, RAIL_HEIGHT, 0.045]} />
+        <meshStandardMaterial color={IRON} roughness={0.5} metalness={0.45} />
+        {treads.map((step) => {
+          const [x, z] = at(step.angle, balusterR)
+          return (
+            <Instance key={step.index} position={[x, step.top + RAIL_HEIGHT / 2, z]} rotation={[0, step.angle, 0]} />
+          )
+        })}
+      </Instances>
+      <Instances limit={treads.length} range={treads.length}>
+        <boxGeometry args={[0.3, 0.26, 0.012]} />
+        <meshStandardMaterial color={IRON} roughness={0.5} metalness={0.45} />
+        {treads.map((step) => {
+          const [x, z] = at(step.angle - STAIR.turn / 2, balusterR)
+          return (
+            <Instance
+              key={step.index}
+              position={[x, step.top + RAIL_HEIGHT * 0.46, z]}
+              rotation={[0, step.angle, 0]}
+            />
+          )
+        })}
+      </Instances>
+
+      <mesh geometry={rail} castShadow>
+        <meshStandardMaterial color={TIMBER} roughness={0.55} />
+      </mesh>
+      <mesh geometry={coreRail} castShadow>
+        <meshStandardMaterial color={TIMBER} roughness={0.55} />
+      </mesh>
+      <mesh geometry={string}>
+        <meshStandardMaterial color="#8e8d89" roughness={0.7} />
+      </mesh>
+
+      {/* The core the flight winds round: plaster, with a stone base moulding
+          the way every pier in this hall has one. */}
+      <mesh position={[STAIR.x, (STAIR_RISE + 1.2) / 2, STAIR.z]} castShadow receiveShadow>
+        <cylinderGeometry args={[STAIR.well + 0.04, STAIR.well + 0.04, STAIR_RISE + 1.2, 20]} />
+        <meshStandardMaterial color="#e8eaec" roughness={0.9} />
+      </mesh>
+      <mesh position={[STAIR.x, 0.14, STAIR.z]} castShadow receiveShadow>
+        <cylinderGeometry args={[STAIR.well + 0.16, STAIR.well + 0.2, 0.28, 20]} />
+        <meshStandardMaterial color={STONE} roughness={0.7} />
+      </mesh>
+
+      {/* The newel at the foot, with the ball finial the photographs show. */}
+      {(() => {
+        const [x, z] = at(treads[0].angle, balusterR)
+        return (
+          <group position={[x, 0, z]}>
+            <mesh position={[0, 0.62, 0]} castShadow>
+              <cylinderGeometry args={[0.07, 0.09, 1.24, 10]} />
+              <meshStandardMaterial color={IRON} roughness={0.5} metalness={0.45} />
+            </mesh>
+            <mesh position={[0, 1.32, 0]} castShadow>
+              <sphereGeometry args={[0.1, 12, 10]} />
+              <meshStandardMaterial color={IRON} roughness={0.42} metalness={0.5} />
             </mesh>
           </group>
-        ))}
+        )
+      })()}
 
-        <mesh castShadow receiveShadow position={[0, 4.35, UFAZ_STAIR.landing.z - UFAZ_STAIR.z]}>
-          <boxGeometry args={[UFAZ_STAIR.landing.halfW * 2, 0.4, UFAZ_STAIR.landing.halfD * 2]} />
-          <meshStandardMaterial color="#9a9a99" roughness={0.6} />
-        </mesh>
+      <StairLanding />
+    </group>
+  )
+}
 
-        {/* Balustrade: a solid stepped parapet with a brass cap, built from
-            the same rise and going as the treads so it can never drift out of
-            line with them the way a single raking rail did. */}
-        {[-UFAZ_STAIR.halfW, UFAZ_STAIR.halfW].map((x) =>
-          Array.from({ length: UFAZ_STAIR.steps }, (_, i) => (
-            <group key={`${x}-${i}`} position={[x, 0.3 + i * UFAZ_STAIR.rise, -i * UFAZ_STAIR.going]}>
-              {/* An iron baluster per tread rather than a solid stepped
-                  parapet, which is what the photographs show — you can see the
-                  hall through the stair. */}
-              <mesh castShadow position={[0, 0.62, 0]}>
-                <boxGeometry args={[0.05, 1.05, 0.05]} />
-                <meshStandardMaterial color="#1c1f23" roughness={0.55} metalness={0.4} />
+/**
+ * The landing at the top of the flight, and the balustrade round its edges.
+ *
+ * Only three of them: the fourth is where the stair arrives, and a rail across
+ * that is a rail across the top step.
+ */
+function StairLanding() {
+  const { x, z, halfW, halfD } = STAIR_LANDING
+  const top = STAIR_RISE
+
+  // North, east and south. The west edge is the head of the flight.
+  const edges: { at: [number, number, number]; length: number; ry: number }[] = [
+    { at: [x, top, z - halfD], length: halfW * 2, ry: 0 },
+    { at: [x, top, z + halfD], length: halfW * 2, ry: 0 },
+    { at: [x + halfW, top, z], length: halfD * 2, ry: Math.PI / 2 },
+  ]
+
+  return (
+    <group>
+      <mesh position={[x, top - TREAD_THICK / 2, z]} castShadow receiveShadow>
+        <boxGeometry args={[halfW * 2, TREAD_THICK, halfD * 2]} />
+        <meshStandardMaterial color={STONE} roughness={0.62} />
+      </mesh>
+
+      {edges.map((edge, i) => {
+        const posts = Math.max(2, Math.round(edge.length / 0.42))
+        return (
+          <group key={i} position={edge.at} rotation={[0, edge.ry, 0]}>
+            {Array.from({ length: posts + 1 }, (_, p) => (
+              <mesh key={p} position={[-edge.length / 2 + (p * edge.length) / posts, RAIL_HEIGHT / 2, 0]} castShadow>
+                <boxGeometry args={[0.045, RAIL_HEIGHT, 0.045]} />
+                <meshStandardMaterial color={IRON} roughness={0.5} metalness={0.45} />
               </mesh>
-              {/* Timber handrail, which is the one warm thing on it. */}
-              <mesh castShadow position={[0, 1.2, 0]}>
-                <boxGeometry args={[0.1, 0.09, 0.68]} />
-                <meshStandardMaterial color="#6b4227" roughness={0.6} />
-              </mesh>
-            </group>
-          )),
-        )}
-
-        {/* Newel posts at the foot of the flight */}
-        {[-UFAZ_STAIR.halfW, UFAZ_STAIR.halfW].map((x) => (
-          <mesh key={x} castShadow position={[x, 0.8, 0.7]}>
-            <cylinderGeometry args={[0.07, 0.09, 1.6, 8]} />
-            <meshStandardMaterial color="#1c1f23" roughness={0.55} metalness={0.4} />
-          </mesh>
-        ))}
-      </group>
+            ))}
+            <mesh position={[0, RAIL_HEIGHT, 0]} castShadow>
+              <boxGeometry args={[edge.length, 0.09, 0.1]} />
+              <meshStandardMaterial color={TIMBER} roughness={0.55} />
+            </mesh>
+          </group>
+        )
+      })}
+    </group>
   )
 }
 

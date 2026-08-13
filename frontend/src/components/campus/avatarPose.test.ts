@@ -3,15 +3,17 @@ import { describe, it, expect } from 'vitest'
 import {
   ACTIVITIES,
   EMOTE_SECONDS,
+  POSED_EMOTES,
   RUN_SPEED,
-  SIT_DROP,
+  SEATED_TURNS,
   TURN_RATE,
   WALK_SPEED,
   approachAngle,
   gaitFor,
   isActivity,
   isHeld,
-  poseFrame,
+  isPosedEmote,
+  poseTurns,
   shortestTurn,
   toActivity,
   type Activity,
@@ -127,121 +129,120 @@ describe('turning', () => {
   })
 })
 
-describe('poseFrame', () => {
-  it('drops the hips by a seat height when sitting', () => {
-    // The avatar is placed at floor level in front of the chair, so the drop
-    // is what actually puts them on it.
-    expect(poseFrame('sitting', 0, 0).hipDrop).toBeCloseTo(SIT_DROP)
-    expect(poseFrame('standing', 0, 0).hipDrop).toBe(0)
-  })
+/**
+ * The joints in the pack, so a pose cannot name one that is not there.
+ *
+ * A misspelled joint is the quietest possible failure: nothing throws, nothing
+ * logs, the lookup returns undefined, the turn is skipped and the emote simply
+ * does not happen. That is how the seated pose did nothing at all for a while —
+ * the pack calls a joint `UpperLeg.L` and three.js renames it `UpperLeg_L`, so
+ * sixty-two bones were in the map and not one under the name being asked for.
+ */
+const RIG = [
+  'Head', 'Neck', 'Chest', 'Torso', 'Abdomen', 'Hips', 'Root', 'Body',
+  ...['L', 'R'].flatMap((side) => [
+    `Shoulder.${side}`, `UpperArm.${side}`, `LowerArm.${side}`, `Wrist.${side}`,
+    `UpperLeg.${side}`, `LowerLeg.${side}`, `Foot.${side}`, `PT.${side}`,
+  ]),
+]
 
-  it('folds the legs when sitting rather than sticking them out', () => {
-    const frame = poseFrame('sitting', 0, 0)
-    // Thigh forward, shin back down. A single-segment leg cannot do this, and
-    // rotating one capsule at the hip gives a doll propped against a wall.
-    expect(frame.leftHip).toBeCloseTo(-Math.PI / 2)
-    expect(frame.leftKnee).toBeCloseTo(Math.PI / 2)
-    expect(frame.rightHip).toBeCloseTo(-Math.PI / 2)
-  })
-
-  it('ignores movement while seated', () => {
-    // The server keeps a seated player seated; the pose has to agree, or a
-    // player nudging a key appears to walk on the spot in their chair.
-    const still = poseFrame('sitting', 1.5, 0)
-    const moving = poseFrame('sitting', 1.5, RUN_SPEED)
-    expect(moving).toEqual(still)
-  })
-
-  it('never bends a knee backwards', () => {
-    // Rectified in the walk cycle: a shin that swings through the thigh is the
-    // most obvious possible animation bug.
-    for (const speed of [WALK_SPEED, RUN_SPEED]) {
-      for (let t = 0; t < 4; t += 0.05) {
-        const frame = poseFrame('standing', t, speed)
-        expect(frame.leftKnee, `t=${t}`).toBeGreaterThanOrEqual(0)
-        expect(frame.rightKnee, `t=${t}`).toBeGreaterThanOrEqual(0)
+describe('posed emotes', () => {
+  it('only turns joints the rig actually has', () => {
+    for (const activity of ACTIVITIES) {
+      for (const time of [0, 0.37, 12.5]) {
+        for (const turn of poseTurns(activity as Activity, time)) {
+          expect(RIG, `${activity} turns ${turn.joint}`).toContain(turn.joint)
+        }
       }
     }
   })
 
-  it('swings the legs in opposition', () => {
-    const frame = poseFrame('standing', 0.3, WALK_SPEED)
-    expect(Math.sign(frame.leftHip)).toBe(-Math.sign(frame.rightHip))
-  })
-
-  it('counter-swings the arms against the legs', () => {
-    const frame = poseFrame('standing', 0.3, WALK_SPEED)
-    expect(Math.sign(frame.leftShoulder)).toBe(-Math.sign(frame.leftHip))
-  })
-
-  it('keeps a standing player still apart from a breath', () => {
-    const frame = poseFrame('standing', 1, 0)
-    expect(frame.leftHip).toBe(0)
-    expect(frame.rightHip).toBe(0)
-    expect(Math.abs(frame.headNod)).toBeLessThan(0.05)
-  })
-
-  it('raises one arm to raise a hand, not both', () => {
-    const frame = poseFrame('hand_raised', 0, 0)
-    expect(frame.rightShoulder).toBeLessThan(-2)
-    expect(frame.leftShoulder).toBeCloseTo(0)
-  })
-
-  it('brings the hands together and apart when clapping', () => {
-    let closest = Infinity
-    let widest = -Infinity
-    for (let t = 0; t < 2; t += 0.01) {
-      const frame = poseFrame('clapping', t, 0)
-      const gap = frame.leftShoulderZ - frame.rightShoulderZ
-      closest = Math.min(closest, gap)
-      widest = Math.max(widest, gap)
+  it('gives every posed emote something to do, and the rest nothing', () => {
+    // The bug this replaces: clapping, a raised hand and pointing all fell
+    // through to whichever baked clip was nearest, because the pack has none of
+    // them and the poses written for them were for the avatar before this one.
+    for (const activity of POSED_EMOTES) {
+      expect(poseTurns(activity, 0).length, activity).toBeGreaterThan(0)
     }
-    expect(widest).toBeGreaterThan(closest + 0.3)
+    for (const activity of ['standing', 'waving', 'leaning'] as Activity[]) {
+      expect(poseTurns(activity, 0), activity).toEqual([])
+    }
+    // Waving is the one emote the pack ships a clip for, so it is not posed.
+    expect(isPosedEmote('waving')).toBe(false)
   })
 
-  it('still walks while emoting', () => {
-    // Waving does not stop your legs. The emote is layered over the gait.
-    const frame = poseFrame('waving', 0.3, WALK_SPEED)
-    expect(Math.abs(frame.leftHip)).toBeGreaterThan(0.01)
+  it('folds the hips in the parent frame and the knees in their own', () => {
+    // In the parent's frame the two knees bend in opposite directions and the
+    // legs cross over, which is a yoga pose rather than somebody on a chair.
+    const hip = SEATED_TURNS.find((turn) => turn.joint === 'UpperLeg.L')
+    const knee = SEATED_TURNS.find((turn) => turn.joint === 'LowerLeg.L')
+    expect(hip?.frame).toBe('parent')
+    expect(knee?.frame).toBeUndefined()
+    expect(poseTurns('sitting', 0)).toEqual(SEATED_TURNS)
   })
 
-  it('returns finite angles for every pose at any time', () => {
+  it('raises one hand, not two', () => {
+    // Both arms up is surrender, not a question.
+    const sides = new Set(poseTurns('hand_raised', 0).map((turn) => turn.joint.slice(-1)))
+    expect(sides).toEqual(new Set(['R']))
+  })
+
+  it('opens and shuts the hands when clapping, on both arms', () => {
+    const elbow = (t: number, side: string) =>
+      poseTurns('clapping', t).find((turn) => turn.joint === `LowerArm.${side}`)!.angle
+
+    for (const side of ['L', 'R']) {
+      let shut = -Infinity
+      let open = Infinity
+      for (let t = 0; t < 2; t += 0.01) {
+        shut = Math.max(shut, elbow(t, side))
+        open = Math.min(open, elbow(t, side))
+      }
+      // A clap the hands never part for is a held prayer.
+      expect(shut - open, side).toBeGreaterThan(0.4)
+    }
+  })
+
+  it('claps with both hands doing the same thing at the same moment', () => {
+    // One hand leading the other by half a cycle is not applause.
+    for (const t of [0, 0.13, 0.5, 3.7]) {
+      expect(elbowOf(t, 'L')).toBeCloseTo(elbowOf(t, 'R'))
+    }
+  })
+
+  it('holds a raised hand still enough to read as held', () => {
+    // It is a held activity: it stays up until the player drops it. A sway
+    // wide enough to be a wave would make it the gesture it is not.
+    const shoulder = (t: number) =>
+      poseTurns('hand_raised', t).find((turn) => turn.axis === 'z')!.angle
+    let lowest = Infinity
+    let highest = -Infinity
+    for (let t = 0; t < 8; t += 0.02) {
+      lowest = Math.min(lowest, shoulder(t))
+      highest = Math.max(highest, shoulder(t))
+    }
+    expect(highest - lowest).toBeLessThan(0.12)
+    expect(highest - lowest).toBeGreaterThan(0)
+  })
+
+  it('returns finite angles for every activity at any time', () => {
     for (const activity of ACTIVITIES) {
-      for (const speed of [0, WALK_SPEED, RUN_SPEED]) {
-        for (const t of [0, 0.37, 12.5]) {
-          const frame = poseFrame(activity as Activity, t, speed)
-          for (const [joint, value] of Object.entries(frame)) {
-            expect(Number.isFinite(value), `${activity} ${joint}`).toBe(true)
-          }
+      for (const t of [0, 0.37, 12.5, 1e6]) {
+        for (const turn of poseTurns(activity as Activity, t)) {
+          expect(Number.isFinite(turn.angle), `${activity} ${turn.joint}`).toBe(true)
         }
       }
     }
   })
 })
 
+function elbowOf(time: number, side: string): number {
+  return poseTurns('clapping', time).find((turn) => turn.joint === `LowerArm.${side}`)!.angle
+}
+
 describe('leaning', () => {
   it('is a posture that holds rather than an emote that releases', () => {
     expect(isHeld('leaning')).toBe(true)
-  })
-
-  it('leans backwards, onto the wall rather than off it', () => {
-    // Forwards reads as being about to fall over. The wall is behind, because
-    // that is the only side the detection looks at.
-    const pose = poseFrame('leaning', 0, 0)
-    expect(pose.torsoLean).toBeLessThan(0)
-  })
-
-  it('ignores the gait, because you cannot walk while propped up', () => {
-    // Laid over a walk it produced a player sliding along the wall at an angle.
-    const still = poseFrame('leaning', 1, 0)
-    const running = poseFrame('leaning', 1, RUN_SPEED)
-    expect(running).toEqual(still)
-  })
-
-  it('crosses one leg over the other', () => {
-    // What separates it from standing still at a slight angle.
-    const pose = poseFrame('leaning', 0, 0)
-    expect(pose.leftHip).not.toBeCloseTo(pose.rightHip)
   })
 
   it('is a real activity as far as the wire is concerned', () => {

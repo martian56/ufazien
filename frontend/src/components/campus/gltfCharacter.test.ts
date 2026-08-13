@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 
-import { AVATAR_MODELS, clipFor, packIndex } from './GltfCharacter'
-import { ACTIVITIES, RUN_SPEED, WALK_SPEED } from './avatarPose'
+import { AVATAR_MODELS, clipFor, clipRate, packIndex } from './GltfCharacter'
+import { ACTIVITIES, POSED_EMOTES, RUN_SPEED, WALK_SPEED } from './avatarPose'
 
 /**
  * The clip chosen for a given activity, and the pack chosen for a given seed.
@@ -52,6 +52,46 @@ describe('choosing a clip', () => {
     // `is_moving` false with a leftover speed is what an interrupted client
     // sends, and treating it as movement moonwalks them on the spot.
     expect(clipFor('standing', 0.2, false)).toBe('Idle')
+  })
+
+  it('never plays a gesture clip for an emote the pack does not have', () => {
+    // The bug. Clapping played `Interact`, which is reaching for a switch, and
+    // a raised hand played `Wave` — so asking for a raised hand got you a wave,
+    // which is not a near miss but a different gesture entirely. All three are
+    // posed from the rig now, over a still idle.
+    for (const activity of POSED_EMOTES) {
+      expect(clipFor(activity, 0, false), activity).toBe('Idle_Neutral')
+    }
+  })
+})
+
+describe('the speed a gait clip plays at', () => {
+  it('plays a gait clip at its own pace at the speed it was baked for', () => {
+    expect(clipRate('Walk', WALK_SPEED)).toBeCloseTo(1)
+    expect(clipRate('Run', RUN_SPEED)).toBeCloseTo(1)
+  })
+
+  it('slows the walk down for somebody creeping', () => {
+    // Otherwise the legs march at full stride while the player barely moves,
+    // which is the same skating the fixed cadence used to cause.
+    expect(clipRate('Walk', 1.5)).toBeLessThan(1)
+  })
+
+  it('leaves the clips that are not gaits alone', () => {
+    for (const clip of ['Idle', 'Idle_Neutral', 'Wave', 'Interact'] as const) {
+      expect(clipRate(clip, RUN_SPEED), clip).toBe(1)
+    }
+  })
+
+  it('stays within a sane range for any speed a client might send', () => {
+    // A hacked or broken client can report anything. A timeScale of zero
+    // freezes the avatar mid-stride and a huge one is a blur.
+    for (const speed of [0, -4, 0.01, 400, Number.NaN, Infinity]) {
+      const rate = clipRate('Run', speed)
+      expect(Number.isFinite(rate), String(speed)).toBe(true)
+      expect(rate).toBeGreaterThan(0)
+      expect(rate).toBeLessThanOrEqual(1.8)
+    }
   })
 })
 

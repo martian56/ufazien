@@ -22,7 +22,7 @@
  * Pure, so the whole graph can be walked in a test without a canvas.
  */
 
-import type { InteriorKind } from './campusLayout'
+import { PLAYER_RADIUS, type InteriorKind } from './campusLayout'
 
 /** Ground, then the three floors above it. */
 export type Floor = 0 | 1 | 2 | 3
@@ -83,9 +83,175 @@ export const CORRIDOR_DOORS = [-12, -4, 4, 12]
  */
 export const ARCADE_PIERS = [-8, 0, 8, 16]
 
-/** Where the stair and the lift stand, in room coordinates. */
-export const STAIR_HEAD = { x: 10.5, z: -19.4, halfW: 4.5, halfD: 2.2 }
-export const STAIR_FOOT = { x: 10.5, z: -9, halfW: 3.5, halfD: 1.6 }
+/**
+ * The stair, as the numbers everything else is derived from.
+ *
+ * ## Why it turns
+ *
+ * It was a straight flight of fourteen steps with a landing on the end, which
+ * is not the stair in the building. The one in the photographs is stone, with a
+ * black wrought-iron balustrade and a dark timber handrail, and it *winds* — it
+ * climbs past the lift shaft and carries on round out of frame. A straight run
+ * is also the wrong shape for this room: fourteen steps at a 0.62 m going is
+ * nearly nine metres of floor spent going up one level, which is why the old
+ * one had to be shoved into a corner and still crossed half the hall.
+ *
+ * So it is a helix: three quarters of a turn about an open core, twenty-four
+ * treads, landing on the east side. It occupies a circle 8.6 m across instead
+ * of a strip 7 by 12, and you can see the hall through it the whole way up.
+ *
+ * ## The numbers
+ *
+ * A 0.19 m rise and a 0.54 m going at the walking line, which is a shallow,
+ * comfortable stair rather than the ladder a tight spiral usually is — that is
+ * what the 2.75 m walking radius buys. Twenty-four of them is 4.56 m, which is
+ * the floor-to-floor height the building already used.
+ *
+ * Everything downstream is computed from this: `stairTreads` gives the treads,
+ * `interiorPhysics` turns them into platforms, and `BuildingInteriors` draws
+ * them. There is one description of this stair and three readers of it, which
+ * is the arrangement the old one did not have — it was drawn in one file and
+ * made solid in another, and for a while the drawn one had no platforms under
+ * it at all on the upper floors.
+ */
+export const STAIR = {
+  /** Centre of the well, in room coordinates. */
+  x: 11,
+  z: -15.2,
+  /** The open core down the middle, and the outer edge of the treads. */
+  well: 1.2,
+  outer: 4.3,
+  /** Where feet actually go, halfway between the two. */
+  walk: 2.75,
+  treads: 24,
+  rise: 0.19,
+  /** Radians turned per tread. Negative, so it winds clockwise seen from above. */
+  turn: -(Math.PI * 1.5) / 24,
+}
+
+/** How high the flight climbs: one floor. */
+export const STAIR_RISE = STAIR.treads * STAIR.rise
+
+/** One tread of the helix. */
+export interface Tread {
+  /** 1 to `STAIR.treads`, counting up from the floor. */
+  index: number
+  /** Where it points, as a polar angle: 0 is due south, and it winds clockwise. */
+  angle: number
+  /** The height of the walking surface. */
+  top: number
+  /** The centre of the tread, on the walking line. */
+  x: number
+  z: number
+}
+
+/**
+ * Every tread, from the bottom.
+ *
+ * The last one comes out due east, which is where the landing is: the flight is
+ * laid out backwards from the landing rather than forwards from the foot,
+ * because the landing is the thing that has to line up with something.
+ */
+export function stairTreads(): Tread[] {
+  return Array.from({ length: STAIR.treads }, (_, i) => {
+    const index = i + 1
+    const angle = STAIR.turn * index
+    return {
+      index,
+      angle,
+      top: STAIR.rise * index,
+      x: STAIR.x + Math.sin(angle) * STAIR.walk,
+      z: STAIR.z + Math.cos(angle) * STAIR.walk,
+    }
+  })
+}
+
+/**
+ * How wide and deep a tread is, as a box.
+ *
+ * The tangential half-width is measured at the *outer* edge, not at the walking
+ * line: sized to the middle, the boxes tile at 2.75 m and leave a 0.3 m gap
+ * between them out at 4.3, which is a hole in the stair exactly where somebody
+ * holding forward round the outside of a bend would find it.
+ */
+export const TREAD_HALF_W = (STAIR.outer * Math.abs(STAIR.turn)) / 2
+export const TREAD_HALF_D = (STAIR.outer - STAIR.well) / 2
+
+/**
+ * The landing at the top, and the two triggers.
+ *
+ * The landing runs due east off the last tread, out over floor nothing else
+ * uses. `STAIR_HEAD` covers very nearly all of it on purpose: arriving on the
+ * landing is what takes you up, so there is no moment where a player is stood
+ * on a platform four and a half metres up with an unguarded edge.
+ */
+export const STAIR_LANDING = { x: 16, z: -15.2, halfW: 2.2, halfD: 1.3 }
+export const STAIR_HEAD = { x: 16, z: -15.2, halfW: 2, halfD: 1.15 }
+
+/**
+ * Where you stand to go down: on the floor at the foot of the flight.
+ *
+ * Clear of the helix's own footprint rather than under it. Everything more than
+ * a step above your feet is a wall, so the treads overhead are solid from down
+ * here — a trigger tucked under the flight would be one you could never reach.
+ */
+export const STAIR_FOOT = { x: 10.5, z: -9.2, halfW: 2, halfD: 1.3 }
+
+/** The interiors this stair stands in: the entrance hall and the corridors. */
+export const STAIR_ROOMS: readonly InteriorKind[] = ['ufaz', 'ufaz-floor']
+
+/**
+ * Keeps a player on the stair instead of off the side of it.
+ *
+ * A helix is walked tangentially: you hold forward and the stair curves away
+ * from under you. The treads themselves stop you cutting across the flight —
+ * anything more than a step up is a wall — but they do nothing about the
+ * outside of the bend, which is a 4.5 m drop by the top.
+ *
+ * A balustrade would be the obvious answer and it cannot be one here: as
+ * colliders it is twenty-odd boxes half a metre apart, and half a metre apart
+ * is the exact thing `interiorPhysics.test.ts` forbids, because a slot narrower
+ * than a player is somewhere they get wedged. So it is a clamp, like the room's
+ * own walls are a clamp — a radius rather than geometry.
+ *
+ * Only above the third tread, so that walking past the stair at floor level is
+ * unaffected, and never on the landing, or stepping off the top would drag the
+ * player back onto the flight they just climbed.
+ *
+ * Returns null when there is nothing to do, which is almost always.
+ */
+export function stairwellClamp(
+  kind: InteriorKind,
+  x: number,
+  z: number,
+  feet: number,
+  radius = PLAYER_RADIUS,
+): { x: number; z: number } | null {
+  // Only the rooms this stair is actually in. Every interior is drawn at the
+  // same origin, so without this the amphitheatre's back row and the sports
+  // hall's bleachers — the two other places in the campus where a player stands
+  // several metres off the floor — sit inside a stairwell that is not there.
+  if (!STAIR_ROOMS.includes(kind)) return null
+  if (feet <= STAIR.rise * 3) return null
+  if (
+    Math.abs(x - STAIR_LANDING.x) <= STAIR_LANDING.halfW &&
+    Math.abs(z - STAIR_LANDING.z) <= STAIR_LANDING.halfD
+  ) {
+    return null
+  }
+
+  const dx = x - STAIR.x
+  const dz = z - STAIR.z
+  const distance = Math.hypot(dx, dz)
+  const limit = STAIR.outer - radius
+  if (distance <= limit) return null
+  // Beyond the stair altogether — on a landing edge or another floor's
+  // furniture — is not something to be pulled towards the stair.
+  if (distance > STAIR.outer + 2) return null
+
+  const scale = limit / distance
+  return { x: STAIR.x + dx * scale, z: STAIR.z + dz * scale }
+}
 
 /**
  * Where you stand to call the lift: in front of the doors, not inside the car.
@@ -161,10 +327,10 @@ export function portalsFrom(roomId: number): Portal[] {
       to: CORRIDOR_OF[(floor + 1) as Floor],
       kind: 'stair-up',
       ...STAIR_HEAD,
-      // Only from the landing itself. In plan this rectangle sits over the
-      // flight as well, so without a height the player is sent upstairs by
-      // walking underneath the stair they have not climbed.
-      minY: 3.6,
+      // Only from the top of the flight. The landing stands over the last few
+      // treads and over open floor, so without a height the player is sent
+      // upstairs for walking underneath a stair they have not climbed.
+      minY: STAIR_RISE - STAIR.rise * 4,
       // Clear of the flight, not on it. Landing on the foot of the stair puts
       // the player straight into the trigger that goes back down, and they
       // bounce between two floors with no way to walk out of it.

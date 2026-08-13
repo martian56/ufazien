@@ -11,6 +11,9 @@ import {
   TURN_RATE,
   WALK_SPEED,
   approachAngle,
+  gaitFor,
+  isPosedEmote,
+  poseTurns,
   toActivity,
   type Activity,
 } from './avatarPose'
@@ -108,21 +111,42 @@ export interface GltfCharacterProps {
  * The clip that matches what a player is doing.
  *
  * Movement wins over activity: a player waving while they walk is walking, and
- * playing the wave would slide them across the floor in a standing pose. The
- * emotes that are not in the pack — clapping and pointing — borrow `Interact`,
- * which is a torso-and-arm gesture and reads as *doing something* rather than
- * as the wrong thing.
+ * playing the wave would slide them across the floor in a standing pose.
+ *
+ * Everything the pack has no clip for is a still idle with the joints posed
+ * over it, which `poseTurns` supplies. It used to borrow instead: clapping and
+ * pointing took `Interact`, which is a reach for a switch, and a raised hand
+ * took `Wave`. Borrowing is fine when the substitute is vague and wrong when it
+ * is specific — a wave is unmistakably a wave, so asking for a raised hand and
+ * getting one is not a near miss, it is a different gesture.
  */
 export function clipFor(activity: Activity, speed: number, isMoving: boolean): Clip {
   if (isMoving || speed > 0.4) {
     return speed > (WALK_SPEED + RUN_SPEED) / 2 ? 'Run' : 'Walk'
   }
-  if (activity === 'waving' || activity === 'hand_raised') return 'Wave'
-  if (activity === 'clapping' || activity === 'pointing') return 'Interact'
-  // Sitting and leaning are posed on top of a still idle: the pack has no clip
-  // for either, and a seated character playing a breathing idle sways.
-  if (activity === 'sitting' || activity === 'leaning') return 'Idle_Neutral'
+  // The one emote the pack does have, and its own is better than six angles.
+  if (activity === 'waving') return 'Wave'
+  if (isPosedEmote(activity) || activity === 'sitting' || activity === 'leaning') {
+    return 'Idle_Neutral'
+  }
   return 'Idle'
+}
+
+/**
+ * How fast to play a gait clip so the feet do not skate.
+ *
+ * The clips are baked at one speed each. Played at that speed they are right,
+ * and played at any other the stride length is wrong by exactly the ratio —
+ * a player creeping forward at a metre a second used to march. Normalised so
+ * that the nominal speed is 1, and following the same square-root law `gaitFor`
+ * documents: going twice as fast is mostly a longer stride, not twice as many
+ * steps.
+ */
+export function clipRate(clip: Clip, speed: number): number {
+  if (clip !== 'Walk' && clip !== 'Run') return 1
+  const nominal = clip === 'Run' ? RUN_SPEED : WALK_SPEED
+  const rate = gaitFor(speed).cadence / gaitFor(nominal).cadence
+  return Math.min(1.8, Math.max(0.55, rate))
 }
 
 /**
@@ -146,29 +170,6 @@ function joint(name: string): string {
   return name.replace(/[^a-z0-9]/gi, '').toLowerCase()
 }
 
-/**
- * Extra rotation applied on top of the clip, in radians, by joint.
- *
- * The pack has no sitting animation, so sitting is a still idle with the hips
- * and knees folded. Done as an override rather than a separate clip because it
- * has to compose with whatever the mixer just wrote: the mixer runs first and
- * this runs after it, every frame, or the animation overwrites the pose and the
- * player stands up through the chair.
- */
-const SEATED: [string, number, 'parent' | 'local'][] = [
-  // Hips swing in the parent's frame, which for a thigh is the pelvis and is
-  // near enough world-aligned.
-  [joint('UpperLeg.L'), -1.45, 'parent'],
-  [joint('UpperLeg.R'), -1.45, 'parent'],
-  // Knees hinge about their own axis. In the parent's frame the two legs bend
-  // in opposite directions and cross over each other, which is a yoga pose
-  // rather than a person on a chair.
-  [joint('LowerLeg.L'), 1.5, 'local'],
-  [joint('LowerLeg.R'), 1.5, 'local'],
-  [joint('Foot.L'), 0.25, 'local'],
-  [joint('Foot.R'), 0.25, 'local'],
-]
-
 /** Picks a pack from a seed of either shape, deterministically. */
 export function packIndex(variant: number | string): number {
   if (typeof variant === 'number' && Number.isFinite(variant)) {
@@ -181,8 +182,12 @@ export function packIndex(variant: number | string): number {
   return Math.abs(hash) % AVATAR_MODELS.length
 }
 
-/** Scratch objects, so a seated player does not allocate two per joint per frame. */
-const HINGE = new THREE.Vector3(1, 0, 0)
+/** Scratch objects, so a posed player does not allocate two per joint per frame. */
+const AXES = {
+  x: new THREE.Vector3(1, 0, 0),
+  y: new THREE.Vector3(0, 1, 0),
+  z: new THREE.Vector3(0, 0, 1),
+} as const
 const FOLD = new THREE.Quaternion()
 
 export function GltfCharacter({
@@ -223,6 +228,31 @@ export function GltfCharacter({
     })
     return map
   }, [scene])
+
+  /**
+   * Every joint's rest orientation, taken before anything animates it.
+   *
+   * A pose is measured against the pack's A-pose and has to be applied against
+   * it too. Composed onto whatever the clip happened to write instead, the
+   * angles are all off by however far that clip had moved the joint — which for
+   * `Idle_Neutral`'s arms is most of a right angle, and turned a clap into a
+   * pair of arms held straight out sideways and a raised hand into an arm
+   * pointing at the wall.
+   *
+   * Safe to read here: `useGLTF` hands back one parsed scene per URL and never
+   * animates it, and every mixer runs on a clone, so this clone is still at
+   * rest until the frame loop starts.
+   */
+  const restPose = useMemo(() => {
+    const map = new Map<string, THREE.Quaternion>()
+    scene.traverse((object) => {
+      if ((object as THREE.Bone).isBone) map.set(joint(object.name), object.quaternion.clone())
+    })
+    return map
+  }, [scene])
+
+  /** Which joints this frame has already reset, so two turns compose. */
+  const reset = useRef(new Set<string>())
 
   const current = useRef<string | null>(null)
 
@@ -267,7 +297,7 @@ export function GltfCharacter({
     }
   }, [mixer])
 
-  useFrame((_, delta) => {
+  useFrame((state, delta) => {
     const want = clipFor(pose, ground, isMoving)
     if (want !== current.current) {
       const next = actions.get(want)
@@ -278,15 +308,15 @@ export function GltfCharacter({
         current.current = want
       }
     }
+    // Every frame rather than on the change, because the speed moves
+    // continuously within a clip and the stride has to follow it.
+    const playing = actions.get(want)
+    if (playing) playing.timeScale = clipRate(want, ground)
 
     mixer.update(delta)
 
     // After the mixer, never before: it writes the whole skeleton each frame.
 
-    // Composed onto what the clip wrote, not substituted for it. Assigning the
-    // rotation outright throws away the joint's rest orientation — the pack's
-    // leg bones do not sit axis-aligned — and the legs come out twisted into
-    // sticks rather than folded.
     // Turned towards the heading rather than snapped to it, and never the long
     // way round. Sitting locks the body to the seat's facing.
     const group = body.current
@@ -302,12 +332,35 @@ export function GltfCharacter({
       }
     }
 
-    if (pose !== 'sitting') return
-    for (const [name, angle, frame] of SEATED) {
+    // The joints an emote poses, over the clip the mixer just wrote.
+    //
+    // Each posed joint goes back to its rest orientation first and the turn is
+    // composed onto that — never assigned outright, which would throw the rest
+    // orientation away, and none of the pack's limb bones sit axis-aligned, so
+    // the limbs come out twisted into sticks rather than folded.
+    //
+    // Only the joints an emote names: everything else is still playing the
+    // clip, which is what keeps a clapping student breathing.
+    //
+    // Skipped while travelling, for the same reason `clipFor` puts movement
+    // first: a player clapping on the move is walking, and holding their arms
+    // in front of their chest through the walk cycle reads as a bug.
+    if (isMoving || ground > 0.4) return
+    const turns = poseTurns(pose, state.clock.elapsedTime)
+    if (turns.length === 0) return
+
+    reset.current.clear()
+    for (const turn of turns) {
+      const name = joint(turn.joint)
       const bone = bones.get(name)
       if (!bone) continue
-      FOLD.setFromAxisAngle(HINGE, angle)
-      if (frame === 'parent') bone.quaternion.premultiply(FOLD)
+      if (!reset.current.has(name)) {
+        const rest = restPose.get(name)
+        if (rest) bone.quaternion.copy(rest)
+        reset.current.add(name)
+      }
+      FOLD.setFromAxisAngle(AXES[turn.axis], turn.angle)
+      if (turn.frame === 'parent') bone.quaternion.premultiply(FOLD)
       else bone.quaternion.multiply(FOLD)
     }
   })

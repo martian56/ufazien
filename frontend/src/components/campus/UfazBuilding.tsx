@@ -366,10 +366,44 @@ export default function UfazBuilding({ building, timeOfDay = 'day' }: UfazBuildi
           band: the real plinth is not a different material, it is the same
           render carried down, and only the cream sill course at its head marks
           where the semi-basement ends. */}
-      <mesh position={[0, PLINTH / 2, 0]} castShadow receiveShadow>
-        <boxGeometry args={[width + 0.3, PLINTH, depth + 0.3]} />
+      {/*
+        Built round the doorway, not straight through it.
+
+        This was one box the full width and depth of the building and two and a
+        half metres high, which is above head height — so the entrance was a
+        hole in the facade with a solid wall across the bottom of it, and the
+        arch you walk towards had render where its lower two thirds should be.
+        Nothing caught it because the collider gap is separate geometry and the
+        player walks through the gap regardless: it was only ever wrong to look
+        at, and only obvious once the opening became an arch you can see the
+        whole of.
+      */}
+      <mesh position={[0, PLINTH / 2, -PORCH_DEPTH / 2]} castShadow receiveShadow>
+        <boxGeometry args={[width + 0.3, PLINTH, depth + 0.3 - PORCH_DEPTH]} />
         <meshStandardMaterial color={PLINTH_COLOUR} roughness={0.95} />
       </mesh>
+      <group position={[0, 0, halfD - PORCH_DEPTH / 2]}>
+        {[-1, 1].map((side) => {
+          const pier = halfW + 0.15 - OPENING_HALF_W
+          return (
+            <mesh
+              key={side}
+              position={[side * (OPENING_HALF_W + pier / 2), PLINTH / 2, 0]}
+              castShadow
+              receiveShadow
+            >
+              <boxGeometry args={[pier, PLINTH, PORCH_DEPTH]} />
+              <meshStandardMaterial color={PLINTH_COLOUR} roughness={0.95} />
+            </mesh>
+          )
+        })}
+        {/* And the step the threshold stands on, which is the only part of the
+            plinth that crosses the opening. */}
+        <mesh position={[0, THRESHOLD / 2, 0]} castShadow receiveShadow>
+          <boxGeometry args={[OPENING_HALF_W * 2, THRESHOLD, PORCH_DEPTH]} />
+          <meshStandardMaterial color={PLINTH_COLOUR} roughness={0.95} />
+        </mesh>
+      </group>
       {Array.from({ length: BAYS }, (_, i) => {
         const x = -halfW + bay * (i + 0.5)
         // Not across the doorway.
@@ -430,13 +464,33 @@ export default function UfazBuilding({ building, timeOfDay = 'day' }: UfazBuildi
       <Entrance depth={depth} trim={DRESSING} accent={RENDER_COLOUR} />
 
       {/* String course between the plinth and the first floor, and a cornice
-          under the roofline. Both run right round. */}
-      {[PLINTH + 0.1, height - 0.5].map((y, i) => (
-        <mesh key={i} position={[0, y, 0]} castShadow>
-          <boxGeometry args={[width + 0.5, i === 0 ? 0.28 : 0.5, depth + 0.5]} />
-          <meshStandardMaterial color={DRESSING} roughness={0.88} />
-        </mesh>
-      ))}
+          under the roofline.
+
+          The cornice runs right round; the string course cannot, because the
+          entrance arch reaches through it. Run as one box it was a cream band
+          straight across the doorway at head height — the arch's own surround
+          passing behind a string course is not something any building does, and
+          it made the entrance read as a window with a band painted over it. So
+          the front is two pieces, stopping either side of the opening, and the
+          returns and the back are the third. */}
+      <mesh position={[0, height - 0.5, 0]} castShadow>
+        <boxGeometry args={[width + 0.5, 0.5, depth + 0.5]} />
+        <meshStandardMaterial color={DRESSING} roughness={0.88} />
+      </mesh>
+      <mesh position={[0, PLINTH + 0.1, -PORCH_DEPTH / 2]} castShadow>
+        <boxGeometry args={[width + 0.5, 0.28, depth + 0.5 - PORCH_DEPTH]} />
+        <meshStandardMaterial color={DRESSING} roughness={0.88} />
+      </mesh>
+      {(() => {
+        const clear = OPENING_HALF_W + 0.75
+        const run = halfW + 0.25 - clear
+        return [-1, 1].map((side) => (
+          <mesh key={side} position={[side * (clear + run / 2), PLINTH + 0.1, halfD - PORCH_DEPTH / 2]} castShadow>
+            <boxGeometry args={[run, 0.28, PORCH_DEPTH + 0.25]} />
+            <meshStandardMaterial color={DRESSING} roughness={0.88} />
+          </mesh>
+        ))
+      })()}
 
       {/* Every window on the building, in one instanced pass. */}
       <DressedWindows spots={windows} />

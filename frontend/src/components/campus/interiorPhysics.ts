@@ -20,7 +20,15 @@ import { INTERIOR_SPECS, interiorHalfExtent } from './interiorSpecs'
 import { fitProjector } from './projectorFit'
 import { LECTURE_SEATING, LECTURE_ROWS } from './lectureSeating'
 import { STEP_UP, type Collider, type Platform } from './campusPhysics'
-import { ARCADE_PIERS } from './verticalCirculation'
+import {
+  ARCADE_PIERS,
+  STAIR,
+  STAIR_LANDING,
+  STAIR_RISE,
+  TREAD_HALF_D,
+  TREAD_HALF_W,
+  stairTreads,
+} from './verticalCirculation'
 
 /** Somewhere a player can sit, and which way they face once they do. */
 export interface Seat {
@@ -120,28 +128,6 @@ export const UFAZ_LIFTS = { x: -15, z: -19, halfW: 3.4, halfD: 1.8 }
 export const UFAZ_TURNSTILES = [-4.5, -1.5, 1.5, 4.5]
 export const UFAZ_TURNSTILE_Z = 13
 
-export const UFAZ_STAIR = {
-  // Narrower and further in than the first attempt at moving it. At x 12.5
-  // with a four-metre half-width its balustrade landed at 16.7, which is
-  // inside the colonnade at 17 — the rail ran straight through a column.
-  x: 10.5,
-  z: -10,
-  steps: 14,
-  rise: 0.3,
-  going: 0.62,
-  halfW: 3.5,
-  landing: { z: -19.4, halfW: 4.5, halfD: 2.2, top: 4.55 },
-}
-
-/**
- * An upper floor: a corridor with the arcade down one side.
- *
- * The stair and the lift are the same objects in the same places as the ground
- * floor — that is what "the corridors are the same on every floor" means — so
- * the flight is here too, running the other way: you arrive at its head and go
- * down. Its platforms are the ground floor's mirrored in z, which keeps the two
- * ends of a journey at the same place on both floors.
- */
 /**
  * The main flight, as physics.
  *
@@ -151,35 +137,37 @@ export const UFAZ_STAIR = {
  * all: the flight drawn upstairs was scenery you walked through, and the
  * stair-up trigger sits four metres off the floor, so on floors one and two
  * there was no way to reach it and no way up.
+ *
+ * ## Turned boxes, and the sign that catches everybody
+ *
+ * A tread of a helix is a wedge, and the nearest thing this collision layer has
+ * is a box that can be turned. `insideCollider` maps a world offset into the
+ * box's frame with `cos(-ry)` and `sin(-ry)`, and three.js's `rotation.y` maps
+ * the box's frame out to the world with `cos(ry)` and `sin(ry)`. Those are
+ * inverses of each other only if the two are given opposite signs. So the
+ * platform gets `-angle` and the mesh gets `angle`, and getting it the other
+ * way round mirrors the stair's collision about the room's axis: the treads
+ * would be solid where the flight isn't and open where it is, at every angle
+ * except the four multiples of a right angle where the two agree.
  */
 function mainStair(colliders: Collider[], platforms: Platform[]) {
-  for (let i = 0; i < UFAZ_STAIR.steps; i++) {
+  for (const tread of stairTreads()) {
     platforms.push({
-      x: UFAZ_STAIR.x,
-      z: UFAZ_STAIR.z - i * UFAZ_STAIR.going,
-      halfW: UFAZ_STAIR.halfW,
-      halfD: UFAZ_STAIR.going / 2,
-      top: 0.45 + i * UFAZ_STAIR.rise,
+      x: tread.x,
+      z: tread.z,
+      halfW: TREAD_HALF_W,
+      halfD: TREAD_HALF_D,
+      ry: -tread.angle,
+      top: tread.top,
     })
   }
-  platforms.push({
-    x: UFAZ_STAIR.x,
-    z: UFAZ_STAIR.landing.z,
-    halfW: UFAZ_STAIR.landing.halfW,
-    halfD: UFAZ_STAIR.landing.halfD,
-    top: UFAZ_STAIR.landing.top,
-  })
 
-  // The balustrades either side of the flight, which are walls.
-  for (const side of [-1, 1]) {
-    colliders.push({
-      x: UFAZ_STAIR.x + side * (UFAZ_STAIR.halfW + 0.2),
-      z: UFAZ_STAIR.z - (UFAZ_STAIR.steps * UFAZ_STAIR.going) / 2,
-      halfW: 0.25,
-      halfD: (UFAZ_STAIR.steps * UFAZ_STAIR.going) / 2 + 0.4,
-      height: 5.6,
-    })
-  }
+  platforms.push({ ...STAIR_LANDING, top: STAIR_RISE })
+
+  // The core the flight winds around, which is the one solid thing on it. The
+  // outside of the bend is a clamp rather than a balustrade — see
+  // `stairwellClamp`, and the note there on why it cannot be colliders.
+  colliders.push({ x: STAIR.x, z: STAIR.z, radius: STAIR.well, height: STAIR_RISE + 1.1 })
 }
 
 /**

@@ -75,6 +75,10 @@ starts at the API client, so a browser check still matters for anything visual. 
 
 **react-three-fiber aims the default camera at the origin.** A camera positioned directly above the origin ends up looking straight down.
 
+**A turned collider's `ry` is the negative of the mesh's `rotation.y`.** `insideCollider` maps world into box space with `cos(-ry)`/`sin(-ry)`; three.js maps box space out to the world with `cos(ry)`/`sin(ry)`. Give both the same number and the footprint is mirrored about the room's axis — and it agrees at the four right angles, so a spot check passes. The helical stair's treads are the worked example.
+
+**`metalness` near 1 with no environment map renders black.** A `meshStandardMaterial` at high metalness has almost no diffuse term and reflects an environment to make up for it. These scenes have none, so polished steel comes out as black plastic. Keep architectural metals around 0.3 and let the colour do the work. It has caught the speed gates and the lift doors.
+
 **`utils/api.js` is a fetch client that returns parsed JSON**, not an axios `{data}` envelope. Do not destructure `.data` from it. Note `services/api.js` is a *different*, axios-based client.
 
 **Emoji in `print()` crashes on Windows** under cp1252. Use logging.

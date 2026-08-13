@@ -4,8 +4,11 @@ import {
   CORRIDOR_OF,
   FLOOR_PLANS,
   LIFT_CAR,
+  STAIR,
   STAIR_FOOT,
   STAIR_HEAD,
+  STAIR_LANDING,
+  STAIR_RISE,
   allRoomIds,
   corridorFor,
   exitOf,
@@ -13,10 +16,12 @@ import {
   isCorridor,
   portalAt,
   portalsFrom,
+  stairTreads,
+  stairwellClamp,
 } from './verticalCirculation'
-import { CAMPUS_BUILDINGS, PLAYER_RADIUS } from './campusLayout'
+import { CAMPUS_BUILDINGS, PLAYER_RADIUS, type InteriorKind } from './campusLayout'
 import { interiorColliders, interiorPlatforms } from './interiorPhysics'
-import { insideCollider } from './campusPhysics'
+import { STEP_UP, groundHeight, insideCollider } from './campusPhysics'
 import { corridorKind } from './verticalCirculation'
 
 /**
@@ -96,7 +101,7 @@ describe('the stair and the lift', () => {
     // high off the floor the player is. At ground level this is somebody
     // walking beneath it.
     expect(portalAt(1, STAIR_HEAD.x, STAIR_HEAD.z, 0)).toBeNull()
-    expect(portalAt(1, STAIR_HEAD.x, STAIR_HEAD.z, 4.55)?.kind).toBe('stair-up')
+    expect(portalAt(1, STAIR_HEAD.x, STAIR_HEAD.z, STAIR_RISE)?.kind).toBe('stair-up')
   })
 
   it('has a lift on every floor, and it runs both ways', () => {
@@ -122,6 +127,154 @@ describe('the stair and the lift', () => {
         ).not.toBe(id)
       }
     }
+  })
+})
+
+describe('the helical flight', () => {
+  /**
+   * The graph tests above prove the stair joins two floors together. None of
+   * them touches the thing a helix can get wrong that a straight run cannot:
+   * whether there is continuous ground under somebody walking round it.
+   */
+  const platforms = interiorPlatforms('ufaz')
+  const at = (angle: number, radius: number) => ({
+    x: STAIR.x + Math.sin(angle) * radius,
+    z: STAIR.z + Math.cos(angle) * radius,
+  })
+
+  it('climbs one floor, in steps a person can take', () => {
+    expect(STAIR_RISE).toBeCloseTo(STAIR.treads * STAIR.rise)
+    expect(STAIR.rise).toBeLessThanOrEqual(STEP_UP)
+    // A going shorter than a foot is a ladder. Measured at the walking line,
+    // which is what the 2.75 m radius is for — at the core it is a third of it.
+    expect(Math.abs(STAIR.turn) * STAIR.walk).toBeGreaterThan(0.3)
+  })
+
+  it('puts a tread under every step of the way up', () => {
+    // Walked rather than asserted: start on the floor at the foot and take each
+    // tread in turn, carrying the height forward, because `groundHeight` only
+    // counts what is within a step of where the feet already are.
+    let feet = 0
+    for (const tread of stairTreads()) {
+      const floor = groundHeight(tread.x, tread.z, platforms, feet)
+      expect(floor, `tread ${tread.index} at ${tread.x.toFixed(2)}, ${tread.z.toFixed(2)}`).toBe(
+        tread.top,
+      )
+      feet = floor
+    }
+    expect(feet).toBeCloseTo(STAIR_RISE)
+  })
+
+  it('is mirrored the moment a tread is turned the wrong way', () => {
+    // What this is really testing is the sign of `ry`. `insideCollider` and
+    // three.js's `rotation.y` turn a box in opposite directions, so the
+    // platform takes `-angle` and the mesh takes `angle`. With both the same,
+    // the stair is solid where it is not drawn — and at the four right angles
+    // the two conventions agree, so a spot check would pass.
+    const wrong = stairTreads().map((tread) => ({
+      x: tread.x,
+      z: tread.z,
+      halfW: 0.42,
+      halfD: 1.55,
+      ry: tread.angle,
+      top: tread.top,
+    }))
+    let feet = 0
+    const missed = stairTreads().filter((tread) => {
+      const floor = groundHeight(tread.x, tread.z, wrong, feet)
+      if (floor === tread.top) feet = floor
+      return floor !== tread.top
+    })
+    expect(missed.length).toBeGreaterThan(0)
+  })
+
+  it('leaves no gap between treads at the outside of the bend', () => {
+    // Sized to the walking line, the boxes tile at 2.75 m and part by 0.3 m out
+    // at 4.3 — a hole exactly where somebody holding forward round a bend ends
+    // up. Sampled at the outer edge, between tread centres, which is where a
+    // gap would be.
+    const treads = stairTreads()
+    const edge = STAIR.outer - PLAYER_RADIUS
+    for (let i = 1; i < treads.length; i++) {
+      for (const t of [0.25, 0.5, 0.75]) {
+        const angle = treads[i - 1].angle + (treads[i].angle - treads[i - 1].angle) * t
+        const point = at(angle, edge)
+        const floor = groundHeight(point.x, point.z, platforms, treads[i - 1].top)
+        expect(floor, `gap between treads ${i} and ${i + 1} at the outer edge`).toBeGreaterThan(0)
+      }
+    }
+  })
+
+  it('lands on the landing, and the landing on the last tread', () => {
+    const last = stairTreads()[STAIR.treads - 1]
+    expect(groundHeight(STAIR_LANDING.x, STAIR_LANDING.z, platforms, last.top)).toBeCloseTo(
+      STAIR_RISE,
+    )
+    // And the two overlap, or there is a step of open air between them.
+    const reach = at(last.angle, STAIR.outer)
+    expect(Math.abs(reach.x - STAIR_LANDING.x)).toBeLessThan(STAIR_LANDING.halfW)
+    expect(Math.abs(reach.z - STAIR_LANDING.z)).toBeLessThan(STAIR_LANDING.halfD)
+  })
+
+  it('can be stepped onto from the floor at the foot', () => {
+    const first = stairTreads()[0]
+    expect(groundHeight(first.x, first.z, platforms, 0)).toBe(first.top)
+    // And the trigger that goes down is on open floor, not under the flight,
+    // where everything overhead is a wall.
+    const toCentre = Math.hypot(STAIR_FOOT.x - STAIR.x, STAIR_FOOT.z - STAIR.z)
+    expect(toCentre - STAIR_FOOT.halfD).toBeGreaterThan(STAIR.outer)
+  })
+})
+
+describe('staying on the stair', () => {
+  it('holds a climber inside the outer edge', () => {
+    // Walking a helix means holding forward while the ground curves away. Two
+    // metres past the edge at head height is the top of the flight.
+    const held = stairwellClamp('ufaz', STAIR.x, STAIR.z + STAIR.outer + 1.5, 3)
+    expect(held).not.toBeNull()
+    expect(Math.hypot(held!.x - STAIR.x, held!.z - STAIR.z)).toBeCloseTo(
+      STAIR.outer - PLAYER_RADIUS,
+    )
+  })
+
+  it('leaves somebody on the treads alone', () => {
+    for (const tread of stairTreads()) {
+      expect(stairwellClamp('ufaz', tread.x, tread.z, tread.top), `tread ${tread.index}`).toBeNull()
+    }
+  })
+
+  it('does not fence off the floor around the stair', () => {
+    // At ground level the stair is something you walk past, not into.
+    expect(stairwellClamp('ufaz', STAIR.x, STAIR.z + STAIR.outer + 1, 0)).toBeNull()
+    expect(stairwellClamp('ufaz-floor', STAIR_FOOT.x, STAIR_FOOT.z, 0)).toBeNull()
+  })
+
+  it('lets go at the landing rather than dragging you back onto the flight', () => {
+    // The landing is outside the outer radius, so a clamp that did not know
+    // about it would pull a player who has just finished climbing back over
+    // the edge of the stair they climbed.
+    expect(stairwellClamp('ufaz', STAIR_LANDING.x, STAIR_LANDING.z, STAIR_RISE)).toBeNull()
+    expect(stairwellClamp('ufaz-floor', STAIR_HEAD.x, STAIR_HEAD.z, STAIR_RISE)).toBeNull()
+  })
+
+  it('ignores somewhere else in the room entirely', () => {
+    // Otherwise a player on another part of the floor at height is dragged to
+    // the edge of a stair they are nowhere near.
+    expect(stairwellClamp('ufaz', -15, 10, 3)).toBeNull()
+  })
+
+  it('does not reach into rooms that have no stair in them', () => {
+    // Every interior is drawn about the same origin, so a clamp that only asked
+    // where the player was standing would fence off a circle of the
+    // amphitheatre and the sports hall as well — the two other rooms on the
+    // campus where somebody stands metres above the floor, on a raked tier and
+    // on the bleachers. Both have a platform under this exact spot.
+    for (const kind of ['lecture', 'sports', 'library'] as InteriorKind[]) {
+      const outside = { x: STAIR.x, z: STAIR.z + STAIR.outer + 1.5 }
+      expect(stairwellClamp(kind, outside.x, outside.z, 3), kind).toBeNull()
+    }
+    // And the guard is worth having: the same spot in the hall is clamped.
+    expect(stairwellClamp('ufaz', STAIR.x, STAIR.z + STAIR.outer + 1.5, 3)).not.toBeNull()
   })
 })
 
