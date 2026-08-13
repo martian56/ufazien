@@ -352,14 +352,12 @@ export default function UfazBuilding({ building, timeOfDay = 'day' }: UfazBuildi
   // The row of small gables along the front, one every other bay, skipping the
   // centre where the two big ones meet.
   const flankGables = useMemo(() => {
-    const out: number[] = []
-    for (let i = 1; i < BAYS - 1; i += 3) {
-      const x = -halfW + bay * (i + 0.5)
-      if (Math.abs(x) < bay * 1.6) continue
-      out.push(x)
-    }
-    return out
-  }, [halfW, bay])
+    // Mirrored pairs, not a stride across the bays. Stepping `i` by three over
+    // eleven bays landed them at -4 and +2 bays — the middle one fell in the
+    // gap kept clear for the two big gables and the other two were never a
+    // pair to begin with, so the front elevation read visibly lopsided.
+    return [2.5, 4.5].flatMap((step) => [-bay * step, bay * step])
+  }, [bay])
 
   return (
     <group position={building.position}>
