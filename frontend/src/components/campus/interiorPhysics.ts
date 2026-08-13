@@ -20,6 +20,7 @@ import { INTERIOR_SPECS, interiorHalfExtent } from './interiorSpecs'
 import { fitProjector } from './projectorFit'
 import { LECTURE_SEATING, LECTURE_ROWS } from './lectureSeating'
 import { STEP_UP, type Collider, type Platform } from './campusPhysics'
+import { ARCADE_PIERS } from './verticalCirculation'
 
 /** Somewhere a player can sit, and which way they face once they do. */
 export interface Seat {
@@ -74,8 +75,14 @@ interface InteriorPhysics {
  */
 export const UFAZ_FLAGS = [-3, 3]
 
-/** The reception desk, clear of the colonnade behind it. */
-export const UFAZ_DESK_X = -11.8
+/**
+ * The reception desk, clear of the arcade beside it.
+ *
+ * At -11.8 its six-metre counter reached x -14.8 and the arcade pier's face is
+ * -14.55: a quarter-metre overlap, which is the shallow kind the collision
+ * resolver cannot settle a player out of.
+ */
+export const UFAZ_DESK_X = -9.4
 
 /**
  * The waiting benches, moved down the wall.
@@ -135,6 +142,59 @@ export const UFAZ_STAIR = {
  * down. Its platforms are the ground floor's mirrored in z, which keeps the two
  * ends of a journey at the same place on both floors.
  */
+/**
+ * The main flight, as physics.
+ *
+ * Shared by the entrance hall and every corridor above it, because they are the
+ * same stair in the same place — that is what "the corridors repeat" means. It
+ * was only on the ground floor, so `ufazFloorPhysics` returned no platforms at
+ * all: the flight drawn upstairs was scenery you walked through, and the
+ * stair-up trigger sits four metres off the floor, so on floors one and two
+ * there was no way to reach it and no way up.
+ */
+function mainStair(colliders: Collider[], platforms: Platform[]) {
+  for (let i = 0; i < UFAZ_STAIR.steps; i++) {
+    platforms.push({
+      x: UFAZ_STAIR.x,
+      z: UFAZ_STAIR.z - i * UFAZ_STAIR.going,
+      halfW: UFAZ_STAIR.halfW,
+      halfD: UFAZ_STAIR.going / 2,
+      top: 0.45 + i * UFAZ_STAIR.rise,
+    })
+  }
+  platforms.push({
+    x: UFAZ_STAIR.x,
+    z: UFAZ_STAIR.landing.z,
+    halfW: UFAZ_STAIR.landing.halfW,
+    halfD: UFAZ_STAIR.landing.halfD,
+    top: UFAZ_STAIR.landing.top,
+  })
+
+  // The balustrades either side of the flight, which are walls.
+  for (const side of [-1, 1]) {
+    colliders.push({
+      x: UFAZ_STAIR.x + side * (UFAZ_STAIR.halfW + 0.2),
+      z: UFAZ_STAIR.z - (UFAZ_STAIR.steps * UFAZ_STAIR.going) / 2,
+      halfW: 0.25,
+      halfD: (UFAZ_STAIR.steps * UFAZ_STAIR.going) / 2 + 0.4,
+      height: 5.6,
+    })
+  }
+}
+
+/**
+ * The arcade piers, solid on every floor.
+ *
+ * The openings between them are the walkable part, which is why these are
+ * separate boxes rather than one wall. The ground floor drew the arcade and had
+ * no colliders for it at all — you walked through the piers.
+ */
+function arcadePiers(colliders: Collider[]) {
+  for (const z of ARCADE_PIERS) {
+    colliders.push({ x: -15, z, halfW: 0.45, halfD: 0.55, height: 4.2 })
+  }
+}
+
 function ufazFloorPhysics(): InteriorPhysics {
   const colliders: Collider[] = []
   const platforms: Platform[] = []
@@ -149,27 +209,20 @@ function ufazFloorPhysics(): InteriorPhysics {
     height: 5.6,
   })
 
-  // The arcade piers. Solid, with the openings between them walkable — which
-  // is the whole point of an arcade and the reason these are separate boxes
-  // rather than one wall.
-  for (const z of [-10, -4, 2, 8, 14]) {
-    colliders.push({ x: -15, z, halfW: 0.45, halfD: 0.55, height: 4.2 })
-  }
+  arcadePiers(colliders)
+  mainStair(colliders, platforms)
 
   // A bench in each window bay, which is what the corridors are furnished with.
-  for (const z of [-8, 0, 8]) {
-    const id = `ufaz-floor-bench-${z}`
-    colliders.push({ id, x: 19.4, z, halfW: 0.55, halfD: 1.6, height: 0.6 })
-    seats.push({
-      id,
-      x: 19.4,
-      z,
-      y: 0,
-      ry: -Math.PI / 2,
-      seatHeight: 0.55,
-      kind: 'bench',
-      on: id,
-    })
+  //
+  // Solid, but not registered as seats. The stairwell stands between the east
+  // wall and the projector, so a seat on this side cannot see the screen from
+  // anywhere behind the flight — and `interiorPhysics.test.ts` rightly holds
+  // every seat to a clear view of it. Rather than shuffle benches up the
+  // corridor until they scrape past the balustrade, they are what a corridor
+  // bench actually is: somewhere to put your bag down, not seating for a
+  // presentation. Every room that is for watching something still has seats.
+  for (const z of [-2, 4, 10]) {
+    colliders.push({ x: 19.4, z, halfW: 0.55, halfD: 1.6, height: 0.6 })
   }
 
   return { colliders, platforms, seats }
@@ -201,34 +254,8 @@ function ufazPhysics(): InteriorPhysics {
     colliders.push({ x, z: UFAZ_TURNSTILE_Z, halfW: 0.24, halfD: 0.62, height: 1.05 })
   }
 
-  // The flight, as steps you walk up rather than geometry you walk through.
-  for (let i = 0; i < UFAZ_STAIR.steps; i++) {
-    platforms.push({
-      x: UFAZ_STAIR.x,
-      z: UFAZ_STAIR.z - i * UFAZ_STAIR.going,
-      halfW: UFAZ_STAIR.halfW,
-      halfD: UFAZ_STAIR.going / 2,
-      top: 0.45 + i * UFAZ_STAIR.rise,
-    })
-  }
-  platforms.push({
-    x: UFAZ_STAIR.x,
-    z: UFAZ_STAIR.landing.z,
-    halfW: UFAZ_STAIR.landing.halfW,
-    halfD: UFAZ_STAIR.landing.halfD,
-    top: UFAZ_STAIR.landing.top,
-  })
-
-  // The balustrades either side of the flight, which are walls.
-  for (const side of [-1, 1]) {
-    colliders.push({
-      x: UFAZ_STAIR.x + side * (UFAZ_STAIR.halfW + 0.2),
-      z: UFAZ_STAIR.z - (UFAZ_STAIR.steps * UFAZ_STAIR.going) / 2,
-      halfW: 0.25,
-      halfD: (UFAZ_STAIR.steps * UFAZ_STAIR.going) / 2 + 0.4,
-      height: 5.6,
-    })
-  }
+  arcadePiers(colliders)
+  mainStair(colliders, platforms)
 
   // Reception desk. Pulled in off the colonnade: at -13 its corner clipped
   // the column at -17, and a five-centimetre intersection is a seam the
@@ -245,10 +272,12 @@ function ufazPhysics(): InteriorPhysics {
   // staircase balustrade between everyone sitting on them and the board.
   for (const z of UFAZ_BENCH_Z) {
     const id = `ufaz-bench-${z}`
-    colliders.push({ id, x: -half + 8, z, halfW: 0.8, halfD: 2.2, height: 0.6 })
+    // Clear of the arcade. At -half + 8 the bench and the pier at z -8 overlapped
+    // by a quarter of a metre, which is a wedge rather than a wall.
+    colliders.push({ id, x: -half + 11, z, halfW: 0.8, halfD: 2.2, height: 0.6 })
     seats.push({
       id,
-      x: -half + 8,
+      x: -half + 11,
       z,
       y: 0,
       // Facing back into the hall, away from the wall behind them.

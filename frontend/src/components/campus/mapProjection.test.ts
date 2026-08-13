@@ -103,7 +103,12 @@ describe('building labels', () => {
   it('drops a label rather than running it off the edge', () => {
     // A synthetic row, because only one building stands on the campus now and
     // the thing under test is what happens when labels compete for room.
-    const labels = placeLabels(fitCampus(120), width, CROWD)
+    // The view has to be fitted to `CROWD` as well. `fitCampus` defaults to the
+    // outdoor list, which is one building, so the view was centred tightly on
+    // it and every one of these fell off the canvas — the assertion below then
+    // passed because nothing was placed at all, not because anything was
+    // sensibly refused.
+    const labels = placeLabels(fitCampus(120, CROWD), width, CROWD)
     for (const label of labels) {
       expect(label.x - width(label.text) / 2).toBeGreaterThanOrEqual(0)
       expect(label.x + width(label.text) / 2).toBeLessThanOrEqual(120)
@@ -112,10 +117,11 @@ describe('building labels', () => {
   })
 
   it('gives the biggest buildings first refusal on a spot', () => {
-    const biggest = [...OUTDOOR_BUILDINGS].sort(
-      (a, b) => b.size[0] * b.size[2] - a.size[0] * a.size[2],
-    )[0]
-    const labels = placeLabels(fitCampus(240), width)
+    // Against `CROWD` for the same reason as the tests above: with one
+    // building on the campus every label fits and nothing has to be refused,
+    // so the priority this asserts would never actually be exercised.
+    const biggest = [...CROWD].sort((a, b) => b.size[0] * b.size[2] - a.size[0] * a.size[2])[0]
+    const labels = placeLabels(fitCampus(240, CROWD), width, CROWD)
     expect(labels.map((l) => l.text)).toContain(biggest.name)
   })
 })

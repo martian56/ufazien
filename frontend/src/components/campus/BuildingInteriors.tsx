@@ -29,7 +29,7 @@ import {
   libraryAisleHalf,
 } from './interiorPhysics'
 import { NoticeBoard, ScheduleBoard, SitesBoard } from './CampusBoards'
-import { CORRIDOR_DOORS } from './verticalCirculation'
+import { ARCADE_PIERS, CORRIDOR_DOORS } from './verticalCirculation'
 import { INTERIOR_SPECS, type FloorKind, type InteriorSpec } from './interiorSpecs'
 import { LECTURE_ROWS, LECTURE_SEATING } from './lectureSeating'
 import {
@@ -852,9 +852,9 @@ function LiftCore({ ceiling }: { ceiling: number }) {
  */
 function Arcade({ half, ceiling }: { half: number; ceiling: number }) {
   const head = 4.2
-  // Stops short of the lift core in the back corner rather than running the
-  // full depth of the room and standing inside it.
-  const bays = [-10, -4, 2, 8, 14]
+  // The shared list, so what is drawn and what is solid cannot disagree — they
+  // did, and one of the piers stood in a classroom doorway.
+  const bays = ARCADE_PIERS
   const pier = 1.1
 
   return (
@@ -870,11 +870,14 @@ function Arcade({ half, ceiling }: { half: number; ceiling: number }) {
         <boxGeometry args={[0.9, ceiling - head, 32]} />
         <meshStandardMaterial color="#e9ebee" roughness={0.94} />
       </mesh>
-      {/* Spandrels: the curve of each head, as a half disc between two piers. */}
+      {/* Spandrels: the curve of each head, as a half disc between two piers.
+          Proud of the wall above rather than on its centre line — the wall is
+          0.9 thick and these sat inside it, so every opening came out square
+          and the arcade was a row of rectangular holes. */}
       {bays.slice(0, -1).map((z, i) => (
         <mesh
           key={`s${z}`}
-          position={[0, head, (z + bays[i + 1]) / 2]}
+          position={[0.46, head, (z + bays[i + 1]) / 2]}
           rotation={[0, Math.PI / 2, 0]}
         >
           <circleGeometry args={[(bays[i + 1] - z) / 2 - 0.45, 18, 0, Math.PI]} />
@@ -893,75 +896,14 @@ function Arcade({ half, ceiling }: { half: number; ceiling: number }) {
  * per floor is the doors along the arcade and what is behind them, and those
  * come from `verticalCirculation`.
  */
-function UfazFloor({ spec }: { spec: InteriorSpec }) {
-  const half = spec.halfExtent
-
-  return (
-    <group>
-      <HeritageWindows spec={spec} />
-      <Arcade half={half} ceiling={spec.ceiling} />
-      <LiftCore ceiling={spec.ceiling} />
-
-      {/* The classroom doors along the arcade. Drawn on every floor in the same
-          places; which rooms they lead to is the floor's business, not this
-          component's. */}
-      {CORRIDOR_DOORS.map((z) => (
-        <group key={z} position={[-half + 7.4, 0, z]}>
-          <mesh position={[0, 1.6, 0]} castShadow>
-            <boxGeometry args={[0.12, 3.2, 2.2]} />
-            <meshStandardMaterial color="#5a3b25" roughness={0.6} />
-          </mesh>
-          {/* Architrave behind the leaf, not in front of it. Drawn proud it
-              is a blank panel the size of the opening and the door disappears
-              behind it — which is the third time this has bitten in this
-              codebase, after the gable coping and the window surrounds. */}
-          <mesh position={[-0.06, 1.7, 0]}>
-            <boxGeometry args={[0.1, 3.5, 2.6]} />
-            <meshStandardMaterial color="#dcdfe3" roughness={0.9} />
-          </mesh>
-          <mesh position={[-0.08, 1.1, 0.85]}>
-            <sphereGeometry args={[0.07, 8, 6]} />
-            <meshStandardMaterial color="#b8a25c" roughness={0.4} metalness={0.7} />
-          </mesh>
-        </group>
-      ))}
-
-      {/* Corridor benches in the window bays. */}
-      {[-8, 0, 8].map((z) => (
-        <group key={z} position={[19.4, 0, z]}>
-          <mesh position={[0, 0.5, 0]} castShadow receiveShadow>
-            <boxGeometry args={[1.1, 0.12, 3.2]} />
-            <meshStandardMaterial color="#5a4433" roughness={0.7} />
-          </mesh>
-          {[-1.3, 1.3].map((t) => (
-            <mesh key={t} position={[0, 0.22, t]} castShadow>
-              <boxGeometry args={[0.9, 0.44, 0.12]} />
-              <meshStandardMaterial color="#2b2e33" roughness={0.6} metalness={0.3} />
-            </mesh>
-          ))}
-        </group>
-      ))}
-
-      {/* The stair, arriving from below. Same flight as the hall's, turned so
-          you come up at the head of it and walk down the other way. */}
-      <group position={[UFAZ_STAIR.x, 0, UFAZ_STAIR.z]} rotation={[0, Math.PI, 0]}>
-        {Array.from({ length: 6 }, (_, i) => (
-          <mesh key={i} position={[0, 0.15 - i * 0.3, -i * 0.62]} castShadow receiveShadow>
-            <boxGeometry args={[UFAZ_STAIR.halfW * 2, 0.3, 0.66]} />
-            <meshStandardMaterial color="#9a9a99" roughness={0.6} />
-          </mesh>
-        ))}
-        {[-UFAZ_STAIR.halfW, UFAZ_STAIR.halfW].map((x) => (
-          <mesh key={x} castShadow position={[x, 0.6, -1.9]}>
-            <boxGeometry args={[0.08, 1.05, 4]} />
-            <meshStandardMaterial color="#1c1f23" roughness={0.55} metalness={0.4} />
-          </mesh>
-        ))}
-      </group>
-    </group>
-  )
-}
-
+/**
+ * The classroom doors along the arcade.
+ *
+ * Drawn on every floor in the same places, including the ground floor — which
+ * did not draw them at all, so the conference hall was reached by walking into
+ * a blank stretch of wall and being teleported. A door portal with no door is
+ * indistinguishable from a bug.
+ */
 /**
  * Suspended square light rings.
  *
@@ -1025,66 +967,16 @@ function LightRings({ ceiling }: { ceiling: number }) {
   )
 }
 
-function UfazHall({ spec }: { spec: InteriorSpec }) {
-  const half = spec.halfExtent
-
+/**
+ * The main flight: granite treads, iron balusters, a timber handrail.
+ *
+ * One component for the entrance hall and every corridor above it, matching
+ * `mainStair` in `interiorPhysics` — they are the same stair in the same place
+ * on every floor, and drawing two different ones was how the upper floors ended
+ * up with steps that nothing could stand on.
+ */
+function MainStair() {
   return (
-    <group>
-      <HeritageWindows spec={spec} />
-      <Turnstiles />
-      <LiftCore ceiling={spec.ceiling} />
-      <Arcade half={half} ceiling={spec.ceiling} />
-
-      {/* The corridor floor west of the arcade: dark boards, not the tile of
-          the entrance hall. The two surfaces meeting at the arcade is the
-          clearest thing in the corridor photographs. */}
-      <mesh
-        rotation={[-Math.PI / 2, 0, 0]}
-        position={[-half + 3.2, 0.02, 2]}
-        receiveShadow
-      >
-        <planeGeometry args={[7.6, 32]} />
-        <meshStandardMaterial color="#4a3f39" roughness={0.55} />
-      </mesh>
-
-      {/*
-        Framed photographs along the walls, hung in a line at head height.
-
-        There used to be a colonnade here — five columns a side with capitals
-        and bases, on the reasoning that a hall of this period has one. The
-        Ministry of Education's photographs of the building show no columns
-        anywhere: the circulation is plain yellow wall, a boarded ceiling, and a
-        run of framed pictures down one side. The colonnade was the single thing
-        making this room read as a marble palace rather than as the restored
-        townhouse it is, so it has gone and the pictures have taken its place.
-      */}
-      {[-1, 1].map((side) =>
-        [-15, -9, -3, 3, 9, 15].map((z, i) => (
-          <group
-            key={`${side}-${z}`}
-            position={[side * (half - 1.45), 4.2, z]}
-            rotation={[0, side * -Math.PI / 2, 0]}
-          >
-            <mesh castShadow>
-              <boxGeometry args={[i % 2 ? 1.5 : 1.1, i % 2 ? 1.1 : 1.5, 0.09]} />
-              <meshStandardMaterial color="#2a2724" roughness={0.6} />
-            </mesh>
-            <mesh position={[0, 0, 0.06]}>
-              <planeGeometry args={[i % 2 ? 1.28 : 0.9, i % 2 ? 0.9 : 1.28]} />
-              <meshStandardMaterial color="#e8e2d4" roughness={0.85} />
-            </mesh>
-          </group>
-        )),
-      )}
-
-      {/*
-        The staircase.
-        Deep treads climbing away from the door towards a landing on the back
-        wall. It used to be a dozen pale steps against a pale wall in a room lit
-        from directly above, and the whole flight disappeared: from the entrance
-        it read as a floating slab. A dark runner and a rail with real posts
-        give it edges to catch the light.
-      */}
       <group position={[UFAZ_STAIR.x, 0, UFAZ_STAIR.z]}>
         {Array.from({ length: UFAZ_STAIR.steps }, (_, i) => (
           <group key={i} position={[0, 0.3 + i * UFAZ_STAIR.rise, -i * UFAZ_STAIR.going]}>
@@ -1133,6 +1025,127 @@ function UfazHall({ spec }: { spec: InteriorSpec }) {
           </mesh>
         ))}
       </group>
+  )
+}
+
+function ClassroomDoors({ half }: { half: number }) {
+  return (
+    <group>
+      {CORRIDOR_DOORS.map((z) => (
+        <group key={z} position={[-half + 7.4, 0, z]}>
+          <mesh position={[0, 1.6, 0]} castShadow>
+            <boxGeometry args={[0.12, 3.2, 2.2]} />
+            <meshStandardMaterial color="#5a3b25" roughness={0.6} />
+          </mesh>
+          {/* Architrave behind the leaf, not in front of it. Drawn proud it
+              is a blank panel the size of the opening and the door disappears
+              behind it — which is the third time this has bitten in this
+              codebase, after the gable coping and the window surrounds. */}
+          <mesh position={[-0.06, 1.7, 0]}>
+            <boxGeometry args={[0.1, 3.5, 2.6]} />
+            <meshStandardMaterial color="#dcdfe3" roughness={0.9} />
+          </mesh>
+          <mesh position={[0.08, 1.1, 0.85]}>
+            <sphereGeometry args={[0.07, 8, 6]} />
+            <meshStandardMaterial color="#b8a25c" roughness={0.4} metalness={0.7} />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  )
+}
+
+function UfazFloor({ spec }: { spec: InteriorSpec }) {
+  const half = spec.halfExtent
+
+  return (
+    <group>
+      <HeritageWindows spec={spec} />
+      <Arcade half={half} ceiling={spec.ceiling} />
+      <LiftCore ceiling={spec.ceiling} />
+
+      <ClassroomDoors half={half} />
+
+      {/* Corridor benches in the window bays. Forward of the stairwell — see
+          the note on their colliders. */}
+      {[-2, 4, 10].map((z) => (
+        <group key={z} position={[19.4, 0, z]}>
+          <mesh position={[0, 0.5, 0]} castShadow receiveShadow>
+            <boxGeometry args={[1.1, 0.12, 3.2]} />
+            <meshStandardMaterial color="#5a4433" roughness={0.7} />
+          </mesh>
+          {[-1.3, 1.3].map((t) => (
+            <mesh key={t} position={[0, 0.22, t]} castShadow>
+              <boxGeometry args={[0.9, 0.44, 0.12]} />
+              <meshStandardMaterial color="#2b2e33" roughness={0.6} metalness={0.3} />
+            </mesh>
+          ))}
+        </group>
+      ))}
+
+      {/* The same flight the hall has, in the same place — which is what
+          "the corridors repeat" means, and what the physics now agrees with.
+          It was six decorative steps descending through the floor with no
+          platforms under them: scenery you walked through, and no way up. */}
+      <MainStair />
+    </group>
+  )
+}
+
+function UfazHall({ spec }: { spec: InteriorSpec }) {
+  const half = spec.halfExtent
+
+  return (
+    <group>
+      <HeritageWindows spec={spec} />
+      <Turnstiles />
+      <LiftCore ceiling={spec.ceiling} />
+      <Arcade half={half} ceiling={spec.ceiling} />
+      <ClassroomDoors half={half} />
+
+      {/* The corridor floor west of the arcade: dark boards, not the tile of
+          the entrance hall. The two surfaces meeting at the arcade is the
+          clearest thing in the corridor photographs. */}
+      <mesh
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[-half + 3.2, 0.02, 2]}
+        receiveShadow
+      >
+        <planeGeometry args={[7.6, 32]} />
+        <meshStandardMaterial color="#4a3f39" roughness={0.55} />
+      </mesh>
+
+      {/*
+        Framed photographs along the walls, hung in a line at head height.
+
+        There used to be a colonnade here — five columns a side with capitals
+        and bases, on the reasoning that a hall of this period has one. The
+        Ministry of Education's photographs of the building show no columns
+        anywhere: the circulation is plain yellow wall, a boarded ceiling, and a
+        run of framed pictures down one side. The colonnade was the single thing
+        making this room read as a marble palace rather than as the restored
+        townhouse it is, so it has gone and the pictures have taken its place.
+      */}
+      {[-1, 1].map((side) =>
+        [-15, -9, -3, 3, 9, 15].map((z, i) => (
+          <group
+            key={`${side}-${z}`}
+            position={[side * (half - 1.45), 4.2, z]}
+            rotation={[0, side * -Math.PI / 2, 0]}
+          >
+            <mesh castShadow>
+              <boxGeometry args={[i % 2 ? 1.5 : 1.1, i % 2 ? 1.1 : 1.5, 0.09]} />
+              <meshStandardMaterial color="#2a2724" roughness={0.6} />
+            </mesh>
+            <mesh position={[0, 0, 0.06]}>
+              <planeGeometry args={[i % 2 ? 1.28 : 0.9, i % 2 ? 0.9 : 1.28]} />
+              <meshStandardMaterial color="#e8e2d4" roughness={0.85} />
+            </mesh>
+          </group>
+        )),
+      )}
+
+      <MainStair />
 
       {/* Reception desk. The worktop was near-black, which in a cream marble
           hall read as a monolith rather than a counter. */}

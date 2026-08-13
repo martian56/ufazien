@@ -33,9 +33,15 @@ describe('every interior has physics', () => {
     }
   })
 
-  it('gives every room but the laboratory somewhere to sit', () => {
+  it('gives every room you go to in order to be there somewhere to sit', () => {
+    // The laboratory is worked at standing up. The corridors are circulation:
+    // they are how you get to a room, not a place you settle in, and the
+    // stairwell stands between their east wall and the projector so a seat
+    // there could not see the screen anyway. Everything else — the halls, the
+    // library, the lecture theatre, the cafeteria — is somewhere you stay, and
+    // somewhere you stay needs seats.
     for (const kind of KINDS) {
-      if (kind === 'lab') continue
+      if (kind === 'lab' || kind === 'ufaz-floor') continue
       expect(interiorSeats(kind).length, kind).toBeGreaterThan(0)
     }
   })

@@ -14,7 +14,10 @@ import {
   portalAt,
   portalsFrom,
 } from './verticalCirculation'
-import { CAMPUS_BUILDINGS } from './campusLayout'
+import { CAMPUS_BUILDINGS, PLAYER_RADIUS } from './campusLayout'
+import { interiorColliders, interiorPlatforms } from './interiorPhysics'
+import { insideCollider } from './campusPhysics'
+import { corridorKind } from './verticalCirculation'
 
 /**
  * The building as a graph: four levels, the rooms off them, and the stair and
@@ -179,5 +182,68 @@ describe('the doors along a corridor', () => {
       Math.abs(LIFT_CAR.x - STAIR_FOOT.x) > LIFT_CAR.halfW + STAIR_FOOT.halfW ||
       Math.abs(LIFT_CAR.z - STAIR_FOOT.z) > LIFT_CAR.halfD + STAIR_FOOT.halfD
     expect(apart).toBe(true)
+  })
+})
+
+describe('every portal can actually be reached', () => {
+  /**
+   * The gap this closes.
+   *
+   * Everything above proves the graph joins up — that the stair comes back, the
+   * lift runs both ways, no two triggers overlap. None of it asks whether a
+   * player can *stand* in a trigger, and the lift's could not be stood in at
+   * all: it was the lift shaft's own footprint, and the shaft is solid and
+   * slightly larger than the trigger, so every point inside it was inside a
+   * wall. The feature was unreachable and seventeen passing tests said nothing.
+   */
+  const standable = (kind: ReturnType<typeof corridorKind>, x: number, z: number) =>
+    !interiorColliders(kind).some((collider) => insideCollider(x, z, collider, PLAYER_RADIUS))
+
+  it('leaves somewhere solid-free inside every trigger', () => {
+    const stuck: string[] = []
+
+    for (const id of allRoomIds()) {
+      const kind = corridorKind(id)
+      if (!isCorridor(id)) continue
+
+      for (const portal of portalsFrom(id)) {
+        // Sampled across the rectangle rather than at its centre: a trigger
+        // half-covered by a desk is still usable, and one wholly inside a wall
+        // is not.
+        let open = false
+        for (let sx = -0.8; sx <= 0.8 && !open; sx += 0.4) {
+          for (let sz = -0.8; sz <= 0.8 && !open; sz += 0.4) {
+            if (standable(kind, portal.x + sx * portal.halfW, portal.z + sz * portal.halfD)) {
+              open = true
+            }
+          }
+        }
+        if (!open) stuck.push(`room ${id}: ${portal.label} (${portal.kind}) is inside a wall`)
+      }
+    }
+
+    expect(stuck).toEqual([])
+  })
+
+  it('leaves something to climb to any trigger that is off the floor', () => {
+    // The stair up fires from a landing four metres in the air. Without a
+    // flight under it that height is unreachable, which is exactly what every
+    // floor above the ground had: `ufazFloorPhysics` returned no platforms.
+    for (const id of allRoomIds()) {
+      if (!isCorridor(id)) continue
+      const kind = corridorKind(id)
+
+      for (const portal of portalsFrom(id)) {
+        const minY = portal.minY
+        if (minY === undefined) continue
+        const reaches = interiorPlatforms(kind).some(
+          (platform) =>
+            platform.top >= minY &&
+            Math.abs(platform.x - portal.x) <= platform.halfW + portal.halfW &&
+            Math.abs(platform.z - portal.z) <= platform.halfD + portal.halfD,
+        )
+        expect(reaches, `room ${id}: nothing reaches ${portal.label}`).toBe(true)
+      }
+    }
   })
 })

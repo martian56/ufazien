@@ -69,10 +69,34 @@ export interface Portal {
  */
 export const CORRIDOR_DOORS = [-12, -4, 4, 12]
 
+/**
+ * The arcade piers, between the doors rather than across them.
+ *
+ * One list, exported, because it was written out twice — once in what is drawn
+ * and once in what is solid — and the two had a pier at z -4, which is where a
+ * classroom door is. A pier standing in a doorway is a door that cannot be
+ * used, and nothing about either copy said the two lists had to agree.
+ *
+ * The run stops short of the lift core, which stands on the same line at the
+ * back of the room: a pier at -16 left a 0.65 m slot against the shaft, and a
+ * slot that narrow is a wedge the collision resolver cannot settle a player in.
+ */
+export const ARCADE_PIERS = [-8, 0, 8, 16]
+
 /** Where the stair and the lift stand, in room coordinates. */
 export const STAIR_HEAD = { x: 10.5, z: -19.4, halfW: 4.5, halfD: 2.2 }
 export const STAIR_FOOT = { x: 10.5, z: -9, halfW: 3.5, halfD: 1.6 }
-export const LIFT_CAR = { x: -15, z: -19, halfW: 3.2, halfD: 1.6 }
+
+/**
+ * Where you stand to call the lift: in front of the doors, not inside the car.
+ *
+ * This was the shaft's own footprint, which is solid — the trigger sat wholly
+ * inside a collider that is slightly larger than it, so no reachable point was
+ * ever inside the trigger and the lift could not be used at all. The graph
+ * tests all passed: they checked that the portals joined up, never that a
+ * player could stand in one.
+ */
+export const LIFT_CAR = { x: -15, z: -15.6, halfW: 2.6, halfD: 1.2 }
 
 /**
  * Which rooms are on which floor.

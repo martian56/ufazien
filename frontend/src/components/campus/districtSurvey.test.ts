@@ -46,10 +46,20 @@ describe('the district', () => {
     DISTRICT_BUILDINGS.forEach((building, i) => {
       const xs = building.footprint.map((p) => p[0])
       const zs = building.footprint.map((p) => p[1])
+      // Sampled along every edge, not just at the corners. A long wall can
+      // cross a narrow street with both of its ends well clear of it, and
+      // corners alone would call that fine.
       const probes: (readonly [number, number])[] = [
         [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...zs) + Math.max(...zs)) / 2],
-        ...building.footprint,
       ]
+      for (let e = 0; e < building.footprint.length; e++) {
+        const [ax, az] = building.footprint[e]
+        const [bx, bz] = building.footprint[(e + 1) % building.footprint.length]
+        const steps = Math.max(2, Math.ceil(Math.hypot(bx - ax, bz - az) / 2))
+        for (let t = 0; t <= steps; t++) {
+          probes.push([ax + ((bx - ax) * t) / steps, az + ((bz - az) * t) / steps])
+        }
+      }
 
       for (const street of DISTRICT_STREETS) {
         for (let k = 0; k < street.points.length - 1; k++) {
