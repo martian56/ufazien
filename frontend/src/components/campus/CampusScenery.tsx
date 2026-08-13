@@ -4,25 +4,24 @@ import { Sky } from '@react-three/drei'
 import * as THREE from 'three'
 
 import {
-  CAMPUS_BUILDINGS,
+  OUTDOOR_BUILDINGS,
   GROUND_SIZE,
   PAVEMENTS,
   QUAD_CENTRE,
   QUAD_RADIUS,
   SCENERY_BLOCKS,
-  ALCOVE_DEPTH,
+  DOOR_HALF_WIDTH,
   daylight,
-  doorwayFor,
   campusBenches,
   campusLamps,
   campusTrees,
   type BuildingStyle,
-  type CampusBuilding,
   type DaylightConfig,
   type SceneryBlock,
   type TimeOfDay,
   type Vec3,
 } from './campusLayout'
+import NizamiDistrict from './NizamiDistrict'
 import UfazBuilding from './UfazBuilding'
 import {
   asphaltTexture,
@@ -36,9 +35,6 @@ import {
   stoneTexture,
 } from './campusTextures'
 import CampusWindows from './CampusWindows'
-import { CharacterModel } from './CharacterModel'
-
-export { CharacterModel }
 
 /**
  * Procedural campus scenery.
@@ -406,7 +402,126 @@ function FacadeTrim({
 }
 
 /** The doorway on the +Z face, which is the face every building presents. */
-function Entrance({ depth, trim }: { depth: number; trim: string }) {
+/**
+ * How deep the lobby behind a doorway is.
+ *
+ * The building's own box is shortened by this much at the front and the wall
+ * is rebuilt around the opening, so this is real space rather than a painted
+ * one: stand in front of an open door and you are looking into a room.
+ */
+export const PORCH_DEPTH = 3.4
+
+/** The clear opening, matching the gap left in the collider exactly. */
+export const OPENING_HALF_W = DOOR_HALF_WIDTH
+export const OPENING_HEIGHT = 4.4
+
+/**
+ * Height of the threshold above the ground.
+ *
+ * Three steps up, matching the flight outside. Everything in the opening —
+ * the reveal, the leaves and the lobby floor — is measured from here, because
+ * a doorway that starts at ground level starts below the step you walk up.
+ */
+// The top *surface* of the top step, not its centre. The steps are boxes of
+// height 0.3 at 0.18 + i * 0.28, so the top one is centred at 0.74 and you walk
+// on 0.89 — at 0.74 the lobby floor, the reveal and the door leaves all sat a
+// hand's width below the step outside them.
+export const THRESHOLD = 0.89
+
+/**
+ * The lobby you can see through an open door.
+ *
+ * The whole point of the exercise. An open door used to show a flat glazed
+ * panel — the facade had no hole in it, so there was nothing behind the leaves
+ * but more wall, and opening one revealed that rather than an interior.
+ *
+ * It is deliberately a lobby and not the room itself. Rendering an interior
+ * through every door would mean either a second render pass per doorway or
+ * seven full rooms resident in the outdoor scene, and neither is worth paying
+ * for something you glance at on your way past — you cannot see the whole
+ * library through its front door in life either. Six static meshes and no
+ * light: the ceiling panel is emissive, so the lobby reads as lit without
+ * adding a seventh shadow-casting source to the campus.
+ */
+function DoorLobby({ trim, accent, sill }: { trim: string; accent: string; sill: number }) {
+  const width = OPENING_HALF_W * 2
+  // Slightly wider than the opening so the side walls are never seen edge-on
+  // through the gap between the reveal and the jamb.
+  const inner = width + 0.5
+
+  return (
+    <group position={[0, 0, -PORCH_DEPTH / 2]}>
+      {/* Floor, level with the top step outside. At ground level it sat below
+          the threshold and the lobby read as a lit box with no bottom.
+          Every surface in here carries a little emissive: a lobby lit by real
+          lights would mean a seventh light source per building on a campus
+          that already pays for a hundred and fifty trees, and self-lit
+          surfaces cost nothing at all to sample. */}
+      <mesh position={[0, sill, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+        <planeGeometry args={[inner, PORCH_DEPTH]} />
+        <meshStandardMaterial
+          color="#6b6459"
+          emissive="#3a3630"
+          emissiveIntensity={0.55}
+          roughness={0.75}
+        />
+      </mesh>
+      {/* Ceiling, emissive so the lobby is lit without costing a light. */}
+      <mesh position={[0, sill + OPENING_HEIGHT - 0.05, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[inner, PORCH_DEPTH]} />
+        <meshStandardMaterial
+          color="#fbf3e4"
+          emissive="#ffeacb"
+          emissiveIntensity={1.25}
+          toneMapped={false}
+        />
+      </mesh>
+      {/* Side walls. */}
+      {[-1, 1].map((side) => (
+        <mesh key={side} position={[(side * inner) / 2, sill + OPENING_HEIGHT / 2, 0]} rotation={[0, side * -Math.PI / 2, 0]}>
+          <planeGeometry args={[PORCH_DEPTH, OPENING_HEIGHT]} />
+          <meshStandardMaterial
+            color="#e6e0d3"
+            emissive="#6a6458"
+            emissiveIntensity={0.5}
+            roughness={0.9}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+      ))}
+      {/* The far wall, with a band of the building's own colour on it so each
+          lobby looks like it belongs to its building rather than to a kit. */}
+      <mesh position={[0, sill + OPENING_HEIGHT / 2, -PORCH_DEPTH / 2 + 0.02]}>
+        <planeGeometry args={[inner, OPENING_HEIGHT]} />
+        <meshStandardMaterial
+          color="#efe9dc"
+          emissive="#6f6a5e"
+          emissiveIntensity={0.5}
+          roughness={0.92}
+        />
+      </mesh>
+      <mesh position={[0, sill + 2.1, -PORCH_DEPTH / 2 + 0.05]}>
+        <planeGeometry args={[inner * 0.62, 1.1]} />
+        <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={0.3} roughness={0.7} />
+      </mesh>
+      {/* A counter, which is what makes the depth readable: without something
+          standing in it, a box with a lit ceiling reads as a painted panel. */}
+      <mesh position={[inner / 2 - 0.75, sill + 0.5, -0.5]} castShadow receiveShadow>
+        <boxGeometry args={[1.1, 1, 0.6]} />
+        <meshStandardMaterial color={trim} emissive={trim} emissiveIntensity={0.25} roughness={0.8} />
+      </mesh>
+    </group>
+  )
+}
+
+/**
+ * Steps, a surround, a canopy — and a hole in the wall behind them.
+ *
+ * The glazed slab that used to sit here was the whole of the "door": a flat
+ * panel on an unbroken facade. The opening is real now, and `Building` builds
+ * the wall around it rather than as one box.
+ */
+export function Entrance({ depth, trim, accent }: { depth: number; trim: string; accent: string }) {
   return (
     <group position={[0, 0, depth / 2 + 0.06]}>
       {/* Steps up to the threshold */}
@@ -417,37 +532,37 @@ function Entrance({ depth, trim }: { depth: number; trim: string }) {
         </mesh>
       ))}
 
-      {/* Surround */}
-      <mesh castShadow position={[0, 2.6, 0.05]}>
-        <boxGeometry args={[6.4, 5.2, 0.5]} />
+      {/* Surround, as a frame around the opening rather than a slab across it:
+          two slim jambs and a head, so the doorway stays clear. */}
+      {[-1, 1].map((side) => (
+        <mesh
+          key={side}
+          castShadow
+          position={[side * (OPENING_HALF_W + 0.35), THRESHOLD + OPENING_HEIGHT / 2, 0.05]}
+        >
+          <boxGeometry args={[0.7, OPENING_HEIGHT + 0.7, 0.45]} />
+          <meshStandardMaterial color={trim} roughness={0.85} />
+        </mesh>
+      ))}
+      <mesh castShadow position={[0, THRESHOLD + OPENING_HEIGHT + 0.35, 0.05]}>
+        <boxGeometry args={[OPENING_HALF_W * 2 + 1.4, 0.7, 0.45]} />
         <meshStandardMaterial color={trim} roughness={0.85} />
       </mesh>
-      {/* Recessed dark reveal */}
-      <mesh position={[0, 2.4, 0.32]}>
-        <boxGeometry args={[5.2, 4.4, 0.2]} />
-        <meshStandardMaterial color="#2a323d" roughness={0.6} metalness={0.2} />
+
+      {/* The reveal: the thickness of the wall, seen from outside. */}
+      {[-1, 1].map((side) => (
+        <mesh key={`r${side}`} position={[side * OPENING_HALF_W, THRESHOLD + OPENING_HEIGHT / 2, -PORCH_DEPTH / 2]} rotation={[0, side * -Math.PI / 2, 0]}>
+          <planeGeometry args={[PORCH_DEPTH, OPENING_HEIGHT]} />
+          <meshStandardMaterial color="#c8c1b4" roughness={0.9} side={THREE.DoubleSide} />
+        </mesh>
+      ))}
+      <mesh position={[0, THRESHOLD + OPENING_HEIGHT, -PORCH_DEPTH / 2]} rotation={[Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[OPENING_HALF_W * 2, PORCH_DEPTH]} />
+        <meshStandardMaterial color="#bdb6a9" roughness={0.9} side={THREE.DoubleSide} />
       </mesh>
-      {/* Glazed doors */}
-      <mesh position={[0, 2.2, 0.45]}>
-        <boxGeometry args={[4.4, 3.9, 0.12]} />
-        <meshStandardMaterial
-          color="#8fd0ff"
-          roughness={0.08}
-          metalness={0.5}
-          transparent
-          opacity={0.7}
-        />
-      </mesh>
-      {/* Mullion, so it reads as a pair of doors */}
-      <mesh position={[0, 2.2, 0.52]}>
-        <boxGeometry args={[0.14, 3.9, 0.1]} />
-        <meshStandardMaterial color="#3b444f" roughness={0.5} metalness={0.4} />
-      </mesh>
-      {/* Canopy */}
-      <mesh castShadow position={[0, 5.3, 0.9]}>
-        <boxGeometry args={[7.2, 0.3, 2.2]} />
-        <meshStandardMaterial color={trim} roughness={0.8} />
-      </mesh>
+
+      <DoorLobby trim={trim} accent={accent} sill={THRESHOLD} />
+
     </group>
   )
 }
@@ -504,10 +619,40 @@ export function Building({
 
   useLayoutEffect(() => () => facadeMap?.dispose(), [facadeMap])
 
+  /**
+   * The front wall, as the pieces left over once the doorway is taken out.
+   *
+   * Two piers and a lintel. A building narrower than its own doorway gets one
+   * solid piece instead — there is nothing left to build an opening out of,
+   * and half a doorway is worse than none.
+   */
+  const facadePieces = useMemo(() => {
+    const pierWidth = width / 2 - OPENING_HALF_W
+    if (pierWidth <= 0.5) return [{ x: 0, y: height / 2, w: width, h: height }]
+    return [
+      { x: -(OPENING_HALF_W + pierWidth / 2), y: height / 2, w: pierWidth, h: height },
+      { x: OPENING_HALF_W + pierWidth / 2, y: height / 2, w: pierWidth, h: height },
+      {
+        x: 0,
+        y: THRESHOLD + OPENING_HEIGHT + (height - THRESHOLD - OPENING_HEIGHT) / 2,
+        w: OPENING_HALF_W * 2,
+        h: height - THRESHOLD - OPENING_HEIGHT,
+      },
+      // And the plinth under the threshold. Without it the opening runs to the
+      // ground and the doorway is a hole you can see daylight under.
+      { x: 0, y: THRESHOLD / 2, w: OPENING_HALF_W * 2, h: THRESHOLD },
+    ]
+  }, [width, height])
+
   return (
     <group position={position}>
-      <mesh castShadow receiveShadow position={[0, height / 2, 0]}>
-        <boxGeometry args={[width, height, depth]} />
+      {/* The body, shortened at the front by the depth of the lobby, and the
+          front wall rebuilt around the opening in three pieces. One box cannot
+          have a hole in it, and a hole is the entire difference between a door
+          you can see through and a picture of one. The back, sides and roof
+          are unchanged, so the silhouette is exactly what it was. */}
+      <mesh castShadow receiveShadow position={[0, height / 2, -PORCH_DEPTH / 2]}>
+        <boxGeometry args={[width, height, depth - PORCH_DEPTH]} />
         <meshStandardMaterial
           map={facadeMap ?? undefined}
           color={facadeMap ? '#ffffff' : color}
@@ -515,6 +660,23 @@ export function Building({
           metalness={style === 'glass' ? 0.25 : 0.04}
         />
       </mesh>
+
+      {facadePieces.map((piece, i) => (
+        <mesh
+          key={i}
+          castShadow
+          receiveShadow
+          position={[piece.x, piece.y, depth / 2 - PORCH_DEPTH / 2]}
+        >
+          <boxGeometry args={[piece.w, piece.h, PORCH_DEPTH]} />
+          <meshStandardMaterial
+            map={facadeMap ?? undefined}
+            color={facadeMap ? '#ffffff' : color}
+            roughness={style === 'glass' ? 0.4 : 0.88}
+            metalness={style === 'glass' ? 0.25 : 0.04}
+          />
+        </mesh>
+      ))}
 
       <FacadeTrim
         width={width}
@@ -535,7 +697,7 @@ export function Building({
         seed={seed}
       />
 
-      <Entrance depth={depth} trim={trim} />
+      <Entrance depth={depth} trim={trim} accent={color} />
 
       {sign && (
         <mesh position={[0, 6.2, depth / 2 + 0.35]}>
@@ -618,6 +780,9 @@ export function SceneryBuilding({
 export function CampusSkyline({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay | string }) {
   return (
     <group>
+      {/* The real city on UFAZ's side of Nizami Street: surveyed streets and
+          footprints, none of them enterable. */}
+      <NizamiDistrict timeOfDay={timeOfDay} />
       {SCENERY_BLOCKS.map((block, i) => (
         <SceneryBuilding key={i} block={block} timeOfDay={timeOfDay} />
       ))}
@@ -954,56 +1119,13 @@ export function SpeakingRing({ accent = '#6ee7a8' }: { accent?: string }) {
  * The main building gets its own component. It is the one real building on
  * this campus and deserves more than an extruded box with windows on it.
  */
-/**
- * The opening in a facade, as something you can see.
- *
- * The collider already has the notch — this is what stops the notch being
- * invisible. A recess set into the wall, a frame around it, and a canopy over
- * it, so the way in is findable from across the quad rather than being a place
- * where the wall happens not to stop you.
- */
-function Doorway({ building }: { building: CampusBuilding }) {
-  const door = doorwayFor(building)
-  const height = 3.4
-  const width = door.halfW * 2
-
-  return (
-    <group position={[door.x, 0, door.z]}>
-      {/* The recess. Pushed a hair proud of the facade so it does not fight
-          the wall behind it for the same pixels. */}
-      <mesh position={[0, height / 2, -ALCOVE_DEPTH / 2 + 0.01]}>
-        <boxGeometry args={[width, height, ALCOVE_DEPTH]} />
-        <meshStandardMaterial color="#12161c" roughness={0.95} />
-      </mesh>
-      {/* Frame: two jambs and a head. */}
-      {[-1, 1].map((side) => (
-        <mesh key={side} position={[side * (door.halfW + 0.16), height / 2, 0.08]} castShadow>
-          <boxGeometry args={[0.32, height + 0.4, 0.5]} />
-          <meshStandardMaterial color="#d8d2c6" roughness={0.7} />
-        </mesh>
-      ))}
-      <mesh position={[0, height + 0.2, 0.08]} castShadow>
-        <boxGeometry args={[width + 0.64, 0.4, 0.5]} />
-        <meshStandardMaterial color="#d8d2c6" roughness={0.7} />
-      </mesh>
-      {/* A canopy, which is most of what reads as an entrance at a distance. */}
-      <mesh position={[0, height + 0.55, 0.7]} castShadow>
-        <boxGeometry args={[width + 1.6, 0.18, 1.6]} />
-        <meshStandardMaterial color="#b6ad9c" roughness={0.8} />
-      </mesh>
-      {/* And a light under it, so the door is findable at night. */}
-      <pointLight position={[0, height - 0.2, 0.6]} intensity={12} distance={9} color="#ffe6bb" />
-    </group>
-  )
-}
-
 export function CampusBuildings({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay | string }) {
   return (
     <group>
-      {CAMPUS_BUILDINGS.map((building) => (
-        <Doorway key={`door-${building.id}`} building={building} />
-      ))}
-      {CAMPUS_BUILDINGS.map((building) =>
+      {/* Only what stands on the campus. The library, the labs, the
+          amphitheatre, the student centre, the cafeteria and the sports hall
+          are rooms inside the main building now, and a room has no facade. */}
+      {OUTDOOR_BUILDINGS.map((building) =>
         building.interior === 'ufaz' ? (
           <UfazBuilding key={building.id} building={building} timeOfDay={timeOfDay} />
         ) : (

@@ -382,8 +382,67 @@ export function lettersTexture(text: string, color = '#6b5b40') {
  * makes illegible anyway. One plane carries the whole expression, and because
  * it is a texture the expression can vary per person for free.
  */
-export function faceTexture(variant: 0 | 1 | 2) {
-  const key = `face:${variant}`
+/**
+ * A colour moved towards black, or towards a tint.
+ *
+ * Used to keep every feature legible against whatever skin it is drawn on:
+ * brows, creases and lips are all the wearer's own colour darkened, so they
+ * have the same contrast on every student rather than disappearing on some.
+ */
+function shade(hex: string, factor: number, towards = '#000000'): string {
+  const from = parseHex(hex)
+  const to = parseHex(towards)
+  const mix = (a: number, b: number) => Math.round(a * factor + b * (1 - factor))
+  return `rgb(${mix(from[0], to[0])},${mix(from[1], to[1])},${mix(from[2], to[2])})`
+}
+
+function withAlpha(rgb: string, alpha: number): string {
+  return rgb.replace('rgb(', 'rgba(').replace(')', `,${alpha})`)
+}
+
+function parseHex(hex: string): [number, number, number] {
+  const clean = hex.replace('#', '')
+  const full = clean.length === 3 ? clean.split('').map((c) => c + c).join('') : clean
+  const value = Number.parseInt(full, 16)
+  if (!Number.isFinite(value)) return [0, 0, 0]
+  return [(value >> 16) & 255, (value >> 8) & 255, value & 255]
+}
+
+/**
+ * What a face is doing.
+ *
+ * Separate from the activity enum on purpose: several activities share one
+ * expression — clapping and waving are both pleased — and the face has to be
+ * able to change without the pose changing, which is what talking is.
+ */
+export type Expression = 'neutral' | 'smile' | 'talk' | 'focus' | 'surprise'
+
+const EXPRESSIONS: readonly Expression[] = ['neutral', 'smile', 'talk', 'focus', 'surprise']
+
+/** Narrowed rather than cast, so an unknown string is a face and not a crash. */
+export function toExpression(value: unknown): Expression {
+  return EXPRESSIONS.includes(value as Expression) ? (value as Expression) : 'neutral'
+}
+
+/**
+ * A face, drawn rather than modelled.
+ *
+ * Three features do almost all of the work and the old face had one and a half
+ * of them: eyes with a highlight so they are not flat discs, brows, which
+ * carry more expression than anything else on a face, and a nose, whose
+ * absence is most of why the first version read as a balloon with dots on it.
+ *
+ * `variant` is which face this student has — it stays with them. `expression`
+ * is what they are doing at this moment, so one student has five faces and the
+ * cache holds fifteen textures rather than three.
+ */
+export function faceTexture(
+  variant: 0 | 1 | 2,
+  expression: Expression = 'neutral',
+  skin = '#c98b62',
+  hair = '#2f2118',
+) {
+  const key = `face:${variant}:${expression}:${skin}:${hair}`
   const hit = cache.get(key)
   if (hit) return hit
   if (typeof document === 'undefined') return null
@@ -395,47 +454,128 @@ export function faceTexture(variant: 0 | 1 | 2) {
   if (!ctx) return null
 
   ctx.clearRect(0, 0, 128, 128)
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
 
-  // Eyes. The whites are deliberately small; large ones read as cartoon.
-  const eyeY = 56
-  for (const x of [44, 84]) {
+  // Features are drawn relative to the face they sit on. A fixed brown brow is
+  // invisible on dark skin — which is exactly what happened: half the campus
+  // had no eyebrows at all, and a face without brows reads as a mask.
+  //
+  // The brows follow the hair rather than the skin, which is both what brows
+  // do and the only thing that guarantees contrast: darkening the skin cannot
+  // stand out against the skin it came from.
+  const brow = shade(hair, 0.82)
+  const crease = shade(skin, 0.62)
+  const lip = shade(skin, 0.55)
+
+  const wide = expression === 'surprise'
+  const narrowed = expression === 'focus'
+  const eyeY = 54
+  const eyeRx = 11
+  const eyeRy = wide ? 11 : narrowed ? 5 : variant === 2 ? 7.5 : 9
+
+  for (const [i, x] of [44, 84].entries()) {
+    // The socket: a hair of shadow under the brow, which is what stops the
+    // eye reading as a sticker laid on a sphere.
+    ctx.fillStyle = withAlpha(crease, 0.3)
+    ctx.beginPath()
+    ctx.ellipse(x, eyeY - 1, eyeRx + 3, eyeRy + 3.5, 0, 0, Math.PI * 2)
+    ctx.fill()
+
     ctx.fillStyle = '#fbfbfa'
     ctx.beginPath()
-    ctx.ellipse(x, eyeY, 11, variant === 2 ? 7 : 9, 0, 0, Math.PI * 2)
+    ctx.ellipse(x, eyeY, eyeRx, eyeRy, 0, 0, Math.PI * 2)
     ctx.fill()
-    ctx.fillStyle = '#2a1f18'
-    ctx.beginPath()
-    ctx.arc(x + (variant === 2 ? 1.5 : 0), eyeY, 5, 0, Math.PI * 2)
-    ctx.fill()
-  }
 
-  // Brows, which carry more expression than the eyes do.
-  ctx.strokeStyle = 'rgba(40,28,20,0.85)'
-  ctx.lineWidth = 4.5
-  ctx.lineCap = 'round'
-  for (const [x, tilt] of [
-    [44, variant === 2 ? 4 : -2],
-    [84, variant === 2 ? -4 : 2],
-  ] as [number, number][]) {
+    // The iris, off-centre towards the nose, which is where eyes rest.
+    const gaze = i === 0 ? 1.5 : -1.5
+    ctx.fillStyle = '#3a2b1f'
     ctx.beginPath()
-    ctx.moveTo(x - 11, eyeY - 17 + tilt)
-    ctx.lineTo(x + 11, eyeY - 17 - tilt)
+    ctx.arc(x + gaze, eyeY, Math.min(5.4, eyeRy + 0.6), 0, Math.PI * 2)
+    ctx.fill()
+    ctx.fillStyle = '#12100e'
+    ctx.beginPath()
+    ctx.arc(x + gaze, eyeY, Math.min(2.6, eyeRy * 0.5), 0, Math.PI * 2)
+    ctx.fill()
+    // The highlight. One white dot is the difference between an eye and a
+    // hole, and it costs a single arc.
+    ctx.fillStyle = 'rgba(255,255,255,0.9)'
+    ctx.beginPath()
+    ctx.arc(x + gaze - 2, eyeY - 2.6, 1.8, 0, Math.PI * 2)
+    ctx.fill()
+
+    // A lash line along the top lid, heavier than the lid itself.
+    ctx.strokeStyle = withAlpha(brow, 0.6)
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.ellipse(x, eyeY, eyeRx, eyeRy, 0, Math.PI * 1.05, Math.PI * 1.95)
     ctx.stroke()
   }
 
-  // Mouth.
-  ctx.strokeStyle = 'rgba(122,64,54,0.95)'
+  // Brows. Height and tilt are where the expression actually lives.
+  const browLift = wide ? 8 : expression === 'smile' ? 3 : 0
+  const browTilt = narrowed ? 5 : expression === 'smile' ? -3 : variant === 2 ? 4 : -2
+  ctx.strokeStyle = brow
   ctx.lineWidth = 5.5
-  ctx.beginPath()
-  if (variant === 1) {
-    ctx.arc(64, 78, 15, 0.25 * Math.PI, 0.75 * Math.PI)
-  } else if (variant === 2) {
-    ctx.moveTo(53, 92)
-    ctx.lineTo(75, 92)
-  } else {
-    ctx.arc(64, 82, 12, 0.15 * Math.PI, 0.85 * Math.PI)
+  for (const [x, tilt] of [
+    [44, browTilt],
+    [84, -browTilt],
+  ] as [number, number][]) {
+    ctx.beginPath()
+    ctx.moveTo(x - 11, eyeY - 17 - browLift + tilt)
+    ctx.quadraticCurveTo(x, eyeY - 21 - browLift, x + 11, eyeY - 17 - browLift - tilt)
+    ctx.stroke()
   }
+
+  // The nose. Two strokes: the bridge shadow and the base. Its absence is
+  // most of why the old face read as a balloon with dots drawn on it.
+  ctx.strokeStyle = withAlpha(crease, 0.65)
+  ctx.lineWidth = 3.5
+  ctx.beginPath()
+  ctx.moveTo(63, eyeY + 4)
+  ctx.lineTo(61, eyeY + 17)
+  ctx.quadraticCurveTo(64, eyeY + 21, 68, eyeY + 17)
   ctx.stroke()
+
+  // Mouth.
+  const mouthY = 88
+  ctx.strokeStyle = lip
+  ctx.lineWidth = 5
+  ctx.beginPath()
+  if (expression === 'talk') {
+    // Open, and filled, because a talking mouth is a hole rather than a line.
+    ctx.fillStyle = shade(skin, 0.34)
+    ctx.ellipse(64, mouthY, 9, 7.5, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+  } else if (expression === 'surprise') {
+    ctx.fillStyle = shade(skin, 0.34)
+    ctx.ellipse(64, mouthY, 7, 9.5, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+  } else if (expression === 'smile' || variant === 1) {
+    ctx.arc(64, mouthY - 6, 15, 0.2 * Math.PI, 0.8 * Math.PI)
+    ctx.stroke()
+  } else if (expression === 'focus') {
+    ctx.moveTo(55, mouthY)
+    ctx.lineTo(73, mouthY - 1)
+    ctx.stroke()
+  } else if (variant === 2) {
+    ctx.moveTo(54, mouthY)
+    ctx.lineTo(74, mouthY)
+    ctx.stroke()
+  } else {
+    ctx.arc(64, mouthY - 4, 12, 0.15 * Math.PI, 0.85 * Math.PI)
+    ctx.stroke()
+  }
+
+  // A little warmth on the cheeks, which reads as skin rather than plastic.
+  ctx.fillStyle = withAlpha(shade(skin, 0.8, '#e08a6a'), 0.3)
+  for (const x of [36, 92]) {
+    ctx.beginPath()
+    ctx.ellipse(x, 74, 10, 7, 0, 0, Math.PI * 2)
+    ctx.fill()
+  }
 
   const texture = new THREE.CanvasTexture(canvas)
   texture.colorSpace = THREE.SRGBColorSpace
@@ -554,6 +694,65 @@ export function tileTexture(a = '#d9d5cc', b = '#a8a49a') {
     ctx.strokeRect(0, half, half, half)
     ctx.strokeRect(half, half, half, half)
     speckle(ctx, size, 700, ['rgba(255,255,255,0.08)', 'rgba(0,0,0,0.06)'], 71, 1.2)
+  })
+}
+
+/**
+ * Encaustic cement tile, which is what the entrance hall is floored in.
+ *
+ * A four-pointed star repeated on a square grid, in cream, grey and a warm
+ * ochre, with a fine grey grout. The hall had a plain two-tone chequer, and in
+ * the photographs of the building the floor is the most decorated thing in the
+ * room by a distance — plain squares read as a public swimming baths.
+ *
+ * Drawn as one tile of the pattern and repeated, which is how the real thing is
+ * made: the motif is symmetric about both axes, so it meets itself at every
+ * edge without any seam to line up.
+ */
+export function encausticTexture() {
+  // Repeated hard: `RoomShell` scales the repeat by the room's size over a
+  // hundred, so at 24 a "tile" came out four metres across and the hall looked
+  // like a mosaic in a swimming baths. At 100 they are about a metre, which is
+  // still generous and reads as tile at eye height.
+  return build('encaustic', 128, 100, (ctx, size) => {
+    const half = size / 2
+    ctx.fillStyle = '#e8e4d9'
+    ctx.fillRect(0, 0, size, size)
+
+    // The star, as four kites meeting at the centre of the tile. Each corner of
+    // the tile carries a quarter of the neighbouring star, which is what makes
+    // the repeat continuous.
+    const star = (cx: number, cy: number, r: number, fill: string) => {
+      ctx.fillStyle = fill
+      ctx.beginPath()
+      for (let i = 0; i < 8; i++) {
+        const angle = (i / 8) * Math.PI * 2 - Math.PI / 2
+        const reach = i % 2 === 0 ? r : r * 0.38
+        const x = cx + Math.cos(angle) * reach
+        const y = cy + Math.sin(angle) * reach
+        if (i === 0) ctx.moveTo(x, y)
+        else ctx.lineTo(x, y)
+      }
+      ctx.closePath()
+      ctx.fill()
+    }
+
+    star(half, half, half * 0.86, '#9aa0a6')
+    star(half, half, half * 0.4, '#c7b78d')
+    for (const [cx, cy] of [
+      [0, 0],
+      [size, 0],
+      [0, size],
+      [size, size],
+    ]) {
+      star(cx, cy, half * 0.86, '#b9bdc2')
+    }
+
+    // Grout between tiles, thin and cool.
+    ctx.strokeStyle = 'rgba(120,120,116,0.55)'
+    ctx.lineWidth = 2
+    ctx.strokeRect(1, 1, size - 2, size - 2)
+    speckle(ctx, size, 500, ['rgba(255,255,255,0.06)', 'rgba(0,0,0,0.05)'], 91, 1.1)
   })
 }
 

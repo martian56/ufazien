@@ -20,6 +20,7 @@ import { INTERIOR_SPECS, interiorHalfExtent } from './interiorSpecs'
 import { fitProjector } from './projectorFit'
 import { LECTURE_SEATING, LECTURE_ROWS } from './lectureSeating'
 import { STEP_UP, type Collider, type Platform } from './campusPhysics'
+import { ARCADE_PIERS } from './verticalCirculation'
 
 /** Somewhere a player can sit, and which way they face once they do. */
 export interface Seat {
@@ -74,8 +75,14 @@ interface InteriorPhysics {
  */
 export const UFAZ_FLAGS = [-3, 3]
 
-/** The reception desk, clear of the colonnade behind it. */
-export const UFAZ_DESK_X = -11.8
+/**
+ * The reception desk, clear of the arcade beside it.
+ *
+ * At -11.8 its six-metre counter reached x -14.8 and the arcade pier's face is
+ * -14.55: a quarter-metre overlap, which is the shallow kind the collision
+ * resolver cannot settle a player out of.
+ */
+export const UFAZ_DESK_X = -9.4
 
 /**
  * The waiting benches, moved down the wall.
@@ -84,6 +91,34 @@ export const UFAZ_DESK_X = -11.8
  * both were on the west side of the hall.
  */
 export const UFAZ_BENCH_Z = [-10, -4, 2]
+
+/**
+ * The lift core.
+ *
+ * Two lifts side by side in a glazed shaft, at the far end of the hall with the
+ * corridor running off past them — walk in, cross the hall, and turn left,
+ * which is the route through the real building.
+ *
+ * Back and to one side rather than dead ahead, which is where the photographs
+ * put them relative to the doors. Dead ahead is where the projector screen
+ * hangs, and a three-metre glass shaft on that line blocks the sightline from
+ * every seat in the room: `interiorPhysics.test.ts` failed on the benches, on
+ * the centre line, and on the flag stand it was standing half a metre from, all
+ * three at once. Screen sharing is not worth a lift lobby. Tucked into the
+ * corner and shallower on the second attempt, too: at three metres out from the
+ * wall it still clipped the line from the west benches to the near edge of the
+ * board, which is the kind of half-blocked view nobody reports and everybody
+ * quietly moves away from.
+ *
+ * The courtyard that was here has gone. It is a real part of the building and
+ * the 2017 opening was held in it, but it is not on the route the player walks,
+ * and it sat squarely where the lifts and the stair have to be.
+ */
+export const UFAZ_LIFTS = { x: -15, z: -19, halfW: 3.4, halfD: 1.8 }
+
+/** The speed gates across the entrance, as the photographs show them. */
+export const UFAZ_TURNSTILES = [-4.5, -1.5, 1.5, 4.5]
+export const UFAZ_TURNSTILE_Z = 13
 
 export const UFAZ_STAIR = {
   // Narrower and further in than the first attempt at moving it. At x 12.5
@@ -98,20 +133,26 @@ export const UFAZ_STAIR = {
   landing: { z: -19.4, halfW: 4.5, halfD: 2.2, top: 4.55 },
 }
 
-function ufazPhysics(): InteriorPhysics {
-  const half = INTERIOR_SPECS.ufaz.halfExtent
-  const colliders: Collider[] = []
-  const platforms: Platform[] = []
-  const seats: Seat[] = []
-
-  // Columns down both sides. Round, because they are.
-  for (const side of [-1, 1]) {
-    for (const z of [-14, -7, 0, 7, 14]) {
-      colliders.push({ x: side * (half - 5), z, radius: 1.05, height: INTERIOR_SPECS.ufaz.ceiling })
-    }
-  }
-
-  // The flight, as steps you walk up rather than geometry you walk through.
+/**
+ * An upper floor: a corridor with the arcade down one side.
+ *
+ * The stair and the lift are the same objects in the same places as the ground
+ * floor — that is what "the corridors are the same on every floor" means — so
+ * the flight is here too, running the other way: you arrive at its head and go
+ * down. Its platforms are the ground floor's mirrored in z, which keeps the two
+ * ends of a journey at the same place on both floors.
+ */
+/**
+ * The main flight, as physics.
+ *
+ * Shared by the entrance hall and every corridor above it, because they are the
+ * same stair in the same place — that is what "the corridors repeat" means. It
+ * was only on the ground floor, so `ufazFloorPhysics` returned no platforms at
+ * all: the flight drawn upstairs was scenery you walked through, and the
+ * stair-up trigger sits four metres off the floor, so on floors one and two
+ * there was no way to reach it and no way up.
+ */
+function mainStair(colliders: Collider[], platforms: Platform[]) {
   for (let i = 0; i < UFAZ_STAIR.steps; i++) {
     platforms.push({
       x: UFAZ_STAIR.x,
@@ -139,6 +180,82 @@ function ufazPhysics(): InteriorPhysics {
       height: 5.6,
     })
   }
+}
+
+/**
+ * The arcade piers, solid on every floor.
+ *
+ * The openings between them are the walkable part, which is why these are
+ * separate boxes rather than one wall. The ground floor drew the arcade and had
+ * no colliders for it at all — you walked through the piers.
+ */
+function arcadePiers(colliders: Collider[]) {
+  for (const z of ARCADE_PIERS) {
+    colliders.push({ x: -15, z, halfW: 0.45, halfD: 0.55, height: 4.2 })
+  }
+}
+
+function ufazFloorPhysics(): InteriorPhysics {
+  const colliders: Collider[] = []
+  const platforms: Platform[] = []
+  const seats: Seat[] = []
+
+  // The lift shaft, in the same corner it occupies downstairs.
+  colliders.push({
+    x: UFAZ_LIFTS.x,
+    z: UFAZ_LIFTS.z,
+    halfW: UFAZ_LIFTS.halfW,
+    halfD: UFAZ_LIFTS.halfD,
+    height: 5.6,
+  })
+
+  arcadePiers(colliders)
+  mainStair(colliders, platforms)
+
+  // A bench in each window bay, which is what the corridors are furnished with.
+  //
+  // Solid, but not registered as seats. The stairwell stands between the east
+  // wall and the projector, so a seat on this side cannot see the screen from
+  // anywhere behind the flight — and `interiorPhysics.test.ts` rightly holds
+  // every seat to a clear view of it. Rather than shuffle benches up the
+  // corridor until they scrape past the balustrade, they are what a corridor
+  // bench actually is: somewhere to put your bag down, not seating for a
+  // presentation. Every room that is for watching something still has seats.
+  for (const z of [-2, 4, 10]) {
+    colliders.push({ x: 19.4, z, halfW: 0.55, halfD: 1.6, height: 0.6 })
+  }
+
+  return { colliders, platforms, seats }
+}
+
+function ufazPhysics(): InteriorPhysics {
+  const half = INTERIOR_SPECS.ufaz.halfExtent
+  const colliders: Collider[] = []
+  const platforms: Platform[] = []
+  const seats: Seat[] = []
+
+  // The colonnade used to be here, ten round colliders down the sides. The
+  // photographs of the building show no columns anywhere, so it has gone from
+  // what is drawn — and it has to go from here too, or the hall keeps ten
+  // invisible pillars that a player walks into and cannot see.
+
+  // The lift shaft, which is solid glass and steel.
+  colliders.push({
+    x: UFAZ_LIFTS.x,
+    z: UFAZ_LIFTS.z,
+    halfW: UFAZ_LIFTS.halfW,
+    halfD: UFAZ_LIFTS.halfD,
+    height: 8.2,
+  })
+
+  // The speed gates. Waist height and narrow, with a person's width between
+  // them, so you walk through the line rather than round it.
+  for (const x of UFAZ_TURNSTILES) {
+    colliders.push({ x, z: UFAZ_TURNSTILE_Z, halfW: 0.24, halfD: 0.62, height: 1.05 })
+  }
+
+  arcadePiers(colliders)
+  mainStair(colliders, platforms)
 
   // Reception desk. Pulled in off the colonnade: at -13 its corner clipped
   // the column at -17, and a five-centimetre intersection is a seam the
@@ -155,10 +272,12 @@ function ufazPhysics(): InteriorPhysics {
   // staircase balustrade between everyone sitting on them and the board.
   for (const z of UFAZ_BENCH_Z) {
     const id = `ufaz-bench-${z}`
-    colliders.push({ id, x: -half + 8, z, halfW: 0.8, halfD: 2.2, height: 0.6 })
+    // Clear of the arcade. At -half + 8 the bench and the pier at z -8 overlapped
+    // by a quarter of a metre, which is a wedge rather than a wall.
+    colliders.push({ id, x: -half + 11, z, halfW: 0.8, halfD: 2.2, height: 0.6 })
     seats.push({
       id,
-      x: -half + 8,
+      x: -half + 11,
       z,
       y: 0,
       // Facing back into the hall, away from the wall behind them.
@@ -188,6 +307,15 @@ export const STACK_ROWS = [-15, -9, -3, 3]
  * sightline.
  */
 export const LIBRARY_TERMINAL: [number, number] = [-13.5, 12]
+
+/**
+ * The two runs of the issue desk, either side of the doorway.
+ *
+ * Between the door and the reading tables at ±9: the tables reach in to 6.5,
+ * and the doorway needs a person's width of clearance either side of centre.
+ */
+export const LIBRARY_DESK_X = [-4, 4]
+export const LIBRARY_DESK_HALF = 1.3
 
 /** Where the reading tables stand, and how the chairs sit around them. */
 export const LIBRARY_TABLE_X = [-9, 9]
@@ -286,8 +414,14 @@ function libraryPhysics(): InteriorPhysics {
     }
   }
 
-  // Issue desk by the door.
-  colliders.push({ x: 0, z: half - 4, halfW: 3.5, halfD: 0.95, height: 1.35 })
+  // Issue desk by the door, in two runs either side of it.
+  //
+  // It used to be one seven-metre counter on the centre line, which is where
+  // the door is: the way out of the library ran straight through the desk.
+  // `doorways.test.ts` holds the approach clear now.
+  for (const x of LIBRARY_DESK_X) {
+    colliders.push({ x, z: half - 4, halfW: LIBRARY_DESK_HALF, halfD: 0.95, height: 1.35 })
+  }
 
   // The calculator terminal, against the west wall clear of the reading
   // tables. Turned to face into the room, so its footprint is deep rather
@@ -497,6 +631,15 @@ function studentCentrePhysics(): InteriorPhysics {
 /* Cafeteria                                                            */
 /* ------------------------------------------------------------------ */
 
+/**
+ * The bins by the cafeteria door, either side of the way out.
+ *
+ * There were three, at -3, 0 and 3. The one on the centre line stood in the
+ * doorway itself: leaving the cafeteria meant walking round a bin placed in
+ * the only way out.
+ */
+export const CAFE_BINS = [-5.2, -3, 3]
+
 export const CAFE_TABLE_X = [-11, -3.5, 4, 11.5]
 export const CAFE_TABLE_Z = [-8, -1, 6, 13]
 /**
@@ -549,7 +692,10 @@ function cafeteriaPhysics(): InteriorPhysics {
     }
   }
 
-  for (const x of [-3, 0, 3]) {
+  // Bins and a water station by the door — beside it, not across it. The
+  // middle one stood in the doorway, so leaving the cafeteria meant walking
+  // round a bin placed in the only way out.
+  for (const x of CAFE_BINS) {
     colliders.push({ x, z: half - 2.5, halfW: 0.5, halfD: 0.5, height: 1.2 })
   }
 
@@ -601,6 +747,7 @@ function sportsPhysics(): InteriorPhysics {
 
 const PHYSICS: Record<InteriorKind, InteriorPhysics> = {
   ufaz: ufazPhysics(),
+  'ufaz-floor': ufazFloorPhysics(),
   library: libraryPhysics(),
   lab: labPhysics(),
   lecture: lecturePhysics(),

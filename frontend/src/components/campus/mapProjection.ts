@@ -1,4 +1,4 @@
-import { CAMPUS_BUILDINGS, CAMPUS_LIMIT, type CampusBuilding } from './campusLayout'
+import { CAMPUS_LIMIT, OUTDOOR_BUILDINGS, type CampusBuilding } from './campusLayout'
 
 export interface MapView {
   cx: number
@@ -20,7 +20,7 @@ export const CAMPUS_SPAN = CAMPUS_LIMIT * 2 + 24
 
 export const FIT_MARGIN = 26
 
-export function fitCampus(size: number, buildings: CampusBuilding[] = CAMPUS_BUILDINGS): MapView {
+export function fitCampus(size: number, buildings: CampusBuilding[] = OUTDOOR_BUILDINGS): MapView {
   if (buildings.length === 0) return { cx: 0, cz: 0, span: CAMPUS_SPAN, size }
 
   let minX = Infinity
@@ -63,7 +63,7 @@ export function headingVector(heading: number): { x: number; y: number } {
   return { x: -Math.sin(heading), y: -Math.cos(heading) }
 }
 
-export function buildingsInView(view: MapView, buildings: CampusBuilding[] = CAMPUS_BUILDINGS): CampusBuilding[] {
+export function buildingsInView(view: MapView, buildings: CampusBuilding[] = OUTDOOR_BUILDINGS): CampusBuilding[] {
   const half = view.span / 2
   return buildings.filter((building) => {
     const [x, , z] = building.position
@@ -95,7 +95,7 @@ export interface PlacedLabel {
 export function placeLabels(
   view: MapView,
   measure: (text: string) => number,
-  buildings: CampusBuilding[] = CAMPUS_BUILDINGS,
+  buildings: CampusBuilding[] = OUTDOOR_BUILDINGS,
   lineHeight = 12,
 ): PlacedLabel[] {
   const scale = scaleOf(view)
@@ -139,7 +139,7 @@ export function placeLabels(
 export function nearestBuilding(
   x: number,
   z: number,
-  buildings: CampusBuilding[] = CAMPUS_BUILDINGS,
+  buildings: CampusBuilding[] = OUTDOOR_BUILDINGS,
 ): CampusBuilding | null {
   let best: CampusBuilding | null = null
   let bestDistance = Infinity

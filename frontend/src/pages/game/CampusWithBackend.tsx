@@ -41,10 +41,12 @@ import {
   CampusBuildings,
   CampusSkyline,
   ChatBubble,
-  CharacterModel,
   NameTag,
   SpeakingRing,
+  THRESHOLD,
 } from '../../components/campus/CampusScenery'
+import { GltfCharacter } from '../../components/campus/GltfCharacter'
+import { exitOf, portalAt } from '../../components/campus/verticalCirculation'
 import {
   BUBBLE_MS,
   bubbleFor,
@@ -81,6 +83,7 @@ import {
   doorstep,
   doorwayFor,
   interiorDoorFor,
+  interiorLimit,
   leavingThroughDoor,
 } from '../../components/campus/doorways'
 import {
@@ -468,14 +471,17 @@ function PlayerAvatar({
 
   return (
     <group ref={meshRef} position={[position.x, 0, position.z]}>
-      <CharacterModel
+      <GltfCharacter
         color={String(userData.color ?? "#4F46E5")}
         isMoving={Boolean(userData.is_moving)}
         direction={String(userData.direction ?? "down")}
         heading={typeof userData.heading === 'number' ? userData.heading : undefined}
         activity={String(userData.activity ?? "standing")}
         speed={Boolean(userData.is_moving) ? 5.5 : 0}
-        seed={seed}
+        // Which of the CC0 packs this player wears. Derived from the same seed
+        // the old model used for its appearance, so a given player keeps the
+        // same look between sessions instead of being reshuffled on reconnect.
+        variant={seed}
       />
       <NameTag
         name={name}
@@ -505,7 +511,20 @@ function PlayerAvatar({
  * far side of the plane that decides you are going in. Walking out put them
  * back there and they walked straight in again.
  */
-function InteriorCameraPlacement({ insideBuilding }: { insideBuilding: CampusBuilding | null }) {
+function InteriorCameraPlacement({
+  insideBuilding,
+  arrival,
+}: {
+  insideBuilding: CampusBuilding | null
+  /**
+   * Where to put the player down, when they got here by stair, lift or an
+   * inner door rather than through the front of the building.
+   *
+   * Without it every arrival lands at the front door of the room, so stepping
+   * out of the lift on the fourth floor drops you at the foot of the stairs.
+   */
+  arrival: { x: number; z: number } | null
+}) {
   const { camera } = useThree()
   const previous = useRef<CampusBuilding | null>(null)
 
@@ -515,7 +534,8 @@ function InteriorCameraPlacement({ insideBuilding }: { insideBuilding: CampusBui
       const door = interiorDoorFor(insideBuilding.interior)
       // Just inside the door you came through, which is now a real place in
       // the room rather than a spawn point chosen per interior.
-      camera.position.set(door.x, spec.spawn[1], door.z - 1.5)
+      if (arrival) camera.position.set(arrival.x, spec.spawn[1], arrival.z)
+      else camera.position.set(door.x, spec.spawn[1], door.z - 1.5)
       const look = spec.spawnLookAt ?? spec.projector
       // lookAt leaves roll at zero, so the pointer-lock controls pick this up
       // as an ordinary heading and pitch.
@@ -527,6 +547,9 @@ function InteriorCameraPlacement({ insideBuilding }: { insideBuilding: CampusBui
       camera.lookAt(door.x, EYE_HEIGHT, door.z + 10)
     }
     previous.current = insideBuilding
+    // `arrival` deliberately absent: it is set in the same tick as the room and
+    // re-running this when it clears would teleport the player to the door.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [insideBuilding, camera])
 
   return null
@@ -918,6 +941,7 @@ function CampusDoors({
           x={door.x}
           z={door.z}
           halfWidth={door.halfW}
+          sill={THRESHOLD}
           swing={doorSwing(doors, exteriorDoorId(door.id), now)}
         />
       ))}
@@ -944,6 +968,7 @@ function Player({
   leaning,
   follow,
   onEnter,
+  onTravel,
   onLeave,
   doors,
   onOpenDoor,
@@ -960,6 +985,8 @@ function Player({
   leaning: boolean
   /** Walked in through a door. */
   onEnter: (building: CampusBuilding) => void
+  /** Moving between rooms of the same building, by stair, lift or inner door. */
+  onTravel: (building: CampusBuilding, spawn: { x: number; z: number }) => void
   /** Walked back out through one. */
   onLeave: (building: CampusBuilding) => void
   /** Which doors are open, and since when. */
@@ -1164,14 +1191,47 @@ function Player({
         isDoorOpen(doors, interiorDoorId(insideBuilding.id), doorNow) &&
         leavingThroughDoor(camera.position.x, camera.position.z, door)
       ) {
-        onLeave(insideBuilding)
-        return
+        // A room inside the building opens onto its corridor; only the ground
+        // floor opens onto the street. Walking out of the library on the
+        // fourth floor and finding yourself on Nizami Street is the sort of
+        // thing that makes a building feel like a menu.
+        const back = exitOf(insideBuilding.id)
+        const corridor = back && CAMPUS_BUILDINGS.find((b) => b.id === back.room)
+        if (back && corridor) {
+          onTravel(corridor, back.spawn)
+          return
+        }
+        if (insideBuilding.outdoor) {
+          onLeave(insideBuilding)
+          return
+        }
       }
 
-      // The room's own walls, which are a clamp rather than geometry.
-      const limit = interiorHalfExtent(insideBuilding.interior)
-      camera.position.x = MathUtils.clamp(camera.position.x, -limit, limit)
-      camera.position.z = MathUtils.clamp(camera.position.z, -limit, limit)
+      // The stair, the lift, and the doors along a corridor. Checked before
+      // the clamp for the same reason the door is: afterwards the position has
+      // already been pulled back and there is nothing left to detect.
+      const portal = portalAt(
+        insideBuilding.id,
+        camera.position.x,
+        camera.position.z,
+        camera.position.y - EYE_HEIGHT,
+      )
+      if (portal) {
+        const target = CAMPUS_BUILDINGS.find((b) => b.id === portal.to)
+        if (target) {
+          onTravel(target, portal.spawn)
+          return
+        }
+      }
+
+      // The room's own walls, which are a clamp rather than geometry. The
+      // limit opens out to the wall inside the doorway, so a player can walk
+      // into the opening instead of stopping at an invisible line in front of
+      // it — which is what the door being in the wall means.
+      const side = interiorHalfExtent(insideBuilding.interior)
+      const ahead = interiorLimit(insideBuilding.interior, camera.position.x, camera.position.z)
+      camera.position.x = MathUtils.clamp(camera.position.x, -side, side)
+      camera.position.z = MathUtils.clamp(camera.position.z, -side, ahead)
     } else {
       camera.position.x = MathUtils.clamp(camera.position.x, -CAMPUS_LIMIT, CAMPUS_LIMIT)
       camera.position.z = MathUtils.clamp(camera.position.z, -CAMPUS_LIMIT, CAMPUS_LIMIT)
@@ -1263,6 +1323,8 @@ const CampusWithBackend = () => {
   const lobbyId = (rawLobbyId === 'null' || rawLobbyId === 'undefined') ? null : rawLobbyId;
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [insideBuilding, setInsideBuilding] = useState<CampusBuilding | null>(null)
+  /** Where a stair, lift or inner door put the player down. */
+  const [arrival, setArrival] = useState<{ x: number; z: number } | null>(null)
   /**
    * Which doors are open. Held here rather than in the scene because both the
    * player's collisions and the door meshes need it, and they live in
@@ -2200,7 +2262,7 @@ const CampusWithBackend = () => {
             )}
 
             <CampusDoors doors={doors} insideBuilding={insideBuilding} />
-            <InteriorCameraPlacement insideBuilding={insideBuilding} />
+            <InteriorCameraPlacement insideBuilding={insideBuilding} arrival={arrival} />
             <ProximitySensor insideBuilding={insideBuilding} target={proximity} />
             <ActionKeyBridge action={actionInput} />
             <Player
@@ -2211,8 +2273,18 @@ const CampusWithBackend = () => {
               emote={emote}
               leaning={leaning}
               follow={followTarget}
-              onEnter={setInsideBuilding}
-              onLeave={() => setInsideBuilding(null)}
+              onEnter={(building) => {
+                setArrival(null)
+                setInsideBuilding(building)
+              }}
+              onTravel={(building, spawn) => {
+                setArrival(spawn)
+                setInsideBuilding(building)
+              }}
+              onLeave={() => {
+                setArrival(null)
+                setInsideBuilding(null)
+              }}
               doors={doors}
               onOpenDoor={openDoorById}
               poseRef={selfPose}

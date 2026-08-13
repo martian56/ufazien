@@ -18,6 +18,8 @@
  * campus behind it. It reads as UFAZ rather than as Generic University #4.
  */
 
+import { DISTRICT_BUILDINGS, DISTRICT_STREETS } from './districtSurvey'
+
 /** r3f accepts a plain number[] at runtime, but its types want the length. */
 export type Vec3 = [number, number, number]
 
@@ -25,9 +27,13 @@ export type Vec3 = [number, number, number]
  * How far from the origin a player may walk.
  *
  * Was 50, which put the whole world inside one screen: you could see every
- * building from the spawn point and cross the campus in twelve seconds.
+ * building from the spawn point and cross the campus in twelve seconds. Then
+ * 185, the campus; then 240, to fit a district that reached 28 May küçəsi and
+ * Azadlıq prospekti. That district turned out to be what made the game freeze,
+ * so it has been pulled back to the block the university actually stands on and
+ * this with it — far enough to hold the scenery blocks at z 176, no further.
  */
-export const CAMPUS_LIMIT = 185
+export const CAMPUS_LIMIT = 200
 
 /** The ground plane. Comfortably past the fog, so the world has no visible edge. */
 export const GROUND_SIZE = 1000
@@ -38,6 +44,7 @@ export const PLAYER_RADIUS = 0.55
 /** Which interior a building opens into. One design per building. */
 export type InteriorKind =
   | 'ufaz'
+  | 'ufaz-floor'
   | 'library'
   | 'lab'
   | 'lecture'
@@ -68,6 +75,23 @@ export interface CampusBuilding {
   trim: string
   /** Shown on the approach prompt, so walking up to a door tells you something. */
   blurb: string
+  /**
+   * Whether this room is a building standing on the campus, or a room inside
+   * one.
+   *
+   * Only the main building is outdoors now. The library, the labs, the
+   * amphitheatre, the student centre, the cafeteria and the sports hall used to
+   * be six separate blocks scattered across a lawn; they are rooms off the
+   * corridors of 183 Nizami Street, which is where the university actually
+   * puts them. Their ids have not changed — the id is what travels as
+   * `current_room` — so a presenter in the library is still visible to
+   * everybody in the library.
+   *
+   * Everything that draws a facade, cuts a doorway or makes a footprint solid
+   * reads this. An indoor room has no exterior to draw and no ground to stand
+   * on.
+   */
+  outdoor: boolean
 }
 
 /**
@@ -89,6 +113,7 @@ export const CAMPUS_BUILDINGS: CampusBuilding[] = [
     style: 'heritage',
     interior: 'ufaz',
     blurb: '183 Nizami Street — the restored 1900s building UFAZ actually occupies',
+    outdoor: true,
   },
   {
     id: 2,
@@ -100,6 +125,7 @@ export const CAMPUS_BUILDINGS: CampusBuilding[] = [
     icon: '📚',
     style: 'brick',
     interior: 'library',
+    outdoor: false,
     blurb: 'Reading room, stacks, and a book-sorting challenge on the desk',
   },
   {
@@ -112,6 +138,7 @@ export const CAMPUS_BUILDINGS: CampusBuilding[] = [
     icon: '🔬',
     style: 'modern',
     interior: 'lab',
+    outdoor: false,
     blurb: 'Strasbourg-standard labs — the titration bench is open',
   },
   {
@@ -124,6 +151,7 @@ export const CAMPUS_BUILDINGS: CampusBuilding[] = [
     icon: '🎓',
     style: 'modern',
     interior: 'lecture',
+    outdoor: false,
     blurb: 'Tiered lecture hall with the projector screen',
   },
   {
@@ -136,6 +164,7 @@ export const CAMPUS_BUILDINGS: CampusBuilding[] = [
     icon: '🏢',
     style: 'glass',
     interior: 'student-center',
+    outdoor: false,
     blurb: 'Sofas, table football and somewhere to actually sit down',
   },
   {
@@ -148,6 +177,7 @@ export const CAMPUS_BUILDINGS: CampusBuilding[] = [
     icon: '🍽️',
     style: 'brick',
     interior: 'cafeteria',
+    outdoor: false,
     blurb: 'Counters, trays, and the smell of reheated plov',
   },
   {
@@ -160,9 +190,57 @@ export const CAMPUS_BUILDINGS: CampusBuilding[] = [
     icon: '🏀',
     style: 'modern',
     interior: 'sports',
+    outdoor: false,
     blurb: 'Indoor court — free throws on the far hoop',
   },
+
+  // The three floors above the entrance hall. They are rooms rather than
+  // buildings: no facade, no footprint, reached by the stair and the lift. Ids
+  // continue the sequence because an id is a `current_room`, and two rooms
+  // sharing one would put their occupants in each other's screen share.
+  {
+    id: 8,
+    name: 'Second Floor',
+    position: [0, 0, -86],
+    size: [54, 25, 22],
+    color: '#e0d2b4',
+    trim: '#cdba99',
+    icon: '🚪',
+    style: 'heritage',
+    interior: 'ufaz-floor',
+    blurb: 'Corridor, with the laboratories and the cafeteria off it',
+    outdoor: false,
+  },
+  {
+    id: 9,
+    name: 'Third Floor',
+    position: [0, 0, -86],
+    size: [54, 25, 22],
+    color: '#e0d2b4',
+    trim: '#cdba99',
+    icon: '🚪',
+    style: 'heritage',
+    interior: 'ufaz-floor',
+    blurb: 'Corridor, with the student centre and the sports hall off it',
+    outdoor: false,
+  },
+  {
+    id: 10,
+    name: 'Fourth Floor',
+    position: [0, 0, -86],
+    size: [54, 25, 22],
+    color: '#e0d2b4',
+    trim: '#cdba99',
+    icon: '🚪',
+    style: 'heritage',
+    interior: 'ufaz-floor',
+    blurb: 'Corridor, and the library in the roof',
+    outdoor: false,
+  },
 ]
+
+/** The buildings that actually stand on the campus and can be walked up to. */
+export const OUTDOOR_BUILDINGS: CampusBuilding[] = CAMPUS_BUILDINGS.filter((b) => b.outdoor)
 
 /**
  * Buildings you cannot walk into.
@@ -182,18 +260,9 @@ export interface SceneryBlock {
 }
 
 export const SCENERY_BLOCKS: SceneryBlock[] = [
-  // The Nizami Street terrace, continuing the frontage either side of UFAZ.
-  //
-  // Flush and touching, both because that is how a Baku street terrace is
-  // built and because gaps narrower than a person are a trap: the collision
-  // resolver would push someone out of one facade and straight into the next.
-  // Only the heights vary, which is what gives the row its rhythm.
-  { position: [-55, 0, -88], size: [40, 21, 20], color: '#cdbb9c', trim: '#a08d6c', style: 'heritage', arched: true },
-  { position: [-95, 0, -88], size: [40, 18, 20], color: '#d5c6a6', trim: '#a89573', style: 'heritage', arched: true },
-  { position: [-135, 0, -88], size: [40, 22, 20], color: '#c6b394', trim: '#9c8967', style: 'heritage', arched: true },
-  { position: [55, 0, -88], size: [40, 20, 20], color: '#d2c1a1', trim: '#a4916f', style: 'heritage', arched: true },
-  { position: [95, 0, -88], size: [40, 23, 20], color: '#c9b795', trim: '#9d8a68', style: 'heritage', arched: true },
-  { position: [135, 0, -88], size: [40, 19, 20], color: '#d6c7a8', trim: '#aa9775', style: 'heritage', arched: true },
+  // The Nizami Street terrace used to be six invented facades here, three
+  // either side of the landmark. It is now the real one: `districtSurvey.ts`
+  // carries the surveyed footprints, and `NizamiDistrict` draws them.
 
   // Halls of residence, well back on the west side.
   { position: [-138, 0, 70], size: [26, 26, 22], color: '#b6a894', trim: '#6d6355', style: 'brick' },
@@ -220,14 +289,12 @@ export interface Pavement {
 }
 
 export const PAVEMENTS: Pavement[] = [
-  // Nizami Street itself, running east-west in front of the landmark.
-  { position: [0, -62], size: [400, 18], kind: 'asphalt' },
-  // Pavements either side of it.
-  { position: [0, -71.5], size: [400, 5], kind: 'stone' },
-  { position: [0, -52.5], size: [400, 5], kind: 'stone' },
+  // Nizami Street used to be a single 400-metre asphalt strip here with a
+  // pavement either side. It is drawn from its surveyed centreline now, along
+  // with the four streets that cross it; see `districtSurvey.ts`.
 
   // The forecourt between the street and the main building's steps.
-  { position: [0, -76], size: [70, 10], kind: 'stone' },
+  { position: [0, -70], size: [70, 8], kind: 'stone' },
 
   // The spine: gate to amphitheatre to sports hall.
   { position: [0, 20], size: [16, 190], kind: 'path' },
@@ -386,25 +453,110 @@ export function buildingRect(building: { position: Vec3; size: Vec3 }): Rect {
 }
 
 /**
+ * The footprint of a district block, as the collision system sees it.
+ *
+ * The resolver works in axis-aligned boxes, so a surveyed footprint collides as
+ * its bounding box rather than as its outline. Every street in the extract runs
+ * within a few degrees of an axis once the district has been rotated onto ours,
+ * so for the terrace blocks the two are near enough the same shape; where they
+ * are not, the effect is that a courtyard notch is solid rather than walkable.
+ * That is the right way round to be wrong: you cannot walk into a building, and
+ * the alternative — a polygon resolver — would be a rewrite of the one piece of
+ * this codebase that everything else depends on being simple.
+ */
+export function districtRect(building: { footprint: readonly (readonly [number, number])[] }): Rect {
+  const xs = building.footprint.map((p) => p[0])
+  const zs = building.footprint.map((p) => p[1])
+  const minX = Math.min(...xs)
+  const maxX = Math.max(...xs)
+  const minZ = Math.min(...zs)
+  const maxZ = Math.max(...zs)
+  return {
+    x: (minX + maxX) / 2,
+    z: (minZ + maxZ) / 2,
+    halfW: (maxX - minX) / 2,
+    halfD: (maxZ - minZ) / 2,
+  }
+}
+
+/**
+ * The narrowest slot between two blocks that is worth leaving open.
+ *
+ * A least-penetration resolver ejects along the shallower axis, so a gap
+ * narrower than a person — or a shallow overlap — bounces them between the two
+ * walls forever. Anything inside this band gets merged rather than left as a
+ * trap. `campusLayout.test.ts` is what enforces it.
+ */
+const MIN_ALLEY = PLAYER_RADIUS * 2 + 1
+
+function isWedge(a: Rect, b: Rect): boolean {
+  const gapX = Math.abs(a.x - b.x) - (a.halfW + b.halfW)
+  const gapZ = Math.abs(a.z - b.z) - (a.halfD + b.halfD)
+  // Two blocks offset on both axes are diagonal neighbours, not a slot.
+  if (gapX > 0 && gapZ > 0) return false
+  const gap = Math.max(gapX, gapZ)
+  return gap > -MIN_ALLEY && gap < MIN_ALLEY
+}
+
+function union(a: Rect, b: Rect): Rect {
+  const minX = Math.min(a.x - a.halfW, b.x - b.halfW)
+  const maxX = Math.max(a.x + a.halfW, b.x + b.halfW)
+  const minZ = Math.min(a.z - a.halfD, b.z - b.halfD)
+  const maxZ = Math.max(a.z + a.halfD, b.z + b.halfD)
+  return { x: (minX + maxX) / 2, z: (minZ + maxZ) / 2, halfW: (maxX - minX) / 2, halfD: (maxZ - minZ) / 2 }
+}
+
+/**
+ * Merges every pair of boxes that would form a wedge, until none is left.
+ *
+ * A Baku terrace is drawn as separate houses — the reveals between them are
+ * most of what gives the row its rhythm — but it is one continuous wall and has
+ * to collide as one. This is the same trick the hand-built terrace used, except
+ * that it was two hardcoded rectangles and this works out the runs for itself,
+ * so the surveyed footprints can change without anyone having to remember.
+ *
+ * Repeated to a fixed point because merging two boxes can bring the result
+ * within a wedge of a third.
+ */
+function mergeWedges(rects: Rect[]): Rect[] {
+  const boxes = [...rects]
+  // Fixed before the first merge. `boxes` loses an entry every time a pair
+  // joins, so a bound that reads its length falls as the work is done and can
+  // stop short of the fixed point this promises. `if (!joined) break` is the
+  // real exit; this is only a backstop.
+  const limit = rects.length * 4
+  for (let guard = 0; guard < limit; guard++) {
+    let joined = false
+    search: for (let i = 0; i < boxes.length; i++) {
+      for (let j = i + 1; j < boxes.length; j++) {
+        if (!isWedge(boxes[i], boxes[j])) continue
+        boxes[i] = union(boxes[i], boxes[j])
+        boxes.splice(j, 1)
+        joined = true
+        break search
+      }
+    }
+    if (!joined) break
+  }
+  return boxes
+}
+
+/** Every block of the real district, as something to bump into. */
+export const DISTRICT_COLLIDERS: Rect[] = mergeWedges(DISTRICT_BUILDINGS.map(districtRect))
+
+/**
  * What is solid, which is not the same list as what is drawn.
  *
- * The Nizami Street terrace is drawn as six facades so the roofline and the
- * colours vary along the row, but it is one continuous wall and has to collide
- * as one. Two boxes that share an edge exactly are a trap for a
- * least-penetration resolver: standing on the seam, each block pushes you
- * sideways into the other, and no number of passes settles it. Merged, there is
- * no seam to stand on.
+ * Two boxes that share an edge exactly are a trap for a least-penetration
+ * resolver: standing on the seam, each block pushes you sideways into the
+ * other, and no number of passes settles it. The district generator leaves a
+ * margin between adjacent blocks for exactly that reason, so nothing here has
+ * to be merged the way the old hand-built terrace did.
  */
-const TERRACE_DEPTH = { z: -88, halfD: 10 }
-
 export const SCENERY_COLLIDERS: Rect[] = [
-  // The two terrace runs, each merged from the three facades that make it up.
-  // They stop short of the landmark rather than butting against it, so the
-  // main building stands slightly proud of the row with an alley either side.
-  { x: -95, halfW: 60, ...TERRACE_DEPTH },
-  { x: 95, halfW: 60, ...TERRACE_DEPTH },
+  ...DISTRICT_COLLIDERS,
   // Everything else stands alone, with room to walk between.
-  ...SCENERY_BLOCKS.filter((block) => block.style !== 'heritage').map(buildingRect),
+  ...SCENERY_BLOCKS.map(buildingRect),
 ]
 
 /** Half-width of a doorway. A shade over two people wide. */
@@ -443,7 +595,7 @@ export function doorwayFor(building: CampusBuilding): Doorway {
 }
 
 /** Every door on the campus. */
-export const CAMPUS_DOORS: Doorway[] = CAMPUS_BUILDINGS.map(doorwayFor)
+export const CAMPUS_DOORS: Doorway[] = OUTDOOR_BUILDINGS.map(doorwayFor)
 
 /**
  * A building's footprint with the doorway left open.
@@ -493,15 +645,36 @@ export function buildingCollidersWithDoor(building: CampusBuilding): Rect[] {
  * not drop a tree into a doorway just because the doorway is not solid.
  */
 export const CAMPUS_COLLIDERS: Rect[] = [
-  ...CAMPUS_BUILDINGS.flatMap(buildingCollidersWithDoor),
+  ...OUTDOOR_BUILDINGS.flatMap(buildingCollidersWithDoor),
   ...SCENERY_COLLIDERS,
 ]
 
+/**
+ * The carriageways, as footprints, so the scatter does not plant a tree in the
+ * middle of Nizami Street.
+ *
+ * One rect per segment rather than per street: a street that turns a corner has
+ * a bounding box covering the whole block it turns around, and everything
+ * inside it would be swept clear of trees for no reason.
+ */
+export const DISTRICT_STREET_RECTS: Rect[] = DISTRICT_STREETS.flatMap((street) =>
+  street.points.slice(1).map((point, i) => {
+    const previous = street.points[i]
+    return {
+      x: (previous[0] + point[0]) / 2,
+      z: (previous[1] + point[1]) / 2,
+      halfW: Math.abs(point[0] - previous[0]) / 2 + street.width / 2,
+      halfD: Math.abs(point[1] - previous[1]) / 2 + street.width / 2,
+    }
+  }),
+)
+
 /** Footprints the scatter must keep clear: buildings plus every paved surface. */
 export const KEEP_CLEAR: Rect[] = [
+  ...DISTRICT_STREET_RECTS,
   // The whole building footprint, doorway included: an opening you cannot walk
   // into because a tree is standing in it is not an opening.
-  ...CAMPUS_BUILDINGS.map(buildingRect),
+  ...OUTDOOR_BUILDINGS.map(buildingRect),
   ...SCENERY_COLLIDERS,
   ...PAVEMENTS.map((p) => ({
     x: p.position[0],
@@ -586,7 +759,7 @@ export interface NearbyBuilding {
 export function nearestEntrance(
   x: number,
   z: number,
-  buildings: CampusBuilding[] = CAMPUS_BUILDINGS,
+  buildings: CampusBuilding[] = OUTDOOR_BUILDINGS,
   reach = 9,
 ): NearbyBuilding | null {
   let best: NearbyBuilding | null = null
