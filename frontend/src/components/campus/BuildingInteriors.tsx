@@ -24,12 +24,24 @@ import {
   UFAZ_LIFTS,
   UFAZ_TURNSTILES,
   UFAZ_TURNSTILE_Z,
+  STOREY_HEIGHT,
   UFAZ_STAIR,
   VENDING_MACHINES,
   libraryAisleHalf,
 } from './interiorPhysics'
 import { NoticeBoard, ScheduleBoard, SitesBoard } from './CampusBoards'
 import { ARCADE_PIERS, CORRIDOR_DOORS } from './verticalCirculation'
+import {
+  FLOORS,
+  HALF_FLIGHTS,
+  arrivalLandingPlatform,
+  coreGuards,
+  coreSlabs,
+  floorLevel,
+  halfFlightPlatforms,
+  halfLandingPlatform,
+  type Floor,
+} from './ufazCore'
 import { INTERIOR_SPECS, type FloorKind, type InteriorSpec } from './interiorSpecs'
 import { LECTURE_ROWS, LECTURE_SEATING } from './lectureSeating'
 import {
@@ -968,116 +980,119 @@ function LightRings({ ceiling }: { ceiling: number }) {
 }
 
 /**
- * The main flight: granite treads, iron balusters, a timber handrail.
+ * The stair, as it is walked: a dog-leg per storey, repeated up the building.
  *
- * One component for the entrance hall and every corridor above it, matching
- * `mainStair` in `interiorPhysics` — they are the same stair in the same place
- * on every floor, and drawing two different ones was how the upper floors ended
- * up with steps that nothing could stand on. Every dimension below is read from
- * `UFAZ_STAIR`, so reprofiling the flight moves what you see and what you stand
- * on together.
+ * Every dimension comes from `ufazCore`, which is where the flights are laid
+ * out and where they are walked in a test. Drawing the stair from its own
+ * numbers is how the old one ended up with steps nothing could stand on.
  *
- * Open-riser, because that is what the balusters imply and what the collision
- * layer now agrees with: there is nothing between the treads, and above head
- * height you walk underneath.
+ * Open-riser, with the treads carried on two stone strings — which is what the
+ * balusters always implied, and what the collision layer agrees with since
+ * platforms learned that some of them have space underneath.
  */
-function MainStair() {
-  const { steps, rise, going, halfW } = UFAZ_STAIR
-  /** Horizontal run from the first tread to the last. */
-  const run = (steps - 1) * going
-  /** And the climb over that run, which together give the pitch. */
-  const climb = (steps - 1) * rise
-  const pitch = Math.atan2(climb, run)
-  /** Length of a member following the slope. */
-  const rake = Math.hypot(run, climb)
+function DogLegStair() {
+  const { rise, going } = UFAZ_STAIR
   const treadThickness = 0.07
 
+  const slab = (p: { x: number; z: number; halfW: number; halfD: number; top: number }, key: string) => (
+    <mesh key={key} castShadow receiveShadow position={[p.x, p.top - 0.09, p.z]}>
+      <boxGeometry args={[p.halfW * 2, 0.18, p.halfD * 2]} />
+      <meshStandardMaterial color="#9a9a99" roughness={0.6} />
+    </mesh>
+  )
+
   return (
-      <group position={[UFAZ_STAIR.x, 0, UFAZ_STAIR.z]}>
-        {Array.from({ length: steps }, (_, i) => (
-          /* Grey stone treads. They were cream with a red carpet runner up
-             the middle, which is a country house; the stair in the building
-             is granite with a black iron balustrade and a timber rail.
-             `treadTop` is the walking surface, so the slab hangs below it. */
-          <mesh
-            key={i}
-            castShadow
-            receiveShadow
-            position={[0, (i + 1) * rise - treadThickness / 2, -i * going]}
-          >
-            <boxGeometry args={[halfW * 2, treadThickness, going]} />
-            <meshStandardMaterial color="#9a9a99" roughness={0.6} />
-          </mesh>
-        ))}
+    <group>
+      {([0, 1, 2] as Floor[]).map((floor) => (
+        <group key={floor}>
+          {slab(halfLandingPlatform(floor), `turn-${floor}`)}
+          {slab(arrivalLandingPlatform(floor), `arrive-${floor}`)}
+        </group>
+      ))}
 
-        {/* The strings the treads sit on. Two raking beams rather than a solid
-            mass under the flight, so the stair reads as the open one it is. */}
-        {[-1, 1].map((side) => (
-          <mesh
-            key={side}
-            castShadow
-            receiveShadow
-            position={[side * (halfW - 0.18), (rise + climb + rise) / 2 - 0.28, -run / 2]}
-            rotation={[pitch, 0, 0]}
-          >
-            <boxGeometry args={[0.28, 0.4, rake]} />
-            <meshStandardMaterial color="#8d8d8c" roughness={0.7} />
-          </mesh>
-        ))}
+      {HALF_FLIGHTS.map((flight) => {
+        const treads = halfFlightPlatforms(flight)
+        const first = treads[0]
+        const last = treads[treads.length - 1]
+        const run = Math.abs(last.z - first.z)
+        const climb = last.top - first.top
+        const pitch = Math.atan2(climb, run) * -flight.direction
+        const rake = Math.hypot(run, climb)
+        const midZ = (first.z + last.z) / 2
+        const midY = (first.top + last.top) / 2
 
-        {/* Height derived from the landing's own top rather than written out
-            again: the drawn stair and the one you stand on are the same stair,
-            and a second copy of a number here is how they stop being. */}
-        <mesh
-          castShadow
-          receiveShadow
-          position={[0, UFAZ_STAIR.landing.top - 0.2, UFAZ_STAIR.landing.z - UFAZ_STAIR.z]}
-        >
-          <boxGeometry args={[UFAZ_STAIR.landing.halfW * 2, 0.4, UFAZ_STAIR.landing.halfD * 2]} />
-          <meshStandardMaterial color="#9a9a99" roughness={0.6} />
-        </mesh>
+        return (
+          <group key={`${flight.from}-${flight.half}`}>
+            {treads.map((tread, i) => (
+              <mesh
+                key={i}
+                castShadow
+                receiveShadow
+                position={[tread.x, tread.top - treadThickness / 2, tread.z]}
+              >
+                <boxGeometry args={[flight.halfW * 2, treadThickness, going]} />
+                <meshStandardMaterial color="#9a9a99" roughness={0.6} />
+              </mesh>
+            ))}
 
-        {/* Balustrade. An iron baluster rather than a solid stepped parapet,
-            which is what the photographs show — you can see the hall through
-            the stair.
+            {/* The strings the treads sit on. */}
+            {[-1, 1].map((side) => (
+              <mesh
+                key={side}
+                castShadow
+                receiveShadow
+                position={[flight.x + side * (flight.halfW - 0.16), midY - 0.28, midZ]}
+                rotation={[pitch, 0, 0]}
+              >
+                <boxGeometry args={[0.26, 0.36, rake]} />
+                <meshStandardMaterial color="#8d8d8c" roughness={0.7} />
+              </mesh>
+            ))}
 
-            One baluster every other tread, and the handrail as a single raking
-            member per side instead of one short segment per tread. At 175 mm
-            risers there are twenty-five treads rather than fourteen, and a
-            baluster plus a rail segment on each of them would be a hundred
-            meshes for a staircase; this is twenty-eight, fewer than the old
-            flight drew, and a continuous rail is what a handrail is. */}
-        {[-halfW, halfW].map((x) => (
-          <group key={x}>
-            {Array.from({ length: Math.ceil(steps / 2) }, (_, n) => {
-              const i = n * 2
-              return (
-                <mesh key={i} castShadow position={[x, (i + 1) * rise + 0.5, -i * going]}>
-                  <boxGeometry args={[0.05, 1.0, 0.05]} />
-                  <meshStandardMaterial color="#1c1f23" roughness={0.55} metalness={0.4} />
+            {/* Balusters every other tread, and one continuous timber rail per
+                side. At 175 mm risers a baluster and a rail segment on every
+                tread would be a hundred meshes for one flight. */}
+            {[-1, 1].map((side) => (
+              <group key={`rail${side}`}>
+                {treads
+                  .filter((_, i) => i % 2 === 0)
+                  .map((tread, n) => (
+                    <mesh
+                      key={n}
+                      castShadow
+                      position={[flight.x + side * flight.halfW, tread.top + 0.5, tread.z]}
+                    >
+                      <boxGeometry args={[0.05, 1.0, 0.05]} />
+                      <meshStandardMaterial color="#1c1f23" roughness={0.55} metalness={0.4} />
+                    </mesh>
+                  ))}
+                <mesh
+                  castShadow
+                  position={[flight.x + side * flight.halfW, midY + 1.0, midZ]}
+                  rotation={[pitch, 0, 0]}
+                >
+                  <boxGeometry args={[0.1, 0.09, rake]} />
+                  <meshStandardMaterial color="#6b4227" roughness={0.6} />
                 </mesh>
-              )
-            })}
-            {/* Timber handrail, which is the one warm thing on it. */}
-            <mesh
-              castShadow
-              position={[x, (rise + climb + rise) / 2 + 1.0, -run / 2]}
-              rotation={[pitch, 0, 0]}
-            >
-              <boxGeometry args={[0.1, 0.09, rake]} />
-              <meshStandardMaterial color="#6b4227" roughness={0.6} />
-            </mesh>
+              </group>
+            ))}
           </group>
-        ))}
+        )
+      })}
 
-        {/* Newel posts at the foot of the flight */}
-        {[-halfW, halfW].map((x) => (
-          <mesh key={x} castShadow position={[x, 0.8, 0.7]}>
-            <cylinderGeometry args={[0.07, 0.09, 1.6, 8]} />
-            <meshStandardMaterial color="#1c1f23" roughness={0.55} metalness={0.4} />
+      {/* Rails round the open sides of the well on every floor above the
+          ground, because a hole in a floor you can walk into is a hole you
+          fall down. */}
+      {coreGuards().map((guard, i) => {
+        const g = guard as { x: number; z: number; halfW: number; halfD: number; height: number }
+        return (
+          <mesh key={i} castShadow position={[g.x, g.height - 0.55, g.z]}>
+            <boxGeometry args={[g.halfW * 2, 1.1, g.halfD * 2]} />
+            <meshStandardMaterial color="#1c1f23" roughness={0.55} metalness={0.4} transparent opacity={0.85} />
           </mesh>
-        ))}
-      </group>
+        )
+      })}
+    </group>
   )
 }
 
@@ -1108,7 +1123,7 @@ function ClassroomDoors({ half }: { half: number }) {
   )
 }
 
-function UfazFloor({ spec }: { spec: InteriorSpec }) {
+function UfazUpperLevel({ spec }: { spec: InteriorSpec }) {
   const half = spec.halfExtent
 
   return (
@@ -1136,16 +1151,11 @@ function UfazFloor({ spec }: { spec: InteriorSpec }) {
         </group>
       ))}
 
-      {/* The same flight the hall has, in the same place — which is what
-          "the corridors repeat" means, and what the physics now agrees with.
-          It was six decorative steps descending through the floor with no
-          platforms under them: scenery you walked through, and no way up. */}
-      <MainStair />
     </group>
   )
 }
 
-function UfazHall({ spec }: { spec: InteriorSpec }) {
+function UfazGroundLevel({ spec, whiteboard }: InteriorProps) {
   const half = spec.halfExtent
 
   return (
@@ -1197,8 +1207,6 @@ function UfazHall({ spec }: { spec: InteriorSpec }) {
           </group>
         )),
       )}
-
-      <MainStair />
 
       {/* Reception desk. The worktop was near-black, which in a cream marble
           hall read as a monolith rather than a counter. */}
@@ -2063,9 +2071,51 @@ interface InteriorProps {
   whiteboard?: React.ReactNode
 }
 
+/**
+ * The main building: four levels in one scene.
+ *
+ * The ground floor is the entrance hall and the three above it are the same
+ * corridor repeated, which is how the real building is laid out — so they are
+ * drawn in a loop from one component rather than written out, and the slabs and
+ * the stair come from `ufazCore`, which is where they are walked in a test.
+ *
+ * Each level is handed a spec with a storey's ceiling rather than the whole
+ * building's, so everything inside it — windows, arcade, light fittings — is
+ * proportioned to the floor it stands on.
+ */
+function UfazCore({ spec, whiteboard }: InteriorProps) {
+  const levelSpec = { ...spec, ceiling: STOREY_HEIGHT }
+
+  return (
+    <group>
+      {/* The slabs, with the stairwell and the lift shaft cut out of them. */}
+      {coreSlabs()
+        .filter((slab) => slab.top > 0)
+        .map((slab, i) => (
+          <mesh key={i} receiveShadow position={[slab.x, slab.top - 0.14, slab.z]}>
+            <boxGeometry args={[slab.halfW * 2, 0.28, slab.halfD * 2]} />
+            <meshStandardMaterial color="#d8d4cc" roughness={0.8} />
+          </mesh>
+        ))}
+
+      <DogLegStair />
+      <LiftCore ceiling={STOREY_HEIGHT * 4} />
+
+      {FLOORS.map((floor) => (
+        <group key={floor} position={[0, floorLevel(floor), 0]}>
+          {floor === 0 ? (
+            <UfazGroundLevel spec={levelSpec} whiteboard={whiteboard} />
+          ) : (
+            <UfazUpperLevel spec={levelSpec} />
+          )}
+        </group>
+      ))}
+    </group>
+  )
+}
+
 const CONTENTS: Record<InteriorKind, (props: InteriorProps) => React.ReactElement> = {
-  ufaz: UfazHall,
-  'ufaz-floor': UfazFloor,
+  'ufaz-core': UfazCore,
   library: LibraryInterior,
   lab: LabInterior,
   lecture: LectureInterior,

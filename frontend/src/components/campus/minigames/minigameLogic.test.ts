@@ -399,7 +399,7 @@ describe('the spawn point', () => {
 
   it('keeps a clear sightline to the main building', () => {
     // Nothing solid between the spawn and the landmark's door.
-    const target = CAMPUS_BUILDINGS.find((b) => b.interior === 'ufaz')!
+    const target = CAMPUS_BUILDINGS.find((b) => b.interior === 'ufaz-core')!
     const doorZ = target.position[2] + target.size[2] / 2
     for (let t = 0; t <= 1; t += 0.02) {
       const z = SPAWN[2] + (doorZ - SPAWN[2]) * t

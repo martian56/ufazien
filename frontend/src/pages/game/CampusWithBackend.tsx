@@ -46,7 +46,8 @@ import {
   THRESHOLD,
 } from '../../components/campus/CampusScenery'
 import { GltfCharacter } from '../../components/campus/GltfCharacter'
-import { exitOf, portalAt } from '../../components/campus/verticalCirculation'
+import { CORRIDOR_OF, exitOf, isCorridor, portalAt } from '../../components/campus/verticalCirculation'
+import { floorAt } from '../../components/campus/ufazCore'
 import {
   BUBBLE_MS,
   bubbleFor,
@@ -556,10 +557,16 @@ function InteriorCameraPlacement({
       camera.lookAt(door.x, EYE_HEIGHT, door.z + 10)
     }
     previous.current = insideBuilding
-    // `arrival` deliberately absent: it is set in the same tick as the room and
-    // re-running this when it clears would teleport the player to the door.
+    // Keyed on the *interior*, not the room. The four levels of the main
+    // building are one interior with four `current_room` ids, and walking up
+    // the stair changes the id — placing the camera on that would teleport the
+    // player to the front door every time they reached a landing.
+    //
+    // `arrival` deliberately absent for the same shape of reason: it is set in
+    // the same tick as the room and re-running this when it clears would put
+    // them back at the door.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [insideBuilding, camera])
+  }, [insideBuilding?.interior, camera])
 
   return null
 }
@@ -978,6 +985,7 @@ function Player({
   follow,
   onEnter,
   onTravel,
+  onFloorChange,
   onLeave,
   doors,
   onOpenDoor,
@@ -994,8 +1002,10 @@ function Player({
   leaning: boolean
   /** Walked in through a door. */
   onEnter: (building: CampusBuilding) => void
-  /** Moving between rooms of the same building, by stair, lift or inner door. */
+  /** Moving between rooms of the same building, by lift or inner door. */
   onTravel: (building: CampusBuilding, spawn: { x: number; z: number }) => void
+  /** Arriving on another floor by walking there, which moves nothing. */
+  onFloorChange: (building: CampusBuilding) => void
   /** Walked back out through one. */
   onLeave: (building: CampusBuilding) => void
   /** Which doors are open, and since when. */
@@ -1243,9 +1253,9 @@ function Player({
         }
       }
 
-      // The stair, the lift, and the doors along a corridor. Checked before
-      // the clamp for the same reason the door is: afterwards the position has
-      // already been pulled back and there is nothing left to detect.
+      // The lift, and the doors along a corridor. Checked before the clamp for
+      // the same reason the door is: afterwards the position has already been
+      // pulled back and there is nothing left to detect.
       const portal = portalAt(
         insideBuilding.id,
         camera.position.x,
@@ -1303,6 +1313,28 @@ function Player({
       velocity.current.y = 0
       camera.position.y = standing
       isOnGround.current = true
+    }
+
+    // Which floor we are on, read off the surface we are standing on. The main
+    // building is one stacked space, so there is no trigger to walk into and
+    // nothing to spawn: climbing past a slab is arriving on the floor above.
+    // The room id still has to change, because it is what scopes who you can
+    // see, who you can hear and whose projector a screen share lands on.
+    //
+    // Read from `floor` and not from the camera, and after the snap rather
+    // than before it. The camera is a frame of gravity below where the player
+    // is standing — about five millimetres at 60fps and twenty centimetres at
+    // ten — and `floorAt` divides by the storey height, so a player standing on
+    // the first floor reads as 4.545 m and rounds down to the ground. The room
+    // never changed. It is the same sag that made the old landing unclimbable.
+    if (insideBuilding && isCorridor(insideBuilding.id)) {
+      const arrived = CORRIDOR_OF[floorAt(floor)]
+      if (arrived !== insideBuilding.id) {
+        const level = CAMPUS_BUILDINGS.find((b) => b.id === arrived)
+        // No spawn and no camera move: the player is already standing where
+        // they should be. `onFloorChange` only relabels the room.
+        if (level) onFloorChange(level)
+      }
     }
 
     // Always update backend position (even when not moving, to send final
@@ -2330,6 +2362,12 @@ const CampusWithBackend = () => {
               }}
               onTravel={(building, spawn) => {
                 setArrival(spawn)
+                setInsideBuilding(building)
+              }}
+              onFloorChange={(building) => {
+                // Only the label. No arrival, so the camera placement — which
+                // is keyed on the interior — does not fire and the player keeps
+                // walking from wherever the stair left them.
                 setInsideBuilding(building)
               }}
               onLeave={() => {

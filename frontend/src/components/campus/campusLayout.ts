@@ -43,8 +43,16 @@ export const PLAYER_RADIUS = 0.55
 
 /** Which interior a building opens into. One design per building. */
 export type InteriorKind =
-  | 'ufaz'
-  | 'ufaz-floor'
+  /**
+   * The main building, all four levels of it in one space.
+   *
+   * It replaces `ufaz` and `ufaz-floor`, which were the entrance hall and a
+   * corridor built separately at the origin and joined by trigger rectangles.
+   * The four corridors keep their own ids, because an id is a `current_room`
+   * and renumbering one would put a presenter and their audience in different
+   * rooms — but they now share one interior and one coordinate system.
+   */
+  | 'ufaz-core'
   | 'library'
   | 'lab'
   | 'lecture'
@@ -111,7 +119,7 @@ export const CAMPUS_BUILDINGS: CampusBuilding[] = [
     trim: '#cdba99',
     icon: '🏛️',
     style: 'heritage',
-    interior: 'ufaz',
+    interior: 'ufaz-core',
     blurb: '183 Nizami Street — the restored 1900s building UFAZ actually occupies',
     outdoor: true,
   },
@@ -207,7 +215,7 @@ export const CAMPUS_BUILDINGS: CampusBuilding[] = [
     trim: '#cdba99',
     icon: '🚪',
     style: 'heritage',
-    interior: 'ufaz-floor',
+    interior: 'ufaz-core',
     blurb: 'Corridor, with the laboratories and the cafeteria off it',
     outdoor: false,
   },
@@ -220,7 +228,7 @@ export const CAMPUS_BUILDINGS: CampusBuilding[] = [
     trim: '#cdba99',
     icon: '🚪',
     style: 'heritage',
-    interior: 'ufaz-floor',
+    interior: 'ufaz-core',
     blurb: 'Corridor, with the student centre and the sports hall off it',
     outdoor: false,
   },
@@ -233,7 +241,7 @@ export const CAMPUS_BUILDINGS: CampusBuilding[] = [
     trim: '#cdba99',
     icon: '🚪',
     style: 'heritage',
-    interior: 'ufaz-floor',
+    interior: 'ufaz-core',
     blurb: 'Corridor, and the library in the roof',
     outdoor: false,
   },

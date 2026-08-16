@@ -60,27 +60,18 @@ export const INTERIOR_SPECS: Record<InteriorKind, InteriorSpec> = {
   // ceiling, off the 2017 opening photographs, which is a different part of the
   // building. The hall you actually walk into is neither: it is white, and very
   // plain, and everything in it is the floor.
-  ufaz: {
-    halfExtent: 22, ceiling: 9, wall: '#eceef0', accent: '#5a5f66', floor: 'encaustic',
-    projector: [0, 5.6, -21.2], spawn: [0, 1.7, 18], lightColor: '#f2f6fa', lightIntensity: 1.2,
+  // The main building: the entrance hall and the three corridors above it, in
+  // one stacked space. White walls, encaustic cement tile in a four-pointed
+  // star on the ground floor and dark boards above, and a flat white ceiling.
+  //
+  // The ceiling is the top of the building rather than of a room, because
+  // there are four floors inside it now. The projector height is per floor —
+  // see `projectorForFloor` — since one number cannot serve four levels.
+  'ufaz-core': {
+    halfExtent: 22, ceiling: 19, wall: '#eceef0', accent: '#5a5f66', floor: 'encaustic',
+    projector: [0, 3.1, -21.2], spawn: [0, 1.7, 18], lightColor: '#f2f6fa', lightIntensity: 1.2,
     ceilingKind: 'plaster',
   },
-  // The upper floors, all three the same. In the real building the corridor on
-  // the second floor is the corridor on the third and the fourth: white walls,
-  // an arcade of round-headed openings down one side, dark boards underfoot,
-  // deep window reveals with a panel radiator under each and framed portraits
-  // between them.
-  'ufaz-floor': {
-    halfExtent: 22, ceiling: 6.2, wall: '#eceef0', accent: '#4a4640', floor: 'wood',
-    projector: [0, 4.2, -21.2], spawn: [10.5, 1.7, -5], spawnLookAt: [-2, 2.6, -16],
-    lightColor: '#f4f7fa', lightIntensity: 1.1,
-    floorTint: '#4b3b31',
-    ceilingKind: 'plaster',
-  },
-  // The library is in the roof, and the roof is the room: a steep pitch with
-  // dark steel trusses across a white boarded soffit, conical pendants on long
-  // cables between them, and a dark walnut floor. It was cream walls under a
-  // flat ceiling, which is a reading room in a different building.
   library: {
     halfExtent: 24, ceiling: 11, wall: '#eef0f2', accent: '#5c6167', floor: 'wood',
     projector: [0, 5.4, -23.2], spawn: [0, 1.7, 18], lightColor: '#eef4fa', lightIntensity: 1.45,

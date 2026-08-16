@@ -1126,7 +1126,7 @@ export function CampusBuildings({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay |
           amphitheatre, the student centre, the cafeteria and the sports hall
           are rooms inside the main building now, and a room has no facade. */}
       {OUTDOOR_BUILDINGS.map((building) =>
-        building.interior === 'ufaz' ? (
+        building.interior === 'ufaz-core' ? (
           <UfazBuilding key={building.id} building={building} timeOfDay={timeOfDay} />
         ) : (
           <Building
