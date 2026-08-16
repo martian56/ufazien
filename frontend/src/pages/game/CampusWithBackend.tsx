@@ -306,7 +306,13 @@ function ChatSystem({
   const filteredMessages = chatMessages.filter(msg => {
     if (!isDrawableChat(msg.message)) return false
     if (activeTab === "global") return msg.channel === "global" || !msg.channel
-    if (activeTab === "nearby") return nearbyUsers.some(user => user.userId === msg.user_id)
+    // Said on the nearby channel *and* by somebody who is nearby. It used to
+    // be only the second half, which was the one thing making the tab work at
+    // all: the channel was thrown away by the server, so every message arrived
+    // labelled global and this fell back to filtering by who sent it.
+    if (activeTab === "nearby") {
+      return msg.channel === "nearby" && nearbyUsers.some((user) => user.userId === msg.user_id)
+    }
     return msg.channel === activeTab
   })
 
