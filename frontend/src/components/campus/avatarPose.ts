@@ -146,6 +146,41 @@ export function approachAngle(from: number, to: number, maxStep: number): number
  */
 export const TURN_RATE = 9
 
+/**
+ * How far a seated player may turn away from the chair they are in.
+ *
+ * A little under a hundred degrees, which is about as far as somebody can turn
+ * in a seat without standing up.
+ *
+ * Sitting used to broadcast the chair's own facing, so a seated player was
+ * drawn rigidly facing forwards however much they looked around — and the
+ * obvious fix, sending the live camera heading, is wrong in the other
+ * direction: the seated pose folds the legs in the *body's* frame, so a player
+ * who turns to look behind them ends up with their knees through the back of
+ * the chair. Clamping is what a person actually does.
+ */
+export const SEATED_TURN_LIMIT = Math.PI * 0.55
+
+/**
+ * What a seated player's body faces, given where they are looking.
+ *
+ * `seat` is the chair's facing and `looking` the camera heading, both in the
+ * avatar convention where zero faces +Z. The result stays within
+ * `SEATED_TURN_LIMIT` of the chair, taking the shorter way round so that a
+ * chair facing just west of north and a player looking just east of it is a
+ * small turn rather than most of a circle.
+ */
+export function seatedHeading(
+  seat: number,
+  looking: number,
+  limit: number = SEATED_TURN_LIMIT,
+): number {
+  if (!Number.isFinite(looking)) return seat
+  const turn = shortestTurn(seat, looking)
+  if (Math.abs(turn) <= limit) return looking
+  return seat + Math.sign(turn) * limit
+}
+
 /* ------------------------------------------------------------------ */
 /* Poses                                                                */
 /* ------------------------------------------------------------------ */

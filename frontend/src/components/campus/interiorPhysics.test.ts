@@ -26,6 +26,53 @@ const KINDS = Object.keys(INTERIOR_SPECS) as InteriorKind[]
 /** Eye height of someone sitting down, above the seat pan. */
 const SEATED_EYE = 1.15
 
+/**
+ * Which way a seat points.
+ *
+ * `interiorPhysics.test.ts` has always checked that a seat has a clear line to
+ * the board, and never that it is turned towards it — so every seat in the
+ * amphitheatre and every seat in the sports hall faced the opposite wall, with
+ * an unobstructed view of it, and eighteen passing tests said nothing. Both
+ * comments claimed the right thing; both angles were half a turn out, because
+ * `ry` is the avatar convention in which zero faces *+Z*.
+ */
+describe('which way the seats face', () => {
+  /** The direction a seat looks, in the avatar convention: zero faces +Z. */
+  const facing = (ry: number) => ({ x: Math.sin(ry), z: Math.cos(ry) })
+
+  it('turns tiered seating towards the board', () => {
+    // A tier is auditorium seating: unlike a chair at a table, the only reason
+    // it exists is to look at the front of the room. Table seating is left
+    // alone deliberately — half of it faces its table, away from the screen,
+    // which is what a table is for.
+    for (const { kind, seat } of ALL_INTERIOR_SEATS) {
+      if (seat.kind !== 'tiered') continue
+      const board = INTERIOR_SPECS[kind].projector
+      const toBoard = { x: board[0] - seat.x, z: board[2] - seat.z }
+      const length = Math.hypot(toBoard.x, toBoard.z) || 1
+      const look = facing(seat.ry)
+      const alignment = (look.x * toBoard.x + look.z * toBoard.z) / length
+      expect(alignment, `${kind} seat ${seat.id} faces away from the board`).toBeGreaterThan(0)
+    }
+  })
+
+  it('never sits anybody facing a wall from touching distance', () => {
+    // The sports hall's bleachers stand against the west wall, so the sign of
+    // their facing decides whether they watch the court or the brickwork. Two
+    // metres is close enough that no legitimate seat looks into a wall.
+    const PROBE = 2
+    for (const { kind, seat } of ALL_INTERIOR_SEATS) {
+      const limit = interiorHalfExtent(kind)
+      const look = facing(seat.ry)
+      const ahead = { x: seat.x + look.x * PROBE, z: seat.z + look.z * PROBE }
+      expect(
+        Math.max(Math.abs(ahead.x), Math.abs(ahead.z)),
+        `${kind} seat ${seat.id} faces a wall ${PROBE} m away`,
+      ).toBeLessThanOrEqual(limit)
+    }
+  })
+})
+
 describe('every interior has physics', () => {
   it('gives each room a collider list', () => {
     for (const kind of KINDS) {
