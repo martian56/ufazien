@@ -21,6 +21,7 @@ import {
   type Collider,
 } from './campusPhysics'
 import { INTERIOR_SPECS, interiorHalfExtent } from './interiorSpecs'
+import { halfLandingPlatform } from './ufazCore'
 import { CAMPUS_BUILDINGS, PLAYER_RADIUS, type InteriorKind } from './campusLayout'
 import { fitProjector } from './projectorFit'
 
@@ -125,11 +126,12 @@ describe('the space under the staircase', () => {
     // The flight is drawn with iron balusters you can see the hall through,
     // and its landing clears the floor by 4.55 m under a 9 m ceiling. Before
     // `walkUnder`, every square metre of its footprint was unreachable.
-    const spec = INTERIOR_SPECS.ufaz
-    const { seen, key } = reachableAtFloorLevel('ufaz', { x: spec.spawn[0], z: spec.spawn[2] })
+    const spec = INTERIOR_SPECS['ufaz-core']
+    const { seen, key } = reachableAtFloorLevel('ufaz-core', { x: spec.spawn[0], z: spec.spawn[2] })
 
     // A spot under the landing, at the back of the flight.
-    const underLanding = { x: UFAZ_STAIR.x, z: UFAZ_STAIR.landing.z }
+    const turn = halfLandingPlatform(0)
+    const underLanding = { x: turn.x, z: turn.z }
     expect(
       seen.has(key(underLanding.x, underLanding.z)),
       `cannot reach (${underLanding.x}, ${underLanding.z}) under the landing`,
@@ -139,7 +141,7 @@ describe('the space under the staircase', () => {
   it('still refuses to let you duck under the bottom of the flight', () => {
     // The first few treads are barely off the ground. Walking "under" those
     // would be walking through them.
-    const low = interiorPlatforms('ufaz').filter((p) => p.top > STEP_UP && p.top < HEADROOM)
+    const low = interiorPlatforms('ufaz-core').filter((p) => p.top > STEP_UP && p.top < HEADROOM)
     expect(low.length, 'no low treads left to check').toBeGreaterThan(0)
     for (const tread of low) {
       expect(blockingPlatforms([tread], 0), `tread at ${tread.top} should still block`).toHaveLength(
@@ -164,7 +166,7 @@ describe('every interior has physics', () => {
     // library, the lecture theatre, the cafeteria — is somewhere you stay, and
     // somewhere you stay needs seats.
     for (const kind of KINDS) {
-      if (kind === 'lab' || kind === 'ufaz-floor') continue
+      if (kind === 'lab' || kind === 'ufaz-core') continue
       expect(interiorSeats(kind).length, kind).toBeGreaterThan(0)
     }
   })
@@ -221,7 +223,7 @@ describe('seats are usable', () => {
   })
 
   it('offers nothing when you are not near a seat', () => {
-    expect(nearestSeat(0, 0, interiorSeats('ufaz'), 0.5)).toBeNull()
+    expect(nearestSeat(0, 0, interiorSeats('ufaz-core'), 0.5)).toBeNull()
   })
 })
 

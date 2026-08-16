@@ -210,8 +210,8 @@ describe('campus data', () => {
   it('gives every room its own interior, except the floors that share one', () => {
     // The three upper corridors are deliberately the same room design — in the
     // building they are the same corridor. Everything else is its own place.
-    const shared = CAMPUS_BUILDINGS.filter((b) => b.interior === 'ufaz-floor')
-    const rest = CAMPUS_BUILDINGS.filter((b) => b.interior !== 'ufaz-floor')
+    const shared = CAMPUS_BUILDINGS.filter((b) => b.interior === 'ufaz-core')
+    const rest = CAMPUS_BUILDINGS.filter((b) => b.interior !== 'ufaz-core')
     expect(new Set(rest.map((b) => b.interior)).size).toBe(rest.length)
     expect(shared.length).toBeGreaterThan(1)
   })

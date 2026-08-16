@@ -21,6 +21,25 @@ import { fitProjector } from './projectorFit'
 import { LECTURE_SEATING, LECTURE_ROWS } from './lectureSeating'
 import { STEP_UP, type Collider, type Platform } from './campusPhysics'
 import { ARCADE_PIERS } from './verticalCirculation'
+import {
+  FLOORS,
+  LIFT_SHAFT,
+  STOREY_HEIGHT,
+  UFAZ_STAIR,
+  coreGuards,
+  coreSlabs,
+  coreStairPlatforms,
+  floorLevel,
+} from './ufazCore'
+
+/**
+ * The stair's own dimensions live with the circulation they belong to.
+ *
+ * Re-exported here because this is where callers have always found them, and
+ * because moving them was what broke a cycle: this module needs the slabs and
+ * the flights, and those need the profile.
+ */
+export { STOREY_HEIGHT, UFAZ_STAIR }
 
 /** Somewhere a player can sit, and which way they face once they do. */
 export interface Seat {
@@ -124,198 +143,44 @@ export const UFAZ_LIFTS = { x: -15, z: -19, halfW: 3.4, halfD: 1.8 }
 export const UFAZ_TURNSTILES = [-4.5, -1.5, 1.5, 4.5]
 export const UFAZ_TURNSTILE_Z = 13
 
-/**
- * Floor to floor, in metres.
- *
- * The one number the whole building is set out from: the stair divides it into
- * risers and the landing arrives at exactly the next floor level, so a change
- * here carries the flight, the landing and everything derived from them.
- */
-export const STOREY_HEIGHT = 4.55
-
-/**
- * How many risers make up a storey.
- *
- * Twenty-six of 175 mm. It was fourteen of 300 mm with a 620 mm going — a
- * thirty-centimetre hop onto a sixty-two-centimetre shelf, roughly twice human
- * size in both directions. That reads as stadium terracing rather than a
- * stair, and in first person the camera lurched a foot per step.
- *
- * The pitch was the misleading part: 26 degrees sounds shallow and safe, and
- * it was shallow *because* the treads were enormous, not because the steps
- * were comfortable. At 175 by 280 the pitch comes out at 32 degrees, which is
- * an ordinary stair, and `2R + G` is 630 mm — the middle of the range a stair
- * is comfortable to walk in.
- */
-const RISERS_PER_STOREY = 26
-
-const UFAZ_FLIGHT = {
-  // Narrower and further in than the first attempt at moving it. At x 12.5
-  // with a four-metre half-width its balustrade landed at 16.7, which is
-  // inside the colonnade at 17 — the rail ran straight through a column.
-  x: 10.5,
-  z: -10,
-  // Treads, which is one fewer than the risers: the last riser puts you on the
-  // landing rather than on another tread.
-  steps: RISERS_PER_STOREY - 1,
-  rise: STOREY_HEIGHT / RISERS_PER_STOREY,
-  going: 0.28,
-  halfW: 3.5,
-}
-
-/**
- * Height of the walking surface of tread `i`, counting from zero.
- *
- * The first tread is one riser up, not 0.45 — the old flight began with a step
- * half again as tall as the ones after it, which is the first thing you feel
- * walking onto it.
- */
-function treadTop(i: number): number {
-  return (i + 1) * UFAZ_FLIGHT.rise
-}
-
-/**
- * Where the flight stops: the back edge of the top tread.
- *
- * The landing starts here rather than reaching out over the flight. It used to
- * be a free number — `z: -19.4, halfD: 2.2`, so it spanned -21.6 to -17.2 —
- * which put its front edge half a metre *in front of* the top tread and left
- * the last two treads underneath it in plan. There was no way onto them except
- * by entering the landing's footprint, and from tread 11 the landing is 0.80 m
- * up, which is exactly `STEP_UP`.
- *
- * Exactly is the problem. `blockingPlatforms` treats a surface as a wall when
- * it is *more* than `STEP_UP` above the player's feet, and the frame loop
- * reads those feet after applying a frame of gravity — about five millimetres.
- * So the landing was a wall on every frame, the player stopped dead two treads
- * from the top, and the stair could not be climbed at all. Jumping did not
- * help: while airborne the landing stops blocking, you move into its
- * footprint, and on touchdown the resolver ejects you sideways across the hall.
- *
- * None of the tests saw it, because a pure walk resolves the height without
- * gravity and lands on 4.55 > 4.55, which is false.
- */
-const UFAZ_FLIGHT_END =
-  UFAZ_FLIGHT.z - (UFAZ_FLIGHT.steps - 1) * UFAZ_FLIGHT.going - UFAZ_FLIGHT.going / 2
-
-/** The back wall the landing runs to. */
-const UFAZ_LANDING_BACK = -21.6
-
-export const UFAZ_STAIR = {
-  ...UFAZ_FLIGHT,
-  landing: {
-    z: (UFAZ_FLIGHT_END + UFAZ_LANDING_BACK) / 2,
-    halfW: 4.5,
-    halfD: (UFAZ_FLIGHT_END - UFAZ_LANDING_BACK) / 2,
-    // One more ordinary riser up from the top tread, derived rather than
-    // written down, so reprofiling the flight cannot leave the landing behind.
-    // Lands on exactly `STOREY_HEIGHT`, which is what makes it the next floor.
-    top: treadTop(UFAZ_FLIGHT.steps - 1) + UFAZ_FLIGHT.rise,
-  },
-}
-
-/**
- * An upper floor: a corridor with the arcade down one side.
- *
- * The stair and the lift are the same objects in the same places as the ground
- * floor — that is what "the corridors are the same on every floor" means — so
- * the flight is here too, running the other way: you arrive at its head and go
- * down. Its platforms are the ground floor's mirrored in z, which keeps the two
- * ends of a journey at the same place on both floors.
- */
-/**
- * The main flight, as physics.
- *
- * Shared by the entrance hall and every corridor above it, because they are the
- * same stair in the same place — that is what "the corridors repeat" means. It
- * was only on the ground floor, so `ufazFloorPhysics` returned no platforms at
- * all: the flight drawn upstairs was scenery you walked through, and the
- * stair-up trigger sits four metres off the floor, so on floors one and two
- * there was no way to reach it and no way up.
- */
-function mainStair(colliders: Collider[], platforms: Platform[]) {
-  for (let i = 0; i < UFAZ_STAIR.steps; i++) {
-    platforms.push({
-      x: UFAZ_STAIR.x,
-      z: UFAZ_STAIR.z - i * UFAZ_STAIR.going,
-      halfW: UFAZ_STAIR.halfW,
-      halfD: UFAZ_STAIR.going / 2,
-      top: treadTop(i),
-      // Open underneath, like the flight it is drawn as. The bottom treads
-      // still stop you, because `HEADROOM` says so and there is genuinely no
-      // room under them; the upper ones are over your head and you walk beneath.
-      walkUnder: true,
-    })
-  }
-  platforms.push({
-    x: UFAZ_STAIR.x,
-    z: UFAZ_STAIR.landing.z,
-    halfW: UFAZ_STAIR.landing.halfW,
-    halfD: UFAZ_STAIR.landing.halfD,
-    top: UFAZ_STAIR.landing.top,
-    walkUnder: true,
-  })
-
-  // The balustrades either side of the flight, which are walls.
-  for (const side of [-1, 1]) {
-    colliders.push({
-      x: UFAZ_STAIR.x + side * (UFAZ_STAIR.halfW + 0.2),
-      z: UFAZ_STAIR.z - (UFAZ_STAIR.steps * UFAZ_STAIR.going) / 2,
-      halfW: 0.25,
-      halfD: (UFAZ_STAIR.steps * UFAZ_STAIR.going) / 2 + 0.4,
-      height: 5.6,
-    })
-  }
-}
-
-/**
- * The arcade piers, solid on every floor.
- *
- * The openings between them are the walkable part, which is why these are
- * separate boxes rather than one wall. The ground floor drew the arcade and had
- * no colliders for it at all — you walked through the piers.
- */
-function arcadePiers(colliders: Collider[]) {
-  for (const z of ARCADE_PIERS) {
-    colliders.push({ x: -15, z, halfW: 0.45, halfD: 0.55, height: 4.2 })
-  }
-}
-
-function ufazFloorPhysics(): InteriorPhysics {
-  const colliders: Collider[] = []
-  const platforms: Platform[] = []
+function ufazCorePhysics(): InteriorPhysics {
+  const colliders: Collider[] = [...coreGuards()]
+  const platforms: Platform[] = [...coreSlabs(), ...coreStairPlatforms()]
   const seats: Seat[] = []
 
-  // The lift shaft, in the same corner it occupies downstairs.
+  // The lift shaft, which is solid glass and steel the whole way up.
   colliders.push({
-    x: UFAZ_LIFTS.x,
-    z: UFAZ_LIFTS.z,
-    halfW: UFAZ_LIFTS.halfW,
-    halfD: UFAZ_LIFTS.halfD,
-    height: 5.6,
+    x: (LIFT_SHAFT.x0 + LIFT_SHAFT.x1) / 2,
+    z: (LIFT_SHAFT.z0 + LIFT_SHAFT.z1) / 2,
+    halfW: (LIFT_SHAFT.x1 - LIFT_SHAFT.x0) / 2,
+    halfD: (LIFT_SHAFT.z1 - LIFT_SHAFT.z0) / 2,
+    height: STOREY_HEIGHT * 4,
   })
 
-  arcadePiers(colliders)
-  mainStair(colliders, platforms)
-
-  // A bench in each window bay, which is what the corridors are furnished with.
-  //
-  // Solid, but not registered as seats. The stairwell stands between the east
-  // wall and the projector, so a seat on this side cannot see the screen from
-  // anywhere behind the flight — and `interiorPhysics.test.ts` rightly holds
-  // every seat to a clear view of it. Rather than shuffle benches up the
-  // corridor until they scrape past the balustrade, they are what a corridor
-  // bench actually is: somewhere to put your bag down, not seating for a
-  // presentation. Every room that is for watching something still has seats.
-  for (const z of [-2, 4, 10]) {
-    colliders.push({ x: 19.4, z, halfW: 0.55, halfD: 1.6, height: 0.6 })
+  // The arcade piers, in the same place on every floor, so one footprint each.
+  // The openings between them are the walkable part, which is why these are
+  // separate boxes rather than one wall — the ground floor used to draw the
+  // arcade with no colliders at all, and you walked through the piers.
+  for (const z of ARCADE_PIERS) {
+    colliders.push({ x: -15, z, halfW: 0.45, halfD: 0.55, height: floorLevel(3) + 4.2 })
   }
+
+  // The corridor benches are not here yet, and cannot be until a collider can
+  // say which floor it is on. A `Collider` is a plan shape that stops you at
+  // every height, so a bench in a second-floor window bay would stop you in
+  // the entrance hall directly below it. The arcade and the rails are exempt
+  // by being in the same place on every floor; furniture is not.
+
+  const ground = ufazGroundFurniture()
+  colliders.push(...ground.colliders)
+  platforms.push(...ground.platforms)
+  seats.push(...ground.seats)
 
   return { colliders, platforms, seats }
 }
 
-function ufazPhysics(): InteriorPhysics {
-  const half = INTERIOR_SPECS.ufaz.halfExtent
+function ufazGroundFurniture(): InteriorPhysics {
+  const half = INTERIOR_SPECS['ufaz-core'].halfExtent
   const colliders: Collider[] = []
   const platforms: Platform[] = []
   const seats: Seat[] = []
@@ -325,23 +190,11 @@ function ufazPhysics(): InteriorPhysics {
   // what is drawn — and it has to go from here too, or the hall keeps ten
   // invisible pillars that a player walks into and cannot see.
 
-  // The lift shaft, which is solid glass and steel.
-  colliders.push({
-    x: UFAZ_LIFTS.x,
-    z: UFAZ_LIFTS.z,
-    halfW: UFAZ_LIFTS.halfW,
-    halfD: UFAZ_LIFTS.halfD,
-    height: 8.2,
-  })
-
   // The speed gates. Waist height and narrow, with a person's width between
   // them, so you walk through the line rather than round it.
   for (const x of UFAZ_TURNSTILES) {
     colliders.push({ x, z: UFAZ_TURNSTILE_Z, halfW: 0.24, halfD: 0.62, height: 1.05 })
   }
-
-  arcadePiers(colliders)
-  mainStair(colliders, platforms)
 
   // Reception desk. Pulled in off the colonnade: at -13 its corner clipped
   // the column at -17, and a five-centimetre intersection is a seam the
@@ -838,8 +691,7 @@ function sportsPhysics(): InteriorPhysics {
 /* ------------------------------------------------------------------ */
 
 const PHYSICS: Record<InteriorKind, InteriorPhysics> = {
-  ufaz: ufazPhysics(),
-  'ufaz-floor': ufazFloorPhysics(),
+  'ufaz-core': ufazCorePhysics(),
   library: libraryPhysics(),
   lab: labPhysics(),
   lecture: lecturePhysics(),

@@ -83,40 +83,6 @@ export const CORRIDOR_DOORS = [-12, -4, 4, 12]
  */
 export const ARCADE_PIERS = [-8, 0, 8, 16]
 
-/** Where the stair and the lift stand, in room coordinates. */
-
-/**
- * The trigger at the head of the flight, on the landing itself.
- *
- * Shallower than it was. At `halfD: 2.2` it reached z -17.2, which is half a
- * metre in front of the top tread and out over the flight — so it was a
- * trigger you could stand on while still climbing. The landing now begins
- * where the flight ends, at -18.37, and this sits inside it with clearance at
- * both ends: `verticalCirculation.test.ts` holds it there, because this file
- * cannot import the stair geometry without a cycle.
- *
- * The back is bounded by the room clamp at 20.5 rather than by the landing,
- * which runs on to the wall at -21.6 under the last of it.
- */
-export const STAIR_HEAD = { x: 10.5, z: -19.4, halfW: 4.5, halfD: 0.95 }
-export const STAIR_FOOT = { x: 10.5, z: -9, halfW: 3.5, halfD: 1.6 }
-
-/**
- * Where both journeys by stair put you down: on the floor, clear of the flight.
- *
- * One constant for the two directions, because they are the same place. Coming
- * up from the floor below and coming down from the floor above both leave you
- * standing at the foot of this floor's flight, which is the only spot on the
- * stair that is at floor level and outside every trigger.
- *
- * Going down used to spawn at `STAIR_HEAD.z + 3`, which is sixteen metres into
- * the room and *inside the flight* — the treads there are 3.45 m up, so the
- * arriving player was left at floor level underneath the staircase, wedged in
- * three tread colliders that the resolver could free them from by only a
- * quarter of a metre. They could shuffle out sideways and no other way.
- */
-export const STAIR_ARRIVAL = { x: STAIR_FOOT.x, z: STAIR_FOOT.z + 4 }
-
 /**
  * Where you stand to call the lift: in front of the doors, not inside the car.
  *
@@ -186,34 +152,15 @@ export function portalsFrom(roomId: number): Portal[] {
   const plan = FLOOR_PLANS[floor]
   const portals: Portal[] = []
 
-  if (floor < 3) {
-    portals.push({
-      to: CORRIDOR_OF[(floor + 1) as Floor],
-      kind: 'stair-up',
-      ...STAIR_HEAD,
-      // Only from the landing itself. In plan this rectangle sits over the
-      // flight as well, so without a height the player is sent upstairs by
-      // walking underneath the stair they have not climbed.
-      minY: 3.6,
-      // Clear of the flight, not on it. Landing on the foot of the stair puts
-      // the player straight into the trigger that goes back down, and they
-      // bounce between two floors with no way to walk out of it.
-      spawn: { ...STAIR_ARRIVAL },
-      label: 'Up',
-    })
-  }
-  if (floor > 0) {
-    portals.push({
-      to: CORRIDOR_OF[(floor - 1) as Floor],
-      kind: 'stair-down',
-      ...STAIR_FOOT,
-      // The foot of this floor's flight, the same place climbing to it leaves
-      // you. Coming down one floor and coming up one floor arrive at the same
-      // spot because it is the same stair.
-      spawn: { ...STAIR_ARRIVAL },
-      label: 'Down',
-    })
-  }
+  // No stair portals. The stair is a stair: four levels in one space, with
+  // flights you climb and slabs you walk out onto. Which floor you are on is
+  // read off how high you are — see `floorAt` in `ufazCore` — rather than set
+  // by walking into a rectangle, so there is nothing here to get wrong.
+  //
+  // That retires the two ways it used to go wrong. The trigger to go down
+  // covered the foot of the flight, so approaching the stair to climb it sent
+  // you down instead; and coming down put you inside the flight, at floor
+  // level, wedged in three tread colliders.
 
   // The lift, which runs to the library on the top floor and back to the hall.
   // Two stops rather than four: a full floor selector is a menu, and the stair
@@ -284,7 +231,14 @@ export function allRoomIds(): number[] {
   return FLOOR_PLANS.flatMap((plan) => [plan.corridor, ...plan.rooms.map((room) => room.id)])
 }
 
-/** The interior design a corridor floor uses. Floors 1-3 share one. */
-export function corridorKind(roomId: number): InteriorKind {
-  return roomId === 1 ? 'ufaz' : 'ufaz-floor'
+/**
+ * The interior a corridor floor uses.
+ *
+ * All four of them, now: the entrance hall and the corridors above it are one
+ * stacked space rather than four scenes built at the origin. The room ids stay
+ * distinct because they are `current_room` values, and that is what scopes who
+ * you can see and whose projector a screen share lands on.
+ */
+export function corridorKind(_roomId: number): InteriorKind {
+  return 'ufaz-core'
 }
