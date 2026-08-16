@@ -165,11 +165,28 @@ function ufazCorePhysics(): InteriorPhysics {
     colliders.push({ x: -15, z, halfW: 0.45, halfD: 0.55, height: floorLevel(3) + 4.2 })
   }
 
-  // The corridor benches are not here yet, and cannot be until a collider can
-  // say which floor it is on. A `Collider` is a plan shape that stops you at
-  // every height, so a bench in a second-floor window bay would stop you in
-  // the entrance hall directly below it. The arcade and the rails are exempt
-  // by being in the same place on every floor; furniture is not.
+  // A bench in each window bay of each upper corridor, which is what they are
+  // furnished with. These are the reason a collider needed a floor: they sit
+  // in the same place on three different levels, and without a base they would
+  // stop somebody standing in the entrance hall underneath them.
+  //
+  // Solid, but not registered as seats. The stairwell stands between the east
+  // wall and the projector, so a seat here could not see the screen — and
+  // every room that is for watching something has seats already.
+  for (const floor of FLOORS) {
+    if (floor === 0) continue
+    const y = floorLevel(floor)
+    for (const z of [-2, 4, 10]) {
+      colliders.push({
+        x: 19.4,
+        z,
+        halfW: 0.55,
+        halfD: 1.6,
+        base: y,
+        height: y + 0.6,
+      })
+    }
+  }
 
   const ground = ufazGroundFurniture()
   colliders.push(...ground.colliders)

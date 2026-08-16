@@ -239,6 +239,11 @@ describe('colliders do not trap the player', () => {
         for (let j = i + 1; j < colliders.length; j++) {
           const a = colliders[i]
           const b = colliders[j]
+          // Two things that are never at the same height cannot trap anybody
+          // between them. The main building has four floors in one room, so
+          // this is the difference between a slot and a bench three metres
+          // above another bench.
+          if (!sameHeight(a, b)) continue
           const gap = separation(a, b)
           // A negative gap is an overlap, which is worse than a narrow slot —
           // and `gap > 0` used to filter exactly those out, so the one case
@@ -406,4 +411,12 @@ function separation(a: Collider, b: Collider): number {
 
 function describe_(c: Collider): string {
   return 'radius' in c ? `circle(${c.x},${c.z})` : `box(${c.x},${c.z})`
+}
+
+
+/** Whether two colliders are ever level with each other. */
+function sameHeight(a: Collider, b: Collider): boolean {
+  const top = (c: Collider) => c.height ?? 20
+  const base = (c: Collider) => c.base ?? 0
+  return top(a) > base(b) + 1e-9 && top(b) > base(a) + 1e-9
 }

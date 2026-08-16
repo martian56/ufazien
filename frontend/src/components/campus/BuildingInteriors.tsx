@@ -1130,7 +1130,6 @@ function UfazUpperLevel({ spec }: { spec: InteriorSpec }) {
     <group>
       <HeritageWindows spec={spec} />
       <Arcade half={half} ceiling={spec.ceiling} />
-      <LiftCore ceiling={spec.ceiling} />
 
       <ClassroomDoors half={half} />
 
