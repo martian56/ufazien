@@ -223,7 +223,12 @@ class ChatMessage(models.Model):
     """Chat messages in the game"""
     lobby = models.ForeignKey(Lobby, on_delete=models.CASCADE, related_name='chat_messages')
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    message = models.TextField(max_length=500)
+    # `CharField`, not `TextField`. `max_length` on a TextField is a form-level
+    # hint that the database does not enforce and `objects.create` does not
+    # check, which is how a 200,000-character message came to be stored and
+    # broadcast to a whole lobby. The consumer truncates as well; this is the
+    # column refusing to hold more than it says it will.
+    message = models.CharField(max_length=500)
     room = models.CharField(max_length=50, blank=True, null=True)  # Global chat if None
     created_at = models.DateTimeField(auto_now_add=True)
 

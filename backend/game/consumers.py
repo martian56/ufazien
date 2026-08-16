@@ -41,6 +41,12 @@ _MAX_THROW = 250
 # that a bad value cannot put somebody in orbit above everybody's scene.
 _MAX_ELEVATION = 200
 
+# What one message may be, matching `ChatMessage.message`. Truncated rather
+# than rejected: a client that sends slightly too much has still said
+# something, and the whiteboard's stroke format is sized against this exact
+# number — `whiteboardStrokes.ts` derives its point budget from it.
+MAX_CHAT_LENGTH = 500
+
 
 def _clean_heading(value):
     """
@@ -75,6 +81,26 @@ def _clean_floor(value):
     if floor < LiftCar.GROUND or floor > LiftCar.TOP:
         return None
     return floor
+
+def _clean_directions():
+    return {value for value, _label in PlayerPosition._meta.get_field('direction').choices}
+
+
+_DIRECTIONS = None
+
+
+def _clean_direction(value):
+    """One of the four the column allows, or the default.
+
+    `direction` is a `CharField` with choices, and choices are not enforced on
+    save — so anything at all went in, and every client read it back out. The
+    avatar's cardinal fallback looks it up in a Map, which is why an unknown
+    value there is merely ignored rather than fatal; that is luck, not design.
+    """
+    global _DIRECTIONS
+    if _DIRECTIONS is None:
+        _DIRECTIONS = _clean_directions()
+    return value if value in _DIRECTIONS else 'down'
 
 
 def _clean_activity(value):
@@ -254,10 +280,24 @@ class LobbyConsumer(AsyncWebsocketConsumer):
         # direction, is_moving and current_room were dropped from every update:
         # remote players never animated, never faced the right way, and room
         # presence never propagated.
+        # Every field cleaned, not only the two that were.
+        #
+        # `_clean_coordinate` and `_clean_token` were written for the props and
+        # sat a few lines above this, unused by the hot path. So a frame with a
+        # non-numeric `x` reached a FloatField and raised out of a `receive`
+        # that catches only `json.JSONDecodeError` — killing the socket — and a
+        # `current_room` longer than fifty characters raised on PostgreSQL,
+        # which is production, while passing on the SQLite everyone develops
+        # against.
+        x = _clean_coordinate(data.get('x'))
+        y = _clean_coordinate(data.get('y'))
+        if x is None or y is None:
+            return
+
         position_data = {
-            'x': data.get('x', 0),
-            'y': data.get('y', 0),
-            'direction': data.get('direction', 'down'),
+            'x': x,
+            'y': y,
+            'direction': _clean_direction(data.get('direction')),
             'heading': _clean_heading(data.get('heading')),
             # The third axis, bounded and finite for the same reason the
             # heading is: it is written to a float column and read back by
@@ -265,8 +305,8 @@ class LobbyConsumer(AsyncWebsocketConsumer):
             # than only the sender's.
             'elevation': _clean_elevation(data.get('elevation')),
             'activity': _clean_activity(data.get('activity')),
-            'is_moving': data.get('is_moving', False),
-            'current_room': data.get('current_room'),
+            'is_moving': bool(data.get('is_moving', False)),
+            'current_room': _clean_token(data.get('current_room')),
         }
         
         # Update player position in database
@@ -606,8 +646,26 @@ class LobbyConsumer(AsyncWebsocketConsumer):
         )
 
     async def handle_chat_message(self, data):
-        """Handle chat messages."""
-        message = data.get('message', '').strip()
+        """
+        Handle chat messages.
+
+        Two things this did not do. It called `.strip()` on whatever arrived,
+        so a client sending a number instead of a string raised `AttributeError`
+        and took the socket down with it. And it wrote the result straight to
+        the column with no length check: `ChatMessage.message` is a `TextField`
+        with `max_length=500`, which Django applies in forms and serializers and
+        not in the database, and `objects.create` runs neither.
+
+        A 200,000-character message was accepted, stored, and fanned out to
+        every member of the lobby — then handed to everybody who joined
+        afterwards, because the last fifty messages ride along in the lobby
+        snapshot.
+        """
+        message = data.get('message')
+        if not isinstance(message, str):
+            return
+
+        message = message.strip()[:MAX_CHAT_LENGTH]
         if not message:
             return
             
