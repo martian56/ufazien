@@ -56,6 +56,12 @@ It runs at **[ufazien.com](https://ufazien.com)**.
 
 <table>
 <tr>
+<td colspan="2"><img src="images/lecture.png" alt="A lecture in the amphitheatre: a shared screen on the projector, the presenter at the lectern"></td>
+</tr>
+<tr>
+<td colspan="2"><b>A lecture, inside the building.</b> Someone shares their screen and it lands on the projector in the room, not pasted over your view. Voice fades with distance, so the back row can whisper. The host decides who may speak and present, and the server issues the publishing rights to match.</td>
+</tr>
+<tr>
 <td width="50%"><img src="images/dashboard.png" alt="The dashboard: GPA, credits, upcoming events and recent activity"></td>
 <td width="50%"><img src="images/hosting.png" alt="Hosting: three student sites on ufazien.com subdomains with storage and visit counts"></td>
 </tr>
