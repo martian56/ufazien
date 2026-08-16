@@ -84,8 +84,38 @@ export const CORRIDOR_DOORS = [-12, -4, 4, 12]
 export const ARCADE_PIERS = [-8, 0, 8, 16]
 
 /** Where the stair and the lift stand, in room coordinates. */
-export const STAIR_HEAD = { x: 10.5, z: -19.4, halfW: 4.5, halfD: 2.2 }
+
+/**
+ * The trigger at the head of the flight, on the landing itself.
+ *
+ * Shallower than it was. At `halfD: 2.2` it reached z -17.2, which is half a
+ * metre in front of the top tread and out over the flight — so it was a
+ * trigger you could stand on while still climbing. The landing now begins
+ * where the flight ends, at -18.37, and this sits inside it with clearance at
+ * both ends: `verticalCirculation.test.ts` holds it there, because this file
+ * cannot import the stair geometry without a cycle.
+ *
+ * The back is bounded by the room clamp at 20.5 rather than by the landing,
+ * which runs on to the wall at -21.6 under the last of it.
+ */
+export const STAIR_HEAD = { x: 10.5, z: -19.4, halfW: 4.5, halfD: 0.95 }
 export const STAIR_FOOT = { x: 10.5, z: -9, halfW: 3.5, halfD: 1.6 }
+
+/**
+ * Where both journeys by stair put you down: on the floor, clear of the flight.
+ *
+ * One constant for the two directions, because they are the same place. Coming
+ * up from the floor below and coming down from the floor above both leave you
+ * standing at the foot of this floor's flight, which is the only spot on the
+ * stair that is at floor level and outside every trigger.
+ *
+ * Going down used to spawn at `STAIR_HEAD.z + 3`, which is sixteen metres into
+ * the room and *inside the flight* — the treads there are 3.45 m up, so the
+ * arriving player was left at floor level underneath the staircase, wedged in
+ * three tread colliders that the resolver could free them from by only a
+ * quarter of a metre. They could shuffle out sideways and no other way.
+ */
+export const STAIR_ARRIVAL = { x: STAIR_FOOT.x, z: STAIR_FOOT.z + 4 }
 
 /**
  * Where you stand to call the lift: in front of the doors, not inside the car.
@@ -168,7 +198,7 @@ export function portalsFrom(roomId: number): Portal[] {
       // Clear of the flight, not on it. Landing on the foot of the stair puts
       // the player straight into the trigger that goes back down, and they
       // bounce between two floors with no way to walk out of it.
-      spawn: { x: STAIR_FOOT.x, z: STAIR_FOOT.z + 4 },
+      spawn: { ...STAIR_ARRIVAL },
       label: 'Up',
     })
   }
@@ -177,7 +207,10 @@ export function portalsFrom(roomId: number): Portal[] {
       to: CORRIDOR_OF[(floor - 1) as Floor],
       kind: 'stair-down',
       ...STAIR_FOOT,
-      spawn: { x: STAIR_HEAD.x, z: STAIR_HEAD.z + 3 },
+      // The foot of this floor's flight, the same place climbing to it leaves
+      // you. Coming down one floor and coming up one floor arrive at the same
+      // spot because it is the same stair.
+      spawn: { ...STAIR_ARRIVAL },
       label: 'Down',
     })
   }

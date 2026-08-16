@@ -990,7 +990,14 @@ function MainStair() {
           </group>
         ))}
 
-        <mesh castShadow receiveShadow position={[0, 4.35, UFAZ_STAIR.landing.z - UFAZ_STAIR.z]}>
+        {/* Height derived from the landing's own top rather than written out
+            again: the drawn stair and the one you stand on are the same stair,
+            and a second copy of a number here is how they stop being. */}
+        <mesh
+          castShadow
+          receiveShadow
+          position={[0, UFAZ_STAIR.landing.top - 0.2, UFAZ_STAIR.landing.z - UFAZ_STAIR.z]}
+        >
           <boxGeometry args={[UFAZ_STAIR.landing.halfW * 2, 0.4, UFAZ_STAIR.landing.halfD * 2]} />
           <meshStandardMaterial color="#9a9a99" roughness={0.6} />
         </mesh>

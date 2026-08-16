@@ -124,7 +124,7 @@ export const UFAZ_LIFTS = { x: -15, z: -19, halfW: 3.4, halfD: 1.8 }
 export const UFAZ_TURNSTILES = [-4.5, -1.5, 1.5, 4.5]
 export const UFAZ_TURNSTILE_Z = 13
 
-export const UFAZ_STAIR = {
+const UFAZ_FLIGHT = {
   // Narrower and further in than the first attempt at moving it. At x 12.5
   // with a four-metre half-width its balustrade landed at 16.7, which is
   // inside the colonnade at 17 — the rail ran straight through a column.
@@ -134,7 +134,50 @@ export const UFAZ_STAIR = {
   rise: 0.3,
   going: 0.62,
   halfW: 3.5,
-  landing: { z: -19.4, halfW: 4.5, halfD: 2.2, top: 4.55 },
+}
+
+/** Height of the walking surface of tread `i`, counting from zero. */
+function treadTop(i: number): number {
+  return 0.45 + i * UFAZ_FLIGHT.rise
+}
+
+/**
+ * Where the flight stops: the back edge of the top tread.
+ *
+ * The landing starts here rather than reaching out over the flight. It used to
+ * be a free number — `z: -19.4, halfD: 2.2`, so it spanned -21.6 to -17.2 —
+ * which put its front edge half a metre *in front of* the top tread and left
+ * the last two treads underneath it in plan. There was no way onto them except
+ * by entering the landing's footprint, and from tread 11 the landing is 0.80 m
+ * up, which is exactly `STEP_UP`.
+ *
+ * Exactly is the problem. `blockingPlatforms` treats a surface as a wall when
+ * it is *more* than `STEP_UP` above the player's feet, and the frame loop
+ * reads those feet after applying a frame of gravity — about five millimetres.
+ * So the landing was a wall on every frame, the player stopped dead two treads
+ * from the top, and the stair could not be climbed at all. Jumping did not
+ * help: while airborne the landing stops blocking, you move into its
+ * footprint, and on touchdown the resolver ejects you sideways across the hall.
+ *
+ * None of the tests saw it, because a pure walk resolves the height without
+ * gravity and lands on 4.55 > 4.55, which is false.
+ */
+const UFAZ_FLIGHT_END =
+  UFAZ_FLIGHT.z - (UFAZ_FLIGHT.steps - 1) * UFAZ_FLIGHT.going - UFAZ_FLIGHT.going / 2
+
+/** The back wall the landing runs to. */
+const UFAZ_LANDING_BACK = -21.6
+
+export const UFAZ_STAIR = {
+  ...UFAZ_FLIGHT,
+  landing: {
+    z: (UFAZ_FLIGHT_END + UFAZ_LANDING_BACK) / 2,
+    halfW: 4.5,
+    halfD: (UFAZ_FLIGHT_END - UFAZ_LANDING_BACK) / 2,
+    // One more ordinary step up from the top tread, derived rather than
+    // written down, so reprofiling the flight cannot leave the landing behind.
+    top: treadTop(UFAZ_FLIGHT.steps - 1) + 0.2,
+  },
 }
 
 /**
@@ -163,7 +206,7 @@ function mainStair(colliders: Collider[], platforms: Platform[]) {
       z: UFAZ_STAIR.z - i * UFAZ_STAIR.going,
       halfW: UFAZ_STAIR.halfW,
       halfD: UFAZ_STAIR.going / 2,
-      top: 0.45 + i * UFAZ_STAIR.rise,
+      top: treadTop(i),
     })
   }
   platforms.push({

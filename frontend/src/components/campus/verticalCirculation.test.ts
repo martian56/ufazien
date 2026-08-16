@@ -15,8 +15,14 @@ import {
   portalsFrom,
 } from './verticalCirculation'
 import { CAMPUS_BUILDINGS, PLAYER_RADIUS } from './campusLayout'
-import { interiorColliders, interiorPlatforms } from './interiorPhysics'
-import { insideCollider } from './campusPhysics'
+import { UFAZ_STAIR, interiorColliders, interiorPlatforms } from './interiorPhysics'
+import {
+  STEP_UP,
+  blockingPlatforms,
+  groundHeight,
+  insideCollider,
+  resolveColliders,
+} from './campusPhysics'
 import { corridorKind } from './verticalCirculation'
 
 /**
@@ -245,5 +251,174 @@ describe('every portal can actually be reached', () => {
         expect(reaches, `room ${id}: nothing reaches ${portal.label}`).toBe(true)
       }
     }
+  })
+})
+
+
+/**
+ * Walking up the stair, with gravity.
+ *
+ * Everything else in this file is geometry: the graph joins up, no two
+ * triggers overlap, every trigger has somewhere solid-free inside it. All of
+ * it passed while the flight was unclimbable, because none of it runs the
+ * loop the player actually runs.
+ *
+ * The order in that loop is the whole point. `Player` applies a frame of
+ * gravity to the camera and *then* reads the height of its feet, so a surface
+ * exactly `STEP_UP` above the player is more than `STEP_UP` above them by
+ * about five millimetres — and `blockingPlatforms` turns it into a wall. A
+ * pure walk that resolves the floor first compares 4.55 against 4.55, finds it
+ * is not greater, and strolls up a stair the game will not let you climb.
+ */
+
+/** `EYE_HEIGHT` from `CampusWithBackend`. */
+const EYE = 1.5
+/** Its gravity, its walk speed, and a 60 Hz frame. */
+const GRAVITY = 20
+const SPEED = 5.5
+const DT = 1 / 60
+
+interface Spot {
+  x: number
+  z: number
+}
+
+/**
+ * Walks a player from `start` towards `target`, one controller frame at a
+ * time, and reports the first portal they end up standing in.
+ */
+function walk(roomId: number, start: Spot, target: Spot, seconds = 15) {
+  const kind = corridorKind(roomId)
+  const colliders = interiorColliders(kind)
+  const platforms = interiorPlatforms(kind)
+
+  let x = start.x
+  let z = start.z
+  let camY = EYE
+  let vy = 0
+  let highest = 0
+
+  for (let frame = 0; frame < Math.round(seconds / DT); frame++) {
+    const dx = target.x - x
+    const dz = target.z - z
+    const gap = Math.hypot(dx, dz)
+    if (gap > 0.05) {
+      x += (dx / gap) * SPEED * DT
+      z += (dz / gap) * SPEED * DT
+    }
+
+    vy -= GRAVITY * DT
+    camY += vy * DT
+
+    // Read after gravity, exactly as the controller does.
+    const feet = camY - EYE
+    const solid = [...colliders, ...blockingPlatforms(platforms, feet)]
+    const resolved = resolveColliders(x, z, solid)
+    x = resolved.x
+    z = resolved.z
+
+    const floor = groundHeight(x, z, platforms, feet)
+    if (camY <= floor + EYE && vy <= 0) {
+      vy = 0
+      camY = floor + EYE
+    }
+
+    highest = Math.max(highest, camY - EYE)
+    const portal = portalAt(roomId, x, z, camY - EYE)
+    if (portal) return { portal, x, z, feet: camY - EYE, highest }
+  }
+
+  return { portal: null, x, z, feet: camY - EYE, highest }
+}
+
+describe('climbing the stair for real', () => {
+  it('gets a player from the entrance hall to the floor above', () => {
+    // The bug: the player stopped dead at z -16.7, two treads short of the
+    // landing, and no amount of walking or jumping got them any further.
+    const climbed = walk(1, { x: UFAZ_STAIR.x, z: -5 }, { x: UFAZ_STAIR.x, z: -21 })
+    expect(climbed.portal?.kind, `stopped at z ${climbed.z.toFixed(2)}`).toBe('stair-up')
+    expect(climbed.portal?.to).toBe(CORRIDOR_OF[1])
+  })
+
+  it('reaches the top of the flight rather than stalling part way up', () => {
+    const climbed = walk(1, { x: UFAZ_STAIR.x, z: -5 }, { x: UFAZ_STAIR.x, z: -21 })
+    // The landing is 4.55 and the trigger fires on it; anything much below
+    // that means the player was walled off somewhere on the treads.
+    expect(climbed.highest).toBeGreaterThan(UFAZ_STAIR.landing.top - 0.3)
+  })
+
+  it('leaves no step on the flight taller than a player can climb', () => {
+    // The landing was exactly STEP_UP above the tread below it, which one
+    // frame of gravity turns into a wall. Every rise wants clearance, not a tie.
+    const tops = interiorPlatforms('ufaz')
+      .filter((p) => Math.abs(p.x - UFAZ_STAIR.x) < 0.01)
+      .map((p) => p.top)
+      .sort((a, b) => a - b)
+    for (let i = 1; i < tops.length; i++) {
+      expect(tops[i] - tops[i - 1], `step from ${tops[i - 1]} to ${tops[i]}`).toBeLessThan(
+        STEP_UP - 0.05,
+      )
+    }
+  })
+
+  it('does not stand the landing out over its own flight', () => {
+    // In plan the landing covered the last two treads, so the only way onto
+    // them was through the landing's footprint.
+    const landing = UFAZ_STAIR.landing
+    const landingFront = landing.z + landing.halfD
+    const topTreadBack =
+      UFAZ_STAIR.z - (UFAZ_STAIR.steps - 1) * UFAZ_STAIR.going - UFAZ_STAIR.going / 2
+    expect(landingFront).toBeLessThanOrEqual(topTreadBack + 1e-9)
+  })
+
+  it('puts the head trigger on the landing and not on the treads', () => {
+    // `verticalCirculation` cannot import the stair geometry without a cycle,
+    // so the two are held together here instead.
+    const landing = UFAZ_STAIR.landing
+    expect(STAIR_HEAD.z + STAIR_HEAD.halfD).toBeLessThanOrEqual(landing.z + landing.halfD)
+    expect(STAIR_HEAD.z - STAIR_HEAD.halfD).toBeGreaterThanOrEqual(landing.z - landing.halfD)
+  })
+})
+
+describe('coming back down', () => {
+  it('does not put the player down inside the flight', () => {
+    // The descent spawned at z -16.4, which is inside tread 10 — the arriving
+    // player stood at floor level under the staircase, wedged in three tread
+    // colliders the resolver could free them from by a quarter of a metre.
+    for (const plan of FLOOR_PLANS.filter((p) => p.floor > 0)) {
+      const down = portalsFrom(plan.corridor).find((p) => p.kind === 'stair-down')!
+      const kind = corridorKind(down.to)
+      const platforms = interiorPlatforms(kind)
+      const colliders = interiorColliders(kind)
+
+      const inPlatform = platforms.filter((p) =>
+        insideCollider(down.spawn.x, down.spawn.z, p, PLAYER_RADIUS),
+      )
+      expect(
+        inPlatform.map((p) => p.top),
+        `floor ${plan.floor} lands inside the flight`,
+      ).toEqual([])
+
+      const stuck = colliders.filter((c) =>
+        insideCollider(down.spawn.x, down.spawn.z, c, PLAYER_RADIUS),
+      )
+      expect(stuck.length, `floor ${plan.floor} lands inside something solid`).toBe(0)
+    }
+  })
+
+  it('leaves both directions of the stair arriving in the same place', () => {
+    // It is one flight. Coming up to a floor and coming down to it put you at
+    // its foot either way.
+    for (const plan of FLOOR_PLANS) {
+      const portals = portalsFrom(plan.corridor)
+      const up = portals.find((p) => p.kind === 'stair-up')
+      const down = portals.find((p) => p.kind === 'stair-down')
+      if (!up || !down) continue
+      const arrivals = [up, down].map((p) => portalsFrom(p.to).length)
+      expect(arrivals.length).toBe(2)
+    }
+    const fromBelow = portalsFrom(CORRIDOR_OF[0]).find((p) => p.kind === 'stair-up')!
+    const fromAbove = portalsFrom(CORRIDOR_OF[2]).find((p) => p.kind === 'stair-down')!
+    expect(fromBelow.spawn).toEqual(fromAbove.spawn)
   })
 })
