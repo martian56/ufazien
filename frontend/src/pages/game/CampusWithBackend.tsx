@@ -440,7 +440,16 @@ function PlayerAvatar({
   speaking,
   isPresenting,
 }: {
-  position: { x: number; z: number }
+  /**
+   * Where they are, including how high.
+   *
+   * `y` was hardcoded to zero here, which is right on a flat floor and wrong
+   * everywhere else on the campus: a player on the amphitheatre's back tier is
+   * three and three-quarter metres up, one on the sports hall's top bleacher is
+   * two point eight, and one on the main stair is anywhere up to four and a
+   * half. All of them were drawn sunk into the floor.
+   */
+  position: { x: number; y: number; z: number }
   /** Loose: the same component renders both a socket payload and local state. */
   userData: Record<string, unknown>
   /** The player's user id, which decides everything about how they look. */
@@ -459,7 +468,7 @@ function PlayerAvatar({
 
   useFrame((_, delta) => {
     if (!meshRef.current) return
-    target.current.set(position.x, 0, position.z)
+    target.current.set(position.x, position.y, position.z)
     // Framerate-independent. A fixed 0.15 per frame closed the gap more than
     // twice as fast on a 144Hz display as on a 60Hz one, so remote players
     // moved at a speed that depended on the watcher's monitor.
@@ -470,7 +479,7 @@ function PlayerAvatar({
   const name = String(userData.full_name || userData.username || userData.name || "Student")
 
   return (
-    <group ref={meshRef} position={[position.x, 0, position.z]}>
+    <group ref={meshRef} position={[position.x, position.y, position.z]}>
       <GltfCharacter
         color={String(userData.color ?? "#4F46E5")}
         isMoving={Boolean(userData.is_moving)}
@@ -1077,6 +1086,10 @@ function Player({
         y: backend.y,
         direction: 'down',
         heading: seatedFacing,
+        // The floor the chair stands on, not the seat pan: the same number a
+        // standing player sends, so a chair at floor level draws exactly as it
+        // did before and a seat on the fourth tier draws three metres up.
+        elevation: seated.y,
         // An emote wins over the seat. Raising a hand from a chair in a lecture
         // is the whole point of having both; the server keeps the seat either
         // way, because only leave_seat releases it.
@@ -1330,6 +1343,11 @@ function Player({
       y: backendCoords.y,
       direction: playerDirection,
       heading,
+      // Where the floor is under them. `floor` is what the height field just
+      // resolved, so it is a tier, a bleacher or a stair tread rather than the
+      // camera's own height, and it lands the avatar's feet where the player's
+      // are.
+      elevation: floor,
       // An emote wins over the posture, the posture over standing: waving
       // from a wall is still waving, and stopping is still leaning.
       activity: emote ?? (leaning ? 'leaning' : 'standing'),
@@ -1643,7 +1661,7 @@ const CampusWithBackend = () => {
     const avatars: {
       id: string | number
       room: string | null
-      position: { x: number; z: number }
+      position: { x: number; y: number; z: number }
       userData: Record<string, unknown>
     }[] = []
     const currentUserId = currentUser?.id
@@ -1656,7 +1674,10 @@ const CampusWithBackend = () => {
       avatars.push({
         id: userId,
         room: position.current_room ?? null,
-        position: { x: worldPos.x, z: worldPos.z },
+        // `position.y` is the second ground-plane axis, which `coordsTo3D`
+        // turns into z. The height is its own field and needs no conversion:
+        // it is already world metres.
+        position: { x: worldPos.x, y: position.elevation ?? 0, z: worldPos.z },
         userData: {
           username: position.username,
           full_name: position.full_name || position.username,  // Use full_name, fallback to username

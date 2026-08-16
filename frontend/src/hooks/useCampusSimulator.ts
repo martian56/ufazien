@@ -74,6 +74,13 @@ export interface PlayerPosition {
   direction?: string
   /** Real facing angle in radians. `direction` is the four-way fallback. */
   heading?: number
+  /**
+   * Height of the floor under their feet, in world metres.
+   *
+   * Deliberately not part of the `x`/`y` frame, which is the ground plane
+   * scaled by ten about an offset. This is the third axis, unscaled.
+   */
+  elevation?: number
   /** What the player is doing: sitting, waving, a hand up. */
   activity?: string
   /** The seat they hold, if any. Assigned by the server, never the client. */
@@ -120,6 +127,7 @@ interface SentPosition {
     y: number
     direction: string
     heading?: number
+    elevation?: number
     activity?: string
     is_moving?: boolean
     current_room?: string | null
@@ -146,6 +154,9 @@ export function playerPositionFromUpdate(data: {
     // Nullish rather than `||`: a heading of exactly zero is due north, and
     // `0 || fallback` throws it away. Same reasoning as `current_room`.
     heading: data.position.heading ?? 0,
+    // Ground level is zero, and zero is the common case, so this is exactly
+    // the field `||` would quietly discard.
+    elevation: data.position.elevation ?? 0,
     activity: data.position.activity || 'standing',
     seat: data.position.seat ?? null,
     holding: data.position.holding ?? null,
@@ -540,7 +551,11 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
             const last = lastSentPositionRef.current;
             const posed = newPosition.activity !== last.activity;
             const turned = Math.abs((newPosition.heading ?? 0) - (last.heading ?? 0)) > HEADING_EPSILON;
-            if ((posed || turned) && campusWebSocket.getConnectionStatus()) {
+            // Sitting down on a tier changes nothing on the ground plane and
+            // three metres of height, so without this the pose reaches
+            // everybody and the height it happens at does not.
+            const rose = Math.abs((newPosition.elevation ?? 0) - (last.elevation ?? 0)) > 0.05;
+            if ((posed || turned || rose) && campusWebSocket.getConnectionStatus()) {
                 campusWebSocket.sendPositionUpdate(newPosition);
                 lastSentPositionRef.current = { ...newPosition };
             }
@@ -586,6 +601,7 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
                     Math.abs(currentPos.y - lastPos.y) > 0.5 ||
                     currentPos.direction !== lastPos.direction ||
                     currentPos.activity !== lastPos.activity ||
+                    Math.abs((currentPos.elevation ?? 0) - (lastPos.elevation ?? 0)) > 0.05 ||
                     Math.abs((currentPos.heading ?? 0) - (lastPos.heading ?? 0)) > HEADING_EPSILON;
 
                 if (hasMovedSignificantly) {

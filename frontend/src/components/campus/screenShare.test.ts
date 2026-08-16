@@ -52,6 +52,25 @@ describe('playerPositionFromUpdate', () => {
     const merged = playerPositionFromUpdate({ position: { x: 0, y: 0 } as never, username: 'aysel' })
     expect(merged.full_name).toBe('aysel')
   })
+
+  it('keeps how high off the floor they are', () => {
+    // Dropped here and every remote player is drawn at ground level, which is
+    // wrong anywhere the floor is not: the amphitheatre's back tier is 3.75 m
+    // up and the audience appeared buried in it.
+    expect(frame({ x: 1, y: 2, elevation: 3.75 }).elevation).toBe(3.75)
+  })
+
+  it('treats a missing elevation as ground level', () => {
+    expect(frame({ x: 1, y: 2 }).elevation).toBe(0)
+  })
+
+  it('does not confuse the height with the second ground-plane axis', () => {
+    // `y` is the ground plane, `elevation` is the third axis. Folding one into
+    // the other puts a player standing at the south of the campus on the roof.
+    const merged = frame({ x: 10, y: 900, elevation: 0 })
+    expect(merged.y).toBe(900)
+    expect(merged.elevation).toBe(0)
+  })
 })
 
 describe('room matching', () => {

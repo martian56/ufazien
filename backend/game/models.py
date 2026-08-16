@@ -128,6 +128,21 @@ class PlayerPosition(models.Model):
     # only place that can be decided once is the server.
     holding = models.CharField(max_length=48, blank=True, null=True)
 
+    # How high the floor is under the player's feet, in world metres.
+    #
+    # Not part of the 2D frame `x` and `y` use: those are the ground plane,
+    # scaled and offset, and this is the third axis in plain metres above
+    # whatever floor the player is standing on. Kept separate rather than
+    # folded into that frame so nobody applies the offset to it.
+    #
+    # Without it every remote player is drawn at zero, which is wrong anywhere
+    # the floor is not: forty-five of the amphitheatre's fifty-four seats are
+    # raised, all sixteen of the sports hall's are, and the main stair climbs
+    # four and a half metres. An audience sitting through a lecture appeared to
+    # everybody else buried up to the chest in the tiers, and anyone on the
+    # stairs walked through the floor.
+    elevation = models.FloatField(default=0.0)
+
     is_moving = models.BooleanField(default=False)
     current_room = models.CharField(max_length=50, blank=True, null=True)
     last_updated = models.DateTimeField(auto_now=True)

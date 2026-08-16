@@ -217,6 +217,10 @@ class CampusWebSocketService {
             // The real facing angle. `direction` is four cardinal values, which
             // draws anyone walking diagonally as facing north.
             heading: position.heading ?? 0,
+            // How high the floor is under them, in world metres. Without it
+            // every remote player is drawn at ground level, so a lecture
+            // audience sits buried in the tiers.
+            elevation: position.elevation ?? 0,
             activity: position.activity || 'standing',
             is_moving: position.is_moving || false,
             current_room: position.current_room || null
