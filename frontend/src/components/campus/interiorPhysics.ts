@@ -207,6 +207,10 @@ function mainStair(colliders: Collider[], platforms: Platform[]) {
       halfW: UFAZ_STAIR.halfW,
       halfD: UFAZ_STAIR.going / 2,
       top: treadTop(i),
+      // Open underneath, like the flight it is drawn as. The bottom treads
+      // still stop you, because `HEADROOM` says so and there is genuinely no
+      // room under them; the upper ones are over your head and you walk beneath.
+      walkUnder: true,
     })
   }
   platforms.push({
@@ -215,6 +219,7 @@ function mainStair(colliders: Collider[], platforms: Platform[]) {
     halfW: UFAZ_STAIR.landing.halfW,
     halfD: UFAZ_STAIR.landing.halfD,
     top: UFAZ_STAIR.landing.top,
+    walkUnder: true,
   })
 
   // The balustrades either side of the flight, which are walls.
