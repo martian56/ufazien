@@ -967,6 +967,118 @@ class LobbyConsumerTests(TestCase):
         import math
         self.assertTrue(math.isfinite(position.heading))
 
+    def test_a_position_frame_carries_how_high_the_player_is(self):
+        """
+        The third axis, which nothing used to send.
+
+        Everybody else drew a remote player at zero, which is right on a flat
+        floor and wrong on every tier, bleacher and stair tread on the campus —
+        a lecture audience appeared buried in the seating.
+        """
+        from asgiref.sync import async_to_sync
+        from .models import PlayerPosition
+
+        async def scenario():
+            a, _ = await self._connect(self.host)
+            b, _ = await self._connect(self.player)
+            try:
+                await self._drain(a, b)
+                await a.send_json_to({
+                    'type': 'player_position',
+                    'x': 400.0, 'y': 300.0, 'elevation': 3.75,
+                })
+                import json
+                for _ in range(5):
+                    if await b.receive_nothing(timeout=1):
+                        continue
+                    payload = json.loads(await b.receive_from(timeout=2))
+                    if payload.get('type') == 'position_update':
+                        return payload
+                return None
+            finally:
+                await a.disconnect()
+                await b.disconnect()
+
+        payload = async_to_sync(scenario)()
+        self.assertIsNotNone(payload, 'the other player never got a position_update')
+        self.assertEqual(payload['position']['elevation'], 3.75)
+        stored = PlayerPosition.objects.get(lobby=self.lobby, user=self.host)
+        self.assertEqual(stored.elevation, 3.75)
+
+    def test_the_lobby_snapshot_says_how_high_everybody_is(self):
+        """
+        Left out of the snapshot, anybody already sitting on a tier when you
+        arrive is drawn on the floor until they next move.
+        """
+        from asgiref.sync import async_to_sync
+        from .models import PlayerPosition
+
+        PlayerPosition.objects.update_or_create(
+            lobby=self.lobby, user=self.player,
+            defaults={'x': 400.0, 'y': 300.0, 'elevation': 2.8},
+        )
+
+        async def scenario():
+            import json
+            a, _ = await self._connect(self.host)
+            try:
+                for _ in range(5):
+                    payload = json.loads(await a.receive_from(timeout=2))
+                    if payload.get('type') == 'lobby_state':
+                        return payload
+                return None
+            finally:
+                await a.disconnect()
+
+        state = async_to_sync(scenario)()
+        self.assertIsNotNone(state, 'no lobby_state arrived')
+        heights = {p['user_id']: p.get('elevation') for p in state['positions']}
+        self.assertEqual(heights.get(self.player.id), 2.8)
+
+    def test_an_impossible_elevation_never_reaches_the_column(self):
+        """
+        Same reasoning as the heading: this is a float column every other
+        client reads back, so a NaN or an infinity here breaks everybody's
+        scene rather than only the sender's. The campus is twenty-five metres
+        tall, so a five-figure height is nonsense whoever sent it.
+        """
+        from asgiref.sync import async_to_sync, sync_to_async
+        from .models import PlayerPosition
+        import math
+
+        @sync_to_async
+        def stored():
+            return PlayerPosition.objects.get(lobby=self.lobby, user=self.host).elevation
+
+        # Read back after *each* one rather than at the end. Every frame
+        # overwrites the row, so a single assertion after the loop only ever
+        # tests the last value — which is how the first version of this test
+        # passed against a bound four hundred times too loose.
+        bad_values = ['not-a-number', None, 'Infinity', 5000.0, -5000.0, 1e9]
+
+        async def scenario():
+            a, _ = await self._connect(self.host)
+            seen = []
+            try:
+                await self._drain(a)
+                for bad in bad_values:
+                    await a.send_json_to({
+                        'type': 'player_position',
+                        'x': 0.0, 'y': 0.0, 'elevation': bad,
+                    })
+                    await a.receive_nothing(timeout=0.3)
+                    seen.append(await stored())
+            finally:
+                await a.disconnect()
+            return seen
+
+        for sent, kept in zip(bad_values, async_to_sync(scenario)()):
+            self.assertTrue(math.isfinite(kept), f'{sent!r} stored {kept!r}')
+            # 5000 is finite and well-formed, and still four hundred metres
+            # above anything on this campus. The generic coordinate bound is a
+            # hundred thousand, which would let it through.
+            self.assertLessEqual(abs(kept), 200, f'{sent!r} stored {kept!r}')
+
     def test_an_unknown_activity_falls_back_to_standing(self):
         from asgiref.sync import async_to_sync
         from .models import PlayerPosition

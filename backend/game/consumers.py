@@ -34,6 +34,12 @@ _MAX_COORDINATE = 100000
 # modified client cannot post a ball across the campus into a locked room.
 _MAX_THROW = 250
 
+# How high off the floor a player may claim to be, in world metres. Unlike the
+# ground plane this is not scaled: the tallest thing on the campus is the main
+# building at twenty-five metres, so this is generous and still small enough
+# that a bad value cannot put somebody in orbit above everybody's scene.
+_MAX_ELEVATION = 200
+
 
 def _clean_heading(value):
     """
@@ -91,6 +97,17 @@ def _clean_coordinate(value, limit=_MAX_COORDINATE):
     if not math.isfinite(number) or abs(number) > limit:
         return None
     return number
+
+
+def _clean_elevation(value):
+    """A finite height above the floor, or zero.
+
+    Same reasoning as `_clean_coordinate`, with the campus's own bound: this is
+    metres, not the scaled 2D frame, so it gets its own limit rather than
+    borrowing one four orders of magnitude too large.
+    """
+    height = _clean_coordinate(value, _MAX_ELEVATION)
+    return 0.0 if height is None else height
 
 
 class LobbyConsumer(AsyncWebsocketConsumer):
@@ -223,6 +240,11 @@ class LobbyConsumer(AsyncWebsocketConsumer):
             'y': data.get('y', 0),
             'direction': data.get('direction', 'down'),
             'heading': _clean_heading(data.get('heading')),
+            # The third axis, bounded and finite for the same reason the
+            # heading is: it is written to a float column and read back by
+            # every other client, so a NaN here breaks everyone's scene rather
+            # than only the sender's.
+            'elevation': _clean_elevation(data.get('elevation')),
             'activity': _clean_activity(data.get('activity')),
             'is_moving': data.get('is_moving', False),
             'current_room': data.get('current_room'),
@@ -647,7 +669,10 @@ class LobbyConsumer(AsyncWebsocketConsumer):
         try:
             lobby = Lobby.objects.get(id=self.lobby_id)
             # Only accept the PlayerPosition fields that actually exist on the model
-            allowed = {'x', 'y', 'direction', 'heading', 'activity', 'is_moving', 'current_room'}
+            allowed = {
+                'x', 'y', 'direction', 'heading', 'elevation', 'activity',
+                'is_moving', 'current_room',
+            }
             defaults = {k: v for k, v in position_data.items() if k in allowed}
 
             # `seat` is deliberately not in that set. It is claimed and released
@@ -768,6 +793,10 @@ class LobbyConsumer(AsyncWebsocketConsumer):
                 'y': position.y,
                 'direction': getattr(position, 'direction', None),
                 'heading': getattr(position, 'heading', 0.0),
+                # Left out of this snapshot and everybody who was already
+                # sitting on a tier when you arrived is drawn on the floor
+                # until they next move.
+                'elevation': getattr(position, 'elevation', 0.0),
                 'activity': getattr(position, 'activity', PlayerPosition.STANDING),
                 'seat': getattr(position, 'seat', None),
                 'holding': getattr(position, 'holding', None),
