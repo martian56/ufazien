@@ -316,7 +316,29 @@ export const SOLID_CAMPUS: Collider[] = [...CAMPUS_COLLIDERS, ...PROP_COLLIDERS]
  */
 export interface Platform extends Box {
   top: number
+  /**
+   * Whether there is open space beneath this surface.
+   *
+   * A tier in the amphitheatre is a solid block of concrete: from the floor in
+   * front of it, its edge stops you however high it is, and that is right.
+   * A staircase landing is not — you walk under it — and neither is the floor
+   * of the storey above you, which is the whole difficulty in ever putting two
+   * of them in one room.
+   *
+   * Defaults to solid, because everything that existed before this was.
+   */
+  walkUnder?: boolean
 }
+
+/**
+ * How much clear air a player needs above their feet to walk under something.
+ *
+ * Two metres, which is a door. Below it a surface is something you duck into
+ * rather than pass beneath, so the bottom few treads of a flight still stop
+ * you — there genuinely is no room under them — while the upper flight and the
+ * landing four and a half metres up open out.
+ */
+export const HEADROOM = 2
 
 /**
  * How high you can rise onto a surface without jumping.
@@ -361,9 +383,35 @@ export function groundHeight(
  * top of it you should be able to walk about freely. So the same box is solid
  * or not depending on where your feet are, which is why this is a function of
  * the player rather than a fixed list.
+ *
+ * ## Why height alone is not enough
+ *
+ * This used to be the whole rule, and it has no notion of how *far* above you
+ * a surface is. The staircase in the entrance hall is fifteen platforms, and
+ * from the floor thirteen of them are walls — including a landing four and a
+ * half metres up, under a nine-metre ceiling, on a flight drawn with iron
+ * balusters you can see straight through. Eighty-four square metres of a
+ * 44 x 44 m room were fenced off behind nothing.
+ *
+ * It is also what stopped the campus ever having two floors in one room: put a
+ * slab 4.55 m above another one and the upper slab becomes a wall across the
+ * entire plan, and the resolver ejects the player out of the building through
+ * its own ceiling.
+ *
+ * So a surface that says there is space beneath it stops blocking once it is
+ * clear of the player's head. Everything else keeps the old rule, because a
+ * tier really is a solid block and its edge really should stop you.
  */
-export function blockingPlatforms(platforms: Platform[], feet: number, stepUp = STEP_UP): Box[] {
-  return platforms.filter((platform) => platform.top > feet + stepUp)
+export function blockingPlatforms(
+  platforms: Platform[],
+  feet: number,
+  stepUp = STEP_UP,
+  headroom = HEADROOM,
+): Box[] {
+  return platforms.filter((platform) => {
+    if (platform.top <= feet + stepUp) return false
+    return !platform.walkUnder || platform.top < feet + headroom
+  })
 }
 
 /**

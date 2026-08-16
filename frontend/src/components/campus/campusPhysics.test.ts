@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 
 import {
   PROP_COLLIDERS,
+  HEADROOM,
   SOLID_CAMPUS,
   STEP_UP,
   approachStep,
@@ -193,6 +194,67 @@ describe('groundHeight', () => {
     for (let i = 1; i < tops.length; i++) {
       expect(tops[i] - tops[i - 1]).toBeLessThanOrEqual(STEP_UP)
     }
+  })
+})
+
+describe('walking under things', () => {
+  /**
+   * A platform used to block from below however high it was, which fenced 84
+   * square metres of the entrance hall off under a staircase you can see
+   * through — and, more fundamentally, meant a room could never have two
+   * floors in it, because the upper slab became a wall across the whole plan.
+   */
+  const slab = (top: number, walkUnder = false): Platform => ({
+    x: 0,
+    z: 0,
+    halfW: 20,
+    halfD: 20,
+    top,
+    walkUnder,
+  })
+
+  it('still stops you at the edge of anything solid, however high', () => {
+    // An amphitheatre tier is a block of concrete. Its edge stops you from the
+    // floor whether it is one step up or five metres up, and that is right.
+    expect(blockingPlatforms([slab(1.5)], 0)).toHaveLength(1)
+    expect(blockingPlatforms([slab(4.55)], 0)).toHaveLength(1)
+    expect(blockingPlatforms([slab(12)], 0)).toHaveLength(1)
+  })
+
+  it('lets you walk under a surface that says there is room beneath it', () => {
+    expect(blockingPlatforms([slab(4.55, true)], 0)).toHaveLength(0)
+  })
+
+  it('still stops you ducking under something lower than a door', () => {
+    // There is no room under a step a metre off the ground, whatever it says.
+    expect(blockingPlatforms([slab(1.05, true)], 0)).toHaveLength(1)
+    expect(blockingPlatforms([slab(HEADROOM - 0.01, true)], 0)).toHaveLength(1)
+    expect(blockingPlatforms([slab(HEADROOM + 0.01, true)], 0)).toHaveLength(0)
+  })
+
+  it('is measured from the feet, not from the ground', () => {
+    // Standing on the first floor, the second floor's slab is over your head
+    // in exactly the same way the first one was from the ground.
+    expect(blockingPlatforms([slab(9.1, true)], 4.55)).toHaveLength(0)
+    // And the floor you are standing on is not a wall.
+    expect(blockingPlatforms([slab(4.55, true)], 4.55)).toHaveLength(0)
+  })
+
+  it('lets a room have a floor above it at all', () => {
+    // The case that made this necessary: two slabs a storey apart. Before, the
+    // upper one was a 40 x 40 m wall and the resolver pushed the player out of
+    // the building through its own ceiling.
+    const storeys = [slab(0, true), slab(4.55, true)]
+    const solid = blockingPlatforms(storeys, 0)
+    expect(solid).toHaveLength(0)
+    expect(resolveColliders(0, 0, solid)).toEqual({ x: 0, z: 0 })
+  })
+
+  it('still lands you on the floor you are under, not the one above', () => {
+    // `groundHeight` was already right about this; the change must not alter it.
+    const storeys = [slab(0, true), slab(4.55, true)]
+    expect(groundHeight(0, 0, storeys, 0)).toBe(0)
+    expect(groundHeight(0, 0, storeys, 4.55)).toBe(4.55)
   })
 })
 

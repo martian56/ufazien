@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest'
 import {
   ALL_INTERIOR_SEATS,
   SEAT_REACH,
+  UFAZ_STAIR,
   interiorColliders,
   interiorPlatforms,
   interiorSeats,
@@ -10,7 +11,9 @@ import {
   seatWithinRoom,
 } from './interiorPhysics'
 import {
+  HEADROOM,
   STEP_UP,
+  blockingPlatforms,
   groundHeight,
   insideCollider,
   resolveColliders,
@@ -69,6 +72,79 @@ describe('which way the seats face', () => {
         Math.max(Math.abs(ahead.x), Math.abs(ahead.z)),
         `${kind} seat ${seat.id} faces a wall ${PROBE} m away`,
       ).toBeLessThanOrEqual(limit)
+    }
+  })
+})
+
+/**
+ * Whether you can actually walk to a place, rather than whether it is empty.
+ *
+ * A flood fill from where the player is put down, on a half-metre grid, through
+ * whatever is solid at floor level. "Nothing is standing here" and "you can get
+ * here" are different questions, and the entrance hall was a case where the
+ * second answer was no over eighty-four square metres of it: the staircase's
+ * fifteen platforms all blocked from below, so the space under a landing four
+ * and a half metres up, in a nine-metre room, was fenced off behind nothing.
+ */
+function reachableAtFloorLevel(kind: InteriorKind, from: { x: number; z: number }) {
+  const limit = interiorHalfExtent(kind)
+  const solid = [...interiorColliders(kind), ...blockingPlatforms(interiorPlatforms(kind), 0)]
+  const STRIDE = 0.5
+  const key = (x: number, z: number) => `${Math.round(x / STRIDE)},${Math.round(z / STRIDE)}`
+
+  const open = (x: number, z: number) => {
+    if (Math.abs(x) > limit || Math.abs(z) > limit) return false
+    const settled = resolveColliders(x, z, solid)
+    return Math.hypot(settled.x - x, settled.z - z) < 1e-9
+  }
+
+  const seen = new Set<string>()
+  const queue = [from]
+  seen.add(key(from.x, from.z))
+  while (queue.length) {
+    const here = queue.pop()!
+    for (const [dx, dz] of [
+      [STRIDE, 0],
+      [-STRIDE, 0],
+      [0, STRIDE],
+      [0, -STRIDE],
+    ]) {
+      const x = here.x + dx
+      const z = here.z + dz
+      const id = key(x, z)
+      if (seen.has(id) || !open(x, z)) continue
+      seen.add(id)
+      queue.push({ x, z })
+    }
+  }
+  return { seen, key }
+}
+
+describe('the space under the staircase', () => {
+  it('can be walked into from the entrance hall', () => {
+    // The flight is drawn with iron balusters you can see the hall through,
+    // and its landing clears the floor by 4.55 m under a 9 m ceiling. Before
+    // `walkUnder`, every square metre of its footprint was unreachable.
+    const spec = INTERIOR_SPECS.ufaz
+    const { seen, key } = reachableAtFloorLevel('ufaz', { x: spec.spawn[0], z: spec.spawn[2] })
+
+    // A spot under the landing, at the back of the flight.
+    const underLanding = { x: UFAZ_STAIR.x, z: UFAZ_STAIR.landing.z }
+    expect(
+      seen.has(key(underLanding.x, underLanding.z)),
+      `cannot reach (${underLanding.x}, ${underLanding.z}) under the landing`,
+    ).toBe(true)
+  })
+
+  it('still refuses to let you duck under the bottom of the flight', () => {
+    // The first few treads are barely off the ground. Walking "under" those
+    // would be walking through them.
+    const low = interiorPlatforms('ufaz').filter((p) => p.top > STEP_UP && p.top < HEADROOM)
+    expect(low.length, 'no low treads left to check').toBeGreaterThan(0)
+    for (const tread of low) {
+      expect(blockingPlatforms([tread], 0), `tread at ${tread.top} should still block`).toHaveLength(
+        1,
+      )
     }
   })
 })
