@@ -59,8 +59,18 @@ export function project(x: number, z: number, view: MapView): { x: number; y: nu
   }
 }
 
+/**
+ * A heading as a direction on the map.
+ *
+ * `heading` is the avatar convention — zero faces +Z — and `project` maps +Z to
+ * +Y, which is down the screen. So forward is `(sin, cos)`.
+ *
+ * This returned the negation of that, which is the direction the player's back
+ * is pointing: the arrow on the minimap pointed exactly the opposite way to the
+ * one you were walking, all the way across the campus.
+ */
 export function headingVector(heading: number): { x: number; y: number } {
-  return { x: -Math.sin(heading), y: -Math.cos(heading) }
+  return { x: Math.sin(heading), y: Math.cos(heading) }
 }
 
 export function buildingsInView(view: MapView, buildings: CampusBuilding[] = OUTDOOR_BUILDINGS): CampusBuilding[] {

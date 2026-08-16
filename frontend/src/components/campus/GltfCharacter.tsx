@@ -22,12 +22,19 @@ import {
  * `direction` arrives off the socket unvalidated, and on an object literal
  * `FACING['constructor']` returns a function rather than undefined, so the `??`
  * never fires and a function reaches `Euler.y` as NaN.
+ *
+ * The angles are the avatar convention — zero faces +Z, so a heading turns the
+ * forward vector to `(sin, cos)`. The sender classifies a step by the sign of
+ * its components: `headingX > 0` is 'right', which is +X, which is `+PI/2`.
+ * Left and right were the other way round, so every client that fell back to
+ * these drew a walking player mirrored. Exported so the test can hold the two
+ * ends of the wire to the same convention.
  */
-const FACING = new Map<string, number>([
+export const FACING = new Map<string, number>([
   ['down', 0],
   ['up', Math.PI],
-  ['left', Math.PI / 2],
-  ['right', -Math.PI / 2],
+  ['left', -Math.PI / 2],
+  ['right', Math.PI / 2],
 ])
 
 /**

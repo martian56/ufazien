@@ -30,7 +30,11 @@ export interface Seat {
   z: number
   /** Floor height the seat stands on, for tiers and bleachers. */
   y: number
-  /** Facing, in radians, matching the avatar's heading convention. */
+  /**
+   * Facing, in radians, matching the avatar's heading convention: zero faces
+   * +Z, so the seat looks along `(sin ry, cos ry)`. Stated here because two
+   * rooms read it as zero-faces-minus-Z and sat everybody backwards.
+   */
   ry: number
   /** How high the seat pan is above `y`. */
   seatHeight: number
@@ -526,8 +530,11 @@ function lecturePhysics(): InteriorPhysics {
         x,
         z: z + 0.4,
         y: top,
-        // Facing the board, which in three.js is looking down -Z.
-        ry: 0,
+        // Facing the board, which is at -Z. `ry` is the avatar convention, in
+        // which zero faces *+Z* — so zero here turned all fifty-four seats to
+        // face the back wall, and a lecture was delivered to the backs of
+        // everybody's heads.
+        ry: Math.PI,
         seatHeight: 0.5,
         kind: 'tiered',
       })
@@ -729,8 +736,11 @@ function sportsPhysics(): InteriorPhysics {
         x,
         z,
         y: tier * 0.7 + 0.7,
-        // Facing out across the court, away from the wall behind.
-        ry: -Math.PI / 2,
+        // Facing out across the court, away from the wall behind. The bleachers
+        // stand against the west wall, so that is +X, and in the avatar
+        // convention a forward of (1, 0) is +PI/2. The sign was the other way
+        // round and every seat faced the wall it is bolted to.
+        ry: Math.PI / 2,
         seatHeight: 0,
         kind: 'tiered',
       })

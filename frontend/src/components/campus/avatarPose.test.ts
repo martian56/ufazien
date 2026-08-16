@@ -7,11 +7,13 @@ import {
   SIT_DROP,
   TURN_RATE,
   WALK_SPEED,
+  SEATED_TURN_LIMIT,
   approachAngle,
   gaitFor,
   isActivity,
   isHeld,
   poseFrame,
+  seatedHeading,
   shortestTurn,
   toActivity,
   type Activity,
@@ -247,5 +249,53 @@ describe('leaning', () => {
   it('is a real activity as far as the wire is concerned', () => {
     expect(isActivity('leaning')).toBe(true)
     expect(toActivity('leaning')).toBe('leaning')
+  })
+})
+
+
+describe('which way a seated player faces', () => {
+  /**
+   * Sitting used to broadcast the chair's own facing every frame, so a seated
+   * player was drawn rigidly forwards however much they looked around — the
+   * clearest case of the avatar and the view disagreeing about the same
+   * person. Sending the raw camera instead is wrong the other way: the seated
+   * pose folds the legs in the body's frame, so a player looking behind them
+   * puts their knees through the back of the chair.
+   */
+  it('follows the player while they are looking anywhere reachable', () => {
+    expect(seatedHeading(0, 0.4)).toBeCloseTo(0.4)
+    expect(seatedHeading(Math.PI, Math.PI - 0.6)).toBeCloseTo(Math.PI - 0.6)
+  })
+
+  it('stops at the limit rather than twisting through the chair', () => {
+    // Looking straight backwards from a chair facing +Z.
+    const behind = seatedHeading(0, Math.PI)
+    expect(Math.abs(shortestTurn(0, behind))).toBeCloseTo(SEATED_TURN_LIMIT)
+  })
+
+  it('never turns further than the limit, from any chair, to any view', () => {
+    for (const seat of [0, 1.2, -2.9, Math.PI, -Math.PI / 2]) {
+      for (const looking of [-3.1, -1, 0, 0.7, 2.2, 3.14, 6.5, -7]) {
+        const turn = Math.abs(shortestTurn(seat, seatedHeading(seat, looking)))
+        expect(turn, `seat ${seat} looking ${looking}`).toBeLessThanOrEqual(
+          SEATED_TURN_LIMIT + 1e-9,
+        )
+      }
+    }
+  })
+
+  it('takes the short way round the wrap', () => {
+    // A chair facing just west of north and a player looking just east of it
+    // is a small turn, not most of a circle.
+    const seat = Math.PI - 0.05
+    const looking = -Math.PI + 0.05
+    expect(seatedHeading(seat, looking)).toBeCloseTo(looking)
+  })
+
+  it('falls back to the chair when the camera hands over nonsense', () => {
+    // The heading reaches `Euler.y`; a NaN there ends the session.
+    for (const bad of [NaN, Infinity, -Infinity]) {
+      expect(seatedHeading(1.1, bad)).toBe(1.1)
+    }
   })
 })

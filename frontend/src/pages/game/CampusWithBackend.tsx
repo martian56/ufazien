@@ -75,7 +75,7 @@ import {
   nearestSeat,
   type Seat,
 } from '../../components/campus/interiorPhysics'
-import { EMOTE_SECONDS, type Activity } from '../../components/campus/avatarPose'
+import { EMOTE_SECONDS, seatedHeading, type Activity } from '../../components/campus/avatarPose'
 import { takenSeatIds } from '../../components/campus/seatState'
 import {
   CAMPUS_DOORS,
@@ -1012,6 +1012,8 @@ function Player({
   const before = useRef({ x: 0, z: 0 })
   /** Edge detection: holding E must not re-open a door every frame. */
   const doorHeld = useRef(false)
+  /** The seat the camera has already been aimed for, so it is aimed once. */
+  const satOn = useRef<string | null>(null)
 
   const { updatePosition, worldTo2D } = campusHook
 
@@ -1045,18 +1047,36 @@ function Player({
     // still reports position every frame, so anyone watching sees the pose.
     if (seated) {
       camera.position.set(seated.x, seated.y + seated.seatHeight + SEATED_EYE, seated.z)
+
+      // Turn to face the way the chair does, once, on sitting down. Sitting
+      // moved the camera and left its rotation alone, so taking a seat in the
+      // amphitheatre left you looking at whatever you happened to be looking
+      // at — usually the back of the room you had just walked in through.
+      if (satOn.current !== seated.id) {
+        satOn.current = seated.id
+        camera.rotation.order = 'YXZ'
+        // `cameraHeading` is the camera's own yaw plus half a turn, so this is
+        // the rotation that makes the player face along the seat.
+        camera.rotation.set(0, seated.ry - Math.PI, 0)
+      }
+
+      // Where they are actually looking, held to what a person can turn to in
+      // a chair. Broadcasting the seat's own facing froze a seated player
+      // solid however much they looked around; broadcasting the raw camera
+      // twists their folded legs through the back of the chair.
+      const seatedFacing = seatedHeading(seated.ry, cameraHeading(camera))
       const backend = worldTo2D(camera.position.x, camera.position.z)
       poseRef.current = {
         x: camera.position.x,
         z: camera.position.z,
-        heading: seated.ry,
+        heading: seatedFacing,
         room: insideBuilding ? String(insideBuilding.id) : null,
       }
       updatePosition({
         x: backend.x,
         y: backend.y,
         direction: 'down',
-        heading: seated.ry,
+        heading: seatedFacing,
         // An emote wins over the seat. Raising a hand from a chair in a lecture
         // is the whole point of having both; the server keeps the seat either
         // way, because only leave_seat releases it.
@@ -1066,6 +1086,9 @@ function Player({
       })
       return
     }
+
+    // On their feet, so the next time they sit the camera is aimed again.
+    satOn.current = null
 
     if (forward) direction.current.z -= 1
     if (backward) direction.current.z += 1
@@ -1282,16 +1305,23 @@ function Player({
       }
     }
 
-    // The real angle, not one of four. Taken from the camera when standing
-    // still so that turning on the spot is visible to everyone else, and from
-    // the movement vector when walking so a player strafing is drawn facing
-    // the way they are actually travelling.
-    const heading = moving ? Math.atan2(headingX, headingZ) : cameraHeading(camera)
+    // Where the player is looking, and nothing else.
+    //
+    // This used to send the *movement* vector whenever the player was moving,
+    // and the camera only when they stood still — so the avatar everyone else
+    // saw and the view the player had were two different directions for as
+    // long as they were walking anything but straight ahead. Strafing drew
+    // them turned ninety degrees from where they were looking, walking
+    // backwards turned them right round, and stopping snapped them back.
+    //
+    // Read once and used for both, because the giveaway was that the local
+    // minimap and the remote avatar disagreed about the same player.
+    const heading = cameraHeading(camera)
 
     poseRef.current = {
       x: camera.position.x,
       z: camera.position.z,
-      heading: cameraHeading(camera),
+      heading,
       room: insideBuilding ? String(insideBuilding.id) : null,
     }
 

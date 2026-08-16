@@ -148,16 +148,47 @@ describe('which buildings are worth drawing', () => {
 })
 
 describe('where you are facing', () => {
-  it('points up the map when looking down negative z', () => {
+  /**
+   * These used to assert the negation of all three, which is where the arrow
+   * pointing backwards came from: the convention is the avatar's — zero faces
+   * +Z — and `project` puts +Z down the screen, so heading zero is *down* the
+   * map, not up it. The old names said "looking down negative z", which is
+   * heading PI rather than heading 0.
+   */
+  it('points down the map at heading zero, which faces +Z', () => {
     const forward = headingVector(0)
+    expect(forward.x).toBeCloseTo(0)
+    expect(forward.y).toBeCloseTo(1)
+  })
+
+  it('points up the map when looking down negative z', () => {
+    const forward = headingVector(Math.PI)
     expect(forward.x).toBeCloseTo(0)
     expect(forward.y).toBeCloseTo(-1)
   })
 
-  it('turns anticlockwise as the heading grows', () => {
-    const quarter = headingVector(Math.PI / 2)
-    expect(quarter.x).toBeCloseTo(-1)
-    expect(quarter.y).toBeCloseTo(0)
+  it('agrees with the world axes the projection uses', () => {
+    // The arrow has to point the same way as the step the player just took:
+    // walk along your own heading and the marker must move the way the nose is
+    // pointing. Compared as a dot product rather than per axis, because the
+    // component that should be zero comes out as 6e-17 and its sign is noise.
+    const view = windowAround(0, 0, 200)
+    const origin = project(0, 0, view)
+    for (const [heading, name] of [
+      [0, '+Z'],
+      [Math.PI / 2, '+X'],
+      [Math.PI, '-Z'],
+      [-Math.PI / 2, '-X'],
+      [0.9, 'a bearing off the axes'],
+    ] as const) {
+      const forward = headingVector(heading)
+      const stepped = project(Math.sin(heading) * 30, Math.cos(heading) * 30, view)
+      const dx = stepped.x - origin.x
+      const dy = stepped.y - origin.y
+      // Positive: the same direction. Negated — which is what this was — the
+      // arrow points at where the player has just walked away from.
+      expect(forward.x * dx + forward.y * dy, `${name}`).toBeGreaterThan(0)
+    }
   })
 
   it('stays a unit vector at any angle', () => {

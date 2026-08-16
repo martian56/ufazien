@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { AVATAR_MODELS, clipFor, packIndex } from './GltfCharacter'
+import { AVATAR_MODELS, FACING, clipFor, packIndex } from './GltfCharacter'
 import { ACTIVITIES, RUN_SPEED, WALK_SPEED } from './avatarPose'
 
 /**
@@ -77,5 +77,56 @@ describe('choosing a pack', () => {
     for (const seed of [NaN, Infinity, -Infinity]) {
       expect(AVATAR_MODELS[packIndex(seed)]).toBeDefined()
     }
+  })
+})
+
+
+describe('the cardinal fallback', () => {
+  /**
+   * `direction` is what a client that predates `heading` sends, and the two
+   * ends of it were written apart: the sender classifies a step by the sign of
+   * its components, the receiver turns the name back into an angle, and
+   * nothing held them to the same convention. Left and right were mirrored,
+   * so such a client drew every walking player facing the wrong way across.
+   *
+   * The convention is the avatar's: zero faces +Z, so a heading looks along
+   * `(sin, cos)`.
+   */
+  const forward = (heading: number) => ({ x: Math.sin(heading), z: Math.cos(heading) })
+
+  /** The sender's classification, from `Player` in CampusWithBackend. */
+  function directionFor(headingX: number, headingZ: number): string {
+    if (Math.abs(headingX) > Math.abs(headingZ)) return headingX > 0 ? 'right' : 'left'
+    return headingZ > 0 ? 'down' : 'up'
+  }
+
+  it('names every axis the way the sender does', () => {
+    for (const [name, angle] of FACING) {
+      const { x, z } = forward(angle)
+      expect(directionFor(x, z), `${name} is not ${name}`).toBe(name)
+    }
+  })
+
+  it('points along the axis the name means', () => {
+    const axes: [string, number, number][] = [
+      ['down', 0, 1],
+      ['up', 0, -1],
+      ['right', 1, 0],
+      ['left', -1, 0],
+    ]
+    for (const [name, x, z] of axes) {
+      const angle = FACING.get(name)
+      expect(angle, name).toBeDefined()
+      const heading = forward(angle as number)
+      expect(heading.x, `${name} x`).toBeCloseTo(x)
+      expect(heading.z, `${name} z`).toBeCloseTo(z)
+    }
+  })
+
+  it('has nothing on it that is not a direction', () => {
+    // A Map rather than an object literal precisely so that `constructor` and
+    // friends are absent; a function reaching Euler.y arrives as NaN.
+    expect(FACING.get('constructor')).toBeUndefined()
+    expect(FACING.get('toString')).toBeUndefined()
   })
 })
