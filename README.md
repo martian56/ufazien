@@ -26,6 +26,8 @@
 [![LiveKit](https://img.shields.io/badge/LiveKit-WebRTC-1E1E1E?style=flat-square)](https://livekit.io/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 
+<img src="images/campus.png" alt="The 3D campus: the UFAZ building on Nizami Street, with another student standing on the quad" width="100%">
+
 </div>
 
 ---
@@ -49,6 +51,27 @@ It runs at **[ufazien.com](https://ufazien.com)**.
 **Meet on campus.** A multiplayer 3D campus you can walk around with other students. Voice fades with distance, so conversations happen where you're standing. Buildings can be entered, and inside there's a board for screen sharing, enough to run a study session or a lecture, with the host controlling who can speak and present.
 
 **Ask an AI.** A text humanizer backed by Azure OpenAI, with more tools planned.
+
+## A look at it
+
+<table>
+<tr>
+<td width="50%"><img src="images/dashboard.png" alt="The dashboard: GPA, credits, upcoming events and recent activity"></td>
+<td width="50%"><img src="images/hosting.png" alt="Hosting: three student sites on ufazien.com subdomains with storage and visit counts"></td>
+</tr>
+<tr>
+<td><b>Dashboard.</b> Where your term stands, what is next, and who has been in touch. <code>Ctrl K</code> opens search from anywhere.</td>
+<td><b>Hosting.</b> Student projects on their own subdomains, with storage, traffic and TLS.</td>
+</tr>
+<tr>
+<td><img src="images/community.png" alt="A study group chat about a past exam paper"></td>
+<td><img src="images/average.png" alt="The average calculator with a weighted UFAZ schema and a computed average"></td>
+</tr>
+<tr>
+<td><b>Community.</b> Study groups with real-time chat, plus forums and threaded replies.</td>
+<td><b>Average calculator.</b> Build a weighted schema once, publish it, and the rest of your year reuses it.</td>
+</tr>
+</table>
 
 ## How it fits together
 
