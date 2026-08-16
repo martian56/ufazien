@@ -52,11 +52,20 @@ export interface Circle {
   z: number
   radius: number
   /**
-   * Top of the object, for sightlines. It plays no part in collision — you
-   * walk into a table and a wall alike — but a table does not stop you seeing
-   * the board behind it and a wall does.
+   * Top of the object, in metres above the floor of the room.
+   *
+   * Used for sightlines, and now for deciding whether the player is level with
+   * it at all — see `collidersAt`. A building with four floors in one room
+   * cannot have its furniture stop people on every one of them.
    */
   height?: number
+  /**
+   * Bottom of the object. Absent means it stands on the ground.
+   *
+   * A bench in a second-floor window bay has `base` at that floor's level, so
+   * somebody in the entrance hall directly below walks past where it is.
+   */
+  base?: number
   /**
    * Names the object, when a seat needs to refer to it. A sofa's seat is on
    * the sofa, so "inside its own furniture" has to be distinguishable from
@@ -74,8 +83,10 @@ export interface Circle {
 export interface Box extends Rect {
   /** Rotation about Y, in radians. Absent means axis-aligned. */
   ry?: number
-  /** Top of the object, for sightlines. See `Circle.height`. */
+  /** Top of the object. See `Circle.height`. */
   height?: number
+  /** Bottom of the object. See `Circle.base`. */
+  base?: number
   /** Names the object, for seats that sit on it. See `Circle.id`. */
   id?: string
 }
@@ -402,6 +413,35 @@ export function groundHeight(
  * clear of the player's head. Everything else keeps the old rule, because a
  * tier really is a solid block and its edge really should stop you.
  */
+/**
+ * The colliders a player at this height can actually walk into.
+ *
+ * A `Collider` used to be a plan shape and nothing else: whatever its declared
+ * height, it stopped you at every height. That was harmless while a room had
+ * one floor, and became the reason a room could not have four — a bench in a
+ * second-floor window bay stops somebody standing in the entrance hall
+ * directly below it, and a rail round a stairwell on the top floor rails the
+ * ground floor too.
+ *
+ * So a collider now has a vertical extent, and blocks only when it overlaps
+ * the player's own. Anything that does not say otherwise stands on the ground
+ * and is twenty metres tall, which is what everything outdoors and every wall
+ * already assumed — so nothing that existed before this changes.
+ */
+export function collidersAt(
+  colliders: readonly Collider[],
+  feet: number,
+  bodyHeight = HEADROOM,
+): Collider[] {
+  return colliders.filter((collider) => {
+    const base = collider.base ?? 0
+    const top = collider.height ?? DEFAULT_COLLIDER_HEIGHT
+    // Touching at exactly the feet does not count: that is a floor, not a wall,
+    // and a kerb you are standing on top of should not also stop you.
+    return top > feet + 1e-6 && base < feet + bodyHeight
+  })
+}
+
 export function blockingPlatforms(
   platforms: Platform[],
   feet: number,

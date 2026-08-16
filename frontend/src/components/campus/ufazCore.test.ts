@@ -249,21 +249,36 @@ describe('walking the building', () => {
 })
 
 describe('the dog-leg', () => {
-  it('rails both sides of the well, once', () => {
-    // One footprint per side rather than one per floor. A collider is a plan
-    // shape that stops you at every height, so a rail repeated up the building
-    // is the same wall three times — and the campus rule against two solids
-    // closer than a player is wide catches it as a seam with itself.
-    expect(coreGuards().length).toBe(2)
-    const [west, east] = coreGuards() as { x: number }[]
-    expect(west.x).toBeCloseTo(STAIRWELL.x0, 6)
-    expect(east.x).toBeCloseTo(STAIRWELL.x1, 6)
+  it('rails both sides of every floor and walls the head of every turn', () => {
+    // Two rails on each floor above the ground, and a wall at each half-landing.
+    // Each carries the level it belongs to, so a rail on the third floor no
+    // longer rails the entrance hall as well.
+    const guards = coreGuards() as { base?: number; height?: number }[]
+    expect(guards.length).toBe(3 + 3 * 2)
+    for (const guard of guards) {
+      expect(guard.base, 'a guard that does not know its floor').toBeDefined()
+      expect(guard.height).toBeGreaterThan(guard.base as number)
+    }
   })
 
-  it('rails the whole depth of the well', () => {
-    for (const rail of coreGuards() as { z: number; halfD: number }[]) {
-      expect(rail.z - rail.halfD).toBeLessThanOrEqual(STAIRWELL.z0 + 1e-9)
-      expect(rail.z + rail.halfD).toBeGreaterThanOrEqual(STAIRWELL.z1 - 1e-9)
+  it('never puts two guards at the same height in the same place', () => {
+    // The reason the head of the well was open before: a wall there met the
+    // rails down either side, and a seam is what the resolver cannot settle on.
+    const guards = coreGuards() as {
+      x: number; z: number; halfW: number; halfD: number; base?: number; height?: number
+    }[]
+    for (let i = 0; i < guards.length; i++) {
+      for (let j = i + 1; j < guards.length; j++) {
+        const a = guards[i]
+        const b = guards[j]
+        const level =
+          (a.height as number) > (b.base as number) && (b.height as number) > (a.base as number)
+        if (!level) continue
+        const apart =
+          Math.abs(a.x - b.x) > a.halfW + b.halfW + 0.5 ||
+          Math.abs(a.z - b.z) > a.halfD + b.halfD + 0.5
+        expect(apart, 'two guards are level and adjacent').toBe(true)
+      }
     }
   })
 
@@ -307,10 +322,11 @@ describe('the dog-leg', () => {
     }
   })
 
-  it('drops you back where you started if you walk off the head of the well', () => {
-    // The head is open — a rail there would meet the ones down either side,
-    // which the campus forbids. So the fall has to be harmless: onto the floor
-    // the flight left from, not out of the world.
+  it('stops you walking off the head of the well', () => {
+    // It used to drop you a half storey. There is a wall at the turn now, at
+    // the turn's own level, which is what let it exist at all: it is never at
+    // the same height as the rails down either side, so it cannot seam with
+    // them.
     const up = HALF_FLIGHTS.find((f) => f.from === 0 && f.half === 0)!
     const end = walk({ x: up.x, z: up.startZ + 1 }, [
       { x: up.x, z: up.startZ + up.direction * HALF_RUN - 0.9 },
@@ -318,8 +334,7 @@ describe('the dog-leg', () => {
       { x: up.x, z: STAIRWELL.z0 - 4 },
     ])
     expect(end.highest, 'never reached the turn').toBeGreaterThan(2)
-    expect(end.floor, 'ended somewhere other than the floor below').toBe(0)
-    expect(end.feet).toBeCloseTo(0, 2)
+    expect(end.feet, 'walked off the turn instead of being stopped on it').toBeGreaterThan(2)
   })
 
   it('turns halfway up, at half a storey', () => {

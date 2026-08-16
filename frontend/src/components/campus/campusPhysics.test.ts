@@ -4,6 +4,7 @@ import {
   PROP_COLLIDERS,
   HEADROOM,
   SOLID_CAMPUS,
+  collidersAt,
   STEP_UP,
   approachStep,
   blockingPlatforms,
@@ -365,5 +366,61 @@ describe('following somebody', () => {
     const step = approachStep({ x: 0, z: 0 }, { x: 10, z: 10 }, 1, 0)
     expect(step!.x).toBeCloseTo(Math.SQRT1_2)
     expect(step!.z).toBeCloseTo(Math.SQRT1_2)
+  })
+})
+
+
+describe('colliders know which floor they are on', () => {
+  /**
+   * A `Collider` used to be a plan shape and nothing else: whatever height it
+   * declared, it stopped you at every height. Harmless while a room had one
+   * floor, and the reason a room could not have four — a bench in a
+   * second-floor window bay stopped somebody in the entrance hall below it,
+   * and a rail round a stairwell on the top floor railed the ground floor too.
+   */
+  const bench = (base: number): Collider => ({
+    x: 0,
+    z: 0,
+    halfW: 1,
+    halfD: 1,
+    base,
+    height: base + 0.6,
+  })
+
+  it('stops you when you are level with it', () => {
+    expect(collidersAt([bench(0)], 0)).toHaveLength(1)
+    expect(collidersAt([bench(4.55)], 4.55)).toHaveLength(1)
+  })
+
+  it('does not stop you from a different floor', () => {
+    // The case that made this necessary.
+    expect(collidersAt([bench(4.55)], 0)).toHaveLength(0)
+    expect(collidersAt([bench(0)], 4.55)).toHaveLength(0)
+    expect(collidersAt([bench(9.1)], 4.55)).toHaveLength(0)
+  })
+
+  it('lets you walk under something above your head', () => {
+    const beam: Collider = { x: 0, z: 0, halfW: 1, halfD: 1, base: 2.4, height: 3 }
+    expect(collidersAt([beam], 0)).toHaveLength(0)
+    expect(collidersAt([beam], 1.2)).toHaveLength(1)
+  })
+
+  it('leaves everything that came before it alone', () => {
+    // No base and no height is a wall standing on the ground: that is what the
+    // whole campus already assumed, and it must not change.
+    const wall: Collider = { x: 0, z: 0, halfW: 1, halfD: 1 }
+    for (const feet of [0, 1, 3.75, 12]) {
+      expect(collidersAt([wall], feet), `at ${feet}`).toHaveLength(1)
+    }
+    // And a desk with a height but no base still stops you at floor level.
+    const desk: Collider = { x: 0, z: 0, halfW: 1, halfD: 1, height: 1.25 }
+    expect(collidersAt([desk], 0)).toHaveLength(1)
+  })
+
+  it('does not treat the floor you are standing on as a wall', () => {
+    // A kerb whose top is exactly at your feet is something you are on top of.
+    const kerb: Collider = { x: 0, z: 0, halfW: 1, halfD: 1, height: 0.2 }
+    expect(collidersAt([kerb], 0.2)).toHaveLength(0)
+    expect(collidersAt([kerb], 0)).toHaveLength(1)
   })
 })

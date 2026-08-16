@@ -153,18 +153,16 @@ const TURN_EDGE = TOP_OF_HALF_ONE - UFAZ_STAIR.going / 2
 const HALF_LANDING_Z0 = TURN_EDGE - HALF_LANDING_DEPTH
 
 /**
- * The head of the well is open, and walking off it drops you a half storey.
+ * The head of the well, which is now closed.
  *
- * There is no rail across it, because a rail there would meet the rails down
- * either side and this campus forbids two solids closer than a player is wide
- * — flush ones included, since a seam is what the resolver cannot settle on.
- * The landing runs right out to the edge of the well so there is no strip of
- * nothing to step onto first, and the fall is onto the floor you started from,
- * which you can simply walk back up.
+ * It was open, because a rail across it met the rails down either side and
+ * this campus forbids two solids closer than a player is wide — flush ones
+ * included, since a seam is what the resolver cannot settle on. Walking north
+ * off the turn dropped you a half storey.
  *
- * Closing it properly wants a collider that knows which floor it is on, the
- * same way a platform now knows whether there is space beneath it. That is its
- * own change.
+ * A collider knows which floor it is on now, so the rail can be a wall at the
+ * head of the well instead: one shape rising the full height of the building,
+ * a long way from either side rail, and the thing a stairwell has anyway.
  */
 
 /**
@@ -366,20 +364,34 @@ export function coreStairPlatforms(): Platform[] {
 const RAIL_HALF_W = 0.12
 
 export function coreGuards(): Collider[] {
-  // One footprint per side, not one per floor. A `Collider` is a plan shape
-  // with a height used only for sightlines — it stops you at every height —
-  // so three identical rails stacked up the building are three copies of the
-  // same wall, and the campus rule against two solids closer than a player is
-  // wide catches them as a seam with itself.
+  // A wall across the head of the well, at the level of the turn it protects.
   //
-  // That is fine for a rail, which is in the same place on every floor. It is
-  // the reason there is no per-floor furniture in here yet: a bench on the
-  // second floor would stop you in the entrance hall.
-  return [STAIRWELL.x0, STAIRWELL.x1].map((x) => ({
-    x,
-    z: (STAIRWELL.z0 + STAIRWELL.z1) / 2,
-    halfW: RAIL_HALF_W,
-    halfD: (STAIRWELL.z1 - STAIRWELL.z0) / 2,
-    height: floorLevel(3) + 1.1,
+  // One per storey rather than one for the building, because it belongs to the
+  // half-landing: it is there to stop you walking off the turn, and the turn is
+  // half a storey up. That also keeps it clear of the rails down either side —
+  // they sit at floor levels and this sits between them, so the two never exist
+  // at the same height and cannot form a seam.
+  const heads = ([0, 1, 2] as Floor[]).map((floor) => ({
+    x: (STAIRWELL.x0 + STAIRWELL.x1) / 2,
+    z: STAIRWELL.z0 - 0.15,
+    halfW: (STAIRWELL.x1 - STAIRWELL.x0) / 2,
+    halfD: 0.15,
+    base: halfLandingLevel(floor),
+    height: halfLandingLevel(floor) + 1.1,
   }))
+
+  // One rail per side per floor, each knowing which floor it belongs to, so a
+  // rail on the third floor no longer rails the entrance hall as well.
+  const rails = FLOORS.filter((floor) => floor > 0).flatMap((floor) =>
+    [STAIRWELL.x0, STAIRWELL.x1].map((x) => ({
+      x,
+      z: (STAIRWELL.z0 + STAIRWELL.z1) / 2,
+      halfW: RAIL_HALF_W,
+      halfD: (STAIRWELL.z1 - STAIRWELL.z0) / 2,
+      base: floorLevel(floor),
+      height: floorLevel(floor) + 1.1,
+    })),
+  )
+
+  return [...heads, ...rails]
 }

@@ -63,6 +63,7 @@ import {
   SOLID_CAMPUS,
   approachStep,
   blockingPlatforms,
+  collidersAt,
   groundHeight,
   leanSurface,
   resolveColliders,
@@ -822,7 +823,10 @@ function SeatController({
    * a room's own walls are a clamp rather than geometry.
    */
   const wallBehind = useCallback(() => {
-    const solid = insideBuilding ? interiorColliders(insideBuilding.interior) : SOLID_CAMPUS
+    const feet = camera.position.y - EYE_HEIGHT
+    const solid = insideBuilding
+      ? collidersAt(interiorColliders(insideBuilding.interior), feet)
+      : SOLID_CAMPUS
     const limit = insideBuilding ? interiorHalfExtent(insideBuilding.interior) : undefined
     return leanSurface(
       camera.position.x,
@@ -1222,7 +1226,10 @@ function Player({
     const doorNow = performance.now()
     const solid: Collider[] = insideBuilding
       ? [
-          ...interiorColliders(insideBuilding.interior),
+          // Only what the player is level with. Indoors that matters now the
+          // main building has four floors in one room: a bench on the second
+          // floor is not something you walk into in the entrance hall.
+          ...collidersAt(interiorColliders(insideBuilding.interior), feet),
           ...blockingPlatforms(platforms, feet),
           ...interiorClosedDoor(insideBuilding, doors, doorNow),
         ]
