@@ -15,7 +15,12 @@ import {
   portalsFrom,
 } from './verticalCirculation'
 import { CAMPUS_BUILDINGS, PLAYER_RADIUS } from './campusLayout'
-import { UFAZ_STAIR, interiorColliders, interiorPlatforms } from './interiorPhysics'
+import {
+  STOREY_HEIGHT,
+  UFAZ_STAIR,
+  interiorColliders,
+  interiorPlatforms,
+} from './interiorPhysics'
 import {
   STEP_UP,
   blockingPlatforms,
@@ -420,5 +425,71 @@ describe('coming back down', () => {
     const fromBelow = portalsFrom(CORRIDOR_OF[0]).find((p) => p.kind === 'stair-up')!
     const fromAbove = portalsFrom(CORRIDOR_OF[2]).find((p) => p.kind === 'stair-down')!
     expect(fromBelow.spawn).toEqual(fromAbove.spawn)
+  })
+})
+
+
+describe('the flight is a stair you could actually build', () => {
+  /**
+   * It was fourteen risers of 300 mm with a 620 mm going: a thirty-centimetre
+   * hop onto a shelf twice as deep as a tread, which reads as stadium
+   * terracing and lurches the camera a foot per step. The shallow 26-degree
+   * pitch made it look safe on paper; it was shallow because the treads were
+   * enormous, not because the steps were comfortable.
+   */
+  const { rise, going, steps } = UFAZ_STAIR
+
+  it('has risers a person can climb without noticing', () => {
+    // 150-190 mm is the range every building code lands in.
+    expect(rise).toBeGreaterThanOrEqual(0.15)
+    expect(rise).toBeLessThanOrEqual(0.19)
+  })
+
+  it('has treads a foot fits on', () => {
+    expect(going).toBeGreaterThanOrEqual(0.25)
+    expect(going).toBeLessThanOrEqual(0.32)
+  })
+
+  it('satisfies the rule that decides whether a stair is comfortable', () => {
+    // Two rises plus a going should be a pace: 580-640 mm. The old flight came
+    // out at 1220, which is not a pace, it is a stride onto a bench.
+    const pace = 2 * rise + going
+    expect(pace).toBeGreaterThanOrEqual(0.58)
+    expect(pace).toBeLessThanOrEqual(0.64)
+  })
+
+  it('is pitched like a stair rather than like a ramp or a ladder', () => {
+    const pitch = (Math.atan2(rise, going) * 180) / Math.PI
+    expect(pitch).toBeGreaterThan(28)
+    expect(pitch).toBeLessThan(38)
+  })
+
+  it('starts with an ordinary step rather than a tall one', () => {
+    // The first tread used to be 450 mm off the floor, half again as tall as
+    // every step after it, which is the first thing you feel walking onto it.
+    const platforms = interiorPlatforms('ufaz')
+      .filter((p) => Math.abs(p.x - UFAZ_STAIR.x) < 0.01)
+      .map((p) => p.top)
+      .sort((a, b) => a - b)
+    expect(platforms[0]).toBeCloseTo(rise, 6)
+  })
+
+  it('arrives at exactly the next floor level', () => {
+    // The landing is not "somewhere near the top", it is the floor above. If
+    // the risers did not divide the storey this would land part way through a
+    // slab once the floors are stacked.
+    expect(UFAZ_STAIR.landing.top).toBeCloseTo(STOREY_HEIGHT, 6)
+    expect((steps + 1) * rise).toBeCloseTo(STOREY_HEIGHT, 6)
+  })
+
+  it('rises in equal steps the whole way, landing included', () => {
+    const tops = [
+      ...interiorPlatforms('ufaz')
+        .filter((p) => Math.abs(p.x - UFAZ_STAIR.x) < 0.01)
+        .map((p) => p.top),
+    ].sort((a, b) => a - b)
+    for (let i = 1; i < tops.length; i++) {
+      expect(tops[i] - tops[i - 1], `step ${i} of the flight`).toBeCloseTo(rise, 6)
+    }
   })
 })

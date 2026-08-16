@@ -124,21 +124,54 @@ export const UFAZ_LIFTS = { x: -15, z: -19, halfW: 3.4, halfD: 1.8 }
 export const UFAZ_TURNSTILES = [-4.5, -1.5, 1.5, 4.5]
 export const UFAZ_TURNSTILE_Z = 13
 
+/**
+ * Floor to floor, in metres.
+ *
+ * The one number the whole building is set out from: the stair divides it into
+ * risers and the landing arrives at exactly the next floor level, so a change
+ * here carries the flight, the landing and everything derived from them.
+ */
+export const STOREY_HEIGHT = 4.55
+
+/**
+ * How many risers make up a storey.
+ *
+ * Twenty-six of 175 mm. It was fourteen of 300 mm with a 620 mm going — a
+ * thirty-centimetre hop onto a sixty-two-centimetre shelf, roughly twice human
+ * size in both directions. That reads as stadium terracing rather than a
+ * stair, and in first person the camera lurched a foot per step.
+ *
+ * The pitch was the misleading part: 26 degrees sounds shallow and safe, and
+ * it was shallow *because* the treads were enormous, not because the steps
+ * were comfortable. At 175 by 280 the pitch comes out at 32 degrees, which is
+ * an ordinary stair, and `2R + G` is 630 mm — the middle of the range a stair
+ * is comfortable to walk in.
+ */
+const RISERS_PER_STOREY = 26
+
 const UFAZ_FLIGHT = {
   // Narrower and further in than the first attempt at moving it. At x 12.5
   // with a four-metre half-width its balustrade landed at 16.7, which is
   // inside the colonnade at 17 — the rail ran straight through a column.
   x: 10.5,
   z: -10,
-  steps: 14,
-  rise: 0.3,
-  going: 0.62,
+  // Treads, which is one fewer than the risers: the last riser puts you on the
+  // landing rather than on another tread.
+  steps: RISERS_PER_STOREY - 1,
+  rise: STOREY_HEIGHT / RISERS_PER_STOREY,
+  going: 0.28,
   halfW: 3.5,
 }
 
-/** Height of the walking surface of tread `i`, counting from zero. */
+/**
+ * Height of the walking surface of tread `i`, counting from zero.
+ *
+ * The first tread is one riser up, not 0.45 — the old flight began with a step
+ * half again as tall as the ones after it, which is the first thing you feel
+ * walking onto it.
+ */
 function treadTop(i: number): number {
-  return 0.45 + i * UFAZ_FLIGHT.rise
+  return (i + 1) * UFAZ_FLIGHT.rise
 }
 
 /**
@@ -174,9 +207,10 @@ export const UFAZ_STAIR = {
     z: (UFAZ_FLIGHT_END + UFAZ_LANDING_BACK) / 2,
     halfW: 4.5,
     halfD: (UFAZ_FLIGHT_END - UFAZ_LANDING_BACK) / 2,
-    // One more ordinary step up from the top tread, derived rather than
+    // One more ordinary riser up from the top tread, derived rather than
     // written down, so reprofiling the flight cannot leave the landing behind.
-    top: treadTop(UFAZ_FLIGHT.steps - 1) + 0.2,
+    // Lands on exactly `STOREY_HEIGHT`, which is what makes it the next floor.
+    top: treadTop(UFAZ_FLIGHT.steps - 1) + UFAZ_FLIGHT.rise,
   },
 }
 

@@ -973,21 +973,56 @@ function LightRings({ ceiling }: { ceiling: number }) {
  * One component for the entrance hall and every corridor above it, matching
  * `mainStair` in `interiorPhysics` — they are the same stair in the same place
  * on every floor, and drawing two different ones was how the upper floors ended
- * up with steps that nothing could stand on.
+ * up with steps that nothing could stand on. Every dimension below is read from
+ * `UFAZ_STAIR`, so reprofiling the flight moves what you see and what you stand
+ * on together.
+ *
+ * Open-riser, because that is what the balusters imply and what the collision
+ * layer now agrees with: there is nothing between the treads, and above head
+ * height you walk underneath.
  */
 function MainStair() {
+  const { steps, rise, going, halfW } = UFAZ_STAIR
+  /** Horizontal run from the first tread to the last. */
+  const run = (steps - 1) * going
+  /** And the climb over that run, which together give the pitch. */
+  const climb = (steps - 1) * rise
+  const pitch = Math.atan2(climb, run)
+  /** Length of a member following the slope. */
+  const rake = Math.hypot(run, climb)
+  const treadThickness = 0.07
+
   return (
       <group position={[UFAZ_STAIR.x, 0, UFAZ_STAIR.z]}>
-        {Array.from({ length: UFAZ_STAIR.steps }, (_, i) => (
-          <group key={i} position={[0, 0.3 + i * UFAZ_STAIR.rise, -i * UFAZ_STAIR.going]}>
-            {/* Grey stone treads. They were cream with a red carpet runner up
-                the middle, which is a country house; the stair in the building
-                is granite with a black iron balustrade and a timber rail. */}
-            <mesh castShadow receiveShadow>
-              <boxGeometry args={[UFAZ_STAIR.halfW * 2, 0.3, 0.66]} />
-              <meshStandardMaterial color="#9a9a99" roughness={0.6} />
-            </mesh>
-          </group>
+        {Array.from({ length: steps }, (_, i) => (
+          /* Grey stone treads. They were cream with a red carpet runner up
+             the middle, which is a country house; the stair in the building
+             is granite with a black iron balustrade and a timber rail.
+             `treadTop` is the walking surface, so the slab hangs below it. */
+          <mesh
+            key={i}
+            castShadow
+            receiveShadow
+            position={[0, (i + 1) * rise - treadThickness / 2, -i * going]}
+          >
+            <boxGeometry args={[halfW * 2, treadThickness, going]} />
+            <meshStandardMaterial color="#9a9a99" roughness={0.6} />
+          </mesh>
+        ))}
+
+        {/* The strings the treads sit on. Two raking beams rather than a solid
+            mass under the flight, so the stair reads as the open one it is. */}
+        {[-1, 1].map((side) => (
+          <mesh
+            key={side}
+            castShadow
+            receiveShadow
+            position={[side * (halfW - 0.18), (rise + climb + rise) / 2 - 0.28, -run / 2]}
+            rotation={[pitch, 0, 0]}
+          >
+            <boxGeometry args={[0.28, 0.4, rake]} />
+            <meshStandardMaterial color="#8d8d8c" roughness={0.7} />
+          </mesh>
         ))}
 
         {/* Height derived from the landing's own top rather than written out
@@ -1002,30 +1037,41 @@ function MainStair() {
           <meshStandardMaterial color="#9a9a99" roughness={0.6} />
         </mesh>
 
-        {/* Balustrade: a solid stepped parapet with a brass cap, built from
-            the same rise and going as the treads so it can never drift out of
-            line with them the way a single raking rail did. */}
-        {[-UFAZ_STAIR.halfW, UFAZ_STAIR.halfW].map((x) =>
-          Array.from({ length: UFAZ_STAIR.steps }, (_, i) => (
-            <group key={`${x}-${i}`} position={[x, 0.3 + i * UFAZ_STAIR.rise, -i * UFAZ_STAIR.going]}>
-              {/* An iron baluster per tread rather than a solid stepped
-                  parapet, which is what the photographs show — you can see the
-                  hall through the stair. */}
-              <mesh castShadow position={[0, 0.62, 0]}>
-                <boxGeometry args={[0.05, 1.05, 0.05]} />
-                <meshStandardMaterial color="#1c1f23" roughness={0.55} metalness={0.4} />
-              </mesh>
-              {/* Timber handrail, which is the one warm thing on it. */}
-              <mesh castShadow position={[0, 1.2, 0]}>
-                <boxGeometry args={[0.1, 0.09, 0.68]} />
-                <meshStandardMaterial color="#6b4227" roughness={0.6} />
-              </mesh>
-            </group>
-          )),
-        )}
+        {/* Balustrade. An iron baluster rather than a solid stepped parapet,
+            which is what the photographs show — you can see the hall through
+            the stair.
+
+            One baluster every other tread, and the handrail as a single raking
+            member per side instead of one short segment per tread. At 175 mm
+            risers there are twenty-five treads rather than fourteen, and a
+            baluster plus a rail segment on each of them would be a hundred
+            meshes for a staircase; this is twenty-eight, fewer than the old
+            flight drew, and a continuous rail is what a handrail is. */}
+        {[-halfW, halfW].map((x) => (
+          <group key={x}>
+            {Array.from({ length: Math.ceil(steps / 2) }, (_, n) => {
+              const i = n * 2
+              return (
+                <mesh key={i} castShadow position={[x, (i + 1) * rise + 0.5, -i * going]}>
+                  <boxGeometry args={[0.05, 1.0, 0.05]} />
+                  <meshStandardMaterial color="#1c1f23" roughness={0.55} metalness={0.4} />
+                </mesh>
+              )
+            })}
+            {/* Timber handrail, which is the one warm thing on it. */}
+            <mesh
+              castShadow
+              position={[x, (rise + climb + rise) / 2 + 1.0, -run / 2]}
+              rotation={[pitch, 0, 0]}
+            >
+              <boxGeometry args={[0.1, 0.09, rake]} />
+              <meshStandardMaterial color="#6b4227" roughness={0.6} />
+            </mesh>
+          </group>
+        ))}
 
         {/* Newel posts at the foot of the flight */}
-        {[-UFAZ_STAIR.halfW, UFAZ_STAIR.halfW].map((x) => (
+        {[-halfW, halfW].map((x) => (
           <mesh key={x} castShadow position={[x, 0.8, 0.7]}>
             <cylinderGeometry args={[0.07, 0.09, 1.6, 8]} />
             <meshStandardMaterial color="#1c1f23" roughness={0.55} metalness={0.4} />
