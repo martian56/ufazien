@@ -14,13 +14,28 @@ import {
   coreStairPlatforms,
   floorAt,
   floorLevel,
+  LIFT_CAR,
+  LIFT_SPEED,
+  liftShaftWalls,
   halfLandingLevel,
   halfLandingPlatform,
+  insideLiftCar,
+  liftFloorNames,
+  liftHeightAt,
+  liftJourneySeconds,
   slabPieces,
   type Floor,
 } from './ufazCore'
 import { STOREY_HEIGHT, UFAZ_STAIR } from './interiorPhysics'
-import { HEADROOM, STEP_UP, blockingPlatforms, groundHeight, resolveColliders } from './campusPhysics'
+import {
+  HEADROOM,
+  STEP_UP,
+  blockingPlatforms,
+  groundHeight,
+  insideCollider,
+  resolveColliders,
+} from './campusPhysics'
+import { PLAYER_RADIUS } from './campusLayout'
 
 /**
  * The building as one stacked space, walked rather than measured.
@@ -356,6 +371,108 @@ describe('the dog-leg', () => {
     for (const floor of [0, 1, 2] as Floor[]) {
       const landing = arrivalLandingPlatform(floor)
       expect(landing.z + landing.halfD).toBeGreaterThan(STAIRWELL.z1)
+    }
+  })
+})
+
+
+describe('the lift', () => {
+  /**
+   * It used to be a picture of one: two door panels on a glazed shaft and a
+   * rectangle on the floor in front of them that swapped the world. Two stops,
+   * both hardcoded — from the first or second floor it went to the library and
+   * nowhere else — and no way to say where you wanted to go.
+   */
+
+  it('serves every floor the building has', () => {
+    const names = liftFloorNames()
+    expect(names.map((n) => n.floor)).toEqual([...FLOORS])
+    for (const { label } of names) expect(label.length).toBeGreaterThan(0)
+  })
+
+  it('starts and finishes at floor level, exactly', () => {
+    // Anything else parks the car a few centimetres off and leaves a step in
+    // or out of it.
+    for (const from of FLOORS) {
+      for (const to of FLOORS) {
+        expect(liftHeightAt(from, to, 0)).toBeCloseTo(floorLevel(from), 6)
+        expect(liftHeightAt(from, to, 999)).toBeCloseTo(floorLevel(to), 6)
+      }
+    }
+  })
+
+  it('travels in the right direction and does not overshoot', () => {
+    const half = Math.abs(floorLevel(3) - floorLevel(0)) / LIFT_SPEED / 2
+    const midway = liftHeightAt(0, 3, half)
+    expect(midway).toBeGreaterThan(floorLevel(0))
+    expect(midway).toBeLessThan(floorLevel(3))
+    // And the same journey downwards.
+    const down = liftHeightAt(3, 0, half)
+    expect(down).toBeLessThan(floorLevel(3))
+    expect(down).toBeGreaterThan(floorLevel(0))
+  })
+
+  it('clamps rather than drifting past the floor it was called to', () => {
+    // A client that joins mid-ride, or misses a frame, must land on the floor
+    // rather than sail through the roof.
+    for (const elapsed of [-5, 0, 1e6, Number.MAX_SAFE_INTEGER]) {
+      const y = liftHeightAt(0, 2, elapsed)
+      expect(y).toBeGreaterThanOrEqual(floorLevel(0) - 1e-9)
+      expect(y).toBeLessThanOrEqual(floorLevel(2) + 1e-9)
+    }
+  })
+
+  it('takes longer the further it goes, and no time at all to stay put', () => {
+    expect(liftJourneySeconds(0, 0)).toBe(0)
+    expect(liftJourneySeconds(0, 3)).toBeGreaterThan(liftJourneySeconds(0, 1))
+    expect(liftJourneySeconds(0, 1)).toBeCloseTo(liftJourneySeconds(1, 0), 6)
+  })
+
+  it('knows when somebody is standing in the car', () => {
+    const y = floorLevel(1)
+    expect(insideLiftCar(LIFT_CAR.x, LIFT_CAR.z, y, y)).toBe(true)
+    // Beside it on the same floor is not inside it.
+    expect(insideLiftCar(LIFT_CAR.x + LIFT_CAR.halfW + 1, LIFT_CAR.z, y, y)).toBe(false)
+    // And standing in the shaft on a different floor is not either, which is
+    // what stops the panel appearing for somebody watching it go past.
+    expect(insideLiftCar(LIFT_CAR.x, LIFT_CAR.z, floorLevel(0), y)).toBe(false)
+  })
+
+  it('can be walked into from the corridor', () => {
+    // The failure this exists to catch: a solid shaft with the car inside it.
+    // That is how the lift was unusable before — the thing you had to stand in
+    // sat wholly within a collider slightly larger than itself, and every
+    // graph test passed because none of them asked whether a player could
+    // stand anywhere.
+    const walls = liftShaftWalls()
+    const standable = (x: number, z: number) =>
+      !walls.some((w) => insideCollider(x, z, w, PLAYER_RADIUS))
+    expect(standable(LIFT_CAR.x, LIFT_CAR.z), 'the car is walled in').toBe(true)
+    // And the way in is open: a straight line from the corridor to the car.
+    for (let z = LIFT_SHAFT.z1 + 1; z >= LIFT_CAR.z; z -= 0.2) {
+      expect(standable(LIFT_CAR.x, z), `blocked at z ${z.toFixed(1)}`).toBe(true)
+    }
+  })
+
+  it('fits inside its own shaft', () => {
+    expect(LIFT_CAR.x - LIFT_CAR.halfW).toBeGreaterThan(LIFT_SHAFT.x0)
+    expect(LIFT_CAR.x + LIFT_CAR.halfW).toBeLessThan(LIFT_SHAFT.x1)
+    expect(LIFT_CAR.z - LIFT_CAR.halfD).toBeGreaterThan(LIFT_SHAFT.z0)
+    expect(LIFT_CAR.z + LIFT_CAR.halfD).toBeLessThan(LIFT_SHAFT.z1)
+  })
+
+  it('has a shaft that is open at every floor', () => {
+    // The car has to be reachable from all four, which means no slab over it.
+    for (const floor of FLOORS) {
+      if (floor === 0) continue
+      const overCar = coreSlabs()
+        .filter((p) => Math.abs(p.top - floorLevel(floor)) < 1e-6)
+        .some(
+          (p) =>
+            Math.abs(p.x - LIFT_CAR.x) < p.halfW + LIFT_CAR.halfW &&
+            Math.abs(p.z - LIFT_CAR.z) < p.halfD + LIFT_CAR.halfD,
+        )
+      expect(overCar, `floor ${floor} paves over the car`).toBe(false)
     }
   })
 })

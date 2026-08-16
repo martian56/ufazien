@@ -1,7 +1,7 @@
 from django.contrib import admin
 from .models import (
     Lobby, LobbyMember, PlayerPosition, StudyRoom, ChatMessage, SavedLobby,
-    CampusProp, RoomLight,
+    CampusProp, RoomLight, LiftCar,
 )
 
 
@@ -81,3 +81,14 @@ class RoomLightAdmin(admin.ModelAdmin):
     search_fields = ['room', 'lobby__name', 'lobby__id', 'changed_by__username']
     readonly_fields = ['changed_at']
     list_select_related = ['lobby', 'changed_by']
+
+
+@admin.register(LiftCar)
+class LiftCarAdmin(admin.ModelAdmin):
+    """Which floor the lift is standing at, per lobby, and who called it."""
+
+    list_display = ['lobby', 'floor', 'called_by', 'changed_at']
+    list_filter = ['floor', 'changed_at']
+    search_fields = ['lobby__name', 'lobby__id', 'called_by__username']
+    readonly_fields = ['changed_at']
+    list_select_related = ['lobby', 'called_by']

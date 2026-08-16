@@ -198,6 +198,76 @@ export const STAIRWELL: PlanRect = {
 /** The lift shaft, which runs the full height and needs a hole in every slab. */
 export const LIFT_SHAFT: PlanRect = { x0: -18.4, x1: -11.6, z0: -20.8, z1: -17.2 }
 
+/**
+ * The car, and how it travels.
+ *
+ * It used to be a picture of a lift: two door panels on a glazed shaft, and a
+ * rectangle on the floor in front of them that swapped the world for another
+ * scene. Two stops, both hardcoded, and no way to say where you wanted to go.
+ *
+ * Now it is a platform in the shaft that carries whoever is standing on it.
+ * The floor it is at is the server's — see `LiftCar` — so everybody agrees
+ * where it is parked and pressing the call button genuinely fetches it; the
+ * travel between floors is played out by each client from the change, because
+ * a ride is short and a position ticking over the wire is far more to keep in
+ * step than "it is at three now".
+ */
+export const LIFT_CAR = {
+  x: (LIFT_SHAFT.x0 + LIFT_SHAFT.x1) / 2,
+  z: (LIFT_SHAFT.z0 + LIFT_SHAFT.z1) / 2,
+  halfW: (LIFT_SHAFT.x1 - LIFT_SHAFT.x0) / 2 - 0.25,
+  halfD: (LIFT_SHAFT.z1 - LIFT_SHAFT.z0) / 2 - 0.25,
+}
+
+/** How fast the car travels, in metres per second. */
+export const LIFT_SPEED = 2.2
+
+/** How long the doors take to open or close, in seconds. */
+export const LIFT_DOOR_SECONDS = 1.1
+
+/** The floor of the car, as a platform, at a given height. */
+export function liftFloorPlatform(y: number): Platform {
+  return {
+    x: LIFT_CAR.x,
+    z: LIFT_CAR.z,
+    halfW: LIFT_CAR.halfW,
+    halfD: LIFT_CAR.halfD,
+    top: y,
+    // You ride on top of it and walk under it when it is above you.
+    walkUnder: true,
+  }
+}
+
+/** Whether a player standing here is inside the car. */
+export function insideLiftCar(x: number, z: number, feet: number, carY: number): boolean {
+  if (Math.abs(feet - carY) > 0.35) return false
+  return Math.abs(x - LIFT_CAR.x) <= LIFT_CAR.halfW && Math.abs(z - LIFT_CAR.z) <= LIFT_CAR.halfD
+}
+
+/**
+ * Where the car is at a moment in a journey.
+ *
+ * Linear, and clamped at both ends, so a client that joins mid-ride or misses
+ * a frame lands on the right floor rather than drifting past it. `elapsed` is
+ * seconds since the call.
+ */
+export function liftHeightAt(from: Floor, to: Floor, elapsed: number): number {
+  const start = floorLevel(from)
+  const end = floorLevel(to)
+  if (elapsed <= 0) return start
+  const travel = Math.abs(end - start) / LIFT_SPEED
+  if (elapsed >= travel) return end
+  return start + (end - start) * (elapsed / travel)
+}
+
+/** How long a journey between two floors takes, doors included. */
+export function liftJourneySeconds(from: Floor, to: Floor): number {
+  if (from === to) return 0
+  return (
+    LIFT_DOOR_SECONDS + Math.abs(floorLevel(to) - floorLevel(from)) / LIFT_SPEED + LIFT_DOOR_SECONDS
+  )
+}
+
 /** One half of a dog-leg: twelve treads and a riser onto a landing. */
 export interface HalfFlight {
   from: Floor
@@ -394,4 +464,56 @@ export function coreGuards(): Collider[] {
   )
 
   return [...heads, ...rails]
+}
+
+
+/**
+ * The shaft, as three walls with the fourth side open.
+ *
+ * The open side faces the corridor, which is where you walk in from. A closed
+ * shaft is a car nobody can reach, and that is not hypothetical: the lift was
+ * unusable for exactly that reason before it was a lift at all, when the thing
+ * you had to stand in was a trigger inside the shaft's own footprint.
+ */
+export function liftShaftWalls(): Collider[] {
+  const thickness = 0.25
+  // One `id` across all three, because they are one enclosure. Walls meeting
+  // at a corner touch, and the campus rule against two solids closer than a
+  // player is wide would otherwise read a corner as a slot — `id` is the
+  // vocabulary this codebase already uses for "these are the same object",
+  // the way a sofa's seat names the sofa it sits on.
+  const id = 'lift-shaft'
+  const top = floorLevel(3) + STOREY_HEIGHT
+  const midX = (LIFT_SHAFT.x0 + LIFT_SHAFT.x1) / 2
+  const midZ = (LIFT_SHAFT.z0 + LIFT_SHAFT.z1) / 2
+  return [
+    // Back.
+    {
+      id,
+      x: midX,
+      z: LIFT_SHAFT.z0 + thickness / 2,
+      halfW: (LIFT_SHAFT.x1 - LIFT_SHAFT.x0) / 2,
+      halfD: thickness / 2,
+      height: top,
+    },
+    // And the two sides, stopping short of the back so they cannot seam with it.
+    ...[LIFT_SHAFT.x0, LIFT_SHAFT.x1].map((x) => ({
+      id,
+      x: x + (x === LIFT_SHAFT.x0 ? thickness / 2 : -thickness / 2),
+      z: midZ + thickness,
+      halfW: thickness / 2,
+      halfD: (LIFT_SHAFT.z1 - LIFT_SHAFT.z0) / 2 - thickness,
+      height: top,
+    })),
+  ]
+}
+
+/** What the panel inside the car calls each floor. */
+export function liftFloorNames(): { floor: Floor; label: string }[] {
+  return [
+    { floor: 0, label: 'Entrance hall' },
+    { floor: 1, label: 'Second floor' },
+    { floor: 2, label: 'Third floor' },
+    { floor: 3, label: 'Fourth floor — library' },
+  ]
 }

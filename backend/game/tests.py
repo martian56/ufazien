@@ -1079,6 +1079,113 @@ class LobbyConsumerTests(TestCase):
             # hundred thousand, which would let it through.
             self.assertLessEqual(abs(kept), 200, f'{sent!r} stored {kept!r}')
 
+    def test_calling_the_lift_moves_it_for_everybody(self):
+        """
+        A car that is only on the third floor for whoever sent it there is a
+        decoration. Somebody walking up to the doors has to find it where the
+        last person left it.
+        """
+        from asgiref.sync import async_to_sync
+        from .models import LiftCar
+
+        async def scenario():
+            import json
+            a, _ = await self._connect(self.host)
+            b, _ = await self._connect(self.player)
+            try:
+                await self._drain(a, b)
+                await a.send_json_to({'type': 'call_lift', 'floor': 3})
+                for _ in range(5):
+                    if await b.receive_nothing(timeout=1):
+                        continue
+                    payload = json.loads(await b.receive_from(timeout=2))
+                    if payload.get('type') == 'lift_update':
+                        return payload
+                return None
+            finally:
+                await a.disconnect()
+                await b.disconnect()
+
+        payload = async_to_sync(scenario)()
+        self.assertIsNotNone(payload, 'the other player never heard the lift move')
+        self.assertEqual(payload['floor'], 3)
+        self.assertEqual(LiftCar.objects.get(lobby=self.lobby).floor, 3)
+
+    def test_the_lift_cannot_be_sent_to_a_floor_that_does_not_exist(self):
+        """
+        The floor indexes four levels. A car at floor nine has its doors at a
+        height nobody can reach, so nobody could ever call it back.
+        """
+        from asgiref.sync import async_to_sync, sync_to_async
+        from .models import LiftCar
+
+        @sync_to_async
+        def parked():
+            car = LiftCar.objects.filter(lobby=self.lobby).first()
+            return None if car is None else car.floor
+
+        async def scenario():
+            a, _ = await self._connect(self.host)
+            seen = []
+            try:
+                await self._drain(a)
+                for bad in [9, -1, 'top', None, 3.7]:
+                    await a.send_json_to({'type': 'call_lift', 'floor': bad})
+                    await a.receive_nothing(timeout=0.3)
+                    seen.append(await parked())
+            finally:
+                await a.disconnect()
+            return seen
+
+        # Read back after each, because every call overwrites the row: asserting
+        # once at the end only ever tests the last value.
+        for sent, kept in zip([9, -1, 'top', None, 3.7], async_to_sync(scenario)()):
+            self.assertIn(kept, (None, 3), f'{sent!r} parked the car at {kept!r}')
+
+    def test_the_lobby_snapshot_says_where_the_lift_is(self):
+        """
+        Left out and somebody arriving sees the car at the ground floor while
+        everybody else is looking at it on the third.
+        """
+        from asgiref.sync import async_to_sync
+        from .models import LiftCar
+
+        LiftCar.objects.update_or_create(lobby=self.lobby, defaults={'floor': 2})
+
+        async def scenario():
+            import json
+            a, _ = await self._connect(self.host)
+            try:
+                for _ in range(5):
+                    payload = json.loads(await a.receive_from(timeout=2))
+                    if payload.get('type') == 'lobby_state':
+                        return payload
+                return None
+            finally:
+                await a.disconnect()
+
+        state = async_to_sync(scenario)()
+        self.assertIsNotNone(state, 'no lobby_state arrived')
+        self.assertEqual(state['lift']['floor'], 2)
+
+    def test_a_lobby_nobody_has_used_the_lift_in_reports_the_ground_floor(self):
+        from asgiref.sync import async_to_sync
+
+        async def scenario():
+            import json
+            a, _ = await self._connect(self.host)
+            try:
+                for _ in range(5):
+                    payload = json.loads(await a.receive_from(timeout=2))
+                    if payload.get('type') == 'lobby_state':
+                        return payload
+                return None
+            finally:
+                await a.disconnect()
+
+        state = async_to_sync(scenario)()
+        self.assertEqual(state['lift']['floor'], 0)
+
     def test_an_unknown_activity_falls_back_to_standing(self):
         from asgiref.sync import async_to_sync
         from .models import PlayerPosition
