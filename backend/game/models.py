@@ -309,3 +309,41 @@ class CampusProp(models.Model):
 
     def __str__(self):
         return f"{self.prop} at ({self.x}, {self.y}) in {self.lobby.name}"
+
+
+class LiftCar(models.Model):
+    """
+    Where the lift is parked, for everybody in the lobby.
+
+    Stored rather than broadcast and forgotten, for the same reason
+    `RoomLight` is: a car that is only on the third floor for the person who
+    sent it there is a decoration. Somebody who walks up to the doors has to
+    see it where the last person left it, and pressing the call button has to
+    actually fetch it.
+
+    A row exists only once somebody has used the lift; the absence of one means
+    it is standing at the ground floor, which is where it starts.
+
+    There is no `moving` flag and no destination. The car is at a floor or it is
+    travelling to one, and travelling is short enough that the client can play
+    it out from the change — sending "it is at 3 now" and letting each client
+    run the doors and the ride is a great deal less to keep in step than a
+    position ticking over the wire ten times a second.
+    """
+
+    # Four floors, matching `FLOOR_PLANS` in the client's vertical circulation.
+    GROUND = 0
+    TOP = 3
+
+    lobby = models.OneToOneField(Lobby, on_delete=models.CASCADE, related_name='lift')
+    floor = models.IntegerField(
+        default=GROUND,
+        validators=[MinValueValidator(GROUND), MaxValueValidator(TOP)],
+    )
+    called_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True
+    )
+    changed_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.lobby.name} lift at floor {self.floor}"

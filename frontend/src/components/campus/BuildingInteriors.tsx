@@ -1,4 +1,5 @@
 import { useLayoutEffect, useMemo, useRef } from 'react'
+import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 
 import type { InteriorKind, Vec3 } from './campusLayout'
@@ -34,6 +35,7 @@ import { ARCADE_PIERS, CORRIDOR_DOORS } from './verticalCirculation'
 import {
   FLOORS,
   HALF_FLIGHTS,
+  LIFT_CAR,
   arrivalLandingPlatform,
   coreGuards,
   coreSlabs,
@@ -2068,6 +2070,8 @@ interface InteriorProps {
   spec: InteriorSpec
   /** The shared whiteboard, for the room that has one. */
   whiteboard?: React.ReactNode
+  /** Where the lift car is, for the building that has one. */
+  liftHeight?: () => number
 }
 
 /**
@@ -2082,7 +2086,48 @@ interface InteriorProps {
  * building's, so everything inside it — windows, arcade, light fittings — is
  * proportioned to the floor it stands on.
  */
-function UfazCore({ spec, whiteboard }: InteriorProps) {
+/**
+ * The car itself, drawn where it actually is.
+ *
+ * Its height is read per frame from the same function the player controller
+ * rides, so what you are standing on and what you can see are the same object.
+ * Before this the lift was two door panels on the shaft and a trigger on the
+ * floor: nothing about it moved.
+ */
+function LiftCarBody({ height }: { height: () => number }) {
+  const car = useRef<THREE.Group>(null)
+  useFrame(() => {
+    if (car.current) car.current.position.y = height()
+  })
+
+  return (
+    <group ref={car} position={[LIFT_CAR.x, 0, LIFT_CAR.z]}>
+      {/* The floor you stand on. */}
+      <mesh receiveShadow position={[0, -0.06, 0]}>
+        <boxGeometry args={[LIFT_CAR.halfW * 2, 0.12, LIFT_CAR.halfD * 2]} />
+        <meshStandardMaterial color="#3b4149" roughness={0.5} metalness={0.4} />
+      </mesh>
+      {/* Three walls of brushed steel, open towards the corridor. */}
+      {[
+        [0, -LIFT_CAR.halfD, LIFT_CAR.halfW * 2, 0.08],
+        [-LIFT_CAR.halfW, 0, 0.08, LIFT_CAR.halfD * 2],
+        [LIFT_CAR.halfW, 0, 0.08, LIFT_CAR.halfD * 2],
+      ].map(([x, z, w, d], i) => (
+        <mesh key={i} castShadow position={[x, 1.15, z]}>
+          <boxGeometry args={[w, 2.3, d]} />
+          <meshStandardMaterial color="#aab3ba" roughness={0.3} metalness={0.75} />
+        </mesh>
+      ))}
+      {/* A light in the ceiling of it, so the car reads as occupied space. */}
+      <mesh position={[0, 2.28, 0]}>
+        <boxGeometry args={[LIFT_CAR.halfW * 1.2, 0.06, LIFT_CAR.halfD * 1.2]} />
+        <meshStandardMaterial color="#fdf6e6" emissive="#fdf6e6" emissiveIntensity={1.4} toneMapped={false} />
+      </mesh>
+    </group>
+  )
+}
+
+function UfazCore({ spec, whiteboard, liftHeight }: InteriorProps) {
   const levelSpec = { ...spec, ceiling: STOREY_HEIGHT }
 
   return (
@@ -2099,6 +2144,7 @@ function UfazCore({ spec, whiteboard }: InteriorProps) {
 
       <DogLegStair />
       <LiftCore ceiling={STOREY_HEIGHT * 4} />
+      {liftHeight && <LiftCarBody height={liftHeight} />}
 
       {FLOORS.map((floor) => (
         <group key={floor} position={[0, floorLevel(floor), 0]}>
@@ -2134,6 +2180,7 @@ export function BuildingInterior({
   lit = true,
   children,
   whiteboard,
+  liftHeight,
 }: {
   kind?: InteriorKind
   /** Whether the room's lights are on, which everybody in it shares. */
@@ -2141,13 +2188,15 @@ export function BuildingInterior({
   children?: React.ReactNode
   /** Mounted by the page, which owns the socket the strokes travel over. */
   whiteboard?: React.ReactNode
+  /** Where the lift car is, for the building that has one. */
+  liftHeight?: () => number
 }) {
   const spec = INTERIOR_SPECS[kind] ?? INTERIOR_SPECS.lecture
   const Contents = CONTENTS[kind] ?? LectureInterior
 
   return (
     <RoomShell spec={spec} lit={lit}>
-      <Contents spec={spec} whiteboard={whiteboard} />
+      <Contents spec={spec} whiteboard={whiteboard} liftHeight={liftHeight} />
       {children}
     </RoomShell>
   )

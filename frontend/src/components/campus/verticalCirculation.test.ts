@@ -3,7 +3,6 @@ import { describe, it, expect } from 'vitest'
 import {
   CORRIDOR_OF,
   FLOOR_PLANS,
-  LIFT_CAR,
   allRoomIds,
   corridorFor,
   exitOf,
@@ -61,43 +60,12 @@ describe('the floors', () => {
 })
 
 /**
- * What is left of the portal graph.
+ * What is left of the portal graph: the doors off each corridor.
  *
- * The stair is not in it any more: the building is one stacked space and which
- * floor you are on is read off how high you are. See `ufazCore.test.ts`, which
- * walks it. This is the lift and the doors off each corridor.
+ * Neither the stair nor the lift is in it any more. The building is one
+ * stacked space — which floor you are on is read off how high you are, and the
+ * lift is a car you ride. `ufazCore.test.ts` walks both.
  */
-describe('the lift', () => {
-
-
-
-
-  it('has a lift on every floor, and it runs both ways', () => {
-    const top = CORRIDOR_OF[3]
-    for (const plan of FLOOR_PLANS) {
-      const lift = portalsFrom(plan.corridor).find((p) => p.kind === 'lift')
-      expect(lift, `floor ${plan.floor}`).toBeDefined()
-      expect(lift!.to).toBe(plan.floor === 3 ? CORRIDOR_OF[0] : top)
-    }
-    // And the top floor's lift comes back to the hall rather than to itself.
-    expect(portalsFrom(top).find((p) => p.kind === 'lift')!.to).not.toBe(top)
-  })
-
-  it('puts you down clear of the portal you arrived through', () => {
-    // Landing inside the trigger sends you straight back, which is a loop the
-    // player cannot break out of by walking.
-    for (const id of allRoomIds()) {
-      for (const portal of portalsFrom(id)) {
-        const arrival = portalAt(portal.to, portal.spawn.x, portal.spawn.z, 0)
-        expect(
-          arrival?.to,
-          `${id} -> ${portal.to} lands back in a portal to ${arrival?.to}`,
-        ).not.toBe(id)
-      }
-    }
-  })
-})
-
 describe('leaving a room', () => {
   it('puts you back in the corridor it opens off', () => {
     for (const plan of FLOOR_PLANS) {

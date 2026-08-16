@@ -34,7 +34,7 @@ export type Floor = 0 | 1 | 2 | 3
  * arrive at the head of the flight, take the lift and you arrive at the lift
  * lobby, and walking through a classroom door puts you inside the door.
  */
-export type PortalKind = 'stair-up' | 'stair-down' | 'lift' | 'door'
+export type PortalKind = 'door'
 
 export interface Portal {
   /** The room this leads to. Numeric, because it is a `current_room`. */
@@ -82,17 +82,6 @@ export const CORRIDOR_DOORS = [-12, -4, 4, 12]
  * slot that narrow is a wedge the collision resolver cannot settle a player in.
  */
 export const ARCADE_PIERS = [-8, 0, 8, 16]
-
-/**
- * Where you stand to call the lift: in front of the doors, not inside the car.
- *
- * This was the shaft's own footprint, which is solid — the trigger sat wholly
- * inside a collider that is slightly larger than it, so no reachable point was
- * ever inside the trigger and the lift could not be used at all. The graph
- * tests all passed: they checked that the portals joined up, never that a
- * player could stand in one.
- */
-export const LIFT_CAR = { x: -15, z: -15.6, halfW: 2.6, halfD: 1.2 }
 
 /**
  * Which rooms are on which floor.
@@ -162,17 +151,10 @@ export function portalsFrom(roomId: number): Portal[] {
   // you down instead; and coming down put you inside the flight, at floor
   // level, wedged in three tread colliders.
 
-  // The lift, which runs to the library on the top floor and back to the hall.
-  // Two stops rather than four: a full floor selector is a menu, and the stair
-  // is right there for anyone going one floor.
-  const liftTarget = floor === 3 ? CORRIDOR_OF[0] : CORRIDOR_OF[3]
-  portals.push({
-    to: liftTarget,
-    kind: 'lift',
-    ...LIFT_CAR,
-    spawn: { x: LIFT_CAR.x, z: LIFT_CAR.z + 3.2 },
-    label: floor === 3 ? 'Lift to the entrance hall' : 'Lift to the library',
-  })
+  // No lift portal either. The lift is a car in a shaft that carries you, with
+  // a panel inside naming the floors — see `ufazCore`. It used to be two
+  // hardcoded stops and a rectangle on the floor that swapped the world, so
+  // from the first or second floor it went to the library and nowhere else.
 
   plan.rooms.forEach((room, i) => {
     portals.push({

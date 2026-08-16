@@ -244,6 +244,10 @@ describe('colliders do not trap the player', () => {
           // this is the difference between a slot and a bench three metres
           // above another bench.
           if (!sameHeight(a, b)) continue
+          // Nor can two parts of the same object. Walls meeting at a corner
+          // touch, and an enclosure has corners — `id` is how this codebase
+          // already says "these are one thing", as a sofa's seat names its sofa.
+          if (a.id !== undefined && a.id === b.id) continue
           const gap = separation(a, b)
           // A negative gap is an overlap, which is worse than a narrow slot —
           // and `gap > 0` used to filter exactly those out, so the one case

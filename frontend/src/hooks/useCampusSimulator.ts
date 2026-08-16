@@ -203,6 +203,17 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
      */
     const [seatedPlayers, setSeatedPlayers] = useState<SeatMap>(NO_SEATS);
     /**
+     * Which floor the lift is at, and when it was last sent somewhere.
+     *
+     * The server owns the floor; the clock is local and only decides how far
+     * through the ride this client is drawing. A car that arrived before you
+     * joined has `calledAt` at zero, so it is simply parked.
+     */
+    const [lift, setLift] = useState<{ floor: number; calledAt: number }>({
+        floor: 0,
+        calledAt: 0,
+    });
+    /**
      * Who is carrying what.
      *
      * The same shape as the seating map, and for the same reasons: it is a
@@ -329,6 +340,11 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
 
         // Lobby state received
         campusWebSocket.on('lobbyState', (data: any) => {
+            // Where the car is standing. Without this somebody arriving sees it
+            // at the ground floor while everybody else is looking at it on the
+            // third — and `calledAt` stays zero, so it is parked rather than
+            // replaying a ride that finished before they joined.
+            if (data.lift) setLift({ floor: Number(data.lift.floor) || 0, calledAt: 0 });
             setCurrentLobby(data.lobby);
             setLobbyMembers(data.members || []);
             setChatMessages(data.messages || []);
@@ -504,6 +520,12 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
         });
 
         // Chat message received
+        campusWebSocket.on('liftUpdate', (data: any) => {
+            // `performance.now()` rather than the server's clock: this only
+            // times the animation, and the two clocks need not agree for that.
+            setLift({ floor: Number(data.floor) || 0, calledAt: performance.now() });
+        });
+
         campusWebSocket.on('chatMessage', (data: any) => {
             setChatMessages(prev => [...prev, {
                 id: data.message_id,
@@ -673,6 +695,11 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
     }, []);
 
     /** Flick a room's lights for everybody in it. */
+    /** Send the lift to a floor. The server decides; this only asks. */
+    const callLift = useCallback((floor: number) => {
+        campusWebSocket.callLift(floor);
+    }, []);
+
     const setRoomLight = useCallback((room: string, on: boolean) => {
         campusWebSocket.setLight(room, on);
     }, []);
@@ -900,6 +927,8 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
         dropProp,
         roomLights,
         setRoomLight,
+        lift,
+        callLift,
         getNearbyPlayers,
 
         // Utilities

@@ -24,6 +24,7 @@ import { ARCADE_PIERS } from './verticalCirculation'
 import {
   FLOORS,
   LIFT_SHAFT,
+  liftShaftWalls,
   STOREY_HEIGHT,
   UFAZ_STAIR,
   coreGuards,
@@ -148,14 +149,14 @@ function ufazCorePhysics(): InteriorPhysics {
   const platforms: Platform[] = [...coreSlabs(), ...coreStairPlatforms()]
   const seats: Seat[] = []
 
-  // The lift shaft, which is solid glass and steel the whole way up.
-  colliders.push({
-    x: (LIFT_SHAFT.x0 + LIFT_SHAFT.x1) / 2,
-    z: (LIFT_SHAFT.z0 + LIFT_SHAFT.z1) / 2,
-    halfW: (LIFT_SHAFT.x1 - LIFT_SHAFT.x0) / 2,
-    halfD: (LIFT_SHAFT.z1 - LIFT_SHAFT.z0) / 2,
-    height: STOREY_HEIGHT * 4,
-  })
+  // The lift shaft: three walls of glass and steel, open towards the corridor.
+  //
+  // Three and not four. A solid block here is how the lift came to be unusable
+  // in the first place — the trigger that called it sat wholly inside a
+  // collider slightly larger than itself, so no reachable point was ever
+  // inside it. Now that the car is somewhere you stand rather than a rectangle
+  // you step on, a solid shaft would simply wall the car in.
+  colliders.push(...liftShaftWalls())
 
   // The arcade piers, in the same place on every floor, so one footprint each.
   // The openings between them are the walkable part, which is why these are

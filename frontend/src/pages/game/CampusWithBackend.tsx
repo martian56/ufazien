@@ -47,7 +47,15 @@ import {
 } from '../../components/campus/CampusScenery'
 import { GltfCharacter } from '../../components/campus/GltfCharacter'
 import { CORRIDOR_OF, exitOf, isCorridor, portalAt } from '../../components/campus/verticalCirculation'
-import { floorAt } from '../../components/campus/ufazCore'
+import {
+  LIFT_DOOR_SECONDS,
+  floorAt,
+  floorLevel,
+  insideLiftCar,
+  liftFloorPlatform,
+  liftHeightAt,
+  liftFloorNames,
+} from '../../components/campus/ufazCore'
 import {
   BUBBLE_MS,
   bubbleFor,
@@ -991,6 +999,8 @@ function Player({
   onTravel,
   onFloorChange,
   onLeave,
+  liftHeight,
+  onInLift,
   doors,
   onOpenDoor,
   poseRef,
@@ -1010,6 +1020,10 @@ function Player({
   onTravel: (building: CampusBuilding, spawn: { x: number; z: number }) => void
   /** Arriving on another floor by walking there, which moves nothing. */
   onFloorChange: (building: CampusBuilding) => void
+  /** Where the lift car is this instant, in metres. */
+  liftHeight: () => number
+  /** Whether the player is standing in the car, so the panel can appear. */
+  onInLift: (inside: boolean) => void
   /** Walked back out through one. */
   onLeave: (building: CampusBuilding) => void
   /** Which doors are open, and since when. */
@@ -1037,6 +1051,8 @@ function Player({
   const doorHeld = useRef(false)
   /** The seat the camera has already been aimed for, so it is aimed once. */
   const satOn = useRef<string | null>(null)
+  /** Where the lift was last frame, so a rider can be carried by the difference. */
+  const lastCarY = useRef(0)
 
   const { updatePosition, worldTo2D } = campusHook
 
@@ -1215,8 +1231,24 @@ function Player({
     // What is solid here, and what can be stood on. Both change on the
     // threshold of a building, which is why they are read per frame rather
     // than captured once.
-    const platforms = insideBuilding ? interiorPlatforms(insideBuilding.interior) : []
+    //
+    // The lift's floor is one of them and it moves, so it is appended rather
+    // than baked in: `liftY` is where the car is this instant, and standing on
+    // it is standing on a platform like any other.
+    const carY = liftHeight()
+    const platforms = insideBuilding
+      ? [...interiorPlatforms(insideBuilding.interior), liftFloorPlatform(carY)]
+      : []
     const feet = camera.position.y - EYE_HEIGHT
+
+    // Riding it. The platform under the player rises on its own, and gravity
+    // would leave them standing in mid-air for a frame and then falling; this
+    // carries them with it, which is what makes it a lift rather than a hole
+    // that happens to be the right height.
+    if (insideBuilding && insideLiftCar(camera.position.x, camera.position.z, feet, lastCarY.current)) {
+      camera.position.y += carY - lastCarY.current
+    }
+    lastCarY.current = carY
 
     // Anything too high to step onto is a wall rather than a ramp: a stage
     // edge stops you from the floor, and once you are up there you walk about
@@ -1344,6 +1376,13 @@ function Player({
       }
     }
 
+    // Whether the panel should be up. Edge-detected in the page, so this can
+    // be called every frame without re-rendering anything.
+    onInLift(
+      Boolean(insideBuilding) &&
+        insideLiftCar(camera.position.x, camera.position.z, camera.position.y - EYE_HEIGHT, carY),
+    )
+
     // Always update backend position (even when not moving, to send final
     // position on stop). The hook throttles the sending.
     const backendCoords = worldTo2D(camera.position.x, camera.position.z)
@@ -1410,8 +1449,10 @@ const CampusWithBackend = () => {
   const lobbyId = (rawLobbyId === 'null' || rawLobbyId === 'undefined') ? null : rawLobbyId;
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [insideBuilding, setInsideBuilding] = useState<CampusBuilding | null>(null)
-  /** Where a stair, lift or inner door put the player down. */
+  /** Where an inner door put the player down. */
   const [arrival, setArrival] = useState<{ x: number; z: number } | null>(null)
+  /** Whether the player is standing in the lift, so the panel can appear. */
+  const [inLift, setInLift] = useState(false)
   /**
    * Which doors are open. Held here rather than in the scene because both the
    * player's collisions and the door meshes need it, and they live in
@@ -1512,6 +1553,36 @@ const CampusWithBackend = () => {
 
   // Initialize campus simulation hook
   const campusHook = useCampusSimulator(lobbyId)
+
+  /**
+   * Where the lift car is, this instant.
+   *
+   * A function rather than state: it is read every frame by the controller and
+   * by the car itself, and turning a ride into sixty re-renders a second would
+   * cost more than the ride is worth. The floor it is going to is the server's;
+   * how far through the journey we are is this client's clock.
+   *
+   * The doors take `LIFT_DOOR_SECONDS` to close before it moves, which is why
+   * the elapsed time is offset — a car that starts moving the instant somebody
+   * presses a button reads as a teleport with extra steps.
+   */
+  const liftFrom = useRef(0)
+  const liftTo = useRef(0)
+  const { lift } = campusHook
+  useEffect(() => {
+    liftFrom.current = liftTo.current
+    liftTo.current = lift.floor
+  }, [lift.floor, lift.calledAt])
+
+  const liftHeight = useCallback(() => {
+    if (!lift.calledAt) return floorLevel(lift.floor as 0 | 1 | 2 | 3)
+    const elapsed = (performance.now() - lift.calledAt) / 1000 - LIFT_DOOR_SECONDS
+    return liftHeightAt(
+      liftFrom.current as 0 | 1 | 2 | 3,
+      liftTo.current as 0 | 1 | 2 | 3,
+      elapsed,
+    )
+  }, [lift.floor, lift.calledAt])
 
   /**
    * The room this player is in, in the form it travels in.
@@ -1980,6 +2051,38 @@ const CampusWithBackend = () => {
         </div>
       )}
 
+      {/* The lift's own panel.
+          DOM rather than buttons in the world, for the same reason the library
+          terminal is: while the pointer is locked for mouse-look — the normal
+          way to play — a click in the world never lands on anything. */}
+      {inLift && (
+        <div className="pointer-events-auto absolute left-1/2 top-1/2 z-30 -translate-x-1/2 -translate-y-1/2 rounded-xl border border-white/15 bg-slate-950/85 p-3 shadow-xl shadow-black/50 backdrop-blur">
+          <div className="mb-2 text-center text-[11px] uppercase tracking-widest text-slate-400">
+            Lift
+          </div>
+          <div className="flex flex-col gap-1.5">
+            {liftFloorNames().map(({ floor, label }) => (
+              <button
+                key={floor}
+                onClick={() => campusHook.callLift(floor)}
+                aria-label={`Go to the ${label}`}
+                aria-pressed={campusHook.lift.floor === floor}
+                className={`flex items-center gap-2.5 rounded-lg px-3 py-1.5 text-left text-sm transition ${
+                  campusHook.lift.floor === floor
+                    ? 'bg-amber-500/20 text-amber-200'
+                    : 'text-slate-200 hover:bg-white/10'
+                }`}
+              >
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-white/20 text-xs font-semibold">
+                  {floor}
+                </span>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Sitting down. The prompt names the chair you are actually standing at,
           and only offers one nobody else is in. */}
       {!games.active && (insideBuilding || leaning) && (seatCandidate || campusHook.ownSeat || leaning) && (
@@ -2243,6 +2346,7 @@ const CampusWithBackend = () => {
               <BuildingInterior
                 kind={insideBuilding.interior}
                 lit={roomLit}
+                liftHeight={liftHeight}
                 whiteboard={
                   insideBuilding.interior === 'lecture' ? (
                     <Whiteboard
@@ -2377,6 +2481,8 @@ const CampusWithBackend = () => {
                 // walking from wherever the stair left them.
                 setInsideBuilding(building)
               }}
+              liftHeight={liftHeight}
+              onInLift={(inside) => setInLift((was) => (was === inside ? was : inside))}
               onLeave={() => {
                 setArrival(null)
                 setInsideBuilding(null)

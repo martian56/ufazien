@@ -181,6 +181,9 @@ class CampusWebSocketService {
             case 'light_update':
                 this.emit('lightUpdate', data);
                 break;
+            case 'lift_update':
+                this.emit('liftUpdate', data);
+                break;
             case 'chat_message':
                 this.emit('chatMessage', data);
                 break;
@@ -265,6 +268,19 @@ class CampusWebSocketService {
     dropProp(prop: string, x: number, y: number) {
         if (!this.isConnected) return;
         this.send({ type: 'drop_prop', prop, x, y });
+    }
+
+    /**
+     * Send the lift to a floor, for everybody.
+     *
+     * Asked rather than assumed, like the seats and the props: the car is one
+     * object and two people can press two buttons in the same tick. The server
+     * decides where it ends up and tells everybody, so nobody watches it go to
+     * a floor it is not at.
+     */
+    callLift(floor: number) {
+        if (!this.isConnected) return;
+        this.send({ type: 'call_lift', floor });
     }
 
     /** Flick a room's lights, for everybody in it. */

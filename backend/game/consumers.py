@@ -10,6 +10,7 @@ from django.db import IntegrityError, transaction
 from django.contrib.auth import get_user_model
 from .models import (
     CampusProp,
+    LiftCar,
     ChatMessage,
     Lobby,
     LobbyMember,
@@ -58,6 +59,22 @@ def _clean_heading(value):
     # Normalised to (-pi, pi], so the value cannot drift without bound as a
     # player spins on the spot.
     return math.remainder(angle, 2 * math.pi)
+
+
+def _clean_floor(value):
+    """
+    A floor the building actually has, or None.
+
+    Four levels, and nothing else. A car sent to floor nine is one whose doors
+    are at a height no player can reach, so nobody could call it back.
+    """
+    try:
+        floor = int(value)
+    except (TypeError, ValueError):
+        return None
+    if floor < LiftCar.GROUND or floor > LiftCar.TOP:
+        return None
+    return floor
 
 
 def _clean_activity(value):
@@ -209,6 +226,8 @@ class LobbyConsumer(AsyncWebsocketConsumer):
                 await self.handle_take_prop(data)
             elif message_type == 'drop_prop':
                 await self.handle_drop_prop(data)
+            elif message_type == 'call_lift':
+                await self.handle_call_lift(data)
             elif message_type == 'set_light':
                 await self.handle_set_light(data)
             elif message_type == 'chat_message':
@@ -338,6 +357,48 @@ class LobbyConsumer(AsyncWebsocketConsumer):
             return
 
         await self.broadcast_prop(prop, held=False, x=landed[0], y=landed[1], room=landed[2])
+
+    async def handle_call_lift(self, data):
+        """
+        Send the lift to a floor, for everybody.
+
+        No permission check, for the same reason the light switch has none: a
+        lift only the host may call is a worse feature than no lift, and the
+        worst anybody can do with it is take it to a floor somebody else did
+        not want.
+
+        The floor is bounded here rather than trusted. It indexes a fixed set
+        of four levels on the client, and an out-of-range value would be a car
+        parked at a storey that does not exist — which nobody could then call
+        back, because the doors would never be anywhere reachable.
+        """
+        floor = _clean_floor(data.get('floor'))
+        if floor is None:
+            return
+
+        await self.store_lift(floor)
+        await self.channel_layer.group_send(
+            self.lobby_group_name,
+            {
+                'type': 'lift_update',
+                'user_id': self.user.id,
+                'floor': floor,
+            },
+        )
+
+    async def lift_update(self, event):
+        await self.send(text_data=json.dumps({
+            'type': 'lift_update',
+            'user_id': event['user_id'],
+            'floor': event['floor'],
+        }))
+
+    @database_sync_to_async
+    def store_lift(self, floor):
+        LiftCar.objects.update_or_create(
+            lobby_id=self.lobby_id,
+            defaults={'floor': floor, 'called_by': self.user},
+        )
 
     async def handle_set_light(self, data):
         """
@@ -753,6 +814,10 @@ class LobbyConsumer(AsyncWebsocketConsumer):
             # built rather than as the last person left it.
             props = list(CampusProp.objects.filter(lobby=lobby))
             lights = list(RoomLight.objects.filter(lobby=lobby))
+            # Where the lift is standing. Left out and somebody arriving sees
+            # it at the ground floor while everybody else is looking at it on
+            # the third.
+            lift = LiftCar.objects.filter(lobby=lobby).first()
 
             return {
                 'lobby': lobby,
@@ -761,6 +826,7 @@ class LobbyConsumer(AsyncWebsocketConsumer):
                 'messages': messages,
                 'props': props,
                 'lights': lights,
+                'lift': lift,
             }
         except Lobby.DoesNotExist:
             return None
@@ -845,4 +911,6 @@ class LobbyConsumer(AsyncWebsocketConsumer):
             'lights': [
                 {'room': light.room, 'on': light.on} for light in lobby_state['lights']
             ],
+            # No row means nobody has used it, which is the ground floor.
+            'lift': {'floor': lobby_state['lift'].floor if lobby_state['lift'] else 0},
         }))
