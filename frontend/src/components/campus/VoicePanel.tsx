@@ -115,8 +115,15 @@ export default function VoicePanel({
           <Volume2 className="w-4 h-4" />
           Voice
         </span>
-        <span className={`text-xs ${connected ? "text-green-400" : "text-gray-400"}`}>
-          {connected ? `${participants.length + 1} in range` : "connecting..."}
+        {/* Three states, not two. A permanent failure used to read
+            "connecting..." for ever, sitting directly above the reason it
+            had stopped. */}
+        <span
+          className={`text-xs ${
+            connected ? 'text-green-400' : error ? 'text-red-400' : 'text-gray-400'
+          }`}
+        >
+          {connected ? `${participants.length + 1} in range` : error ? 'unavailable' : 'connecting...'}
         </span>
       </div>
 

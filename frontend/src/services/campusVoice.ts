@@ -23,6 +23,12 @@ const FULL_VOLUME_RADIUS = 60
 export interface Position {
   x: number
   y: number
+  /**
+   * Height, in world metres. The ground plane is scaled by ten, so it is
+   * brought into the same units before it reaches the panner — otherwise a
+   * storey of separation reads as forty-five centimetres.
+   */
+  elevation?: number
 }
 
 interface RemoteAudio {
@@ -252,32 +258,52 @@ export class CampusVoice {
   }
 
   /** Where the local player is. Moves the Web Audio listener. */
-  setLocalPosition({ x, y }: Position) {
-    this.localPosition = { x, y }
+  setLocalPosition({ x, y, elevation = 0 }: Position) {
+    this.localPosition = { x, y, elevation }
     if (!this.listener) return
-    // The map is 2D; treat y as depth so left/right panning follows x.
+    // The ground plane is x and y; height is the third axis, in the same
+    // scaled units as the other two.
+    const height = elevation * 10
     if (this.listener.positionX) {
       this.listener.positionX.value = x
-      this.listener.positionY.value = 0
+      this.listener.positionY.value = height
       this.listener.positionZ.value = y
     } else {
-      this.listener.setPosition(x, 0, y)
+      this.listener.setPosition(x, height, y)
     }
   }
 
   /** Where a remote player is, keyed by their user id. Moves all their tracks. */
-  setRemotePosition(userId: string | number, { x, y }: Position) {
+  /**
+   * Move a remote voice, and say whether it should be heard at all.
+   *
+   * `audible` is a separate question from distance, and it has to be. Every
+   * interior is built at the origin and shares one coordinate frame with the
+   * outdoors, so the library on the fourth floor and the cafeteria on the
+   * second occupy the same positions — and at a full-volume radius of six
+   * world metres in rooms forty metres across, people in different rooms on
+   * different floors heard each other perfectly. Distance cannot express a
+   * wall; only the room can.
+   */
+  setRemotePosition(
+    userId: string | number,
+    { x, y, elevation = 0 }: Position,
+    audible = true,
+  ) {
     const identity = `user-${userId}`
     for (const remote of this.remotes.values()) {
       if (remote.identity !== identity) continue
       const { panner } = remote
+      // Into the same units as the ground plane, which is world metres by ten.
+      const height = elevation * 10
       if (panner.positionX) {
         panner.positionX.value = x
-        panner.positionY.value = 0
+        panner.positionY.value = height
         panner.positionZ.value = y
       } else {
-        panner.setPosition(x, 0, y)
+        panner.setPosition(x, height, y)
       }
+      remote.gain.gain.value = audible ? 1 : 0
     }
   }
 
@@ -285,7 +311,8 @@ export class CampusVoice {
   distanceVolume(userId: string | number, position: any) {
     const dx = position.x - this.localPosition.x
     const dy = position.y - this.localPosition.y
-    const distance = Math.hypot(dx, dy)
+    const dz = ((position.elevation ?? 0) - (this.localPosition.elevation ?? 0)) * 10
+    const distance = Math.hypot(dx, dy, dz)
     if (distance <= FULL_VOLUME_RADIUS) return 1
     if (distance >= HEARING_RADIUS) return 0
     return 1 - (distance - FULL_VOLUME_RADIUS) / (HEARING_RADIUS - FULL_VOLUME_RADIUS)

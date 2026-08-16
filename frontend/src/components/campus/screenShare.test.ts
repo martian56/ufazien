@@ -5,6 +5,7 @@ import { fitProjector } from './projectorFit'
 import { INTERIOR_SPECS, interiorHalfExtent } from './interiorSpecs'
 import { lectureSeatingExtent } from './lectureSeating'
 import { CAMPUS_BUILDINGS } from './campusLayout'
+import { inSameRoom } from './playerStatus'
 
 /**
  * The screen-share path, at the two points where it silently broke.
@@ -270,5 +271,48 @@ describe('the two position paths agree', () => {
   it('reads a room the snapshot omits as no room, not as undefined', () => {
     const { current_room: _omitted, ...withoutRoom } = snapshotEntry
     expect(fromSnapshot(withoutRoom as SnapshotEntry).current_room).toBeNull()
+  })
+})
+
+
+describe('who you can hear', () => {
+  /**
+   * Proximity voice ignored the room entirely. Every interior is built at the
+   * origin and shares one coordinate frame with the outdoors, so the library
+   * on the fourth floor and the cafeteria on the second are at the same
+   * coordinates — and at a full-volume radius of six world metres in rooms
+   * forty across, everybody in the building heard everybody else at full
+   * volume, and somebody on the quad near the origin heard all of them.
+   *
+   * `useCampusVoice` now decides audibility with `inSameRoom`, the same
+   * function that decides whether an avatar is drawn, so what these assert is
+   * the rule both layers share.
+   */
+
+  it('hears somebody in the same room, and on the open campus', () => {
+    expect(inSameRoom('1', '1')).toBe(true)
+    expect(inSameRoom(null, null)).toBe(true)
+  })
+
+  it('does not hear another room, however close the coordinates', () => {
+    // The exact case: the same x and y, a different room.
+    expect(inSameRoom('2', '6')).toBe(false)
+  })
+
+  it('does not carry between indoors and the quad', () => {
+    expect(inSameRoom(null, '1')).toBe(false)
+    expect(inSameRoom('1', null)).toBe(false)
+  })
+
+  it('treats a missing room and an empty one as the campus, not as a room', () => {
+    // These arrive off a socket, where a room can be absent, null or ''.
+    expect(inSameRoom(undefined, null)).toBe(true)
+    expect(inSameRoom('', null)).toBe(true)
+    expect(inSameRoom('', '1')).toBe(false)
+  })
+
+  it('compares ids that arrive as numbers and as strings', () => {
+    // The socket sends a number; every other path sends a string.
+    expect(inSameRoom(1, '1')).toBe(true)
   })
 })
