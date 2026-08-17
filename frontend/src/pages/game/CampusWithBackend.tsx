@@ -1667,8 +1667,6 @@ const CampusWithBackend = () => {
     userPosition,
     disconnect,
     coordsTo3D,
-    joinStudyRoom,
-    leaveStudyRoom,
   } = campusHook
 
   // Release the pointer when any panel opens: while it is locked the cursor is
@@ -1680,18 +1678,21 @@ const CampusWithBackend = () => {
     }
   }, [isChatOpen, isMenuOpen, isMapOpen, games.result])
 
-  // Leaving the area you joined should also leave the room on the server.
+  // Which study area the player has joined. Local to this client: the server
+  // used to be told, but nothing on either side did anything with it — the
+  // peer handlers were empty and the `StudyRoom` rows it was nominally about
+  // could never be occupied (#144). The button's "Joined" state is the whole
+  // of its behaviour, and always was.
   const joinedArea = useRef<string | null>(null)
   // Mirrored into state purely so the button's label repaints. Writing a ref
   // schedules nothing, so it kept reading "Join study" after a join.
   const [joinedAreaId, setJoinedAreaId] = useState<string | null>(null)
   useEffect(() => {
     if (joinedArea.current && joinedArea.current !== nearArea?.id) {
-      leaveStudyRoom(joinedArea.current)
       joinedArea.current = null
       setJoinedAreaId(null)
     }
-  }, [nearArea, leaveStudyRoom])
+  }, [nearArea])
 
   // Voice rides on the positions the game already streams.
   const voice = useCampusVoice({
@@ -2309,7 +2310,6 @@ const CampusWithBackend = () => {
             </p>
             <button
               onClick={() => {
-                joinStudyRoom(nearArea.id)
                 joinedArea.current = nearArea.id
                 setJoinedAreaId(nearArea.id)
               }}

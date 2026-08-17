@@ -223,44 +223,6 @@ class PlayerPosition(models.Model):
         return f"{self.user.username} at ({self.x}, {self.y}) in {self.lobby.name}"
 
 
-class StudyRoom(models.Model):
-    """Study rooms within the campus"""
-    lobby = models.ForeignKey(Lobby, on_delete=models.CASCADE, related_name='study_rooms')
-    name = models.CharField(max_length=50)
-    x = models.FloatField()  # Room position X
-    y = models.FloatField()  # Room position Y
-    width = models.FloatField(default=150.0)
-    height = models.FloatField(default=100.0)
-    max_capacity = models.IntegerField(default=8)
-    presenter = models.ForeignKey(
-        settings.AUTH_USER_MODEL, 
-        on_delete=models.SET_NULL, 
-        null=True, 
-        blank=True,
-        related_name='presenting_rooms'
-    )
-    is_presentation_active = models.BooleanField(default=False)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        unique_together = ['lobby', 'name']
-        ordering = ['name']
-
-    def __str__(self):
-        return f"{self.name} in {self.lobby.name}"
-
-    @property
-    def current_occupants_count(self):
-        return PlayerPosition.objects.filter(
-            lobby=self.lobby,
-            current_room=self.name
-        ).count()
-
-    @property
-    def is_full(self):
-        return self.current_occupants_count >= self.max_capacity
-
-
 class ChatMessage(models.Model):
     """Chat messages in the game"""
     lobby = models.ForeignKey(Lobby, on_delete=models.CASCADE, related_name='chat_messages')

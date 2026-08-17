@@ -283,10 +283,6 @@ class LobbyConsumer(AsyncWebsocketConsumer):
                 await self.handle_set_light(data)
             elif message_type == 'chat_message':
                 await self.handle_chat_message(data)
-            elif message_type == 'study_room_join':
-                await self.handle_study_room_join(data)
-            elif message_type == 'study_room_leave':
-                await self.handle_study_room_leave(data)
             else:
                 await self.send(text_data=json.dumps({
                     'type': 'error',
@@ -718,34 +714,6 @@ class LobbyConsumer(AsyncWebsocketConsumer):
             }
         )
 
-    async def handle_study_room_join(self, data):
-        """Handle study room join events."""
-        room_id = data.get('room_id')
-        if room_id:
-            await self.channel_layer.group_send(
-                self.lobby_group_name,
-                {
-                    'type': 'study_room_join',
-                    'user_id': self.user.id,
-                    'username': self.user.username,
-                    'room_id': room_id,
-                }
-            )
-
-    async def handle_study_room_leave(self, data):
-        """Handle study room leave events."""
-        room_id = data.get('room_id')
-        if room_id:
-            await self.channel_layer.group_send(
-                self.lobby_group_name,
-                {
-                    'type': 'study_room_leave',
-                    'user_id': self.user.id,
-                    'username': self.user.username,
-                    'room_id': room_id,
-                }
-            )
-
     # Group message handlers
     async def user_joined(self, event):
         """Handle user joined event."""
@@ -785,24 +753,6 @@ class LobbyConsumer(AsyncWebsocketConsumer):
             'message': event['message'],
             'room': event.get('room'),
             'timestamp': event['timestamp'],
-        }))
-
-    async def study_room_join(self, event):
-        """Handle study room join event."""
-        await self.send(text_data=json.dumps({
-            'type': 'study_room_join',
-            'user_id': event['user_id'],
-            'username': event['username'],
-            'room_id': event['room_id'],
-        }))
-
-    async def study_room_leave(self, event):
-        """Handle study room leave event."""
-        await self.send(text_data=json.dumps({
-            'type': 'study_room_leave',
-            'user_id': event['user_id'],
-            'username': event['username'],
-            'room_id': event['room_id'],
         }))
 
     # Database operations

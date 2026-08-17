@@ -14,7 +14,6 @@ import type {
     Paginated,
     PlayerPosition,
     SavedLobby,
-    StudyRoom,
 } from './campusTypes';
 
 
@@ -283,15 +282,6 @@ class CampusApiService {
         return [];
     }
 
-    /**
-     * Get study rooms in lobby
-     * @param {string} lobbyId - 8-digit lobby ID
-     * @returns {Promise<Array>} List of study rooms
-     */
-    async getStudyRooms(lobbyId: string): Promise<StudyRoom[]> {
-        const lobby = await this.apiRequest(`/lobbies/${lobbyId}/`);
-        return lobby.study_rooms || [];
-    }
 
     /**
      * Save lobby to user's favorites

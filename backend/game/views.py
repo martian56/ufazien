@@ -13,7 +13,7 @@ import random
 
 from . import livekit_service
 from .models import (
-    Lobby, LobbyMember, PlayerPosition, StudyRoom, 
+    Lobby, LobbyMember, PlayerPosition,
     ChatMessage, SavedLobby
 )
 from .serializers import (
@@ -105,18 +105,7 @@ def lobby_list_create(request):
                 x=400.0,  # Center of map
                 y=300.0
             )
-            
-            # Create default study rooms
-            default_rooms = [
-                {'name': 'Library', 'x': 100, 'y': 100, 'width': 200, 'height': 150},
-                {'name': 'Study Room 1', 'x': 400, 'y': 100, 'width': 150, 'height': 100},
-                {'name': 'Study Room 2', 'x': 400, 'y': 250, 'width': 150, 'height': 100},
-                {'name': 'Computer Lab', 'x': 600, 'y': 100, 'width': 180, 'height': 120},
-            ]
-            
-            for room_data in default_rooms:
-                StudyRoom.objects.create(lobby=lobby, **room_data)
-            
+
             return Response(
                 LobbySerializer(lobby).data, 
                 status=status.HTTP_201_CREATED

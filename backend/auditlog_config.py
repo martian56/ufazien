@@ -21,7 +21,7 @@ from community.models import (
     Group, GroupMembership, GroupMessage, Forum, ForumPost, PostLike, PostReply,
     PrivateChat, PrivateMessage, UserActivity
 )
-from game.models import Lobby, LobbyMember, PlayerPosition, StudyRoom, ChatMessage, SavedLobby
+from game.models import Lobby, LobbyMember, PlayerPosition, ChatMessage, SavedLobby
 from gpa.models import AcademicYear, Semester, Course, UserGPA, CourseGrade, GPATarget, UserInputState
 
 User = get_user_model()
@@ -86,7 +86,6 @@ def register_all_models():
     auditlog.register(Lobby)
     auditlog.register(LobbyMember)
     auditlog.register(PlayerPosition)
-    auditlog.register(StudyRoom)
     auditlog.register(ChatMessage)
     auditlog.register(SavedLobby)
     

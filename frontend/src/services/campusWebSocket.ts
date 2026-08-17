@@ -26,8 +26,6 @@ class CampusWebSocketService {
             seatUpdate: [],
             seatDenied: [],
             chatMessage: [],
-            studyRoomJoin: [],
-            studyRoomLeave: [],
             error: []
         };
         this.reconnectAttempts = 0;
@@ -187,12 +185,6 @@ class CampusWebSocketService {
             case 'chat_message':
                 this.emit('chatMessage', data);
                 break;
-            case 'study_room_join':
-                this.emit('studyRoomJoin', data);
-                break;
-            case 'study_room_leave':
-                this.emit('studyRoomLeave', data);
-                break;
             case 'error':
                 this.emit('error', data);
                 break;
@@ -301,32 +293,6 @@ class CampusWebSocketService {
             type: 'chat_message',
             message: message.trim(),
             room: room
-        });
-    }
-
-    /**
-     * Send study room join event
-     * @param {string} roomId - The study room identifier
-     */
-    joinStudyRoom(roomId: string) {
-        if (!this.isConnected) return;
-
-        this.send({
-            type: 'study_room_join',
-            room_id: roomId
-        });
-    }
-
-    /**
-     * Send study room leave event
-     * @param {string} roomId - The study room identifier
-     */
-    leaveStudyRoom(roomId: string) {
-        if (!this.isConnected) return;
-
-        this.send({
-            type: 'study_room_leave',
-            room_id: roomId
         });
     }
 

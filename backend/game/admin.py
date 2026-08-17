@@ -1,6 +1,6 @@
 from django.contrib import admin
 from .models import (
-    Lobby, LobbyMember, PlayerPosition, StudyRoom, ChatMessage, SavedLobby,
+    Lobby, LobbyMember, PlayerPosition, ChatMessage, SavedLobby,
     CampusProp, RoomLight, LiftCar,
 )
 
@@ -29,17 +29,6 @@ class PlayerPositionAdmin(admin.ModelAdmin):
     list_display = ['user', 'lobby', 'x', 'y', 'direction', 'current_room', 'last_updated']
     list_filter = ['direction', 'is_moving', 'last_updated']
     search_fields = ['user__username', 'lobby__name', 'current_room']
-
-
-@admin.register(StudyRoom)
-class StudyRoomAdmin(admin.ModelAdmin):
-    list_display = ['name', 'lobby', 'presenter', 'is_presentation_active', 'current_occupants_count', 'max_capacity']
-    list_filter = ['is_presentation_active', 'created_at']
-    search_fields = ['name', 'lobby__name']
-    
-    def current_occupants_count(self, obj):
-        return obj.current_occupants_count
-    current_occupants_count.short_description = 'Current Occupants'
 
 
 @admin.register(ChatMessage)

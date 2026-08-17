@@ -237,7 +237,6 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
      * touched carries no state at all.
      */
     const [roomLights, setRoomLights] = useState<ReadonlyMap<string, boolean>>(new Map());
-    const [studyRooms, setStudyRooms] = useState<any[]>([]);
 
     // Chat state
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -540,15 +539,6 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
             }]);
         });
 
-        // Study room events
-        campusWebSocket.on('studyRoomJoin', (data: any) => {
-            // Handle study room join logic
-        });
-
-        campusWebSocket.on('studyRoomLeave', (data: any) => {
-            // Handle study room leave logic
-        });
-
         // Error handling
         campusWebSocket.on('error', (data: any) => {
             console.error('WebSocket error:', data);
@@ -705,21 +695,6 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
 
     const setRoomLight = useCallback((room: string, on: boolean) => {
         campusWebSocket.setLight(room, on);
-    }, []);
-
-    const joinStudyRoom = useCallback((roomId: string) => {
-        if (campusWebSocket.getConnectionStatus()) {
-            campusWebSocket.joinStudyRoom(roomId);
-        }
-    }, []);
-
-    /**
-     * Leave study room
-     */
-    const leaveStudyRoom = useCallback((roomId: string) => {
-        if (campusWebSocket.getConnectionStatus()) {
-            campusWebSocket.leaveStudyRoom(roomId);
-        }
     }, []);
 
     /**
@@ -920,7 +895,6 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
         currentLobby,
         lobbyMembers,
         playerPositions,
-        studyRooms,
 
         // Chat
         chatMessages,
@@ -936,8 +910,6 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
         disconnect,
         updatePosition,
         sendChatMessage,
-        joinStudyRoom,
-        leaveStudyRoom,
         ownSeat,
         seatedPlayers,
         takeSeat,

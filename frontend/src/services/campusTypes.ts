@@ -19,26 +19,13 @@ export interface LobbyMember {
   last_seen: string
 }
 
-export interface StudyRoom {
-  id: number
-  name: string
-  x: number
-  y: number
-  width: number
-  height: number
-  max_capacity: number
-  presenter: CampusUser | null
-  is_presentation_active: boolean
-  current_occupants_count: number
-  is_full: boolean
-}
 
 /**
  * A lobby.
  *
- * The list endpoint uses LobbyListSerializer, which omits `members` and
- * `study_rooms`; the detail endpoint includes them. One type with those two
- * optional, rather than two that drift.
+ * The list endpoint uses LobbyListSerializer, which omits `members`; the
+ * detail endpoint includes them. One type with that optional, rather than two
+ * that drift.
  */
 export interface Lobby {
   id: string
@@ -53,7 +40,6 @@ export interface Lobby {
   current_players_count: number
   is_full: boolean
   members?: LobbyMember[]
-  study_rooms?: StudyRoom[]
   /** Added by the list view, not the serializer: whether this user saved it. */
   is_saved?: boolean
 }
