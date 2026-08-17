@@ -63,6 +63,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # bun runs the scripts, but vitest's shebang is `env node`, so the tests
+      # execute on whatever node the runner happens to ship. That default moves
+      # without warning, and node 25 breaks this suite outright, so pin it to
+      # the version CONTRIBUTING asks contributors to use.
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: frontend/.nvmrc
+
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
