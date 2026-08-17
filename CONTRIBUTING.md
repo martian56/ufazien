@@ -12,6 +12,8 @@ For anything beyond a small fix, open an issue first. It's easier to agree on an
 
 You need **Python 3.11**, **Node 24**, and **git**. No database server is required: the backend falls back to SQLite unless `ENVIRONMENT=production`.
 
+The Node version matters: `frontend/.nvmrc` pins it, so `nvm use` in `frontend/` picks the right one. Newer Node works, but it is the version CI runs and the one to reproduce a failure against.
+
 ### Backend
 
 ```bash
@@ -27,7 +29,7 @@ python manage.py runserver
 
 The API is then on `http://localhost:8000`, with docs at `/api/docs/`.
 
-`requirements-dev.txt` includes the runtime dependencies plus `daphne`, which the WebSocket tests need. Production installs `requirements.txt` only.
+`requirements-dev.txt` includes the runtime dependencies plus `daphne`. The WebSocket tests need it, and so does `runserver`: Channels 4 keeps the ASGI-aware development server in `daphne`, and `settings.py` enables it whenever it is installed. Without it `runserver` is an ordinary WSGI server, and the campus loads but nobody else ever appears in it. Production installs `requirements.txt` only and serves ASGI through uvicorn.
 
 ### Frontend
 

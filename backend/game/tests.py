@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from rest_framework.test import APIClient
@@ -1512,3 +1513,49 @@ class HostModerationTests(TestCase):
         host_row = next(m for m in body["members"] if m["user_id"] == self.host.id)
         self.assertTrue(host_row["is_host"])
         self.assertTrue(host_row["can_share_screen"])
+
+
+class DevelopmentServerTests(TestCase):
+    """
+    That `manage.py runserver` serves the campus WebSocket.
+
+    Channels 4 moved the ASGI-aware runserver into `daphne`. Without that app
+    registered, `runserver` is Django's ordinary WSGI server: the API works,
+    the campus loads, `check` passes, and every handshake to
+    `/ws/game/lobby/…` quietly 404s, so the player stands alone in a world
+    where nobody else ever appears. It reads as a bug in the game rather than
+    a missing app, which is how it went unnoticed.
+
+    Django's own `daphne.E001` check covers the ordering requirement, so this
+    only guards what it cannot: that the app is registered in the first place.
+    Registration is conditional, because `requirements.txt` does not install
+    daphne and production would not boot if the app were listed unconditionally.
+    """
+
+    def test_daphne_is_registered_when_installed(self):
+        try:
+            import daphne  # noqa: F401
+        except ImportError:
+            self.skipTest('daphne is not installed, as in production')
+        self.assertIn(
+            'daphne',
+            settings.INSTALLED_APPS,
+            'daphne is installed but not registered, so runserver will not '
+            'serve WebSockets and the campus will look empty',
+        )
+
+    def test_the_campus_socket_has_a_route(self):
+        """The path the client connects to is one the router recognises."""
+        from .routing import websocket_urlpatterns
+
+        matched = [
+            pattern
+            for pattern in websocket_urlpatterns
+            if pattern.pattern.regex.search('ws/game/lobby/42/')
+        ]
+        self.assertEqual(
+            len(matched),
+            1,
+            'the campus client connects to /ws/game/lobby/<id>/ and exactly one '
+            'route should answer it',
+        )

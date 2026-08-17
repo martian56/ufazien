@@ -152,6 +152,29 @@ TEMPLATES = [
 WSGI_APPLICATION = 'ufazien.wsgi.application'
 ASGI_APPLICATION = 'ufazien.asgi.application'
 
+# Makes `manage.py runserver` serve WebSockets.
+#
+# Channels 4 moved the ASGI-aware runserver out of `channels` and into
+# `daphne`, and it only takes effect when `daphne` is listed *before*
+# `staticfiles`. Without it `runserver` is Django's ordinary WSGI server,
+# `ASGI_APPLICATION` is never consulted, and every handshake to
+# `/ws/game/lobby/…` returns 404 — no positions, no chat, no seating, no
+# props, no lift. The campus loads and you are alone in it, which reads as a
+# bug in the game rather than a missing dependency. Following CONTRIBUTING.md
+# to the letter produced exactly that.
+#
+# Conditional because it is a development dependency: `requirements-dev.txt`
+# installs daphne (the WebSocket tests need it), `requirements.txt` does not,
+# and production serves ASGI through uvicorn where none of this applies.
+# Listing it unconditionally would stop the deployed app booting.
+try:
+    import daphne  # noqa: F401
+except ImportError:
+    pass
+else:
+    INSTALLED_APPS.insert(0, 'daphne')
+
+
 # Cache Configuration
 CACHES = {
     'default': {
