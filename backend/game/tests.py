@@ -1286,6 +1286,128 @@ class LobbyConsumerTests(TestCase):
             [m.user_id for m in self.lobby.members.filter(is_online=True)],
         )
 
+    def test_a_frame_the_column_cannot_hold_does_not_kill_the_socket(self):
+        """
+        `receive` catches only `json.JSONDecodeError`, so anything else that
+        comes out of the save propagates and Channels closes the connection.
+        A non-numeric `x` reached a FloatField and did exactly that.
+        """
+        from asgiref.sync import async_to_sync
+
+        async def scenario():
+            a, _ = await self._connect(self.host)
+            try:
+                await self._drain(a)
+                for bad in [
+                    {'x': 'abc', 'y': 0},
+                    {'x': None, 'y': None},
+                    {'x': 0, 'y': 0, 'current_room': 'r' * 400},
+                    {'x': 0, 'y': 0, 'direction': 'sideways'},
+                    {'x': 0, 'y': 0, 'direction': 12},
+                ]:
+                    await a.send_json_to({'type': 'player_position', **bad})
+                    await a.receive_nothing(timeout=0.3)
+                # Still usable afterwards, which is the whole point.
+                await a.send_json_to({'type': 'ping'})
+                reply = await a.receive_from(timeout=2)
+                return reply
+            finally:
+                await a.disconnect()
+
+        reply = async_to_sync(scenario)()
+        self.assertIn('Unknown message type', reply, 'the socket did not survive')
+
+    def test_a_direction_the_column_does_not_allow_falls_back(self):
+        from asgiref.sync import async_to_sync
+        from .models import PlayerPosition
+
+        async def scenario():
+            a, _ = await self._connect(self.host)
+            try:
+                await self._drain(a)
+                await a.send_json_to({
+                    'type': 'player_position', 'x': 0.0, 'y': 0.0, 'direction': 'sideways',
+                })
+                await a.receive_nothing(timeout=0.4)
+            finally:
+                await a.disconnect()
+
+        async_to_sync(scenario)()
+        stored = PlayerPosition.objects.get(lobby=self.lobby, user=self.host)
+        self.assertIn(
+            stored.direction,
+            {value for value, _ in PlayerPosition._meta.get_field('direction').choices},
+        )
+
+    def test_a_room_longer_than_the_column_is_refused(self):
+        """
+        Fifty characters. Longer raised `DataError` on PostgreSQL, which is
+        production, and passed silently on the SQLite everybody develops
+        against — a bug that could not reproduce in a dev environment.
+        """
+        from asgiref.sync import async_to_sync
+        from .models import PlayerPosition
+
+        async def scenario():
+            a, _ = await self._connect(self.host)
+            try:
+                await self._drain(a)
+                await a.send_json_to({
+                    'type': 'player_position', 'x': 0.0, 'y': 0.0, 'current_room': 'r' * 400,
+                })
+                await a.receive_nothing(timeout=0.4)
+            finally:
+                await a.disconnect()
+
+        async_to_sync(scenario)()
+        stored = PlayerPosition.objects.get(lobby=self.lobby, user=self.host)
+        self.assertTrue(
+            stored.current_room is None or len(stored.current_room) <= 50,
+            f'stored a room of {len(stored.current_room or "")} characters',
+        )
+
+    def test_a_chat_message_is_held_to_the_length_the_column_says(self):
+        """
+        `max_length` on a `TextField` is a form-level hint the database does
+        not enforce, and `objects.create` runs no validation. So one frame
+        stored 200,000 characters, broadcast them to the whole lobby, and put
+        them in the snapshot every later joiner downloads.
+        """
+        from asgiref.sync import async_to_sync
+        from .models import ChatMessage
+
+        async def scenario():
+            a, _ = await self._connect(self.host)
+            try:
+                await self._drain(a)
+                await a.send_json_to({'type': 'chat_message', 'message': 'x' * 200000})
+                await a.receive_nothing(timeout=0.6)
+            finally:
+                await a.disconnect()
+
+        async_to_sync(scenario)()
+        longest = max((len(m.message) for m in ChatMessage.objects.all()), default=0)
+        self.assertLessEqual(longest, 500, f'stored a {longest}-character message')
+
+    def test_a_chat_message_that_is_not_a_string_does_not_kill_the_socket(self):
+        """`.strip()` on a number raises, and took the connection with it."""
+        from asgiref.sync import async_to_sync
+
+        async def scenario():
+            a, _ = await self._connect(self.host)
+            try:
+                await self._drain(a)
+                for bad in [12345, None, {'text': 'hi'}, ['hi']]:
+                    await a.send_json_to({'type': 'chat_message', 'message': bad})
+                    await a.receive_nothing(timeout=0.25)
+                await a.send_json_to({'type': 'ping'})
+                return await a.receive_from(timeout=2)
+            finally:
+                await a.disconnect()
+
+        reply = async_to_sync(scenario)()
+        self.assertIn('Unknown message type', reply, 'the socket did not survive')
+
     def test_an_unknown_activity_falls_back_to_standing(self):
         from asgiref.sync import async_to_sync
         from .models import PlayerPosition
