@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { OUTDOOR_BUILDINGS, type CampusBuilding } from './campusLayout'
+import { CAMPUS_LIMIT, OUTDOOR_BUILDINGS, QUAD_CENTRE, type CampusBuilding } from './campusLayout'
 import {
   CAMPUS_SPAN,
   buildingsInView,
@@ -64,18 +64,56 @@ describe('the whole-campus view', () => {
     expect(CAMPUS_SPAN / 2).toBeGreaterThan(widest)
   })
 
-  it('does not waste the square on empty grass', () => {
+  /**
+   * This used to assert the opposite: that the view was tight around the
+   * buildings and smaller than the whole campus. That was right when there
+   * were seven of them scattered across the site, and it is what produced the
+   * bug once the campus was rebuilt around the one real building and every
+   * other room moved indoors — `OUTDOOR_BUILDINGS` became a single entry, and
+   * the map became a 106-metre window on it with no quad, no fountain, no
+   * street and no paths in it at all.
+   *
+   * A campus map has to show the campus. The buildings are a thing on it, not
+   * the thing it is of.
+   */
+  it('shows everywhere the player can walk', () => {
     const view = fitCampus(400)
-    const spread = Math.max(
-      ...OUTDOOR_BUILDINGS.map((b) => Math.abs(b.position[0] - view.cx) + b.size[0] / 2),
-      ...OUTDOOR_BUILDINGS.map((b) => Math.abs(b.position[2] - view.cz) + b.size[2] / 2),
-    )
-    expect(view.span).toBeLessThan(spread * 2 + FIT_MARGIN * 2 + 1)
-    expect(view.span).toBeLessThan(CAMPUS_SPAN)
+    for (const corner of [
+      [CAMPUS_LIMIT, CAMPUS_LIMIT],
+      [-CAMPUS_LIMIT, CAMPUS_LIMIT],
+      [CAMPUS_LIMIT, -CAMPUS_LIMIT],
+      [-CAMPUS_LIMIT, -CAMPUS_LIMIT],
+    ] as [number, number][]) {
+      const at = project(corner[0], corner[1], view)
+      expect(at.x, `x at ${corner}`).toBeGreaterThanOrEqual(0)
+      expect(at.x, `x at ${corner}`).toBeLessThanOrEqual(view.size)
+      expect(at.y, `y at ${corner}`).toBeGreaterThanOrEqual(0)
+      expect(at.y, `y at ${corner}`).toBeLessThanOrEqual(view.size)
+    }
+  })
+
+  it('shows the quad, which is the middle of it', () => {
+    const view = fitCampus(400)
+    const centre = project(QUAD_CENTRE[0], QUAD_CENTRE[1], view)
+    expect(centre.x).toBeGreaterThan(0)
+    expect(centre.x).toBeLessThan(view.size)
+    expect(centre.y).toBeGreaterThan(0)
+    expect(centre.y).toBeLessThan(view.size)
+  })
+
+  it('still fits a building that stands beyond the walkable limit', () => {
+    const far: CampusBuilding = {
+      ...OUTDOOR_BUILDINGS[0],
+      position: [0, 0, -(CAMPUS_LIMIT + 60)],
+    }
+    const view = fitCampus(400, [far])
+    const at = project(far.position[0], far.position[2], view)
+    expect(at.y).toBeGreaterThanOrEqual(0)
   })
 
   it('survives having nothing to fit', () => {
-    expect(fitCampus(300, []).span).toBe(CAMPUS_SPAN)
+    // The campus is still there when the buildings are not.
+    expect(fitCampus(300, []).span).toBeGreaterThanOrEqual(CAMPUS_LIMIT * 2)
   })
 })
 

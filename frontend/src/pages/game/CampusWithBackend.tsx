@@ -2,7 +2,7 @@ import React, { useState, useRef, Suspense, useCallback, useEffect, useMemo, typ
 import { Helmet } from "react-helmet"
 import { Canvas, useFrame, useThree } from "@react-three/fiber"
 import { KeyboardControls, useKeyboardControls, PointerLockControls, PerformanceMonitor } from "@react-three/drei"
-import { Vector3, MathUtils, ACESFilmicToneMapping } from "three"
+import { Vector3, MathUtils, ACESFilmicToneMapping, type PerspectiveCamera } from "three"
 import type { Group } from "three"
 import { useNavigate, useParams } from "react-router-dom"
 import { BookOpen, Clock, DoorOpen, Globe, MapPin, MessageCircle, MonitorUp, Send, Users, X } from "lucide-react"
@@ -115,6 +115,7 @@ import { INTERIOR_SPECS, interiorHalfExtent } from '../../components/campus/inte
 import {
   CAMPUS_BUILDINGS,
   CAMPUS_LIMIT,
+  verticalFov,
   OUTDOOR_COURT,
   SPAWN,
   nearestEntrance,
@@ -747,6 +748,30 @@ const THROW_CHARGE_SECONDS = 1.1
  * head.
  */
 const FOLLOW_DISTANCE = 2.6
+
+/**
+ * Holds the horizontal field of view steady as the window changes shape.
+ *
+ * three.js takes a vertical FOV, so a fixed one narrows as the window gets
+ * taller. At 70 degrees vertical that is about 96 across on a desktop and
+ * about 36 on a phone held in portrait — a third of the view, on the device
+ * with the touch joystick, where turning to look at something is the
+ * expensive part.
+ */
+function FieldOfView() {
+  const camera = useThree((state) => state.camera) as PerspectiveCamera
+  const size = useThree((state) => state.size)
+
+  useEffect(() => {
+    if (!camera.isPerspectiveCamera || !size.height) return
+    const wanted = verticalFov(size.width / size.height)
+    if (Math.abs(camera.fov - wanted) < 0.01) return
+    camera.fov = wanted
+    camera.updateProjectionMatrix()
+  }, [camera, size.width, size.height])
+
+  return null
+}
 
 /** Feeds the mini-games the state of the hold key, from either input method. */
 function ActionKeyBridge({ action }: { action: React.RefObject<ActionInput> }) {
@@ -2339,6 +2364,8 @@ const CampusWithBackend = () => {
           }}
           camera={{ position: SPAWN, fov: 70, near: 0.1, far: 2200 }}
         >
+          {/* Keeps the view the same width whatever shape the window is. */}
+          <FieldOfView />
           {/* Drops the resolution on a machine that cannot hold frame rate,
               and puts it back when it can. Better than picking one number and
               hoping it suits both a laptop and a phone. */}

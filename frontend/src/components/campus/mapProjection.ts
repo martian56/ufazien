@@ -20,27 +20,32 @@ export const CAMPUS_SPAN = CAMPUS_LIMIT * 2 + 24
 
 export const FIT_MARGIN = 26
 
+/**
+ * A view of the whole campus.
+ *
+ * Fitted to where the player can actually go, not to the buildings. It used to
+ * take the bounding box of `OUTDOOR_BUILDINGS`, which was fine when there were
+ * seven of them scattered across the site — and then the campus was rebuilt
+ * around the one real building and every other room moved indoors, leaving that
+ * list with a single entry. The map became a 106-metre window centred on the
+ * main building: no quad, no fountain, no Nizami Street, no paths, and the
+ * player's own marker pinned to the rim whenever they were anywhere else.
+ *
+ * `CAMPUS_LIMIT` is what the player is clamped to, so a view built from it can
+ * never exclude somewhere they can stand. The buildings are still taken into
+ * account, because scenery beyond the limit should not fall off the edge.
+ */
 export function fitCampus(size: number, buildings: CampusBuilding[] = OUTDOOR_BUILDINGS): MapView {
-  if (buildings.length === 0) return { cx: 0, cz: 0, span: CAMPUS_SPAN, size }
+  // Centred on the origin, which is where the campus is laid out about, and
+  // reaching at least as far as the player may walk. A building that stands
+  // beyond that limit pushes it out rather than being cut off.
+  const half = Math.max(
+    CAMPUS_LIMIT,
+    ...buildings.map((b) => Math.abs(b.position[0]) + b.size[0] / 2),
+    ...buildings.map((b) => Math.abs(b.position[2]) + b.size[2] / 2),
+  )
 
-  let minX = Infinity
-  let maxX = -Infinity
-  let minZ = Infinity
-  let maxZ = -Infinity
-  for (const building of buildings) {
-    const [x, , z] = building.position
-    minX = Math.min(minX, x - building.size[0] / 2)
-    maxX = Math.max(maxX, x + building.size[0] / 2)
-    minZ = Math.min(minZ, z - building.size[2] / 2)
-    maxZ = Math.max(maxZ, z + building.size[2] / 2)
-  }
-
-  return {
-    cx: (minX + maxX) / 2,
-    cz: (minZ + maxZ) / 2,
-    span: Math.max(maxX - minX, maxZ - minZ) + FIT_MARGIN * 2,
-    size,
-  }
+  return { cx: 0, cz: 0, span: half * 2 + FIT_MARGIN, size }
 }
 
 export function windowAround(x: number, z: number, size: number, span: number = NEAR_SPAN): MapView {

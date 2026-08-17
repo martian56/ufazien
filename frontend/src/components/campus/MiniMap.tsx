@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { Maximize2, X } from 'lucide-react'
-import { CAMPUS_BUILDINGS, CAMPUS_DOORS, QUAD_CENTRE, QUAD_RADIUS } from './campusLayout'
+import {
+  CAMPUS_BUILDINGS,
+  CAMPUS_DOORS,
+  QUAD_CENTRE,
+  QUAD_RADIUS,
+  SCENERY_BLOCKS,
+} from './campusLayout'
+import { DISTRICT_BUILDINGS, DISTRICT_STREETS } from './districtSurvey'
 import {
   buildingsInView,
   clampToEdge,
@@ -41,6 +48,7 @@ const INK = {
   peer: '#7dd3fc',
   self: '#ffffff',
   label: '#9aa8ba',
+  scenery: '#20262f',
 }
 
 function drawMap(
@@ -75,6 +83,56 @@ function drawMap(
   ctx.moveTo(crossLeft.x, crossLeft.y)
   ctx.lineTo(crossRight.x, crossRight.y)
   ctx.stroke()
+
+  // The neighbourhood first, underneath everything: the Nizami Street terrace
+  // and the blocks that close the horizon. They are not enterable and have no
+  // labels, but without them a campus map is a lawn with one building on it —
+  // which is exactly what it looked like once the extent was fixed.
+  ctx.fillStyle = INK.scenery
+  ctx.strokeStyle = INK.walls
+  ctx.lineWidth = 1
+  for (const block of SCENERY_BLOCKS) {
+    const [x, , z] = block.position
+    const at = project(x, z, view)
+    const w = block.size[0] * scale
+    const d = block.size[2] * scale
+    if (at.x + w < 0 || at.y + d < 0 || at.x - w > size || at.y - d > size) continue
+    ctx.beginPath()
+    ctx.rect(at.x - w / 2, at.y - d / 2, w, d)
+    ctx.fill()
+    ctx.stroke()
+  }
+
+  // Nizami Street as it was surveyed. Drawn from the same footprints the 3D
+  // district is built from, as the polygons they are rather than as boxes —
+  // it is the one real piece of the city on the map and squaring it off would
+  // throw away the only thing that makes it recognisable.
+  ctx.strokeStyle = INK.path
+  ctx.lineWidth = Math.max(1, 5 * scale)
+  for (const street of DISTRICT_STREETS) {
+    ctx.beginPath()
+    street.points.forEach(([x, z], i) => {
+      const at = project(x, z, view)
+      if (i === 0) ctx.moveTo(at.x, at.y)
+      else ctx.lineTo(at.x, at.y)
+    })
+    ctx.stroke()
+  }
+
+  ctx.fillStyle = INK.scenery
+  ctx.strokeStyle = INK.walls
+  ctx.lineWidth = 1
+  for (const block of DISTRICT_BUILDINGS) {
+    ctx.beginPath()
+    block.footprint.forEach(([x, z], i) => {
+      const at = project(x, z, view)
+      if (i === 0) ctx.moveTo(at.x, at.y)
+      else ctx.lineTo(at.x, at.y)
+    })
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+  }
 
   const visible = buildingsInView(view)
   for (const building of visible) {
@@ -122,7 +180,12 @@ function drawMap(
   const radius = centre - 3
   for (const peer of peers) {
     if ((peer.room ?? null) !== (pose.room ?? null)) continue
-    const at = project(peer.position.x, peer.position.z, view)
+    // Indoors, a peer's coordinates are room space and would land them on the
+    // quad. They are in the same room as you by the line above, so the honest
+    // thing to draw is the room.
+    const at = peer.room
+      ? project(roomAnchor(peer.room).x, roomAnchor(peer.room).z, view)
+      : project(peer.position.x, peer.position.z, view)
     const edge = clampToEdge(at.x - centre, at.y - centre, radius)
     ctx.fillStyle = peer.color ?? INK.peer
     ctx.globalAlpha = edge.clamped ? 0.45 : 1
@@ -152,10 +215,26 @@ function drawMap(
   ctx.stroke()
 }
 
-function roomCentre(room: string, view: MapView): { x: number; y: number } {
+/**
+ * Where on the campus a room is.
+ *
+ * A room's own coordinates are no use here: every interior is built at the
+ * origin, so somebody in the library and somebody in the cafeteria have the
+ * same position. What the map can honestly say is which building they are in.
+ *
+ * The four levels of the main building share its footprint, which is right —
+ * they are stacked on it. What the map cannot show is *which* of them, and it
+ * does not pretend to.
+ */
+function roomAnchor(room: string): { x: number; z: number } {
   const building = CAMPUS_BUILDINGS.find((candidate) => String(candidate.id) === room)
-  if (!building) return { x: view.size / 2, y: view.size / 2 }
-  return project(building.position[0], building.position[2], view)
+  if (!building) return { x: 0, z: 0 }
+  return { x: building.position[0], z: building.position[2] }
+}
+
+function roomCentre(room: string, view: MapView): { x: number; y: number } {
+  const at = roomAnchor(room)
+  return project(at.x, at.z, view)
 }
 
 function useMapCanvas(
@@ -188,7 +267,13 @@ function useMapCanvas(
       if (now - last < 66) return
       last = now
       const pose = poseRef.current
-      const view = detailed ? fitCampus(size) : windowAround(pose.x, pose.z, size)
+      // Indoors the pose is in room space — every interior is built at the
+      // origin — so a window centred on it is a window on the middle of the
+      // quad, with the player's own marker put at the building's outdoor
+      // position and then clamped to the rim. Centre on the building instead,
+      // so the small map at least shows where in the campus you are.
+      const anchor = pose.room ? roomAnchor(pose.room) : { x: pose.x, z: pose.z }
+      const view = detailed ? fitCampus(size) : windowAround(anchor.x, anchor.z, size)
       drawMap(ctx, view, pose, peersRef.current, detailed)
     }
     frame = requestAnimationFrame(tick)
