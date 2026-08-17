@@ -3,6 +3,8 @@ import {
   CAMPUS_BUILDINGS,
   CAMPUS_COLLIDERS,
   CAMPUS_LIMIT,
+  CAMPUS_HORIZONTAL_FOV,
+  verticalFov,
   KEEP_CLEAR,
   PLAYER_RADIUS,
   QUAD_CENTRE,
@@ -306,5 +308,84 @@ describe('scatterProps', () => {
       expect(item.variant).toBeGreaterThanOrEqual(0)
       expect(item.variant).toBeLessThan(3)
     }
+  })
+})
+
+
+describe('how wide the view is', () => {
+  /**
+   * three.js takes a *vertical* field of view, so a fixed one narrows as the
+   * window gets taller. At the 70 degrees the campus used, that is about 96
+   * across on a desktop and about 36 on a phone held in portrait — a third of
+   * the view, on the device with the touch joystick and drag-to-look, where
+   * turning to see something is the expensive part.
+   */
+  const across = (vertical: number, aspect: number) =>
+    (2 * Math.atan(Math.tan((vertical * Math.PI) / 180 / 2) * aspect) * 180) / Math.PI
+
+  const SHAPES: [string, number, number][] = [
+    ['desktop', 1920, 1080],
+    ['tablet', 1024, 768],
+    ['phone landscape', 844, 390],
+    ['phone portrait', 390, 844],
+    ['a very tall window', 400, 1400],
+  ]
+
+  it('never gives anybody a narrower view than they had', () => {
+    // The floor at 70 is what guarantees this: a widescreen window already got
+    // more than the target across, and must keep it.
+    for (const [name, w, h] of SHAPES) {
+      const aspect = w / h
+      const before = across(70, aspect)
+      const after = across(verticalFov(aspect), aspect)
+      expect(after, `${name}: ${before.toFixed(0)} -> ${after.toFixed(0)}`).toBeGreaterThanOrEqual(
+        before - 0.01,
+      )
+    }
+  })
+
+  it('reaches the target on anything that is not taller than it is wide', () => {
+    for (const [name, w, h] of SHAPES.filter(([, w, h]) => w / h >= 1)) {
+      const width = across(verticalFov(w / h), w / h)
+      expect(width, `${name}`).toBeGreaterThanOrEqual(CAMPUS_HORIZONTAL_FOV - 1)
+    }
+  })
+
+  it('gets as close as it can on a tall one without bending the room', () => {
+    // A phone in portrait would want about 130 degrees vertical to hold 90
+    // across, which is a fisheye. Capped, it lands near 58 — not the target,
+    // and much more than the 36 it had.
+    const aspect = 390 / 844
+    expect(across(verticalFov(aspect), aspect)).toBeGreaterThan(50)
+  })
+
+  it('substantially widens the case that prompted this', () => {
+    // A phone in portrait used to get about 36 degrees across. It cannot have
+    // 90 without a fisheye, but it should not have a tunnel either.
+    const aspect = 390 / 844
+    const before = across(70, aspect)
+    const after = across(verticalFov(aspect), aspect)
+    expect(before).toBeLessThan(40)
+    expect(after).toBeGreaterThan(before * 1.5)
+  })
+
+  it('never goes narrower than the value the campus was built around', () => {
+    // Widescreen must not end up worse off than it was.
+    for (const [, w, h] of SHAPES) {
+      expect(verticalFov(w / h)).toBeGreaterThanOrEqual(70)
+    }
+  })
+
+  it('does not bend the room to do it', () => {
+    // A fisheye is not an improvement on a tunnel.
+    for (const aspect of [0.05, 0.2, 0.46, 1, 2.4, 10]) {
+      expect(verticalFov(aspect)).toBeLessThanOrEqual(100)
+    }
+  })
+
+  it('survives a window with no height', () => {
+    // Which is what a canvas reports for a frame or two while it is laid out.
+    expect(Number.isFinite(verticalFov(0))).toBe(true)
+    expect(Number.isFinite(verticalFov(Number.POSITIVE_INFINITY))).toBe(true)
   })
 })

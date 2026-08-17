@@ -35,6 +35,40 @@ export type Vec3 = [number, number, number]
  */
 export const CAMPUS_LIMIT = 200
 
+/**
+ * How wide a view the camera gives, in degrees, measured across.
+ *
+ * Across and not up, which is the whole point. three.js takes a *vertical*
+ * field of view, so a fixed one narrows as the window gets taller: 70 degrees
+ * vertical is about 96 across on a desktop and about 36 on a phone held in
+ * portrait. A third of the view, on the device with a touch joystick and
+ * drag-to-look, where turning to see anything is the expensive part.
+ */
+export const CAMPUS_HORIZONTAL_FOV = 90
+
+/**
+ * Vertical field of view for a given aspect ratio.
+ *
+ * Holds the horizontal view constant, which is what a player experiences, and
+ * stops widening once the window is wider than it is tall — past that, holding
+ * the horizontal constant would squash the vertical to nothing.
+ */
+export function verticalFov(aspect: number, horizontal = CAMPUS_HORIZONTAL_FOV): number {
+  const usable = Math.max(aspect, 0.2)
+  const across = (horizontal * Math.PI) / 180
+  const vertical = 2 * Math.atan(Math.tan(across / 2) / usable)
+  const degrees = (vertical * 180) / Math.PI
+  // Never narrower than the value the campus was built around, and never so
+  // wide that the room bends: a fisheye is not an improvement on a tunnel.
+  //
+  // The cap is what a very tall window runs into. A phone in portrait would
+  // need about 130 degrees vertical to hold 90 across, which is severe
+  // distortion; capped at 100 it gets about 58 instead. That is not the full
+  // target and it is still sixty per cent more than the 36 it had, which is
+  // the trade this constant is making.
+  return Math.min(Math.max(degrees, 70), 100)
+}
+
 /** The ground plane. Comfortably past the fog, so the world has no visible edge. */
 export const GROUND_SIZE = 1000
 
