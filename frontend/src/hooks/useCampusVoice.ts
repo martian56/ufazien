@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { CampusVoice, campusHostApi, type Participant } from "../services/campusVoice"
+import { errorMessage } from "../lib/api/errors"
+import { inSameRoom } from "../components/campus/playerStatus"
 
 /**
  * Binds LiveKit voice to the campus lobby.
@@ -8,10 +10,17 @@ import { CampusVoice, campusHostApi, type Participant } from "../services/campus
  * transport: it just re-points the Web Audio listener and each remote panner
  * whenever the game says someone moved.
  */
+interface VoicePosition {
+  x?: number
+  y?: number
+  elevation?: number
+  current_room?: string | null
+}
+
 export interface CampusVoiceOptions {
   lobbyId?: string | null
-  userPosition?: { x?: number; y?: number } | null
-  playerPositions?: Map<string | number, { x?: number; y?: number }> | Record<string, { x?: number; y?: number }> | null
+  userPosition?: VoicePosition | null
+  playerPositions?: Map<string | number, VoicePosition> | Record<string, VoicePosition> | null
   enabled?: boolean
 }
 
@@ -61,7 +70,16 @@ export function useCampusVoice({ lobbyId, userPosition, playerPositions, enabled
       })
       .catch((err) => {
         if (!cancelled) {
-          setError(err?.response?.data?.error || err?.message || "Voice unavailable")
+          // `errorMessage` unwraps whatever was thrown; reading
+          // `err.response.data` is the axios shape, and this goes through the
+          // fetch client, which throws `ApiError`. So the first term was always
+          // undefined and users saw `err.message` — the bare "503 Service
+          // Unavailable" — while the server was sending a perfectly clear
+          // "LIVEKIT_API_KEY, LIVEKIT_API_SECRET and LIVEKIT_URL must be set."
+          //
+          // CLAUDE.md warns about exactly this: the client returns parsed JSON,
+          // not an axios `{data}` envelope.
+          setError(errorMessage(err, "Voice unavailable"))
         }
       })
 
@@ -76,10 +94,33 @@ export function useCampusVoice({ lobbyId, userPosition, playerPositions, enabled
   // Move the listener with the local player.
   useEffect(() => {
     if (!connected || !userPosition) return
-    voiceRef.current?.setLocalPosition({ x: userPosition.x ?? 0, y: userPosition.y ?? 0 })
-  }, [connected, userPosition?.x, userPosition?.y])
+    voiceRef.current?.setLocalPosition({
+      x: userPosition.x ?? 0,
+      y: userPosition.y ?? 0,
+      elevation: userPosition.elevation ?? 0,
+    })
+  }, [connected, userPosition?.x, userPosition?.y, userPosition?.elevation])
 
-  // Move each remote voice with its player.
+  /**
+   * Move each remote voice with its player, and silence anybody in another room.
+   *
+   * The room is not a refinement of the distance — it is the thing distance
+   * cannot express. Every interior is built at the origin and shares one
+   * coordinate frame with the outdoors, so the library on the fourth floor and
+   * the cafeteria on the second are at the same coordinates. At a full-volume
+   * radius of six world metres in rooms forty metres across, that meant
+   * everybody in the building heard everybody else at full volume, and
+   * somebody standing on the quad near the origin heard all of them.
+   *
+   * The visual layer has always known this — `visibleAvatars` filters by
+   * `inSameRoom`, with a comment saying exactly why. The audio layer never got
+   * the same treatment, so you could hear somebody you could not see and who
+   * was not there.
+   *
+   * It calls the same function rather than repeating the comparison, so the
+   * two cannot drift: whoever you can see is exactly whoever you can hear.
+   */
+  const myRoom = userPosition?.current_room ?? null
   useEffect(() => {
     if (!connected || !playerPositions) return
     const entries = playerPositions instanceof Map
@@ -88,12 +129,17 @@ export function useCampusVoice({ lobbyId, userPosition, playerPositions, enabled
 
     for (const [userId, position] of entries) {
       if (!position) continue
-      voiceRef.current?.setRemotePosition(userId, {
-        x: position.x ?? 0,
-        y: position.y ?? 0,
-      })
+      voiceRef.current?.setRemotePosition(
+        userId,
+        {
+          x: position.x ?? 0,
+          y: position.y ?? 0,
+          elevation: position.elevation ?? 0,
+        },
+        inSameRoom(position.current_room, myRoom),
+      )
     }
-  }, [connected, playerPositions])
+  }, [connected, playerPositions, myRoom])
 
   const loadPermissions = useCallback(async () => {
     if (!lobbyId) return null
