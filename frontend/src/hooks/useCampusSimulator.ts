@@ -533,6 +533,9 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
                 username: data.username,
                 message: data.message,
                 timestamp: data.timestamp,
+                // `room` is what the message was said on. The consumer used to
+                // drop it, so everything came back labelled 'global' whatever
+                // tab it was typed in.
                 channel: data.room || 'global'
             }]);
         });
@@ -794,16 +797,35 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
     /**
      * Get nearby players based on distance
      */
+    /**
+     * Who is close enough to count as nearby.
+     *
+     * Room first, then distance. Every interior is built at the origin and
+     * shares one coordinate frame with the outdoors, so somebody standing in
+     * the middle of the library and somebody standing in the middle of the
+     * cafeteria are at the same `x` and `y` — comparing those alone made
+     * "nearby" mean "at the same spot in some room, anywhere in the building".
+     *
+     * Height counts too, now that the main building has four floors in one
+     * space: two people one above the other are not near each other.
+     */
     const getNearbyPlayers = useCallback((maxDistance = 50) => {
         const nearby: NearbyPlayer[] = [];
         const userPos = positionRef.current;
+        const myRoom = userPos.current_room ?? null;
 
         playerPositions.forEach((position, userId) => {
+            if ((position.current_room ?? null) !== myRoom) return;
+
+            // Elevation is world metres and the ground plane is scaled by ten,
+            // so it is brought into the same units before being compared.
+            const rise = ((position.elevation ?? 0) - (userPos.elevation ?? 0)) * 10;
             const distance = Math.sqrt(
-                Math.pow(position.x - userPos.x, 2) + 
-                Math.pow(position.y - userPos.y, 2)
+                Math.pow(position.x - userPos.x, 2) +
+                Math.pow(position.y - userPos.y, 2) +
+                Math.pow(rise, 2)
             );
-            
+
             if (distance <= maxDistance) {
                 nearby.push({
                     userId,

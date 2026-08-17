@@ -694,10 +694,17 @@ class LobbyConsumer(AsyncWebsocketConsumer):
         if not message:
             return
             
-        # Save chat message to database
-        chat_message = await self.save_chat_message(message)
-        
-        # Broadcast chat message to all users in lobby
+        # Which channel it was said on.
+        #
+        # The client has always sent this and the consumer has always thrown it
+        # away — never stored, never put on the broadcast — so every message
+        # came back labelled 'global' whatever tab it was typed in. The chat has
+        # a "nearby" tab, so people were saying things they believed were going
+        # to whoever was around them and sending them to the entire lobby.
+        room = _clean_token(data.get('room'))
+
+        chat_message = await self.save_chat_message(message, room)
+
         await self.channel_layer.group_send(
             self.lobby_group_name,
             {
@@ -706,6 +713,7 @@ class LobbyConsumer(AsyncWebsocketConsumer):
                 'user_id': self.user.id,
                 'username': self.user.username,
                 'message': message,
+                'room': room,
                 'timestamp': chat_message.created_at.isoformat(),
             }
         )
@@ -775,6 +783,7 @@ class LobbyConsumer(AsyncWebsocketConsumer):
             'user_id': event['user_id'],
             'username': event['username'],
             'message': event['message'],
+            'room': event.get('room'),
             'timestamp': event['timestamp'],
         }))
 
@@ -883,14 +892,15 @@ class LobbyConsumer(AsyncWebsocketConsumer):
             return None
 
     @database_sync_to_async
-    def save_chat_message(self, message):
+    def save_chat_message(self, message, room=None):
         """Save chat message to the database."""
         try:
             lobby = Lobby.objects.get(id=self.lobby_id)
             chat_message = ChatMessage.objects.create(
                 lobby=lobby,
                 user=self.user,
-                message=message
+                message=message,
+                room=room,
             )
             return chat_message
         except Lobby.DoesNotExist:
@@ -989,6 +999,7 @@ class LobbyConsumer(AsyncWebsocketConsumer):
                 'user_id': message.user.id,
                 'username': message.user.username,
                 'message': message.message,
+                'room': message.room,
                 'timestamp': message.created_at.isoformat(),
             }
             for message in reversed(lobby_state['messages'])

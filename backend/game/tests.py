@@ -1408,6 +1408,85 @@ class LobbyConsumerTests(TestCase):
         reply = async_to_sync(scenario)()
         self.assertIn('Unknown message type', reply, 'the socket did not survive')
 
+    def test_a_chat_message_keeps_the_channel_it_was_said_on(self):
+        """
+        The client has always sent `room` and the consumer has always thrown it
+        away — never stored, never broadcast — so every message came back
+        labelled global whatever tab it was typed in. The chat has a "nearby"
+        tab, so people were saying things they believed were going to whoever
+        was around them and sending them to the whole lobby.
+        """
+        from asgiref.sync import async_to_sync
+        from .models import ChatMessage
+
+        async def scenario():
+            import json
+            a, _ = await self._connect(self.host)
+            b, _ = await self._connect(self.player)
+            try:
+                await self._drain(a, b)
+                await a.send_json_to({
+                    'type': 'chat_message', 'message': 'over here', 'room': 'nearby',
+                })
+                for _ in range(5):
+                    if await b.receive_nothing(timeout=1):
+                        continue
+                    payload = json.loads(await b.receive_from(timeout=2))
+                    if payload.get('type') == 'chat_message':
+                        return payload
+                return None
+            finally:
+                await a.disconnect()
+                await b.disconnect()
+
+        payload = async_to_sync(scenario)()
+        self.assertIsNotNone(payload, 'the message never arrived')
+        self.assertEqual(payload['room'], 'nearby', 'the channel was dropped on the way out')
+        stored = ChatMessage.objects.get(message='over here')
+        self.assertEqual(stored.room, 'nearby', 'the channel was never stored')
+
+    def test_a_global_message_has_no_room(self):
+        from asgiref.sync import async_to_sync
+        from .models import ChatMessage
+
+        async def scenario():
+            a, _ = await self._connect(self.host)
+            try:
+                await self._drain(a)
+                await a.send_json_to({'type': 'chat_message', 'message': 'everyone'})
+                await a.receive_nothing(timeout=0.5)
+            finally:
+                await a.disconnect()
+
+        async_to_sync(scenario)()
+        self.assertIsNone(ChatMessage.objects.get(message='everyone').room)
+
+    def test_the_backlog_a_joiner_gets_is_labelled_too(self):
+        """Otherwise every message in the history reads as global."""
+        from asgiref.sync import async_to_sync
+        from .models import ChatMessage
+
+        ChatMessage.objects.create(
+            lobby=self.lobby, user=self.player, message='said earlier', room='nearby'
+        )
+
+        async def scenario():
+            import json
+            a, _ = await self._connect(self.host)
+            try:
+                for _ in range(5):
+                    payload = json.loads(await a.receive_from(timeout=2))
+                    if payload.get('type') == 'lobby_state':
+                        return payload
+                return None
+            finally:
+                await a.disconnect()
+
+        state = async_to_sync(scenario)()
+        said = [m for m in state['messages'] if m['message'] == 'said earlier']
+        self.assertEqual(len(said), 1)
+        self.assertEqual(said[0]['room'], 'nearby')
+
     def test_an_unknown_activity_falls_back_to_standing(self):
         from asgiref.sync import async_to_sync
         from .models import PlayerPosition
