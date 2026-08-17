@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from .models import Lobby, LobbyMember, PlayerPosition, StudyRoom, ChatMessage, SavedLobby
+from .models import Lobby, LobbyMember, PlayerPosition, ChatMessage, SavedLobby
 
 User = get_user_model()
 
@@ -21,26 +21,10 @@ class LobbyMemberSerializer(serializers.ModelSerializer):
         fields = ['user', 'joined_at', 'is_online', 'last_seen']
 
 
-class StudyRoomSerializer(serializers.ModelSerializer):
-    """Study room info"""
-    presenter = UserSerializer(read_only=True)
-    current_occupants_count = serializers.ReadOnlyField()
-    is_full = serializers.ReadOnlyField()
-    
-    class Meta:
-        model = StudyRoom
-        fields = [
-            'id', 'name', 'x', 'y', 'width', 'height', 
-            'max_capacity', 'presenter', 'is_presentation_active',
-            'current_occupants_count', 'is_full'
-        ]
-
-
 class LobbySerializer(serializers.ModelSerializer):
     """Main lobby serializer"""
     host = UserSerializer(read_only=True)
     members = LobbyMemberSerializer(many=True, read_only=True)
-    study_rooms = StudyRoomSerializer(many=True, read_only=True)
     current_players_count = serializers.ReadOnlyField()
     is_full = serializers.ReadOnlyField()
     
@@ -49,7 +33,7 @@ class LobbySerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'description', 'host', 'is_private', 
             'max_players', 'is_active', 'created_at', 'updated_at',
-            'current_players_count', 'is_full', 'members', 'study_rooms'
+            'current_players_count', 'is_full', 'members'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
 
