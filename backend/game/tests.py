@@ -207,6 +207,129 @@ class LobbyRestTests(TestCase):
         self.assertEqual(lobby.host, self.player)
 
 
+    def test_the_query_count_does_not_grow_with_the_number_of_lobbies(self):
+        """
+        The measurement behind the change, kept as a test so it cannot quietly
+        regress: listing lobbies and quick-joining must both cost the same
+        whether the platform has one lobby or fifty.
+        """
+        from django.test.utils import CaptureQueriesContext
+        from django.db import connection
+
+        def cost(n):
+            Lobby.objects.all().delete()
+            for i in range(n):
+                self._make_lobby(name=f'L{i}')
+            with CaptureQueriesContext(connection) as listing:
+                self.api.get('/api/game/lobbies/')
+            with CaptureQueriesContext(connection) as joining:
+                self.api.post('/api/game/quick-join/', {'preferred_lobby_type': 'public'})
+            LobbyMember.objects.exclude(user=self.host).delete()
+            return len(listing.captured_queries), len(joining.captured_queries)
+
+        small_list, small_join = cost(2)
+        large_list, large_join = cost(20)
+        self.assertEqual(large_list, small_list, 'listing still costs a query per lobby')
+        self.assertEqual(large_join, small_join, 'quick-join still reads every lobby')
+
+    def test_listing_lobbies_does_not_count_each_one_separately(self):
+        """
+        `current_players_count` and `is_full` are Python properties and both
+        are serialised for every lobby — and `is_full` calls the first — so a
+        page of ten lobbies ran twenty extra COUNTs. The number of queries must
+        not grow with the number of lobbies.
+        """
+        for n in range(3):
+            self._make_lobby(name=f'Small {n}')
+        with self.assertNumQueries(self._list_queries()) as ctx:
+            response = self.api.get('/api/game/lobbies/')
+        self.assertEqual(response.status_code, 200)
+        few = len(ctx.captured_queries)
+
+        for n in range(9):
+            self._make_lobby(name=f'More {n}')
+        with self.assertNumQueries(few):
+            response = self.api.get('/api/game/lobbies/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(self._items(response)), 10, 'page size changed; retune the test')
+
+    def _list_queries(self):
+        """How many queries the list takes right now, measured rather than guessed."""
+        from django.test.utils import CaptureQueriesContext
+        from django.db import connection
+
+        with CaptureQueriesContext(connection) as ctx:
+            self.api.get('/api/game/lobbies/')
+        return len(ctx.captured_queries)
+
+    def test_quick_join_does_not_read_every_lobby_on_the_platform(self):
+        """
+        It used to pull every active lobby into Python and call `is_full` on
+        each. Moving the filter into the database fixed the COUNT per lobby but
+        not this: without a bound it still reads every joinable row on the
+        platform to pick one of them.
+
+        Asserted on the SQL, because it is a rows-fetched problem rather than a
+        query-count one — a query-count test passes either way, which is how
+        the first version of this test failed to notice.
+        """
+        from django.test.utils import CaptureQueriesContext
+        from django.db import connection
+
+        for n in range(12):
+            self._make_lobby(name=f'Open {n}', host=self.player)
+
+        with CaptureQueriesContext(connection) as ctx:
+            response = self.api.post('/api/game/quick-join/', {'preferred_lobby_type': 'public'})
+        self.assertIn(response.status_code, (200, 404), response.content[:200])
+
+        selects = [
+            q['sql'] for q in ctx.captured_queries if 'game_lobby' in q['sql'] and 'SELECT' in q['sql']
+        ]
+        self.assertTrue(selects, 'quick join read no lobbies at all')
+        self.assertTrue(
+            any('LIMIT' in sql for sql in selects),
+            'quick join reads every joinable lobby rather than a bounded sample',
+        )
+
+    def test_a_full_lobby_is_never_offered_by_quick_join(self):
+        """The filter moved into the database; it still has to mean the same."""
+        full = self._make_lobby(name='Full', host=self.player, max_players=2)
+        for name in ('a', 'b'):
+            extra = User.objects.create_user(
+                username=name, email=f'{name}@example.com', password='pw'
+            )
+            LobbyMember.objects.create(lobby=full, user=extra)
+
+        response = self.api.post('/api/game/quick-join/', {'preferred_lobby_type': 'public'})
+        self.assertEqual(response.status_code, 404, 'a full lobby was offered')
+
+    def test_a_lobby_with_room_is_still_offered(self):
+        self._make_lobby(name='Roomy', host=self.player, max_players=20)
+        response = self.api.post('/api/game/quick-join/', {'preferred_lobby_type': 'public'})
+        self.assertEqual(response.status_code, 200, response.content[:200])
+
+    def test_the_count_is_the_same_annotated_or_not(self):
+        """
+        The property reads an annotation when the queryset provided one. If the
+        two ever disagreed, the list and the detail endpoint would report
+        different numbers for the same lobby.
+        """
+        lobby = self._make_lobby(name='Counted')
+        LobbyMember.objects.create(lobby=lobby, user=self.player)
+        LobbyMember.objects.create(
+            lobby=lobby,
+            user=User.objects.create_user(username='away', email='away@e.com', password='pw'),
+            is_online=False,
+        )
+
+        plain = Lobby.objects.get(pk=lobby.pk)
+        annotated = Lobby.objects.with_player_count().get(pk=lobby.pk)
+        self.assertEqual(plain.current_players_count, annotated.current_players_count)
+        self.assertEqual(plain.current_players_count, 2)
+        self.assertEqual(plain.is_full, annotated.is_full)
+
+
 class LobbyConsumerTests(TestCase):
     """The realtime half: position sync, chat and study rooms over WebSocket."""
 
