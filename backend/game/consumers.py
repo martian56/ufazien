@@ -3,11 +3,13 @@ WebSocket consumers for real-time game communication.
 """
 
 import json
+import logging
 import math
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.db import IntegrityError, transaction
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 from .models import (
     CampusProp,
     LiftCar,
@@ -19,6 +21,8 @@ from .models import (
 )
 
 User = get_user_model()
+
+logger = logging.getLogger(__name__)
 
 _ACTIVITIES = {value for value, _label in PlayerPosition.ACTIVITY_CHOICES}
 # Long enough for the ids the campus generates ("lecture-5-8", "cafe-11.5-13-0.8-1.4")
@@ -139,17 +143,19 @@ class LobbyConsumer(AsyncWebsocketConsumer):
         self.lobby_group_name = f'lobby_{self.lobby_id}'
         self.user = self.scope["user"]
         
-        print(f"WebSocket connection attempt - Lobby: {self.lobby_id}, User: {self.user}")
-        
+        # Logging rather than print: this runs per connection and print goes
+        # straight to the server's stdout in production, where it cannot be
+        # levelled, filtered or turned off.
+        logger.debug("connection attempt on lobby %s by %s", self.lobby_id, self.user)
+
         # Check if user is authenticated
         if not self.user.is_authenticated:
-            print(f"User not authenticated: {self.user}")
+            logger.info("rejecting unauthenticated connection to lobby %s", self.lobby_id)
             await self.close(code=4001)
             return
-            
+
         # Check if lobby exists and user is a member
         lobby_exists = await self.check_lobby_membership()
-        print(f"User {self.user.username} is member of lobby {self.lobby_id}: {lobby_exists}")
         if not lobby_exists:
             await self.close(code=4003)
             return
@@ -161,7 +167,12 @@ class LobbyConsumer(AsyncWebsocketConsumer):
         )
 
         await self.accept()
-        print(f"WebSocket connected for user {self.user.username} to lobby {self.lobby_id}")
+
+        # They are here. `is_online` is what capacity is counted from, and
+        # nothing but joining ever set it — see `mark_online`.
+        await self.mark_online(True)
+
+        logger.info("%s connected to lobby %s", self.user.username, self.lobby_id)
 
         # Send initial lobby state
         await self.send_lobby_state()
@@ -192,6 +203,20 @@ class LobbyConsumer(AsyncWebsocketConsumer):
             if dropped:
                 prop, x, y, room = dropped
                 await self.broadcast_prop(prop, held=False, x=x, y=y, room=room)
+
+            # And they are gone.
+            #
+            # Per socket, not per person: somebody with the campus open in two
+            # tabs who closes one reads as offline until they next connect.
+            # That is the wrong answer for them and a much better one than the
+            # status quo, where nobody was ever offline at all — the cost is a
+            # lobby with one more free slot than it should have, against a
+            # lobby that fills with ghosts and then refuses everybody.
+            #
+            # Doing it properly wants a heartbeat: `last_seen` is already
+            # touched on every connect, so "online" could be "seen recently"
+            # rather than a flag two events have to agree about.
+            await self.mark_online(False)
 
             # Notify other users that someone left
             await self.channel_layer.group_send(
@@ -714,6 +739,26 @@ class LobbyConsumer(AsyncWebsocketConsumer):
         }))
 
     # Database operations
+    @database_sync_to_async
+    def mark_online(self, online):
+        """
+        Say whether this member is here.
+
+        `is_online` was set to `True` when somebody joined and never set back.
+        Nothing anywhere wrote `False` — so closing the tab, losing the
+        connection or navigating away left you online for ever, and since
+        `Lobby.current_players_count` counts exactly this, a lobby filled up
+        with people who were not in it and then refused everybody with "Lobby
+        is full".
+
+        Also touches `last_seen`, which is `auto_now` and so had been frozen at
+        the moment of joining for the same reason: nothing on the socket path
+        ever saved the row.
+        """
+        LobbyMember.objects.filter(lobby_id=self.lobby_id, user=self.user).update(
+            is_online=online, last_seen=timezone.now()
+        )
+
     @database_sync_to_async
     def check_lobby_membership(self):
         """Check if the lobby exists and user is a member."""

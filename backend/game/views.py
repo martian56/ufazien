@@ -204,7 +204,7 @@ def join_lobby(request):
 def leave_lobby(request, lobby_id):
     """Leave a specific lobby"""
     lobby = get_object_or_404(Lobby, id=lobby_id, is_active=True)
-    
+
     try:
         member = LobbyMember.objects.get(lobby=lobby, user=request.user)
         member.delete()
@@ -212,15 +212,39 @@ def leave_lobby(request, lobby_id):
         # Remove player position
         PlayerPosition.objects.filter(lobby=lobby, user=request.user).delete()
         
-        # If host leaves, transfer host to another member or deactivate lobby
+        # If the host leaves, hand the lobby to somebody else or close it.
         if lobby.host == request.user:
-            remaining_members = LobbyMember.objects.filter(lobby=lobby, is_online=True)
+            remaining_members = LobbyMember.objects.filter(lobby=lobby)
             if remaining_members.exists():
                 lobby.host = remaining_members.first().user
-                lobby.save()
+                lobby.save(update_fields=['host'])
+
+                # The new host's LiveKit grants are minted from `is_host` at
+                # token time, so without this they cannot present until they
+                # reconnect. Best effort: it is a no-op for somebody who is not
+                # currently in the room.
+                #
+                # And it must not be able to stop somebody leaving. Voice is
+                # optional — `CONTRIBUTING.md` says so, and a dev without the
+                # credentials is the normal case — but
+                # `sync_participant_permissions` deliberately re-raises
+                # `LiveKitNotConfigured` so that the token endpoint can report
+                # it. Uncaught here, walking out of a lobby returns a 500 on
+                # every machine that has not set up LiveKit.
+                new_member = remaining_members.first()
+                try:
+                    livekit_service.sync_participant_permissions(
+                        lobby, new_member.user, new_member
+                    )
+                except livekit_service.LiveKitNotConfigured:
+                    pass
             else:
-                # lobby.is_active = False
-                lobby.save()
+                # Nobody left. The line that did this was commented out, so an
+                # empty hostless lobby stayed active for ever — listed, counted
+                # in the stats, and joinable by people who then found nobody in
+                # it. The `lobby.save()` underneath it saved nothing at all.
+                lobby.is_active = False
+                lobby.save(update_fields=['is_active'])
         
         return Response({'message': 'Left lobby successfully'})
     

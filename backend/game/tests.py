@@ -150,6 +150,63 @@ class LobbyRestTests(TestCase):
                 self.assertIn(anon.get(url).status_code, (401, 403))
 
 
+    def test_the_last_person_out_closes_the_lobby(self):
+        """
+        The line that did this was commented out, so an empty hostless lobby
+        stayed active for ever — listed, counted in the stats, and joinable by
+        people who then found nobody in it.
+        """
+        lobby = self._make_lobby(name='Briefly')
+
+        response = self.api.post(f'/api/game/lobbies/{lobby.id}/leave/')
+        self.assertEqual(response.status_code, 200)
+
+        lobby.refresh_from_db()
+        self.assertFalse(lobby.is_active, 'an empty lobby is still active')
+
+    def test_a_lobby_the_host_leaves_passes_to_somebody_else(self):
+        lobby = self._make_lobby(name='Handover')
+        LobbyMember.objects.create(lobby=lobby, user=self.player)
+
+        self.api.post(f'/api/game/lobbies/{lobby.id}/leave/')
+
+        lobby.refresh_from_db()
+        self.assertTrue(lobby.is_active, 'a lobby with somebody still in it was closed')
+        self.assertEqual(lobby.host, self.player)
+
+    def test_leaving_works_on_a_machine_with_no_livekit(self):
+        """
+        Voice is optional, and a developer without the credentials is the
+        normal case. Handing the lobby on pushes the new host's publishing
+        rights to LiveKit, and that call re-raises when it is not configured —
+        so uncaught, walking out of a lobby is a 500 for most people.
+        """
+        lobby = self._make_lobby(name='No voice here')
+        LobbyMember.objects.create(lobby=lobby, user=self.player)
+
+        response = self.api.post(f'/api/game/lobbies/{lobby.id}/leave/')
+
+        self.assertEqual(response.status_code, 200, response.content[:200])
+        lobby.refresh_from_db()
+        self.assertEqual(lobby.host, self.player)
+
+    def test_a_lobby_is_handed_on_even_when_the_others_are_offline(self):
+        """
+        The handover looked at `is_online`, which nothing ever set to False —
+        and now that something does, an offline member is still a member. A
+        lobby whose remaining players had all closed their tabs would otherwise
+        be closed out from under them.
+        """
+        lobby = self._make_lobby(name='Quiet')
+        LobbyMember.objects.create(lobby=lobby, user=self.player, is_online=False)
+
+        self.api.post(f'/api/game/lobbies/{lobby.id}/leave/')
+
+        lobby.refresh_from_db()
+        self.assertTrue(lobby.is_active)
+        self.assertEqual(lobby.host, self.player)
+
+
 class LobbyConsumerTests(TestCase):
     """The realtime half: position sync, chat and study rooms over WebSocket."""
 
@@ -1185,6 +1242,49 @@ class LobbyConsumerTests(TestCase):
 
         state = async_to_sync(scenario)()
         self.assertEqual(state['lift']['floor'], 0)
+    def test_connecting_marks_you_online_and_leaving_marks_you_off(self):
+        """
+        `is_online` was set when somebody joined and never set back — nothing
+        anywhere wrote False. Since `Lobby.current_players_count` counts
+        exactly this, a lobby filled with people who were not in it and then
+        refused everybody with "Lobby is full".
+        """
+        from asgiref.sync import async_to_sync, sync_to_async
+        from .models import LobbyMember
+
+        LobbyMember.objects.filter(lobby=self.lobby, user=self.host).update(is_online=False)
+
+        @sync_to_async
+        def online():
+            return LobbyMember.objects.get(lobby=self.lobby, user=self.host).is_online
+
+        async def scenario():
+            a, _ = await self._connect(self.host)
+            await self._drain(a)
+            during = await online()
+            await a.disconnect()
+            return during
+
+        during = async_to_sync(scenario)()
+        self.assertTrue(during, 'connecting did not mark the member online')
+        after = LobbyMember.objects.get(lobby=self.lobby, user=self.host)
+        self.assertFalse(after.is_online, 'leaving did not mark the member offline')
+
+    def test_a_lobby_stops_counting_players_who_have_gone(self):
+        """The count is what capacity is decided from, so a ghost is a slot."""
+        from asgiref.sync import async_to_sync
+
+        async def scenario():
+            a, _ = await self._connect(self.host)
+            await self._drain(a)
+            await a.disconnect()
+
+        async_to_sync(scenario)()
+        self.lobby.refresh_from_db()
+        self.assertNotIn(
+            self.host.id,
+            [m.user_id for m in self.lobby.members.filter(is_online=True)],
+        )
 
     def test_an_unknown_activity_falls_back_to_standing(self):
         from asgiref.sync import async_to_sync
