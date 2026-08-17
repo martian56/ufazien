@@ -23,6 +23,12 @@ from .serializers import (
 )
 
 
+#: How many candidates quick-join considers. It only has to pick one somebody
+#: will be happy with, and reading the whole table to do that is the cost this
+#: number exists to bound.
+QUICK_JOIN_SAMPLE = 25
+
+
 class LobbyPagination(PageNumberPagination):
     page_size = 10
     page_size_query_param = 'page_size'
@@ -40,8 +46,18 @@ def lobby_list_create(request):
         lobby_type = request.GET.get('type', 'all')  # all, public, private
         sort_by = request.GET.get('sort', 'created_at')  # created_at, players, name
         
-        # Base queryset
-        queryset = Lobby.objects.filter(is_active=True)
+        # Annotated up front. `current_players_count` and `is_full` are
+        # serialised for every lobby and `is_full` calls the first, so a page
+        # of ten was twenty extra COUNTs; the property reads the annotation
+        # when there is one.
+        # `select_related('host')` because every row serialises its host, and
+        # without it that is one user lookup per lobby — which is most of what
+        # was left once the counts stopped being per-row.
+        queryset = (
+            Lobby.objects.with_player_count()
+            .select_related('host')
+            .filter(is_active=True)
+        )
         
         # Apply filters
         if search:
@@ -56,10 +72,8 @@ def lobby_list_create(request):
         
         # Apply sorting
         if sort_by == 'players':
-            # Sort by current player count (requires annotation)
-            queryset = queryset.annotate(
-                player_count=Count('members', filter=Q(members__is_online=True))
-            ).order_by('-player_count')
+            # Already annotated above, so this is just an ordering now.
+            queryset = queryset.order_by('-player_count')
         elif sort_by == 'name':
             queryset = queryset.order_by('name')
         else:
@@ -267,8 +281,11 @@ def quick_join(request):
     lobby_type = serializer.validated_data.get('preferred_lobby_type', 'public')
     max_players = serializer.validated_data.get('max_players_preference')
     
-    # Build query
-    queryset = Lobby.objects.filter(is_active=True)
+    # Only the ones with room in them, decided in the database. This used to
+    # pull every active lobby on the platform into Python and call `is_full`
+    # on each — a COUNT per lobby, unpaginated and unbounded, on every press
+    # of the quick-join button.
+    queryset = Lobby.objects.only_joinable().select_related('host').filter(is_active=True)
     
     # Exclude lobbies user is already in
     user_lobbies = LobbyMember.objects.filter(user=request.user).values_list('lobby_id', flat=True)
@@ -283,19 +300,17 @@ def quick_join(request):
     if max_players:
         queryset = queryset.filter(max_players__lte=max_players)
     
-    # Find lobbies that aren't full
-    available_lobbies = []
-    for lobby in queryset:
-        if not lobby.is_full:
-            available_lobbies.append(lobby)
-    
+    # A bounded sample rather than the whole table. Ordering by id keeps the
+    # slice stable, and picking from a handful is as good as picking from all
+    # of them for what this does.
+    available_lobbies = list(queryset.order_by('-created_at')[:QUICK_JOIN_SAMPLE])
+
     if not available_lobbies:
         return Response(
-            {'error': 'No suitable lobbies found'}, 
+            {'error': 'No suitable lobbies found'},
             status=status.HTTP_404_NOT_FOUND
         )
-    
-    # Join a random available lobby
+
     lobby = random.choice(available_lobbies)
     
     # Join the lobby
@@ -314,9 +329,9 @@ def quick_join(request):
 def my_lobbies(request):
     """Get user's current lobbies"""
     user_memberships = LobbyMember.objects.filter(
-        user=request.user, 
-        lobby__is_active=True
-    ).select_related('lobby')
+        user=request.user,
+        lobby__is_active=True,
+    ).select_related('lobby', 'lobby__host')
     
     lobbies = [membership.lobby for membership in user_memberships]
     serializer = LobbyListSerializer(lobbies, many=True)
@@ -330,7 +345,9 @@ def saved_lobbies(request):
     """Get or add saved lobbies"""
     
     if request.method == 'GET':
-        saved = SavedLobby.objects.filter(user=request.user).select_related('lobby')
+        saved = SavedLobby.objects.filter(user=request.user).select_related(
+            'lobby', 'lobby__host'
+        )
         serializer = SavedLobbySerializer(saved, many=True)
         return Response(serializer.data)
     

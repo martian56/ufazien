@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth import get_user_model
 from django.conf import settings
 from django.core.validators import MinValueValidator, MaxValueValidator
+from django.db.models import Count, F, Q
 import random
 import string
 
@@ -9,6 +10,26 @@ import string
 def generate_lobby_id():
     """Generate a unique 8-digit lobby ID"""
     return ''.join(random.choices(string.digits, k=8))
+
+
+class LobbyQuerySet(models.QuerySet):
+    """Reusable shapes for the questions the lobby list keeps asking."""
+
+    def with_player_count(self):
+        """Attach the online-member count the serializer would otherwise count."""
+        return self.annotate(player_count=Lobby.ONLINE_MEMBERS)
+
+    def only_joinable(self):
+        """
+        Lobbies with room in them, decided in the database.
+
+        `is_full` is a Python property, and `CLAUDE.md` is explicit that those
+        are not queryset fields — `.exclude(is_full=True)` raises `FieldError`.
+        Counting in the query and comparing with `F()` is the shape it points
+        at, and it is what lets `quick_join` stop materialising every lobby on
+        the platform to ask each one in turn.
+        """
+        return self.with_player_count().filter(player_count__lt=F('max_players'))
 
 
 class Lobby(models.Model):
@@ -27,14 +48,35 @@ class Lobby(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    objects = LobbyQuerySet.as_manager()
+
     class Meta:
         ordering = ['-created_at']
 
     def __str__(self):
         return f"{self.name} ({self.id})"
 
+    #: Annotate a queryset with this to answer `current_players_count` without
+    #: a query per row. `Lobby.objects.annotate(**Lobby.WITH_PLAYER_COUNT)`.
+    #:
+    #: `is_full` compares against `max_players`, which is a column, so the
+    #: whole question can be asked in the database — see `only_joinable`.
+    ONLINE_MEMBERS = Count('members', filter=Q(members__is_online=True))
+
     @property
     def current_players_count(self):
+        """
+        How many people are in this lobby.
+
+        Reads an annotation when the queryset provided one, and falls back to
+        its own COUNT when it did not. Every lobby serialised carries this and
+        `is_full`, which calls it again — so a page of ten lobbies was twenty
+        extra queries, and `quick_join` pulled every active lobby on the
+        platform into Python and ran one each.
+        """
+        annotated = getattr(self, 'player_count', None)
+        if annotated is not None:
+            return annotated
         return self.members.filter(is_online=True).count()
 
     @property
