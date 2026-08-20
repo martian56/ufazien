@@ -12,6 +12,7 @@ import {
   interiorDoors,
   leavingThroughDoor,
 } from './doorways'
+import { interiorDoorId, isDoorOpen, openDoor } from './doorState'
 import { CAMPUS_BUILDINGS, PLAYER_RADIUS, type InteriorKind } from './campusLayout'
 import { INTERIOR_SPECS, interiorHalfExtent } from './interiorSpecs'
 import { LECTURE_BOARD_REACH } from './lectureSeating'
@@ -289,3 +290,27 @@ describe('the way out is clear', () => {
  * hall rather than straight down the middle, which is how a raked hall works.
  */
 const APPROACH = 2.5
+
+describe('a room with two doors keeps them apart', () => {
+  it('gives each one its own state key', () => {
+    // Keyed by building alone they shared a state: opening one swung both, and
+    // walking at the shut one let you through it.
+    const doors = interiorDoors('lecture')
+    const keys = doors.map((_, index) => interiorDoorId(4, index))
+    expect(new Set(keys).size, 'both doors share a key').toBe(doors.length)
+  })
+
+  it('opens only the one that was opened', () => {
+    const now = 1_000
+    // Open the second door of room 4 and nothing else.
+    const state = openDoor({}, interiorDoorId(4, 1), now)
+    expect(isDoorOpen(state, interiorDoorId(4, 1), now)).toBe(true)
+    expect(isDoorOpen(state, interiorDoorId(4, 0), now)).toBe(false)
+  })
+
+  it('keeps a single-door room working unchanged', () => {
+    // Every other room passes no index, and must land on the same key it always
+    // would have.
+    expect(interiorDoorId(2)).toBe(interiorDoorId(2, 0))
+  })
+})

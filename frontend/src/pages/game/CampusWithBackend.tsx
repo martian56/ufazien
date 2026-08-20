@@ -113,7 +113,6 @@ import {
   interiorDoorFor,
   interiorBounds,
   interiorDoors,
-  leavingThroughAny,
   leavingThroughDoor,
 } from '../../components/campus/doorways'
 import {
@@ -1008,16 +1007,17 @@ function CampusDoors({
   const now = performance.now()
 
   if (insideBuilding) {
-    const swing = doorSwing(doors, interiorDoorId(insideBuilding.id), now)
     return (
       <>
-        {interiorDoors(insideBuilding.interior).map((inner) => (
+        {interiorDoors(insideBuilding.interior).map((inner, index) => (
           <DoorLeaf
             key={`${inner.x},${inner.z}`}
             x={inner.x}
             z={inner.z}
             halfWidth={inner.halfW}
-            swing={swing}
+            // Its own state, not the room's: the amphitheatre has two, and one
+            // key between them swung both at once.
+            swing={doorSwing(doors, interiorDoorId(insideBuilding.id, index), now)}
             // Leaves swing away from the room, whichever wall they are in.
             facing={inner.facing === 1 ? -1 : 1}
           />
@@ -1051,9 +1051,12 @@ function interiorClosedDoor(
   doors: DoorState,
   now: number,
 ): Collider[] {
-  if (isDoorOpen(doors, interiorDoorId(building.id), now)) return []
-  const door = interiorDoorFor(building.interior)
-  return [{ x: door.x, z: door.z, halfW: door.halfW, halfD: 0.2 }]
+  // Each door on its own, so opening one does not let the player through the
+  // other. A room with one door is the same thing with a list of one.
+  return interiorDoors(building.interior)
+    .map((door, index) => ({ door, index }))
+    .filter(({ index }) => !isDoorOpen(doors, interiorDoorId(building.id, index), now))
+    .map(({ door }) => ({ x: door.x, z: door.z, halfW: door.halfW, halfD: 0.2 }))
 }
 
 function Player({
@@ -1299,13 +1302,14 @@ function Player({
         if (landing !== null) {
           onCallLift(landing)
         } else {
-          // Any of the room's doors — the amphitheatre has two.
-          const near = interiorDoors(insideBuilding.interior).some(
+          // Whichever of the room's doors is within reach — the amphitheatre
+          // has two, and reaching for one must not open the other.
+          const nearIndex = interiorDoors(insideBuilding.interior).findIndex(
             (inner) =>
               Math.abs(camera.position.x - inner.x) <= inner.halfW + DOOR_REACH &&
               Math.abs(camera.position.z - inner.z) <= DOOR_REACH,
           )
-          if (near) onOpenDoor(interiorDoorId(insideBuilding.id))
+          if (nearIndex >= 0) onOpenDoor(interiorDoorId(insideBuilding.id, nearIndex))
         }
       } else {
         const door = doorWithinReach(camera.position.x, camera.position.z)
@@ -1362,10 +1366,13 @@ function Player({
       // Walking out through the door, which has to be asked before the clamp:
       // afterwards the position has already been pulled back inside the room
       // and there is nothing left to detect.
-      if (
-        isDoorOpen(doors, interiorDoorId(insideBuilding.id), doorNow) &&
-        leavingThroughAny(insideBuilding.interior, camera.position.x, camera.position.z)
-      ) {
+      // Through a door that is *itself* open, rather than any of them being.
+      const leavingBy = interiorDoors(insideBuilding.interior).findIndex(
+        (door, index) =>
+          isDoorOpen(doors, interiorDoorId(insideBuilding.id, index), doorNow) &&
+          leavingThroughDoor(camera.position.x, camera.position.z, door),
+      )
+      if (leavingBy >= 0) {
         // A room inside the building opens onto its corridor; only the ground
         // floor opens onto the street. Walking out of the library on the
         // fourth floor and finding yourself on Nizami Street is the sort of

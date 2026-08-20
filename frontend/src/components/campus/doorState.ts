@@ -47,8 +47,18 @@ export const DOOR_SWING = Math.PI / 2
 export type DoorState = Readonly<Record<string, number>>
 
 /** The id used for the door on the inside of a room. */
-export function interiorDoorId(buildingId: number | string): string {
-  return `interior:${buildingId}`
+/**
+ * The open-and-shut state of one interior door.
+ *
+ * Keyed by the door as well as the building, because a room may have more than
+ * one: the amphitheatre has two, either side of its board. Keyed by building
+ * alone they shared a state, so opening one swung both and walking at the shut
+ * one let you through it.
+ *
+ * `0` by default, which is every room with a single door.
+ */
+export function interiorDoorId(buildingId: number | string, door = 0): string {
+  return `interior:${buildingId}:${door}`
 }
 
 /** The id used for a door on the campus facade. */

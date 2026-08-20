@@ -187,11 +187,3 @@ export function leavingThroughDoor(x: number, z: number, door: InteriorDoor): bo
   return past && Math.abs(x - door.x) <= door.halfW
 }
 
-/** The door a player at this point is walking out through, if any. */
-export function leavingThroughAny(
-  kind: InteriorKind | undefined,
-  x: number,
-  z: number,
-): InteriorDoor | null {
-  return interiorDoors(kind).find((door) => leavingThroughDoor(x, z, door)) ?? null
-}
