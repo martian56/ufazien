@@ -573,45 +573,68 @@ function Archivolt({ trim }: { trim: string }) {
 /**
  * The fanlight in the head of the arch.
  *
- * Glass with bars radiating from the centre of the springing line, which is
- * the pattern in the doorway's photograph and the reason the arch is worth
- * having at all: a plain arched hole reads as a tunnel mouth.
+ * Glass with bars radiating from the centre of the springing line and a
+ * semicircular rib partway up, which is the pattern in the doorway's
+ * photograph.
+ *
+ * The bars stop short of the centre rather than meeting at it. Nine of them
+ * converging on a point made a dark rosette the eye read as a spider, and no
+ * fanlight is built that way — the joinery runs to a small solid hub, because
+ * that is where the bars would otherwise have to be jointed into each other.
  */
 function Fanlight() {
-  const radius = OPENING_HALF_W - 0.04
+  const radius = OPENING_HALF_W - 0.06
+  const hub = 0.22
+  const bars = 7
+  const rib = radius * 0.58
+  const timber = '#5b4225'
 
   return (
     <group position={[0, 0, -0.06]}>
-      <mesh position={[0, SPRING_HEIGHT, 0]} rotation={[0, 0, 0]}>
-        <circleGeometry args={[radius, 32, 0, Math.PI]} />
+      <mesh position={[0, SPRING_HEIGHT, 0]}>
+        <circleGeometry args={[radius, 40, 0, Math.PI]} />
         <meshStandardMaterial
-          color="#b9d9ef"
-          roughness={0.12}
-          metalness={0.25}
+          color="#c3dcee"
+          roughness={0.1}
+          metalness={0.2}
           transparent
-          opacity={0.5}
+          opacity={0.45}
           side={THREE.DoubleSide}
         />
       </mesh>
 
-      {/* The radiating bars, and the rim they run to. */}
-      {Array.from({ length: 9 }, (_, i) => {
-        const angle = (Math.PI * (i + 1)) / 10
+      {/* The radiating bars, from the hub out to the rim. */}
+      {Array.from({ length: bars }, (_, i) => {
+        const angle = (Math.PI * (i + 1)) / (bars + 1)
+        const mid = (hub + radius) / 2
         return (
           <mesh
             key={i}
-            position={[(Math.cos(angle) * radius) / 2, SPRING_HEIGHT + (Math.sin(angle) * radius) / 2, 0.03]}
+            position={[Math.cos(angle) * mid, SPRING_HEIGHT + Math.sin(angle) * mid, 0.02]}
             rotation={[0, 0, angle - Math.PI / 2]}
           >
-            <boxGeometry args={[0.045, radius * 0.94, 0.05]} />
-            <meshStandardMaterial color="#4a3421" roughness={0.6} />
+            <boxGeometry args={[0.05, radius - hub, 0.05]} />
+            <meshStandardMaterial color={timber} roughness={0.6} />
           </mesh>
         )
       })}
-      {archPoints(radius * 0.66).map(({ x, y, angle }, i) => (
-        <mesh key={`r${i}`} position={[x, y, 0.03]} rotation={[0, 0, angle - Math.PI / 2]}>
-          <boxGeometry args={[0.045, (Math.PI * radius * 0.66) / ARCH_FACETS + 0.03, 0.05]} />
-          <meshStandardMaterial color="#4a3421" roughness={0.6} />
+
+      {/* The hub they run to, and the rib they cross. */}
+      <mesh position={[0, SPRING_HEIGHT, 0.02]}>
+        <cylinderGeometry args={[hub, hub, 0.06, 16, 1, false, 0, Math.PI]} />
+        <meshStandardMaterial color={timber} roughness={0.6} />
+      </mesh>
+      {archPoints(rib).map(({ x, y, angle }, i) => (
+        <mesh key={`rib${i}`} position={[x, y, 0.02]} rotation={[0, 0, angle - Math.PI / 2]}>
+          <boxGeometry args={[0.05, (Math.PI * rib) / ARCH_FACETS + 0.03, 0.05]} />
+          <meshStandardMaterial color={timber} roughness={0.6} />
+        </mesh>
+      ))}
+      {/* And the rim, so the glazing ends in joinery rather than in air. */}
+      {archPoints(radius).map(({ x, y, angle }, i) => (
+        <mesh key={`rim${i}`} position={[x, y, 0.02]} rotation={[0, 0, angle - Math.PI / 2]}>
+          <boxGeometry args={[0.08, (Math.PI * radius) / ARCH_FACETS + 0.03, 0.06]} />
+          <meshStandardMaterial color={timber} roughness={0.6} />
         </mesh>
       ))}
     </group>
@@ -643,16 +666,24 @@ function Transom({ from, to }: { from: number; to: number }) {
       </mesh>
       {/* The rail under it and the mullions across it. */}
       <mesh position={[0, from, 0.03]}>
-        <boxGeometry args={[OPENING_HALF_W * 2, 0.16, 0.1]} />
-        <meshStandardMaterial color="#4a3421" roughness={0.6} />
+        <boxGeometry args={[OPENING_HALF_W * 2, 0.16, 0.12]} />
+        <meshStandardMaterial color="#5b4225" roughness={0.6} />
       </mesh>
       {Array.from({ length: bays - 1 }, (_, i) => (
         <mesh
           key={i}
           position={[(-OPENING_HALF_W * 2 * (i + 1)) / bays + OPENING_HALF_W, (from + to) / 2, 0.03]}
         >
-          <boxGeometry args={[0.07, height, 0.07]} />
-          <meshStandardMaterial color="#4a3421" roughness={0.6} />
+          <boxGeometry args={[0.06, height, 0.09]} />
+          <meshStandardMaterial color="#5b4225" roughness={0.6} />
+        </mesh>
+      ))}
+      {/* Crossed by horizontals as well: without them the transom is four tall
+          slots rather than the small panes the door is glazed in. */}
+      {Array.from({ length: 2 }, (_, i) => (
+        <mesh key={`h${i}`} position={[0, from + (height * (i + 1)) / 3, 0.03]}>
+          <boxGeometry args={[OPENING_HALF_W * 2 - 0.08, 0.06, 0.09]} />
+          <meshStandardMaterial color="#5b4225" roughness={0.6} />
         </mesh>
       ))}
     </group>

@@ -53,6 +53,16 @@ const FLOORS = 3
 /** How high the plinth stands, with its small square windows. */
 const PLINTH = 2.4
 
+/**
+ * Where the two flagpoles are fixed: flanking the entrance, over the plaques.
+ *
+ * Clear of the doorway's stone surround and of the plaques under them, and
+ * high enough that the flags fly over head height rather than in the way of
+ * somebody walking in.
+ */
+const FLAG_X = 6.4
+const FLAG_Y = 5.4
+
 // Near-white with a lavender cast, which is what the render actually is. The
 // first pass read it as mid-grey off a single overcast photograph; the flank
 // elevation in better light is much lighter than that.
@@ -628,19 +638,46 @@ export default function UfazBuilding({ building, timeOfDay = 'day' }: UfazBuildi
         </mesh>
       )}
 
-      {/* Two flags: the university is a joint Strasbourg and ASOIU project. */}
+      {/* Two flags: the university is a joint Strasbourg and ASOIU project.
+
+          On poles that come out of the wall. They used to be tilted about Z,
+          which leans a pole sideways *in the plane of the facade* rather than
+          projecting it from the face — so both read as sticks lying diagonally
+          across the windows, halfway up the ground floor and nowhere near the
+          door. A facade flagpole rakes outwards and up, and it flanks the
+          entrance. */}
       {flags.map((flag, i) => {
         if (!flag) return null
         const side = i === 0 ? -1 : 1
+        // From vertical: mostly out from the wall, still climbing.
+        const rake = 1.05
+        const length = 3.2
+        const along = (d: number): [number, number, number] => [
+          0,
+          Math.cos(rake) * d,
+          Math.sin(rake) * d,
+        ]
+        const [, poleY, poleZ] = along(length / 2)
+        const [, flagY, flagZ] = along(length * 0.42)
+
         return (
-          <group key={i} position={[side * bay * 2, PLINTH + 1.4, halfD + 0.5]}>
-            <mesh rotation={[0, 0, -side * 0.5]} castShadow>
-              <cylinderGeometry args={[0.06, 0.06, 3.2, 8]} />
+          <group key={i} position={[side * FLAG_X, FLAG_Y, halfD + 0.08]}>
+            <mesh position={[0, poleY, poleZ]} rotation={[rake, 0, 0]} castShadow>
+              <cylinderGeometry args={[0.05, 0.06, length, 8]} />
               <meshStandardMaterial color="#43484f" roughness={0.5} metalness={0.5} />
             </mesh>
-            {/* Hung from the pole rather than centred on it, so the hoist edge
-                is at the mast and the wave travels away from it. */}
-            <group position={[side * 0.85, 1.35, 0]} rotation={[0, side < 0 ? Math.PI : 0, -side * 0.5]}>
+            {/* A finial, so the pole ends rather than stopping. */}
+            <mesh position={along(length)} castShadow>
+              <sphereGeometry args={[0.1, 10, 8]} />
+              <meshStandardMaterial color="#c9a227" roughness={0.3} metalness={0.8} />
+            </mesh>
+            {/* Hung from the pole and flying outwards, away from the entrance,
+                with its face parallel to the facade so it reads from in front
+                rather than edge-on. */}
+            <group
+              position={[side * 0.78, flagY - 0.42, flagZ]}
+              rotation={[0, side < 0 ? Math.PI : 0, 0]}
+            >
               <WavingFlag width={1.5} height={0.95} texture={flag} phase={i * 1.7} wind={1} />
             </group>
           </group>

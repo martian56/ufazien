@@ -19,6 +19,8 @@ import {
   SCOREBOARD_Y,
   STACK_ROWS,
   TABLE_FOOTBALL,
+  UFAZ_BENCH_X,
+  UFAZ_BENCH_SEAT_HEIGHT,
   UFAZ_BENCH_Z,
   UFAZ_DESK_X,
   UFAZ_FLAGS,
@@ -1293,8 +1295,17 @@ function UfazGroundLevel({ spec, whiteboard }: InteriorProps) {
 
       {/* Seating for people waiting, and greenery */}
       {UFAZ_BENCH_Z.map((z) => (
-        <group key={z} position={[-half + 8, 0, z]}>
-          <mesh castShadow receiveShadow position={[0, 0.45, 0]}>
+        // At the same x as the seat and the collider, which it was not: the
+        // benches were drawn at -half + 8 and their seats registered at
+        // -half + 11, three metres east. The collider was moved to clear the
+        // arcade pier and the mesh stayed where it was, so sitting down put
+        // you on empty floor with the bench in the middle distance.
+        //
+        // The pan is `seatHeight` above the floor for the same reason — it is
+        // the height the player is put at, so it is the height the thing they
+        // are put on has to be.
+        <group key={z} position={[UFAZ_BENCH_X, 0, z]}>
+          <mesh castShadow receiveShadow position={[0, UFAZ_BENCH_SEAT_HEIGHT - 0.125, 0]}>
             <boxGeometry args={[1.6, 0.25, 4.4]} />
             <meshStandardMaterial color="#6d5a45" roughness={0.75} />
           </mesh>
@@ -2139,8 +2150,17 @@ function LiftCarBody({ height }: { height: () => number }) {
 
   return (
     <group ref={car} position={[LIFT_CAR.x, 0, LIFT_CAR.z]}>
-      {/* The floor you stand on. */}
-      <mesh receiveShadow position={[0, -0.06, 0]}>
+      {/* The floor you stand on, standing four centimetres proud of the
+          landing. Flush, its top surface was exactly coplanar with the hall
+          floor whenever the car was at a floor — two surfaces at the same
+          depth, which the depth buffer cannot order, so the car floor and the
+          hall's tiles fought and the car flickered black through the pattern.
+          A real car sits a little above its landing anyway.
+
+          Four rather than one: the corridor's floorboards are laid over the
+          tile at 0.02 and they reach across the shaft, so anything lower than
+          that is still buried under a second floor in the same place. */}
+      <mesh receiveShadow position={[0, -0.02, 0]}>
         <boxGeometry args={[LIFT_CAR.halfW * 2, 0.12, LIFT_CAR.halfD * 2]} />
         <meshStandardMaterial color="#3b4149" roughness={0.5} metalness={0.4} />
       </mesh>

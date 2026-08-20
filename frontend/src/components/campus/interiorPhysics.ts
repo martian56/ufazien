@@ -120,6 +120,17 @@ export const UFAZ_DESK_X = -9.4
 export const UFAZ_BENCH_Z = [-10, -4, 2]
 
 /**
+ * Where the waiting benches stand, and how high their seat is.
+ *
+ * Shared with what draws them. They used to be stated twice — once here for
+ * the collider and the seat, once in the renderer for the mesh — and when the
+ * collider moved east to clear the arcade the mesh did not follow. Sitting
+ * down put the player three metres from the bench, in mid-air.
+ */
+export const UFAZ_BENCH_X = -11
+export const UFAZ_BENCH_SEAT_HEIGHT = 0.58
+
+/**
  * The lift core.
  *
  * Two lifts side by side in a glazed shaft, at the far end of the hall with the
@@ -234,15 +245,15 @@ function ufazGroundFurniture(): InteriorPhysics {
     const id = `ufaz-bench-${z}`
     // Clear of the arcade. At -half + 8 the bench and the pier at z -8 overlapped
     // by a quarter of a metre, which is a wedge rather than a wall.
-    colliders.push({ id, x: -half + 11, z, halfW: 0.8, halfD: 2.2, height: 0.6 })
+    colliders.push({ id, x: UFAZ_BENCH_X, z, halfW: 0.8, halfD: 2.2, height: 0.6 })
     seats.push({
       id,
-      x: -half + 11,
+      x: UFAZ_BENCH_X,
       z,
       y: 0,
       // Facing back into the hall, away from the wall behind them.
       ry: Math.PI / 2,
-      seatHeight: 0.58,
+      seatHeight: UFAZ_BENCH_SEAT_HEIGHT,
       kind: 'bench',
       on: id,
     })
