@@ -20,6 +20,17 @@ import {
   type DoorState,
 } from '../../components/campus/doorState'
 import DoorLeaf from '../../components/campus/DoorLeaf'
+import RenderProbe from '../../components/campus/RenderProbe'
+
+/**
+ * Whether this page load asked to be measured — `?probe=1`.
+ *
+ * Read once at module scope: it is a URL a developer typed, not something that
+ * changes while the campus is open, and re-reading it per render would put a
+ * `window` access in the render path for no reason.
+ */
+const probeRequested =
+  typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('probe')
 import { useCampusVoice } from '../../hooks/useCampusVoice'
 import VoicePanel, { ScreenShareStage } from '../../components/campus/VoicePanel'
 import HudDock from '../../components/campus/HudDock'
@@ -2374,6 +2385,10 @@ const CampusWithBackend = () => {
           }}
           camera={{ position: SPAWN, fov: 70, near: 0.1, far: 2200 }}
         >
+          {/* Measures what a frame costs, at fixed viewpoints, when the URL
+              asks for it. Development only. See `RenderProbe`. */}
+          {import.meta.env.DEV && probeRequested && <RenderProbe />}
+
           {/* Keeps the view the same width whatever shape the window is. */}
           <FieldOfView />
           {/* Drops the resolution on a machine that cannot hold frame rate,

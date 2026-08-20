@@ -1,0 +1,82 @@
+[
+  {
+    "name": "CommonTree_4",
+    "file": "props/CommonTree_4.glb",
+    "pack": "Ultimate Nature Pack (Quaternius)",
+    "licence": "CC0-1.0",
+    "source": "CommonTree_4.obj",
+    "triangles": 1352,
+    "materials": 3,
+    "bytes": 75280
+  },
+  {
+    "name": "CommonTree_3",
+    "file": "props/CommonTree_3.glb",
+    "pack": "Ultimate Nature Pack (Quaternius)",
+    "licence": "CC0-1.0",
+    "source": "CommonTree_3.obj",
+    "triangles": 1584,
+    "materials": 3,
+    "bytes": 87812
+  },
+  {
+    "name": "BirchTree_2",
+    "file": "props/BirchTree_2.glb",
+    "pack": "Ultimate Nature Pack (Quaternius)",
+    "licence": "CC0-1.0",
+    "source": "BirchTree_2.obj",
+    "triangles": 1568,
+    "materials": 4,
+    "bytes": 88484
+  },
+  {
+    "name": "PineTree_2",
+    "file": "props/PineTree_2.glb",
+    "pack": "Ultimate Nature Pack (Quaternius)",
+    "licence": "CC0-1.0",
+    "source": "PineTree_2.obj",
+    "triangles": 1692,
+    "materials": 2,
+    "bytes": 92252
+  },
+  {
+    "name": "Bush_1",
+    "file": "props/Bush_1.glb",
+    "pack": "Ultimate Nature Pack (Quaternius)",
+    "licence": "CC0-1.0",
+    "source": "Bush_1.obj",
+    "triangles": 364,
+    "materials": 1,
+    "bytes": 20596
+  },
+  {
+    "name": "Bush_2",
+    "file": "props/Bush_2.glb",
+    "pack": "Ultimate Nature Pack (Quaternius)",
+    "licence": "CC0-1.0",
+    "source": "Bush_2.obj",
+    "triangles": 268,
+    "materials": 1,
+    "bytes": 15412
+  },
+  {
+    "name": "Rock_1",
+    "file": "props/Rock_1.glb",
+    "pack": "Ultimate Nature Pack (Quaternius)",
+    "licence": "CC0-1.0",
+    "source": "Rock_1.obj",
+    "triangles": 70,
+    "materials": 1,
+    "bytes": 4760
+  },
+  {
+    "name": "Rock_2",
+    "file": "props/Rock_2.glb",
+    "pack": "Ultimate Nature Pack (Quaternius)",
+    "licence": "CC0-1.0",
+    "source": "Rock_2.obj",
+    "triangles": 80,
+    "materials": 1,
+    "bytes": 5348
+  }
+]

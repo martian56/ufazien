@@ -36,6 +36,31 @@ import {
   stoneTexture,
 } from './campusTextures'
 import CampusWindows from './CampusWindows'
+import ModelTrees from './ModelTrees'
+
+/**
+ * The species the model scatter uses, cheapest silhouettes first.
+ *
+ * Chosen by triangle count as much as by looks: the pack's trees run from 676
+ * faces to 1476, and the first one tried was one of the two heaviest — a
+ * hundred and fifty of it put 423,000 triangles on the quad where the drawn
+ * trees had cost about twelve.
+ */
+const MODEL_TREE_SPECIES = [
+  '/props/CommonTree_4.glb',
+  '/props/BirchTree_2.glb',
+  '/props/PineTree_2.glb',
+  '/props/CommonTree_3.glb',
+]
+
+/**
+ * Whether this page load asked for the model trees rather than the drawn ones —
+ * `?trees=model`. Read once: it is a URL a developer typed.
+ */
+const modelTrees =
+  import.meta.env.DEV &&
+  typeof window !== 'undefined' &&
+  new URLSearchParams(window.location.search).get('trees') === 'model'
 
 /**
  * Procedural campus scenery.
@@ -1046,15 +1071,24 @@ export function CampusProps({
     <group>
       {/* One instanced mesh per colour variant: instanceColor would also work,
           but three separate meshes keep flat shading crisp and are still only
-          three draw calls each. */}
-      {TRUNK_COLORS.map((trunkColor, variant) => (
-        <TreeVariant
-          key={variant}
-          items={treesByVariant[variant]}
-          trunkColor={trunkColor}
-          canopyColor={canopyColors[variant]}
-        />
-      ))}
+          three draw calls each.
+
+          `?trees=model` swaps them for a Quaternius model, instanced the same
+          way, so the two can be photographed from the same viewpoint and
+          measured with the same probe. Development only, and a comparison
+          rather than a setting — see `ModelTrees`. */}
+      {modelTrees ? (
+        <ModelTrees items={trees} urls={MODEL_TREE_SPECIES} />
+      ) : (
+        TRUNK_COLORS.map((trunkColor, variant) => (
+          <TreeVariant
+            key={variant}
+            items={treesByVariant[variant]}
+            trunkColor={trunkColor}
+            canopyColor={canopyColors[variant]}
+          />
+        ))
+      )}
 
       <Lamps items={lamps} on={config.lampsOn} />
       <Benches items={benches} />

@@ -79,6 +79,49 @@ starts at the API client, so a browser check still matters for anything visual. 
 
 **Emoji in `print()` crashes on Windows** under cp1252. Use logging.
 
+## 3D assets
+
+Almost everything in the campus is generated in code. What is not is listed
+here, and these are the decisions it is built on.
+
+**Models are built from packs, and only the output is committed.** The packs are
+tens of megabytes and live nobody-knows-where; the built `.glb` is small and
+lives in `frontend/public`. Re-running a build script is a deliberate act, not
+part of `bun run build`.
+
+- `scripts/build-avatars.mjs` — rigged characters, from Quaternius's Ultimate
+  Modular Men and Women. Keeps 6 of the 24 clips and strips weapons.
+- `scripts/build-props.mjs` — static props, from Ultimate Nature Pack (2019).
+  Reads OBJ, because that pack has no glTF and its materials are flat `Kd`
+  colours with no texture maps, which is what the rest of the campus looks like.
+  The newer Stylized Nature pack *does* ship glTF and is textured — bark
+  normals, leaf alpha, a megabyte per species — which is the wrong style and the
+  wrong budget.
+
+**No mesh compression, and none needed.** The whole outdoor prop set — four
+trees, two bushes, two rocks — is 400 KB uncompressed, less than half of one
+avatar. Draco or Meshopt would each add a decoder to fetch before anything
+renders, to save a couple of hundred kilobytes. Revisit if the props ever pass
+about 3 MB; until then the budget is the mechanism.
+
+**Everything repeated is instanced, and the numbers are measured, not guessed.**
+`RenderProbe` (`?probe=1` on the campus, development only) walks the camera to
+fixed viewpoints and reads `gl.info.render.calls`, leaving the result on
+`window.__campusProbe`. Quote before and after when a change adds anything to
+the scene.
+
+Baseline, at 1440×900 on `main`, no models:
+
+| viewpoint | draw calls | triangles |
+| --- | --- | --- |
+| spawn | 425 | 45.8k |
+| quad-north | 393 | 41.0k |
+| spine-south | 454 | 50.7k |
+
+**Draw calls are the metric that has bitten this project; triangles are the one
+that bites phones.** Swapping the 150 procedural trees for models cost −7 draw
+calls and +222k triangles. Both are worth knowing before a decision.
+
 ## Deployment
 
 Coolify on a Hetzner VPS, not from CI. `ci.yml` runs tests and a frontend build only. Do not add a deploy step to it.
