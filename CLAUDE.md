@@ -124,6 +124,13 @@ that bites phones.** The outdoor set as it ships — 150 trees of four species,
 procedural version it replaced. `?trees=drawn` still renders the old one, which
 is how that was decided.
 
+**There are two tree scatters, and they are in different files.** The campus
+grounds are `CampusProps` in `CampusScenery`; the street planting along Nizami
+Street is `StreetTrees` in `NizamiDistrict`. Changing one and not the other
+leaves half the trees looking like the old ones, which is exactly what
+happened. Both draw models now — the campus mixes four species, the street uses
+one, because a municipality plants one tree down a road.
+
 Indoors the win is the other way round. The cafeteria drew sixteen tables and
 sixty-four chairs as separate objects — 448 meshes, computed from the
 components rather than measured, because reaching an interior with the probe
