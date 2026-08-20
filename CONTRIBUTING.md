@@ -36,8 +36,14 @@ The API is then on `http://localhost:8000`, with docs at `/api/docs/`.
 ```bash
 cd frontend
 bun install
+cp .env.example .env          # optional; see below
 VITE_API_URL=http://localhost:8000 bun run dev
 ```
+
+`frontend/.env.example` holds `VITE_GOOGLE_CLIENT_ID`, for signing in with
+Google. Without it the sign-in page simply offers email and password and no
+Google button, which is all local development needs — put a real client id
+there only if you are working on social sign-in itself.
 
 Open the URL Vite prints. Create an account through the UI, or use the Django admin after `python manage.py createsuperuser`.
 
