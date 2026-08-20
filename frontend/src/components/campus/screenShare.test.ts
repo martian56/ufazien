@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 
 import { playerPositionFromUpdate, type PlayerPosition } from '../../hooks/useCampusSimulator'
 import { fitProjector } from './projectorFit'
+import { interiorDoors } from './doorways'
 import { INTERIOR_SPECS, interiorHalfExtent } from './interiorSpecs'
 import { lectureSeatingExtent } from './lectureSeating'
 import { CAMPUS_BUILDINGS } from './campusLayout'
@@ -178,15 +179,27 @@ describe('interior spawns', () => {
     }
   })
 
-  it('turns the player towards the screen one way or another', () => {
+  it('turns the player into the room rather than at the wall behind them', () => {
     // Entry sets the camera rotation to zero, which in three.js looks down -Z,
     // so a room without an explicit target must put its spawn in front of the
     // screen rather than behind it.
+    //
+    // With a target, what matters is that it is away from the door the player
+    // just came in by — not that it is towards the screen. In the amphitheatre
+    // those are opposite things: its doors are beside the board, because the
+    // wall opposite is raked seating, so looking at the board on entry would
+    // mean looking at the wall behind you.
     for (const building of CAMPUS_BUILDINGS) {
       const spec = INTERIOR_SPECS[building.interior]
+      const facing = interiorDoors(building.interior)[0].facing
+
       if (spec.spawnLookAt) {
-        // An explicit target has to be deeper into the room than the player.
-        expect(spec.spawnLookAt[2], `${building.name} look target`).toBeLessThan(spec.spawn[2])
+        // Depth into the room, measured inward from the wall the doors are in.
+        // The player is put a pace inside it, so the target has to be deeper
+        // than that or they are looking back the way they came.
+        const depth = (z: number) => -facing * z + spec.halfExtent
+        expect(depth(spec.spawnLookAt[2]), `${building.name} look target`)
+          .toBeGreaterThan(depth(facing * spec.halfExtent - facing * 1.5))
       } else {
         expect(spec.spawn[2], `${building.name}`).toBeGreaterThan(spec.projector[2])
       }

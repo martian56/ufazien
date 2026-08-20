@@ -33,3 +33,14 @@ export function lectureSeatingExtent(halfExtent = INTERIOR_SPECS.lecture.halfExt
     halfWidth: (halfExtent * 1.85) / 2,
   }
 }
+
+/**
+ * How far the boards on the amphitheatre's front wall reach from its centre.
+ *
+ * The whiteboard is 7.5 wide at x −13 and the schedule board 7 wide at +13, so
+ * between them they occupy the wall out to ±16.75. The doors in that wall have
+ * to start beyond this, and they are placed from it rather than from a number
+ * that happens to look right — a door cut through a whiteboard is what happens
+ * when those two are stated separately.
+ */
+export const LECTURE_BOARD_REACH = 16.75

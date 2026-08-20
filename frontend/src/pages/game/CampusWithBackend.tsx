@@ -108,7 +108,9 @@ import {
   doorstep,
   doorwayFor,
   interiorDoorFor,
-  interiorLimit,
+  interiorBounds,
+  interiorDoors,
+  leavingThroughAny,
   leavingThroughDoor,
 } from '../../components/campus/doorways'
 import {
@@ -580,7 +582,11 @@ function InteriorCameraPlacement({
       // Just inside the door you came through, which is now a real place in
       // the room rather than a spawn point chosen per interior.
       if (arrival) camera.position.set(arrival.x, spec.spawn[1], arrival.z)
-      else camera.position.set(door.x, spec.spawn[1], door.z - 1.5)
+      // A pace *into* the room, which is not always a smaller z: the
+      // amphitheatre's doors are in its −Z wall, and subtracting there put the
+      // player outside the room to be clamped back through the doorway they
+      // had just come in by.
+      else camera.position.set(door.x, spec.spawn[1], door.z - door.facing * 1.5)
       const look = spec.spawnLookAt ?? spec.projector
       // lookAt leaves roll at zero, so the pointer-lock controls pick this up
       // as an ordinary heading and pitch.
@@ -999,15 +1005,21 @@ function CampusDoors({
   const now = performance.now()
 
   if (insideBuilding) {
-    const inner = interiorDoorFor(insideBuilding.interior)
+    const swing = doorSwing(doors, interiorDoorId(insideBuilding.id), now)
     return (
-      <DoorLeaf
-        x={inner.x}
-        z={inner.z}
-        halfWidth={inner.halfW}
-        swing={doorSwing(doors, interiorDoorId(insideBuilding.id), now)}
-        facing={-1}
-      />
+      <>
+        {interiorDoors(insideBuilding.interior).map((inner) => (
+          <DoorLeaf
+            key={`${inner.x},${inner.z}`}
+            x={inner.x}
+            z={inner.z}
+            halfWidth={inner.halfW}
+            swing={swing}
+            // Leaves swing away from the room, whichever wall they are in.
+            facing={inner.facing === 1 ? -1 : 1}
+          />
+        ))}
+      </>
     )
   }
 
@@ -1284,10 +1296,12 @@ function Player({
         if (landing !== null) {
           onCallLift(landing)
         } else {
-          const inner = interiorDoorFor(insideBuilding.interior)
-          const near =
-            Math.abs(camera.position.x - inner.x) <= inner.halfW + DOOR_REACH &&
-            Math.abs(camera.position.z - inner.z) <= DOOR_REACH
+          // Any of the room's doors — the amphitheatre has two.
+          const near = interiorDoors(insideBuilding.interior).some(
+            (inner) =>
+              Math.abs(camera.position.x - inner.x) <= inner.halfW + DOOR_REACH &&
+              Math.abs(camera.position.z - inner.z) <= DOOR_REACH,
+          )
           if (near) onOpenDoor(interiorDoorId(insideBuilding.id))
         }
       } else {
@@ -1345,10 +1359,9 @@ function Player({
       // Walking out through the door, which has to be asked before the clamp:
       // afterwards the position has already been pulled back inside the room
       // and there is nothing left to detect.
-      const door = interiorDoorFor(insideBuilding.interior)
       if (
         isDoorOpen(doors, interiorDoorId(insideBuilding.id), doorNow) &&
-        leavingThroughDoor(camera.position.x, camera.position.z, door)
+        leavingThroughAny(insideBuilding.interior, camera.position.x, camera.position.z)
       ) {
         // A room inside the building opens onto its corridor; only the ground
         // floor opens onto the street. Walking out of the library on the
@@ -1388,9 +1401,9 @@ function Player({
       // into the opening instead of stopping at an invisible line in front of
       // it — which is what the door being in the wall means.
       const side = interiorHalfExtent(insideBuilding.interior)
-      const ahead = interiorLimit(insideBuilding.interior, camera.position.x, camera.position.z)
+      const bounds = interiorBounds(insideBuilding.interior, camera.position.x)
       camera.position.x = MathUtils.clamp(camera.position.x, -side, side)
-      camera.position.z = MathUtils.clamp(camera.position.z, -side, ahead)
+      camera.position.z = MathUtils.clamp(camera.position.z, bounds.minZ, bounds.maxZ)
     } else {
       camera.position.x = MathUtils.clamp(camera.position.x, -CAMPUS_LIMIT, CAMPUS_LIMIT)
       camera.position.z = MathUtils.clamp(camera.position.z, -CAMPUS_LIMIT, CAMPUS_LIMIT)

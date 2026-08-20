@@ -658,7 +658,11 @@ export default function UfazBuilding({ building, timeOfDay = 'day' }: UfazBuildi
           Math.sin(rake) * d,
         ]
         const [, poleY, poleZ] = along(length / 2)
-        const [, flagY, flagZ] = along(length * 0.42)
+        // Near the head of the pole, not partway up it. The flag hung from
+        // 42% along, which reads as a banner tied to the middle of a stick
+        // rather than a flag flown from the top of one.
+        const flagHeight = 0.95
+        const [, flagY, flagZ] = along(length * 0.88)
 
         return (
           <group key={i} position={[side * FLAG_X, FLAG_Y, halfD + 0.08]}>
@@ -675,10 +679,13 @@ export default function UfazBuilding({ building, timeOfDay = 'day' }: UfazBuildi
                 with its face parallel to the facade so it reads from in front
                 rather than edge-on. */}
             <group
-              position={[side * 0.78, flagY - 0.42, flagZ]}
+              // Dropped by half its own height so its *top* edge meets the
+              // pole: `WavingFlag` is centred on its geometry, so hanging it
+              // from a point means offsetting it, not placing it.
+              position={[side * 0.78, flagY - flagHeight / 2, flagZ]}
               rotation={[0, side < 0 ? Math.PI : 0, 0]}
             >
-              <WavingFlag width={1.5} height={0.95} texture={flag} phase={i * 1.7} wind={1} />
+              <WavingFlag width={1.5} height={flagHeight} texture={flag} phase={i * 1.7} wind={1} />
             </group>
           </group>
         )
