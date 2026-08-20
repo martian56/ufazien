@@ -905,22 +905,32 @@ class FollowerAnnouncementTests(APITestCase):
 
     def test_publishing_a_draft_tells_the_followers(self):
         """The path the editor actually takes: save a draft, then publish it."""
-        from django.core import mail
+        from unittest.mock import patch
 
         post = self._draft()
         self.assertEqual(self._notifications().count(), 0, 'a draft was announced')
-        mail.outbox.clear()
 
-        post.is_published = True
-        post.save()
+        # The issue is about the email, not only the bell: `new_post` is on by
+        # default in `NotificationPreference`, so a follower gets one.
+        #
+        # Asserted on the call rather than on `mail.outbox`, because the send
+        # happens on a daemon thread that has not necessarily run by the time
+        # this returns — reading the outbox here passes or fails on timing.
+        with patch(
+            'api.services.notification_service.NotificationService.send_email_async'
+        ) as send:
+            post.is_published = True
+            post.save()
 
         self.assertEqual(
             self._notifications().count(), 1, 'publishing a draft told nobody'
         )
-        # The issue is about the email, not only the bell: `new_post` is on by
-        # default in `NotificationPreference`, so a follower gets one.
-        self.assertEqual(len(mail.outbox), 1, 'the follower got no email')
-        self.assertEqual(mail.outbox[0].to, [self.follower.email])
+        self.assertEqual(send.call_count, 1, 'the follower got no email')
+        self.assertEqual(
+            send.call_args.kwargs.get('recipient_list') or send.call_args.args[3],
+            [self.follower.email],
+            'the email went to somebody other than the follower',
+        )
 
     def test_publishing_through_the_api_tells_the_followers(self):
         """The same thing over HTTP, which is how the editor does it."""
@@ -991,6 +1001,92 @@ class FollowerAnnouncementTests(APITestCase):
         self.assertEqual(
             self._notifications().count(), 1, 'a post that went live announced nothing'
         )
+
+    def test_the_backfill_leaves_a_scheduled_post_for_its_date(self):
+        """
+        A scheduled post is `is_published=True` with a date in the future, so a
+        backfill that goes by the flag alone stamps it — and the catch-up
+        command then skips it for ever, because the stamp is what it looks for.
+        Its followers would never hear about it at all.
+        """
+        import importlib
+        from io import StringIO
+
+        from django.apps import apps as django_apps
+        from django.core.management import call_command
+
+        migration = importlib.import_module(
+            'blog.migrations.0009_blogpost_followers_notified_at'
+        )
+
+        scheduled = self._draft(
+            is_published=True, published_at=timezone.now() + timedelta(days=1)
+        )
+        self.assertIsNone(scheduled.followers_notified_at)
+
+        migration.treat_existing_posts_as_announced(django_apps, None)
+
+        scheduled.refresh_from_db()
+        self.assertIsNone(
+            scheduled.followers_notified_at, 'a post that has not gone live was stamped'
+        )
+
+        BlogPost.objects.filter(pk=scheduled.pk).update(
+            published_at=timezone.now() - timedelta(minutes=1)
+        )
+        call_command('announce_scheduled_posts', stdout=StringIO())
+        self.assertEqual(
+            self._notifications().count(), 1, 'the backfill lost the announcement'
+        )
+
+    def test_a_post_made_private_between_the_save_and_the_claim_is_not_announced(self):
+        """
+        The eligibility check reads the instance, which was loaded before this
+        save and may be a save behind. Everything is asked of the row as well,
+        in the update that claims it — otherwise a post someone has just made
+        private still goes out to the followers it used to have.
+        """
+        from api.services.notification_service import NotificationService
+
+        post = self._draft(is_published=True)
+        self._notifications().delete()
+
+        # The instance still says public and unannounced; the row says private.
+        BlogPost.objects.filter(pk=post.pk).update(
+            followers_notified_at=None, visibility=BlogPost.Visibility.PRIVATE
+        )
+
+        announced = NotificationService.announce_new_post(post)
+
+        self.assertFalse(announced, 'a post that is now private was announced')
+        self.assertEqual(self._notifications().count(), 0)
+        post.refresh_from_db()
+        self.assertIsNone(post.followers_notified_at, 'a post nobody was told of was stamped')
+
+    def test_an_announcement_that_reached_nobody_can_be_retried(self):
+        """
+        `create_notification` swallows its own failures, so a post could be
+        marked announced while every follower got nothing — and a stamp is
+        exactly what stops it being tried again.
+        """
+        from unittest.mock import patch
+
+        from api.services.notification_service import NotificationService
+
+        with patch.object(
+            NotificationService, 'create_notification', return_value=None
+        ):
+            post = self._draft(is_published=True)
+
+        post.refresh_from_db()
+        self.assertIsNone(
+            post.followers_notified_at,
+            'a post that told nobody was marked as told and can never be retried',
+        )
+
+        # And the retry works, through the ordinary path.
+        post.save()
+        self.assertEqual(self._notifications().count(), 1, 'the retry told nobody')
 
     def test_a_private_or_unlisted_post_is_not_announced(self):
         """

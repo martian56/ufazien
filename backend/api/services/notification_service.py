@@ -4,6 +4,7 @@ from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.db.models import Q
 from django.utils import timezone
 import json
 import threading
@@ -320,11 +321,18 @@ class NotificationService:
     
     @staticmethod
     def notify_followers_new_post(author, post):
-        """Notify followers when user publishes new post"""
+        """
+        Notify followers when user publishes new post.
+
+        Returns how many were told. `create_notification` swallows its own
+        failures and returns None, so counting is the only way the caller can
+        find out that nobody heard.
+        """
         followers = author.followers.all()
-        
+
+        told = 0
         for follower in followers:
-            NotificationService.create_notification(
+            created = NotificationService.create_notification(
                 recipient=follower,
                 sender=author,
                 notification_type='new_post',
@@ -332,6 +340,9 @@ class NotificationService:
                 message=f'{author.get_full_name() or author.username} published a new post: "{post.title}".',
                 content_object=post
             )
+            if created is not None:
+                told += 1
+        return told
 
     @staticmethod
     def announce_new_post(post):
@@ -361,8 +372,22 @@ class NotificationService:
             return False
 
         stamp = timezone.now()
+        # Every condition asked of the row, not of the copy in memory. The
+        # instance was loaded before this save and may be a save behind: if
+        # another one has since made the post private, unpublished it, dated it
+        # forward or handed it to a different author, this must not go on to
+        # mail the followers it used to have.
         claimed = BlogPost.objects.filter(
-            pk=post.pk, followers_notified_at__isnull=True
+            pk=post.pk,
+            author_id=post.author_id,
+            is_published=True,
+            visibility__in=(
+                BlogPost.Visibility.PUBLIC,
+                BlogPost.Visibility.FOLLOWERS,
+            ),
+            followers_notified_at__isnull=True,
+        ).filter(
+            Q(published_at__isnull=True) | Q(published_at__lte=stamp)
         ).update(followers_notified_at=stamp)
         if not claimed:
             return False
@@ -373,7 +398,21 @@ class NotificationService:
         # so every edit announced the post again.
         post.followers_notified_at = stamp
 
-        NotificationService.notify_followers_new_post(post.author, post)
+        told = NotificationService.notify_followers_new_post(post.author, post)
+        if told == 0 and post.author.followers.exists():
+            # Nobody heard, and `create_notification` swallowed the reason. Put
+            # the claim back so a later save or the catch-up command can try
+            # again — a post marked announced that announced nothing can never
+            # be retried, and this is the whole failure rather than a partial
+            # one. A delivery that reaches some followers and not others still
+            # counts as done: telling the rest would mean telling the first lot
+            # twice, and that needs a record per follower rather than per post.
+            BlogPost.objects.filter(pk=post.pk, followers_notified_at=stamp).update(
+                followers_notified_at=None
+            )
+            post.followers_notified_at = None
+            return False
+
         return True
 
     @staticmethod
