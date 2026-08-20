@@ -6,6 +6,8 @@ from django.db.models import Count, F, Q
 import random
 import string
 
+from .presence import joining_cutoff, online_cutoff, online_q
+
 
 def generate_lobby_id():
     """Generate a unique 8-digit lobby ID"""
@@ -17,7 +19,7 @@ class LobbyQuerySet(models.QuerySet):
 
     def with_player_count(self):
         """Attach the online-member count the serializer would otherwise count."""
-        return self.annotate(player_count=Lobby.ONLINE_MEMBERS)
+        return self.annotate(player_count=Lobby.online_members())
 
     def only_joinable(self):
         """
@@ -56,12 +58,21 @@ class Lobby(models.Model):
     def __str__(self):
         return f"{self.name} ({self.id})"
 
-    #: Annotate a queryset with this to answer `current_players_count` without
-    #: a query per row. `Lobby.objects.annotate(**Lobby.WITH_PLAYER_COUNT)`.
-    #:
-    #: `is_full` compares against `max_players`, which is a column, so the
-    #: whole question can be asked in the database — see `only_joinable`.
-    ONLINE_MEMBERS = Count('members', filter=Q(members__is_online=True))
+    @staticmethod
+    def online_members():
+        """
+        Annotate a queryset with this to answer `current_players_count`
+        without a query per row — `annotate(player_count=Lobby.online_members())`.
+
+        A method rather than the constant it used to be, because being online
+        is now partly a question about the clock and a constant would have
+        frozen "recently" at the moment the module was imported.
+
+        `is_full` compares against `max_players`, which is a column, so the
+        whole question can still be asked in the database — see
+        `only_joinable`.
+        """
+        return Count('members', filter=online_q('members__'))
 
     @property
     def current_players_count(self):
@@ -77,7 +88,7 @@ class Lobby(models.Model):
         annotated = getattr(self, 'player_count', None)
         if annotated is not None:
             return annotated
-        return self.members.filter(is_online=True).count()
+        return self.members.filter(online_q()).count()
 
     @property
     def is_full(self):
@@ -90,13 +101,31 @@ class Lobby(models.Model):
         super().save(*args, **kwargs)
 
 
+class LobbyMemberQuerySet(models.QuerySet):
+    """Reusable shapes for the questions presence keeps asking."""
+
+    def online(self):
+        """Members with a socket open that we have heard from recently."""
+        return self.filter(online_q())
+
+
 class LobbyMember(models.Model):
     """Players in a lobby"""
     lobby = models.ForeignKey(Lobby, on_delete=models.CASCADE, related_name='members')
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     joined_at = models.DateTimeField(auto_now_add=True)
-    is_online = models.BooleanField(default=True)
-    last_seen = models.DateTimeField(auto_now=True)
+
+    #: How many sockets this member has open, and when we last heard from one.
+    #: Together they are `is_online`; see `game/presence.py` for why it takes
+    #: both.
+    #:
+    #: `last_seen` is null until the first socket connects, which is how a
+    #: member on their way in is told apart from one who has been and gone. It
+    #: is not `auto_now`: it used to be, and so was frozen at the moment of
+    #: joining, because nothing on the socket path ever saved the row —
+    #: `.update()` bypasses `auto_now` in any case, so it is written by hand.
+    connections = models.PositiveIntegerField(default=0)
+    last_seen = models.DateTimeField(null=True, blank=True, default=None)
 
     # Realtime A/V permissions. These live here, not on the client, because the
     # LiveKit token is minted from them: a participant cannot grant itself the
@@ -104,9 +133,33 @@ class LobbyMember(models.Model):
     can_share_screen = models.BooleanField(default=False)
     is_muted = models.BooleanField(default=False)
 
+    objects = LobbyMemberQuerySet.as_manager()
+
     class Meta:
         unique_together = ['lobby', 'user']
         ordering = ['joined_at']
+
+    @property
+    def is_online(self):
+        """
+        Whether this member is in the lobby now.
+
+        Read from the two facts rather than stored, so that nothing has to
+        remember to write it and nothing can write it wrongly. It was a column
+        until #165: closing one of two tabs set it to `False` while the other
+        was still streaming, and `current_players_count` counts exactly this,
+        so a lobby with people in it advertised none and one that was full let
+        more in.
+
+        Prefer `LobbyMember.objects.online()` or the `player_count` annotation
+        where the question is being asked of more than one row: this is a
+        Python property, and `CLAUDE.md` is explicit that those are not
+        queryset fields.
+        """
+        if self.last_seen is None:
+            # Joined but never connected: held a place for a moment, no longer.
+            return self.joined_at >= joining_cutoff()
+        return self.connections > 0 and self.last_seen >= online_cutoff()
 
     def __str__(self):
         return f"{self.user.username} in {self.lobby.name}"

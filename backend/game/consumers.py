@@ -5,11 +5,15 @@ WebSocket consumers for real-time game communication.
 import json
 import logging
 import math
+import time
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.db import IntegrityError, transaction
+from django.db.models import F, Value
+from django.db.models.functions import Greatest
 from django.contrib.auth import get_user_model
 from django.utils import timezone
+from .presence import TOUCH_EVERY_SECONDS
 from .models import (
     CampusProp,
     LiftCar,
@@ -194,9 +198,10 @@ class LobbyConsumer(AsyncWebsocketConsumer):
 
         await self.accept()
 
-        # They are here. `is_online` is what capacity is counted from, and
-        # nothing but joining ever set it — see `mark_online`.
-        await self.mark_online(True)
+        # They are here. Presence is counted from this, so it is a count of
+        # sockets rather than a flag: somebody with two tabs open is one member
+        # with two connections, and closing one leaves them here.
+        await self.connection_opened()
 
         logger.info("%s connected to lobby %s", self.user.username, self.lobby_id)
 
@@ -234,19 +239,10 @@ class LobbyConsumer(AsyncWebsocketConsumer):
                 prop, x, y, room = dropped
                 await self.broadcast_prop(prop, held=False, x=x, y=y, room=room)
 
-            # And they are gone.
-            #
-            # Per socket, not per person: somebody with the campus open in two
-            # tabs who closes one reads as offline until they next connect.
-            # That is the wrong answer for them and a much better one than the
-            # status quo, where nobody was ever offline at all — the cost is a
-            # lobby with one more free slot than it should have, against a
-            # lobby that fills with ghosts and then refuses everybody.
-            #
-            # Doing it properly wants a heartbeat: `last_seen` is already
-            # touched on every connect, so "online" could be "seen recently"
-            # rather than a flag two events have to agree about.
-            await self.mark_online(False)
+            # And this socket is gone. Whether *they* are gone is a question
+            # about the others: closing one of two tabs leaves a connection
+            # open, and #165 was this write not knowing that.
+            await self.connection_closed()
 
             # Notify other users that someone left
             await self.channel_layer.group_send(
@@ -270,7 +266,17 @@ class LobbyConsumer(AsyncWebsocketConsumer):
             payload = text_data if text_data is not None else (bytes_data.decode('utf-8') if bytes_data else '')
             data = json.loads(payload)
             message_type = data.get('type')
-            
+
+            # Anything at all from this socket is proof the player is still
+            # there, including a frame we go on to reject as unknown.
+            await self.note_still_here()
+
+            if message_type == 'heartbeat':
+                # Nothing to do beyond the line above: a player standing
+                # perfectly still sends no position frames, and would age out
+                # of the lobby they are standing in without this.
+                return
+
             if message_type == 'player_position':
                 await self.handle_player_position(data)
             elif message_type == 'take_seat':
@@ -762,24 +768,64 @@ class LobbyConsumer(AsyncWebsocketConsumer):
 
     # Database operations
     @database_sync_to_async
-    def mark_online(self, online):
+    def connection_opened(self):
         """
-        Say whether this member is here.
+        Record that this member has one more socket open.
 
-        `is_online` was set to `True` when somebody joined and never set back.
-        Nothing anywhere wrote `False` — so closing the tab, losing the
-        connection or navigating away left you online for ever, and since
-        `Lobby.current_players_count` counts exactly this, a lobby filled up
-        with people who were not in it and then refused everybody with "Lobby
-        is full".
+        `F()` arithmetic rather than read-then-write: two tabs opening at once
+        must reach two, and the whole point of #165 is that presence used to be
+        decided by whichever write landed last.
 
-        Also touches `last_seen`, which is `auto_now` and so had been frozen at
-        the moment of joining for the same reason: nothing on the socket path
-        ever saved the row.
+        Presence used to be a `True` written here and a `False` written on
+        disconnect, with nothing to say which of your connections was closing.
+        Nothing wrote `False` at all before that, which is its own history:
+        lobbies filled with people who had gone and then refused everybody.
         """
         LobbyMember.objects.filter(lobby_id=self.lobby_id, user=self.user).update(
-            is_online=online, last_seen=timezone.now()
+            connections=F('connections') + 1, last_seen=timezone.now()
         )
+        self._last_touch = time.monotonic()
+
+    @database_sync_to_async
+    def connection_closed(self):
+        """
+        Record that this member has one fewer socket open.
+
+        Clamped at zero with `Greatest`, because a count that goes negative
+        would take a member offline while they were still connected — the
+        stuck-`True` bug in a mirror. It can only happen if a disconnect is
+        processed that has no matching connect, which a worker restart between
+        the two produces.
+
+        `last_seen` is deliberately not touched: leaving is not being seen.
+        """
+        LobbyMember.objects.filter(lobby_id=self.lobby_id, user=self.user).update(
+            connections=Greatest(F('connections') - 1, Value(0))
+        )
+
+    @database_sync_to_async
+    def touch_last_seen(self):
+        """Record that we have just heard from this member."""
+        LobbyMember.objects.filter(lobby_id=self.lobby_id, user=self.user).update(
+            last_seen=timezone.now()
+        )
+
+    async def note_still_here(self):
+        """
+        Keep this member's `last_seen` fresh, at most every so often.
+
+        Every frame from the client counts as being seen, and a walking player
+        sends ten a second — freshness to the second is worth nothing against a
+        ninety-second TTL, so writing that often would be a write per frame per
+        player for no gain. A player standing still sends no frames at all,
+        which is what the client's heartbeat is for.
+        """
+        now = time.monotonic()
+        last = getattr(self, '_last_touch', None)
+        if last is not None and now - last < TOUCH_EVERY_SECONDS:
+            return
+        self._last_touch = now
+        await self.touch_last_seen()
 
     @database_sync_to_async
     def check_lobby_membership(self):

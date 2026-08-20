@@ -389,7 +389,7 @@ def lobby_stats(request):
     """Get lobby statistics"""
     stats = {
         'total_lobbies': Lobby.objects.filter(is_active=True).count(),
-        'total_players': LobbyMember.objects.filter(is_online=True).count(),
+        'total_players': LobbyMember.objects.online().count(),
         'public_lobbies': Lobby.objects.filter(is_active=True, is_private=False).count(),
         'private_lobbies': Lobby.objects.filter(is_active=True, is_private=True).count(),
         'user_lobbies': LobbyMember.objects.filter(user=request.user, lobby__is_active=True).count(),

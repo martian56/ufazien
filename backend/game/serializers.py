@@ -27,6 +27,8 @@ class LobbyMemberSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = LobbyMember
+        # `is_online` is a model property rather than a column; DRF reads it
+        # through the same name it always had, so the response is unchanged.
         fields = ['user', 'joined_at', 'is_online', 'last_seen']
 
 

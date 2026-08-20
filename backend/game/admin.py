@@ -19,8 +19,11 @@ class LobbyAdmin(admin.ModelAdmin):
 
 @admin.register(LobbyMember)
 class LobbyMemberAdmin(admin.ModelAdmin):
-    list_display = ['user', 'lobby', 'is_online', 'joined_at', 'last_seen']
-    list_filter = ['is_online', 'joined_at']
+    list_display = ['user', 'lobby', 'is_online', 'joined_at', 'connections', 'last_seen']
+    # `is_online` is a property now, not a column, so it can be displayed but
+    # not filtered on. The two facts it is read from can be, and between them
+    # they say more: `connections` separates "left" from "stopped answering".
+    list_filter = ['connections', 'joined_at']
     search_fields = ['user__username', 'lobby__name']
 
 

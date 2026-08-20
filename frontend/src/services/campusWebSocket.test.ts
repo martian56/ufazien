@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 
-import campusWebSocket from './campusWebSocket'
+import campusWebSocket, { HEARTBEAT_INTERVAL_MS } from './campusWebSocket'
 
 /**
  * The event registry.
@@ -95,5 +95,91 @@ describe('listener lifetime', () => {
     campusWebSocket.on('seatUpdate', heard)
     campusWebSocket.emit('seatUpdate', { user_id: 1, seat: 'cafe-1' })
     expect(heard).toHaveBeenCalledTimes(1)
+  })
+})
+
+/**
+ * The heartbeat.
+ *
+ * The server counts a member as present from a live socket and a recent sign
+ * of life, so a connection that dies without saying so stops holding a place
+ * (#165). Position frames only flow while the player walks — so a player
+ * standing perfectly still has to keep saying they are there, or they age out
+ * of the lobby they are standing in.
+ */
+describe('the heartbeat', () => {
+  const openSocket = () => {
+    const sent: string[] = []
+    const ws = {
+      readyState: 1,
+      send: (data: string) => sent.push(data),
+      close: () => {},
+    }
+    campusWebSocket.ws = ws as unknown as WebSocket
+    campusWebSocket.isConnected = true
+    return sent
+  }
+
+  const stop = () => {
+    campusWebSocket.stopHeartbeat()
+    campusWebSocket.ws = null
+    campusWebSocket.isConnected = false
+  }
+
+  it('says we are still here without being asked', () => {
+    vi.useFakeTimers()
+    try {
+      const sent = openSocket()
+      campusWebSocket.startHeartbeat()
+
+      expect(sent, 'a heartbeat fired before its interval').toHaveLength(0)
+      vi.advanceTimersByTime(HEARTBEAT_INTERVAL_MS * 3)
+
+      expect(sent).toHaveLength(3)
+      expect(JSON.parse(sent[0])).toEqual({ type: 'heartbeat' })
+    } finally {
+      stop()
+      vi.useRealTimers()
+    }
+  })
+
+  it('beats well inside the window the server drops you after', () => {
+    // Three can go missing — a tab throttled in the background, a moment of
+    // bad signal — before anybody is taken out of a lobby they are in.
+    expect(HEARTBEAT_INTERVAL_MS * 3).toBeLessThan(90_000)
+  })
+
+  it('stops when the socket goes, rather than beating at nothing', () => {
+    vi.useFakeTimers()
+    try {
+      const sent = openSocket()
+      campusWebSocket.startHeartbeat()
+      campusWebSocket.disconnect()
+
+      // The timer itself, not merely the absence of frames: the interval also
+      // checks the connection before sending, so a leaked one is silent. This
+      // is a module singleton that outlives any component using it, and a
+      // leaked interval survives every later connect.
+      expect(campusWebSocket.heartbeatTimer, 'the heartbeat was left running').toBeNull()
+      vi.advanceTimersByTime(HEARTBEAT_INTERVAL_MS * 4)
+      expect(sent, 'the heartbeat outlived the connection').toHaveLength(0)
+    } finally {
+      stop()
+      vi.useRealTimers()
+    }
+  })
+
+  it('leaves only one running when a reconnect starts another', () => {
+    vi.useFakeTimers()
+    try {
+      const sent = openSocket()
+      campusWebSocket.startHeartbeat()
+      campusWebSocket.startHeartbeat()
+      vi.advanceTimersByTime(HEARTBEAT_INTERVAL_MS)
+      expect(sent, 'a reconnect left the old heartbeat running too').toHaveLength(1)
+    } finally {
+      stop()
+      vi.useRealTimers()
+    }
   })
 })
