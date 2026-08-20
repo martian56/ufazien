@@ -1,11 +1,35 @@
+from datetime import timedelta
+
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from .models import Lobby, LobbyMember, SavedLobby
 
 User = get_user_model()
+
+
+def long_ago():
+    """Longer ago than any presence window, so nothing counts as recent."""
+    return timezone.now() - timedelta(days=1)
+
+
+def make_member(lobby, user, online=True, **kwargs):
+    """
+    A lobby member who is, or is not, in the lobby.
+
+    Presence is two columns rather than the flag it used to be — a live socket
+    and a recent sign of life — so a test that wants somebody absent has to say
+    so in both. See `game/presence.py`.
+    """
+    presence = (
+        {'connections': 1, 'last_seen': timezone.now()}
+        if online
+        else {'connections': 0, 'last_seen': long_ago()}
+    )
+    return LobbyMember.objects.create(lobby=lobby, user=user, **presence, **kwargs)
 
 
 class LobbyRestTests(TestCase):
@@ -199,7 +223,7 @@ class LobbyRestTests(TestCase):
         be closed out from under them.
         """
         lobby = self._make_lobby(name='Quiet')
-        LobbyMember.objects.create(lobby=lobby, user=self.player, is_online=False)
+        make_member(lobby, self.player, online=False)
 
         self.api.post(f'/api/game/lobbies/{lobby.id}/leave/')
 
@@ -318,10 +342,10 @@ class LobbyRestTests(TestCase):
         """
         lobby = self._make_lobby(name='Counted')
         LobbyMember.objects.create(lobby=lobby, user=self.player)
-        LobbyMember.objects.create(
-            lobby=lobby,
-            user=User.objects.create_user(username='away', email='away@e.com', password='pw'),
-            is_online=False,
+        make_member(
+            lobby,
+            User.objects.create_user(username='away', email='away@e.com', password='pw'),
+            online=False,
         )
 
         plain = Lobby.objects.get(pk=lobby.pk)
@@ -1376,7 +1400,12 @@ class LobbyConsumerTests(TestCase):
         from asgiref.sync import async_to_sync, sync_to_async
         from .models import LobbyMember
 
-        LobbyMember.objects.filter(lobby=self.lobby, user=self.host).update(is_online=False)
+        # Off before we start, so that connecting is what turns them on:
+        # a member who has only just joined is held a place while their socket
+        # opens, and would read as online without ever connecting.
+        LobbyMember.objects.filter(lobby=self.lobby, user=self.host).update(
+            connections=0, last_seen=long_ago()
+        )
 
         @sync_to_async
         def online():
@@ -1394,6 +1423,143 @@ class LobbyConsumerTests(TestCase):
         after = LobbyMember.objects.get(lobby=self.lobby, user=self.host)
         self.assertFalse(after.is_online, 'leaving did not mark the member offline')
 
+    def test_closing_one_of_two_tabs_leaves_you_in_the_lobby(self):
+        """
+        Presence was a flag two events had to agree about, and nothing told
+        your other connection from your only one — so the second tab's connect
+        and the first tab's disconnect were two writes and the last one won.
+        Close one tab and you were offline while still walking around in the
+        other, and the lobby you were standing in advertised nobody in it.
+
+        The same shape without a second tab: any reconnect where the new socket
+        opens before the old one's disconnect is processed — a blip, a laptop
+        waking, a proxy dropping an idle connection.
+        """
+        from asgiref.sync import async_to_sync, sync_to_async
+
+        @sync_to_async
+        def presence():
+            member = LobbyMember.objects.get(lobby=self.lobby, user=self.host)
+            self.lobby.refresh_from_db()
+            return member.connections, member.is_online, self.lobby.current_players_count
+
+        # The fixture's other member has just joined and so is held a place;
+        # this test is about the host, so retire them first.
+        LobbyMember.objects.filter(lobby=self.lobby, user=self.player).update(
+            connections=0, last_seen=long_ago()
+        )
+
+        async def scenario():
+            first, _ = await self._connect(self.host)
+            second, _ = await self._connect(self.host)
+            await self._drain(first, second)
+            both = await presence()
+            await first.disconnect()
+            one = await presence()
+            await second.disconnect()
+            none = await presence()
+            return both, one, none
+
+        both, one, none = async_to_sync(scenario)()
+        self.assertEqual(both[0], 2, 'two tabs were not counted as two connections')
+        self.assertTrue(both[1])
+        self.assertEqual((one[1], one[2]), (True, 1), 'closing one tab emptied the lobby')
+        self.assertEqual((none[1], none[2]), (False, 0), 'closing the last tab left a ghost')
+
+    def test_a_socket_that_stops_answering_stops_counting(self):
+        """
+        Counting connections alone gets stuck above zero whenever a worker dies
+        without running `disconnect` — the old stuck-`True` bug wearing a
+        different hat. Nobody should have to notice: a member we have not heard
+        from in far longer than a heartbeat is not there.
+        """
+        from asgiref.sync import async_to_sync
+
+        LobbyMember.objects.filter(lobby=self.lobby, user=self.player).update(
+            connections=0, last_seen=long_ago()
+        )
+
+        async def scenario():
+            a, _ = await self._connect(self.host)
+            await self._drain(a)
+            return a
+
+        socket = async_to_sync(scenario)()
+        try:
+            member = LobbyMember.objects.get(lobby=self.lobby, user=self.host)
+            self.assertTrue(member.is_online, 'a live socket did not count')
+
+            # The connection is still open and still counted; it simply has not
+            # said anything for a very long time.
+            LobbyMember.objects.filter(pk=member.pk).update(last_seen=long_ago())
+            member.refresh_from_db()
+            self.assertEqual(member.connections, 1)
+            self.assertFalse(member.is_online, 'a silent socket still counted')
+            self.lobby.refresh_from_db()
+            self.assertEqual(self.lobby.current_players_count, 0)
+        finally:
+            async_to_sync(socket.disconnect)()
+
+    def test_a_heartbeat_keeps_a_player_who_is_standing_still(self):
+        """
+        Position frames only flow while somebody walks, so a player standing
+        perfectly still is heard from once and then never again. Without a
+        heartbeat they age out of the lobby they are standing in.
+        """
+        from unittest.mock import patch
+
+        from asgiref.sync import async_to_sync, sync_to_async
+
+        @sync_to_async
+        def seen_at():
+            return LobbyMember.objects.get(lobby=self.lobby, user=self.host).last_seen
+
+        async def scenario():
+            a, _ = await self._connect(self.host)
+            await self._drain(a)
+            try:
+                # Stale, as if the player had stood still past the TTL.
+                await sync_to_async(
+                    LobbyMember.objects.filter(lobby=self.lobby, user=self.host).update
+                )(last_seen=long_ago())
+                before = await seen_at()
+                await a.send_json_to({'type': 'heartbeat'})
+                # A heartbeat is not a message to answer; the proof it landed
+                # is the row, and the socket staying open.
+                self.assertTrue(await a.receive_nothing(timeout=0.5))
+                return before, await seen_at()
+            finally:
+                await a.disconnect()
+
+        # Connecting has just written `last_seen`, and a socket may only write
+        # it so often — see `note_still_here`. The client's heartbeat interval
+        # is comfortably longer than the throttle; the test does not have to be.
+        with patch('game.consumers.TOUCH_EVERY_SECONDS', 0):
+            before, after = async_to_sync(scenario)()
+        self.assertGreater(after, before, 'a heartbeat did not keep the player here')
+
+    def test_a_member_who_has_joined_but_not_connected_holds_their_place(self):
+        """
+        Joining and connecting are two requests. Between them there is nobody
+        on the wire to count, so without a grace window everyone racing for the
+        last places in a lobby is admitted — at the moment each is checked,
+        none of the others has connected yet.
+
+        It ends the moment they have ever connected, so a player who has been
+        and gone is gone; the grace is for arriving, not for leaving.
+        """
+        newcomer = User.objects.create_user(
+            username='arriving', email='arriving@example.com', password='pw'
+        )
+        member = LobbyMember.objects.create(lobby=self.lobby, user=newcomer)
+
+        self.assertIsNone(member.last_seen, 'a new member looks like one that connected')
+        self.assertTrue(member.is_online, 'a member on their way in was not held a place')
+
+        LobbyMember.objects.filter(pk=member.pk).update(joined_at=long_ago())
+        member.refresh_from_db()
+        self.assertFalse(member.is_online, 'a member who never arrived held a place for ever')
+
     def test_a_lobby_stops_counting_players_who_have_gone(self):
         """The count is what capacity is decided from, so a ghost is a slot."""
         from asgiref.sync import async_to_sync
@@ -1407,7 +1573,7 @@ class LobbyConsumerTests(TestCase):
         self.lobby.refresh_from_db()
         self.assertNotIn(
             self.host.id,
-            [m.user_id for m in self.lobby.members.filter(is_online=True)],
+            [m.user_id for m in self.lobby.members.online()],
         )
 
     def test_a_frame_the_column_cannot_hold_does_not_kill_the_socket(self):

@@ -3,6 +3,15 @@
  * Handles real-time communication with the Django Channels backend
  */
 
+/**
+ * How often we tell the server we are still here.
+ *
+ * The server drops a member it has not heard from in ninety seconds, so three
+ * of these can go missing — a tab throttled in the background, a moment of bad
+ * signal — before anybody is taken out of a lobby they are standing in.
+ */
+export const HEARTBEAT_INTERVAL_MS = 25_000;
+
 class CampusWebSocketService {
     ws: WebSocket | null = null;
     lobbyId: string | null = null;
@@ -11,6 +20,7 @@ class CampusWebSocketService {
     reconnectAttempts = 0;
     maxReconnectAttempts = 5;
     reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
     constructor() {
         this.ws = null;
@@ -31,6 +41,7 @@ class CampusWebSocketService {
         this.reconnectAttempts = 0;
         this.maxReconnectAttempts = 5;
     this.reconnectTimer = null;
+    this.heartbeatTimer = null;
     }
 
     /**
@@ -89,6 +100,7 @@ class CampusWebSocketService {
         this.ws.onopen = () => {
             this.isConnected = true;
             this.reconnectAttempts = 0;
+            this.startHeartbeat();
             this.emit('connected', { lobbyId: this.lobbyId });
         };
 
@@ -103,6 +115,7 @@ class CampusWebSocketService {
 
         this.ws.onclose = (event) => {
             this.isConnected = false;
+            this.stopHeartbeat();
             this.emit('disconnected', { code: event.code, reason: event.reason });
             
             // Handle specific error codes
@@ -372,9 +385,40 @@ class CampusWebSocketService {
     }
 
     /**
+     * Tell the server we are still here, on a timer.
+     *
+     * Position frames only flow while the player walks, so somebody standing
+     * still is heard from once and then never again. The server counts a
+     * member as present from a live socket *and* a recent sign of life, which
+     * is what lets a connection that died without saying so stop holding a
+     * place — and it means a player who stops moving has to keep saying so.
+     *
+     * Well inside the server's window: several of these can go missing before
+     * anybody is dropped. See `backend/game/presence.py`.
+     */
+    startHeartbeat() {
+        this.stopHeartbeat();
+        this.heartbeatTimer = setInterval(() => {
+            if (!this.getConnectionStatus()) {
+                this.stopHeartbeat();
+                return;
+            }
+            this.send({ type: 'heartbeat' });
+        }, HEARTBEAT_INTERVAL_MS);
+    }
+
+    stopHeartbeat() {
+        if (this.heartbeatTimer) {
+            clearInterval(this.heartbeatTimer);
+            this.heartbeatTimer = null;
+        }
+    }
+
+    /**
      * Disconnect from WebSocket
      */
     disconnect() {
+        this.stopHeartbeat();
         if (this.ws) {
             this.ws.close(1000, 'User disconnected');
             this.ws = null;
