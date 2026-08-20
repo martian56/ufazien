@@ -861,3 +861,184 @@ class PostVisibilityTests(APITestCase):
         BlogPost.objects.filter(pk=post.pk).update(visibility=BlogPost.Visibility.PRIVATE)
         after = self.client.get("/api/blog/bookmarks/me/").json()
         self.assertNotIn(post.id, {p["id"] for p in after["results"]})
+
+
+class FollowerAnnouncementTests(APITestCase):
+    """
+    Followers should hear about a post when it is published.
+
+    The signal fired on `created and is_published`, and the editor saves a
+    draft first and publishes by PATCHing that draft — so at publish time the
+    row already existed, `created` was False, and nothing written through the
+    UI ever notified anybody. A post published straight from the API did, which
+    is what made it look like the feature worked. Issue #14.
+    """
+
+    def setUp(self):
+        self.author = User.objects.create_user(
+            username="writer", email="writer@example.com", password="pw"
+        )
+        self.follower = User.objects.create_user(
+            username="reader", email="reader@example.com", password="pw"
+        )
+        self.author.followers.add(self.follower)
+        self.category = Category.objects.create(name="Announcements")
+
+    def _notifications(self):
+        from api.models import Notification
+
+        return Notification.objects.filter(
+            recipient=self.follower, notification_type='new_post'
+        )
+
+    def _draft(self, **kwargs):
+        fields = {
+            'title': 'Something to say',
+            'content': '<p>x</p>',
+            'author': self.author,
+            'category': self.category,
+            'read_time': '1 min',
+            'is_published': False,
+        }
+        fields.update(kwargs)
+        return BlogPost.objects.create(**fields)
+
+    def test_publishing_a_draft_tells_the_followers(self):
+        """The path the editor actually takes: save a draft, then publish it."""
+        from django.core import mail
+
+        post = self._draft()
+        self.assertEqual(self._notifications().count(), 0, 'a draft was announced')
+        mail.outbox.clear()
+
+        post.is_published = True
+        post.save()
+
+        self.assertEqual(
+            self._notifications().count(), 1, 'publishing a draft told nobody'
+        )
+        # The issue is about the email, not only the bell: `new_post` is on by
+        # default in `NotificationPreference`, so a follower gets one.
+        self.assertEqual(len(mail.outbox), 1, 'the follower got no email')
+        self.assertEqual(mail.outbox[0].to, [self.follower.email])
+
+    def test_publishing_through_the_api_tells_the_followers(self):
+        """The same thing over HTTP, which is how the editor does it."""
+        post = self._draft()
+        self.client.force_authenticate(user=self.author)
+
+        response = self.client.patch(
+            f'/api/blog/posts/{post.id}/', {'is_published': True}, format='json'
+        )
+
+        self.assertIn(response.status_code, (200, 202), response.content[:200])
+        self.assertEqual(self._notifications().count(), 1, 'publishing told nobody')
+
+    def test_a_post_published_outright_still_tells_them_once(self):
+        """The one path that always worked has to keep working, and not twice."""
+        self._draft(is_published=True)
+        self.assertEqual(self._notifications().count(), 1)
+
+    def test_editing_a_published_post_does_not_announce_it_again(self):
+        post = self._draft(is_published=True)
+        self.assertEqual(self._notifications().count(), 1)
+
+        post.title = 'Something else to say'
+        post.save()
+        post.content = '<p>y</p>'
+        post.save()
+
+        self.assertEqual(
+            self._notifications().count(), 1, 'editing announced the post again'
+        )
+
+    def test_unpublishing_and_republishing_does_not_announce_it_again(self):
+        """
+        A post taken down and put back is the same post. Followers who were
+        told about it once should not be told again because the author fixed
+        a typo with the post hidden.
+        """
+        post = self._draft(is_published=True)
+        post.is_published = False
+        post.save()
+        post.is_published = True
+        post.save()
+
+        self.assertEqual(
+            self._notifications().count(), 1, 'republishing announced it again'
+        )
+
+    def test_a_scheduled_post_waits_for_its_date(self):
+        """
+        Scheduling is a date in the future and a clock filter — nothing saves
+        the row when the moment arrives. Announcing at publish time would send
+        followers to a post they cannot open yet.
+        """
+        post = self._draft(
+            is_published=True, published_at=timezone.now() + timedelta(days=1)
+        )
+        self.assertEqual(self._notifications().count(), 0, 'a scheduled post announced early')
+
+        # The catch-up command is what brings it in when the date arrives.
+        BlogPost.objects.filter(pk=post.pk).update(
+            published_at=timezone.now() - timedelta(minutes=1)
+        )
+        from django.core.management import call_command
+        from io import StringIO
+
+        call_command('announce_scheduled_posts', stdout=StringIO())
+
+        self.assertEqual(
+            self._notifications().count(), 1, 'a post that went live announced nothing'
+        )
+
+    def test_a_private_or_unlisted_post_is_not_announced(self):
+        """
+        Announcing an unlisted post to every follower *is* the listing it was
+        supposed to stay out of, and a private post is for the author.
+        """
+        self._draft(is_published=True, visibility=BlogPost.Visibility.UNLISTED)
+        self._draft(is_published=True, visibility=BlogPost.Visibility.PRIVATE)
+
+        self.assertEqual(self._notifications().count(), 0)
+
+    def test_a_followers_only_post_is_announced(self):
+        """They are the audience; not telling them is the whole feature."""
+        self._draft(is_published=True, visibility=BlogPost.Visibility.FOLLOWERS)
+        self.assertEqual(self._notifications().count(), 1)
+
+    def test_the_backfill_treats_posts_written_before_this_as_told(self):
+        """
+        Every post that already exists has a null marker, which reads as
+        "nobody has been told". Without the backfill, editing a post written a
+        year ago announces it as new, and one run of the catch-up command mails
+        out the entire back catalogue.
+        """
+        import importlib
+
+        from django.apps import apps as django_apps
+
+        # Imported by name because a migration module cannot be imported with
+        # `from ... import`: its name starts with a digit.
+        migration = importlib.import_module(
+            'blog.migrations.0009_blogpost_followers_notified_at'
+        )
+
+        old = self._draft(is_published=True)
+        self._notifications().delete()
+        BlogPost.objects.filter(pk=old.pk).update(followers_notified_at=None)
+
+        migration.treat_existing_posts_as_announced(django_apps, None)
+
+        old.refresh_from_db()
+        self.assertIsNotNone(old.followers_notified_at, 'an existing post was left unmarked')
+        self.assertEqual(
+            old.followers_notified_at, old.published_at,
+            'the marker claims this deployment rather than when the post went live',
+        )
+
+        old.title = 'Edited years later'
+        old.save()
+        self.assertEqual(
+            self._notifications().count(), 0, 'editing an old post announced it'
+        )

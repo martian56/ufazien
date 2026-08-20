@@ -4,6 +4,7 @@ from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 import json
 import threading
 from pywebpush import webpush, WebPushException
@@ -331,6 +332,49 @@ class NotificationService:
                 message=f'{author.get_full_name() or author.username} published a new post: "{post.title}".',
                 content_object=post
             )
+
+    @staticmethod
+    def announce_new_post(post):
+        """
+        Tell the author's followers about a post, once, when it goes live.
+
+        This used to fire on creation and only on creation, which stopped
+        working the day the editor started saving a draft first and publishing
+        by PATCHing it: at publish time the row already existed, so `created`
+        was False and nobody was ever told. A post published straight from the
+        API still notified, which is why it looked like it worked.
+
+        The moment is claimed in the database before anybody is notified. Two
+        saves arriving together — the editor autosaving over a publish — would
+        otherwise each read a null and each send the same mail to every
+        follower, and an author who unpublishes and republishes would send it
+        all over again. Only the update that changes a row goes on to notify.
+
+        `update()` deliberately, not `save()`: saving here would re-enter the
+        signal that called this.
+
+        Returns whether the followers were told.
+        """
+        from blog.models import BlogPost
+
+        if post.author is None or not post.is_announceable:
+            return False
+
+        stamp = timezone.now()
+        claimed = BlogPost.objects.filter(
+            pk=post.pk, followers_notified_at__isnull=True
+        ).update(followers_notified_at=stamp)
+        if not claimed:
+            return False
+
+        # And on the instance we were handed, which is the one the caller is
+        # part-way through saving. Without this it still holds the null it was
+        # loaded with, and its next `save()` writes that back over the stamp —
+        # so every edit announced the post again.
+        post.followers_notified_at = stamp
+
+        NotificationService.notify_followers_new_post(post.author, post)
+        return True
 
     @staticmethod
     def send_welcome_email(user):

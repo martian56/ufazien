@@ -28,9 +28,19 @@ def notify_new_comment(sender, instance, created, **kwargs):
 
 @receiver(post_save, sender=BlogPost)
 def notify_followers_new_post(sender, instance, created, **kwargs):
-    """Send notification to followers when a new post is published"""
-    if created and instance.is_published:
-        NotificationService.notify_followers_new_post(instance.author, instance)
+    """
+    Send notification to followers when a post is published.
+
+    On the transition, not on creation. This read `created and is_published`,
+    and the editor saves a draft first and publishes by PATCHing it — so at
+    publish time the row already existed, `created` was False, and nothing
+    written through the UI ever notified anybody. A post published straight
+    from the API did, which is what made it look like it worked.
+
+    `announce_new_post` decides whether this post is one to announce and makes
+    sure it is announced once.
+    """
+    NotificationService.announce_new_post(instance)
 
 @receiver(m2m_changed, sender=User.followers.through)
 def notify_new_follower(sender, instance, pk_set, action, **kwargs):
