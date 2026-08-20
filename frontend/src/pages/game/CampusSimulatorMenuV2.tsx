@@ -6,11 +6,36 @@ import campusApi from '../../services/campusApi';
 import { campusUserName, type Lobby, type LobbyListParams, type SavedLobby } from '../../services/campusTypes';
 import { errorMessage } from '../../lib/api/errors';
 import Select from "../../components/ui/Select"
+import CharacterPicker from './CharacterPicker'
+import { api } from '../../lib/api/client'
 import Range from "../../components/ui/Range"
 import { Checkbox } from "../../components/ui/checkbox"
 
 const CampusSimulatorMenu = () => {
   const navigate = useNavigate();
+
+  // Who the player is and what they are wearing, for the character picker.
+  // Held here rather than in the picker so that saving updates the copy under
+  // the preview — the picker would otherwise be telling the player they had
+  // not chosen a moment after they did.
+  const [me, setMe] = useState<{ id: number; campus_character: string } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .get<{ id: number; campus_character?: string }>('/auth/user/')
+      .then((profile) => {
+        if (cancelled) return;
+        setMe({ id: profile.id, campus_character: profile.campus_character ?? '' });
+      })
+      // Deliberately quiet. The picker is one panel on a page whose job is
+      // joining lobbies, and a failure here must not put an error banner over
+      // that. The panel simply does not appear.
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [activeTab, setActiveTab] = useState('browse');
   const [searchTerm, setSearchTerm] = useState('');
   const [showCreateLobby, setShowCreateLobby] = useState(false);
@@ -405,6 +430,18 @@ const CampusSimulatorMenu = () => {
               </button>
             </div>
           </div>
+
+        {/* Who you are in there. Above the browser, because it applies to every
+            lobby on the page rather than to one of them. */}
+        {me && (
+          <div className="mb-6">
+            <CharacterPicker
+              userId={me.id}
+              chosen={me.campus_character}
+              onChosen={(id) => setMe((prev) => (prev ? { ...prev, campus_character: id } : prev))}
+            />
+          </div>
+        )}
 
         {/* Error Display */}
         {error && (

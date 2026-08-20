@@ -6,6 +6,8 @@ import * as THREE from 'three'
 // transitive dependency of drei and could vanish under a minor bump.
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js'
 
+import { AVATAR_CATALOGUE, characterFor, packIndex } from './avatarCatalogue'
+
 import {
   RUN_SPEED,
   TURN_RATE,
@@ -62,12 +64,13 @@ export const FACING = new Map<string, number>([
  * players do different things.
  */
 
-/** The packs the campus ships, built by `scripts/build-avatars.mjs`. */
-export const AVATAR_MODELS = [
-  '/avatars/Casual_Hoodie.glb',
-  '/avatars/Casual_2.glb',
-  '/avatars/Suit.glb',
-] as const
+/**
+ * The packs the campus ships, built by `scripts/build-avatars.mjs`.
+ *
+ * Derived from the catalogue rather than listed again, so the picker, the
+ * server's whitelist and what actually loads cannot disagree.
+ */
+export const AVATAR_MODELS = AVATAR_CATALOGUE.map((entry) => entry.file)
 
 /**
  * The clips kept in the built assets.
@@ -98,6 +101,13 @@ export interface GltfCharacterProps {
    * reshuffled on reconnect.
    */
   variant?: number | string
+  /**
+   * The body this player picked, if they have picked one.
+   *
+   * Overrides `variant`. Absent or unknown falls back to the seed, so a
+   * player who has never chosen looks exactly as they always have.
+   */
+  character?: string | null
   activity?: Activity | string
   /** Whether the player is travelling, which the campus tracks separately. */
   isMoving?: boolean
@@ -176,17 +186,14 @@ const SEATED: [string, number, 'parent' | 'local'][] = [
   [joint('Foot.R'), 0.25, 'local'],
 ]
 
-/** Picks a pack from a seed of either shape, deterministically. */
-export function packIndex(variant: number | string): number {
-  if (typeof variant === 'number' && Number.isFinite(variant)) {
-    return Math.abs(Math.trunc(variant)) % AVATAR_MODELS.length
-  }
-  let hash = 0
-  for (const character of String(variant)) {
-    hash = (hash * 31 + character.charCodeAt(0)) | 0
-  }
-  return Math.abs(hash) % AVATAR_MODELS.length
-}
+/**
+ * Picks a pack from a seed of either shape, deterministically.
+ *
+ * Re-exported from the catalogue, which owns it now that a player can also
+ * choose. Kept here because this is where callers and tests have always found
+ * it.
+ */
+export { packIndex }
 
 /** Scratch objects, so a seated player does not allocate two per joint per frame. */
 const HINGE = new THREE.Vector3(1, 0, 0)
@@ -194,6 +201,7 @@ const FOLD = new THREE.Quaternion()
 
 export function GltfCharacter({
   variant = 0,
+  character = null,
   activity = 'standing',
   isMoving = false,
   heading,
@@ -210,7 +218,9 @@ export function GltfCharacter({
     speed !== undefined && Number.isFinite(speed) ? speed : isMoving ? WALK_SPEED : 0
   const body = useRef<THREE.Group>(null)
   const placed = useRef(false)
-  const url = AVATAR_MODELS[packIndex(variant)]
+  // What this player chose, or what their id has always given them. The
+  // choice wins; nothing chosen means nothing changes.
+  const url = characterFor(character, variant).file
   const gltf = useGLTF(url)
 
   // One clone per avatar, rebound to its own skeleton.

@@ -182,6 +182,17 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
     // Lobby state
     const [currentLobby, setCurrentLobby] = useState<any>(null);
     const [lobbyMembers, setLobbyMembers] = useState<LobbyMember[]>([]);
+    /**
+     * Which body each player in this lobby wears, by user id.
+     *
+     * Kept apart from `lobbyMembers` on purpose. The socket sends members flat
+     * — `{user_id, username, campus_character}` — while the REST lobby detail
+     * nests them under `user`, and `LobbyMember` in `campusTypes` describes the
+     * REST shape. A lookup that read the type would find `user.id` on an object
+     * that has never had one. This is written from the socket, which is what
+     * actually arrives, and read by one thing.
+     */
+    const [characters, setCharacters] = useState<Record<number, string>>({});
     const [playerPositions, setPlayerPositions] = useState<Map<string | number, PlayerPosition>>(new Map());
     /**
      * The seat this player holds, as the server sees it.
@@ -346,6 +357,15 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
             if (data.lift) setLift({ floor: Number(data.lift.floor) || 0, calledAt: 0 });
             setCurrentLobby(data.lobby);
             setLobbyMembers(data.members || []);
+            setCharacters(() => {
+                const next: Record<number, string> = {};
+                for (const member of data.members || []) {
+                    const id = Number(member?.user_id);
+                    const chosen = member?.campus_character;
+                    if (Number.isFinite(id) && chosen) next[id] = String(chosen);
+                }
+                return next;
+            });
             setChatMessages(data.messages || []);
             
             // Update player positions (exclude current user's position - we control our own camera)
@@ -403,6 +423,11 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
 
         // User joined lobby
         campusWebSocket.on('userJoined', (data: any) => {
+            // Whatever they are wearing, so somebody who walks in mid-session
+            // is drawn as themselves rather than as whoever their id hashes to.
+            if (data?.campus_character) {
+                setCharacters(prev => ({ ...prev, [Number(data.user_id)]: String(data.campus_character) }));
+            }
             setLobbyMembers(prev => {
                 const exists = prev.some(member => member.user_id === data.user_id);
                 if (!exists) {
@@ -715,6 +740,8 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
                 currentLobbyIdRef.current = null;
                 wsEverConnectedRef.current = false;
                 setLobbyMembers([]);
+        setCharacters({});
+                setCharacters({});
                 setPlayerPositions(new Map());
                 setSeatedPlayers(NO_SEATS);
                 setOwnSeat(null);
@@ -894,6 +921,7 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
         // Lobby data
         currentLobby,
         lobbyMembers,
+        characters,
         playerPositions,
 
         // Chat

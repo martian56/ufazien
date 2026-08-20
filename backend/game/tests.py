@@ -3,6 +3,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from rest_framework.test import APIClient
 
+from .characters import CAMPUS_CHARACTERS
 from .models import Lobby, LobbyMember, SavedLobby
 
 User = get_user_model()
@@ -1882,4 +1883,101 @@ class DevelopmentServerTests(TestCase):
             1,
             'the campus client connects to /ws/game/lobby/<id>/ and exactly one '
             'route should answer it',
+        )
+
+
+class CampusCharacterTests(TestCase):
+    """
+    Choosing which body you wear in the campus.
+
+    The field is `campus_character` and not `avatar`, because `avatar` on the
+    user model is the profile photograph and has been for far longer.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='wearer', password='pw')
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    def test_nobody_starts_with_one_chosen(self):
+        # Blank means "whichever body this player has always had", which the
+        # campus derives from their id. A real default here would have
+        # restyled every existing player the day this shipped.
+        self.assertEqual(self.user.campus_character, '')
+
+    def test_a_player_can_choose_one(self):
+        response = self.client.patch(
+            '/api/auth/user/', {'campus_character': 'suit'}, format='json'
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.campus_character, 'suit')
+
+    def test_a_player_can_go_back_to_not_having_chosen(self):
+        self.user.campus_character = 'suit'
+        self.user.save()
+        response = self.client.patch(
+            '/api/auth/user/', {'campus_character': ''}, format='json'
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.campus_character, '')
+
+    def test_a_body_the_campus_does_not_have_is_refused(self):
+        # Stored happily, it would fail to load for everyone who met this
+        # player — a broken avatar for the whole room rather than an error for
+        # the one who asked for it.
+        response = self.client.patch(
+            '/api/auth/user/', {'campus_character': 'wizard'}, format='json'
+        )
+        self.assertEqual(response.status_code, 400)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.campus_character, '')
+
+    def test_nobody_can_dress_anybody_else(self):
+        other = User.objects.create_user(username='someone-else', password='pw')
+        response = self.client.patch(
+            f'/api/auth/user/{other.id}/', {'campus_character': 'suit'}, format='json'
+        )
+        self.assertEqual(response.status_code, 403)
+        other.refresh_from_db()
+        self.assertEqual(other.campus_character, '')
+
+    def test_the_room_is_told_what_everyone_is_wearing(self):
+        # Everyone has to draw everyone else, so it goes out with the member.
+        from .serializers import UserSerializer
+
+        self.user.campus_character = 'casual-2'
+        self.user.save()
+        data = UserSerializer(self.user).data
+        self.assertEqual(data['campus_character'], 'casual-2')
+
+    def test_the_room_is_still_not_told_anybody_email(self):
+        # The rule this codebase leaked once. Adding a field must not widen it.
+        from .serializers import UserSerializer
+
+        self.assertNotIn('email', UserSerializer(self.user).data)
+
+    def test_catalogue_matches_the_client(self):
+        """
+        The server's list and the client's are the same list.
+
+        They are declared twice, in two languages, and a picker offering a body
+        the server refuses — or a stored body the client cannot draw — is the
+        failure. Read rather than trusted.
+        """
+        import re
+        from pathlib import Path
+
+        catalogue = (
+            Path(__file__).resolve().parents[2]
+            / 'frontend' / 'src' / 'components' / 'campus' / 'avatarCatalogue.ts'
+        )
+        if not catalogue.exists():
+            self.skipTest('client catalogue not present in this checkout')
+
+        ids = re.findall(r"id:\s*'([a-z0-9-]+)'", catalogue.read_text(encoding='utf-8'))
+        self.assertEqual(
+            list(CAMPUS_CHARACTERS), ids,
+            'the server and client character catalogues have drifted apart',
         )

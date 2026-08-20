@@ -454,6 +454,7 @@ function PlayerAvatar({
   position,
   userData,
   seed,
+  character = null,
   bubble,
   speaking,
   isPresenting,
@@ -470,8 +471,10 @@ function PlayerAvatar({
   position: { x: number; y: number; z: number }
   /** Loose: the same component renders both a socket payload and local state. */
   userData: Record<string, unknown>
-  /** The player's user id, which decides everything about how they look. */
+  /** The player's user id, which decides how they look if they never chose. */
   seed: string | number
+  /** The body they chose, when they have chosen one. */
+  character?: string | null
   /** Their most recent chat message, while it is still fresh. */
   bubble?: string | null
   /** Whether proximity voice currently hears them. */
@@ -509,6 +512,7 @@ function PlayerAvatar({
         // the old model used for its appearance, so a given player keeps the
         // same look between sessions instead of being reshuffled on reconnect.
         variant={seed}
+        character={character}
       />
       <NameTag
         name={name}
@@ -1668,6 +1672,7 @@ const CampusWithBackend = () => {
     error,
     currentLobby,
     lobbyMembers,
+    characters,
     playerPositions,
     userPosition,
     disconnect,
@@ -2444,6 +2449,7 @@ const CampusWithBackend = () => {
                     position={avatar.position}
                     userData={avatar.userData}
                     seed={avatar.id}
+                    character={characters[Number(avatar.id)] ?? null}
                     bubble={bubbleFor(avatar.id, spokenMessages, bubbleClock)}
                     speaking={isSpeaking(avatar.id, voice.participants)}
                     isPresenting={isSameParticipant(voice.screenShare?.identity, avatar.id)}
@@ -2485,6 +2491,7 @@ const CampusWithBackend = () => {
                     position={avatar.position}
                     userData={avatar.userData}
                     seed={avatar.id}
+                    character={characters[Number(avatar.id)] ?? null}
                     bubble={bubbleFor(avatar.id, spokenMessages, bubbleClock)}
                     speaking={isSpeaking(avatar.id, voice.participants)}
                     isPresenting={isSameParticipant(voice.screenShare?.identity, avatar.id)}

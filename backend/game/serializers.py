@@ -6,10 +6,19 @@ User = get_user_model()
 
 
 class UserSerializer(serializers.ModelSerializer):
-    """Basic user info for game display"""
+    """
+    Basic user info for game display.
+
+    Deliberately narrow, and `email` is not in it — see the rule in CLAUDE.md.
+    `campus_character` is here because everyone in the room has to draw
+    everyone else, and read-only because this is what other people see of you,
+    not where you change it.
+    """
+
     class Meta:
         model = User
-        fields = ['id', 'first_name', 'last_name']
+        fields = ['id', 'first_name', 'last_name', 'campus_character']
+        read_only_fields = fields
 
 
 class LobbyMemberSerializer(serializers.ModelSerializer):

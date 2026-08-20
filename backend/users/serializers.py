@@ -2,6 +2,7 @@ from rest_framework import serializers
 from django.contrib.auth import get_user_model
 
 from .models import UserSettings
+from game.characters import CAMPUS_CHARACTERS, is_valid_character
 
 User = get_user_model()
 
@@ -101,6 +102,7 @@ class UserSerializer(serializers.ModelSerializer):
             "gpa",
             "completed_credits",
             "phone",
+            "campus_character",
             "is_staff",
             "is_active",
             "has_password"
@@ -109,6 +111,21 @@ class UserSerializer(serializers.ModelSerializer):
             'password': {'write_only': True}
         }
     
+    def validate_campus_character(self, value):
+        """
+        Only bodies the campus actually has.
+
+        Blank is allowed and means "never chosen" — see `game.characters`. An
+        unknown id would be stored happily and then fail to load for every
+        client that met this player, so it is a broken avatar for everybody
+        rather than an error for the one who set it.
+        """
+        if not is_valid_character(value):
+            raise serializers.ValidationError(
+                f"Unknown campus character. Expected one of: {', '.join(CAMPUS_CHARACTERS)}."
+            )
+        return value
+
     def get_has_password(self, obj):
         """Check if user has a usable password set by examining the password field directly"""
         from django.contrib.auth.hashers import UNUSABLE_PASSWORD_PREFIX
