@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet';
-import { Search, Plus, Lock, Unlock, Users, Star, StarOff, Settings, RefreshCw, Filter, Eye, EyeOff, Zap, ArrowLeft, Building2, Play, Trophy, Users2, Loader2 } from 'lucide-react';
+import { Search, Plus, Lock, Unlock, Users, Star, StarOff, Settings, RefreshCw, Filter, Eye, EyeOff, Zap, ArrowLeft, Building2, Play, Trophy, Users2, Loader2, User, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import campusApi from '../../services/campusApi';
 import { campusUserName, type Lobby, type LobbyListParams, type SavedLobby } from '../../services/campusTypes';
@@ -43,7 +43,34 @@ const CampusSimulatorMenu = () => {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [passwordModalLobbyId, setPasswordModalLobbyId] = useState<string | null>(null);
   const [passwordInput, setPasswordInput] = useState('');
-  const [filterOpen, setFilterOpen] = useState(true);
+  // Open on a wide screen, closed on a phone. The filter block is a full
+  // screenful, and on a phone it sat between the player and every lobby on the
+  // page — you scrolled past the controls to reach the content.
+  const [filterOpen, setFilterOpen] = useState(
+    () => typeof window === 'undefined' || window.innerWidth >= 1024,
+  );
+  /** The character sheet, which is how a phone reaches the picker. */
+  const [showCharacter, setShowCharacter] = useState(false);
+
+  /**
+   * Whether the sidebar is on screen at all.
+   *
+   * Used to mount one picker rather than hide one with a class. `hidden
+   * lg:block` leaves it in the tree, and the picker owns a WebGL canvas
+   * running a render loop — so a phone was driving an invisible turntable, and
+   * screen readers were being offered the same six radios twice.
+   */
+  const [wide, setWide] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches,
+  );
+
+  useEffect(() => {
+    const query = window.matchMedia('(min-width: 1024px)');
+    const sync = () => setWide(query.matches);
+    sync();
+    query.addEventListener('change', sync);
+    return () => query.removeEventListener('change', sync);
+  }, []);
   const [passwordFilter, setPasswordFilter] = useState('all'); // 'all', 'public', 'private'
   const [playerCountFilter, setPlayerCountFilter] = useState('all');
   const [sortBy, setSortBy] = useState('-created_at'); // API sorting field
@@ -52,6 +79,13 @@ const CampusSimulatorMenu = () => {
   const [lobbies, setLobbies] = useState<Lobby[]>([]);
   const [savedLobbies, setSavedLobbies] = useState<SavedLobby[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  /** How many filters are narrowing the list, shown on the collapsed header. */
+  const activeFilterCount = [
+    searchTerm.trim() !== '',
+    passwordFilter !== 'all',
+    playerCountFilter !== 'all',
+  ].filter(Boolean).length;
+
   const [error, setError] = useState<string | null>(null);
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1, totalCount: 0 });
   
@@ -321,23 +355,25 @@ const CampusSimulatorMenu = () => {
               </h3>
             </div>
 
-            <p className="text-xs text-gray-400 mb-2">ID {lobby.id}</p>
+            {/* Only when there is one. "No description provided" is a line of
+                nothing on every card that has not got one, and on a phone that
+                is a line per lobby. */}
+            {lobby.description && (
+              <p className="text-gray-500 text-sm mb-2 line-clamp-2">{lobby.description}</p>
+            )}
 
-            <p className="text-gray-500 text-sm mb-3 line-clamp-2">
-              {lobby.description || 'No description provided'}
-            </p>
-
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-500">
-              <span className="flex items-center gap-1">
-                <Users className="w-4 h-4" />
-                {lobby.current_players_count}/{lobby.max_players}
-              </span>
+            {/* The player count used to be here as well as over the bar below,
+                which is the same number twice on a card that has to fit on a
+                phone. The bar keeps it, because it also shows how full. */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-500">
               {/* `a + ' ' + b || 'Unknown'` reads as `(a + ' ' + b) || 'Unknown'`,
                   and a template with a space in it is truthy even when both
                   halves are empty. A host who never set a name showed as
                   "Host:" followed by nothing, or "undefined undefined". */}
-              <span className="truncate">Host: {campusUserName(lobby.host)}</span>
-              <span>{lobby.created_at ? new Date(lobby.created_at).toLocaleDateString() : 'Recently created'}</span>
+              <span className="truncate min-w-0">Host: {campusUserName(lobby.host)}</span>
+              <span className="text-gray-400">
+                {lobby.created_at ? new Date(lobby.created_at).toLocaleDateString() : 'Recently created'}
+              </span>
             </div>
           </div>
           
@@ -352,7 +388,7 @@ const CampusSimulatorMenu = () => {
           </button>
         </div>
 
-        <div className="mb-4">
+        <div className="mb-3">
           <div className="flex justify-between text-sm mb-1">
             <span className="text-gray-400">Players</span>
             <span className={`${isNearFull ? 'text-orange-600' : 'text-gray-500'}`}>
@@ -414,32 +450,70 @@ const CampusSimulatorMenu = () => {
             </div>
 
             <div className="flex gap-2 sm:gap-3 shrink-0">
+              {/* Phones reach the picker through this; wide screens have it in
+                  the sidebar and do not need a second way in. */}
+              {me && (
+                <button
+                  onClick={() => setShowCharacter(true)}
+                  aria-label="Change your character"
+                  className="lg:hidden border border-gray-300 text-gray-700 hover:bg-gray-50 px-3 py-3 rounded-lg font-medium flex items-center gap-2 transition-colors shrink-0"
+                >
+                  <User className="w-5 h-5 shrink-0" />
+                </button>
+              )}
               <button
                 onClick={() => setShowQuickJoin(true)}
                 className="flex-1 lg:flex-none justify-center border border-gray-300 text-gray-700 hover:bg-gray-50 px-4 sm:px-6 py-3 rounded-lg font-medium flex items-center gap-2 transition-colors"
               >
                 <Zap className="w-5 h-5 shrink-0" />
-                Quick Join
+                <span className="whitespace-nowrap">Quick Join</span>
               </button>
               <button
                 onClick={() => setShowCreateLobby(true)}
                 className="flex-1 lg:flex-none justify-center bg-blue-600 hover:bg-blue-700 text-white px-4 sm:px-6 py-3 rounded-lg font-medium flex items-center gap-2 transition-colors"
               >
                 <Plus className="w-5 h-5 shrink-0" />
-                Create Lobby
+                <span className="whitespace-nowrap">
+                  <span className="sm:hidden">Create</span>
+                  <span className="hidden sm:inline">Create Lobby</span>
+                </span>
               </button>
             </div>
           </div>
 
-        {/* Who you are in there. Above the browser, because it applies to every
-            lobby on the page rather than to one of them. */}
-        {me && (
-          <div className="mb-6">
-            <CharacterPicker
-              userId={me.id}
-              chosen={me.campus_character}
-              onChosen={(id) => setMe((prev) => (prev ? { ...prev, campus_character: id } : prev))}
-            />
+        {/* The character sheet. Bottom-anchored on a phone, which is where a
+            thumb is, and centred once there is room for it. */}
+        {showCharacter && me && !wide && (
+          <div
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4"
+            onClick={() => setShowCharacter(false)}
+          >
+            <div
+              className="bg-white w-full sm:max-w-lg rounded-t-2xl sm:rounded-lg border border-gray-200 p-5 max-h-[85vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                  <User className="w-5 h-5 text-blue-500 shrink-0" />
+                  Your character
+                </h2>
+                <button
+                  onClick={() => setShowCharacter(false)}
+                  aria-label="Close"
+                  className="text-gray-400 hover:text-gray-900 p-1"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <CharacterPicker
+                layout="sheet"
+                userId={me.id}
+                chosen={me.campus_character}
+                onChosen={(id) =>
+                  setMe((prev) => (prev ? { ...prev, campus_character: id } : prev))
+                }
+              />
+            </div>
           </div>
         )}
 
@@ -458,21 +532,46 @@ const CampusSimulatorMenu = () => {
 
         {/* Tabs and Controls */}
         <div className="flex flex-col lg:flex-row gap-6">
-          {/* Sidebar Filters */}
-          <div className="lg:w-80">
-            <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">Filters</h3>
-                <button
-                  onClick={() => setFilterOpen(!filterOpen)}
-                  className="text-gray-400 hover:text-gray-900"
-                >
-                  <Filter className="w-5 h-5" />
-                </button>
+          {/* Sidebar: who you are, then how to filter. Both are about the page
+              rather than about one lobby, which is why they share a column. */}
+          <div className="lg:w-80 lg:shrink-0">
+            {me && wide && (
+              <div className="bg-white border border-gray-200 rounded-lg p-5 mb-6">
+                <div className="flex items-center gap-2 mb-3">
+                  <User className="w-5 h-5 text-blue-500 shrink-0" />
+                  <h3 className="text-lg font-semibold text-gray-900">Your character</h3>
+                </div>
+                <CharacterPicker
+                  layout="sidebar"
+                  userId={me.id}
+                  chosen={me.campus_character}
+                  onChosen={(id) =>
+                    setMe((prev) => (prev ? { ...prev, campus_character: id } : prev))
+                  }
+                />
               </div>
+            )}
+
+            <div className="bg-white border border-gray-200 rounded-lg p-4 sm:p-6 mb-6">
+              <button
+                type="button"
+                onClick={() => setFilterOpen(!filterOpen)}
+                aria-expanded={filterOpen}
+                className="w-full flex items-center justify-between gap-2 text-left"
+              >
+                <h3 className="text-lg font-semibold text-gray-900">Filters</h3>
+                <span className="flex items-center gap-2 text-gray-400">
+                  {activeFilterCount > 0 && (
+                    <span className="rounded-full bg-blue-100 text-blue-700 text-xs font-semibold px-2 py-0.5">
+                      {activeFilterCount}
+                    </span>
+                  )}
+                  <Filter className="w-5 h-5" />
+                </span>
+              </button>
 
               {filterOpen && (
-                <div className="space-y-4">
+                <div className="space-y-4 mt-4">
                   {/* Search */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -563,7 +662,7 @@ const CampusSimulatorMenu = () => {
           </div>
 
           {/* Main Content */}
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             {/* Tab Navigation */}
             <div className="flex space-x-1 mb-6 bg-gray-100 p-1 rounded-lg">
               {[
@@ -573,14 +672,15 @@ const CampusSimulatorMenu = () => {
                 <button
                   key={key}
                   onClick={() => setActiveTab(key)}
-                  className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-md font-medium transition-all ${
+                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3 sm:px-4 rounded-md font-medium text-sm sm:text-base whitespace-nowrap transition-all ${
                     activeTab === key
                       ? 'bg-white text-gray-900 border border-gray-200'
                       : 'text-gray-500 hover:text-gray-900'
                   }`}
                 >
-                  <Icon className="w-4 h-4" />
-                  {label}
+                  <Icon className="w-4 h-4 shrink-0" />
+                  <span className="sm:hidden">{label.replace(' Lobbies', '')}</span>
+                  <span className="hidden sm:inline">{label}</span>
                 </button>
               ))}
             </div>

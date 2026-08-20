@@ -24,13 +24,32 @@ export interface CampusCharacter {
   label: string
   /** The built asset, under `public/`. */
   file: string
+  /** Which set it came from, so the picker can group them. */
+  group: 'men' | 'women'
 }
 
 export const AVATAR_CATALOGUE: readonly CampusCharacter[] = [
-  { id: 'casual-hoodie', label: 'Hoodie', file: '/avatars/Casual_Hoodie.glb' },
-  { id: 'casual-2', label: 'Casual', file: '/avatars/Casual_2.glb' },
-  { id: 'suit', label: 'Suit', file: '/avatars/Suit.glb' },
+  { id: 'casual-hoodie', label: 'Hoodie', file: '/avatars/Casual_Hoodie.glb', group: 'men' },
+  { id: 'casual-2', label: 'Casual', file: '/avatars/Casual_2.glb', group: 'men' },
+  { id: 'suit', label: 'Suit', file: '/avatars/Suit.glb', group: 'men' },
+  { id: 'women-casual', label: 'Casual', file: '/avatars/Women_Casual.glb', group: 'women' },
+  { id: 'women-formal', label: 'Formal', file: '/avatars/Women_Formal.glb', group: 'women' },
+  { id: 'women-suit', label: 'Suit', file: '/avatars/Women_Suit.glb', group: 'women' },
 ]
+
+/**
+ * The bodies a player who has never chosen can be given.
+ *
+ * Frozen to the three the campus shipped with, and it has to stay frozen. The
+ * derived body is `seed % pool.length`, so growing the pool changes the answer
+ * for everybody at once — adding these three women would have silently
+ * restyled every player who has never opened the picker, which is the exact
+ * thing the blank default exists to prevent.
+ *
+ * So new characters are reachable by choosing them, and only by choosing them.
+ * Nobody is ever assigned one they did not ask for.
+ */
+export const DERIVED_POOL: readonly CampusCharacter[] = AVATAR_CATALOGUE.slice(0, 3)
 
 /** Means "never chosen": keep deriving this player's body from their id. */
 export const UNCHOSEN = ''
@@ -52,13 +71,13 @@ export function characterFile(id: string | null | undefined): string | null {
  */
 export function packIndex(variant: number | string): number {
   if (typeof variant === 'number' && Number.isFinite(variant)) {
-    return Math.abs(Math.trunc(variant)) % AVATAR_CATALOGUE.length
+    return Math.abs(Math.trunc(variant)) % DERIVED_POOL.length
   }
   let hash = 0
   for (const character of String(variant)) {
     hash = (hash * 31 + character.charCodeAt(0)) | 0
   }
-  return Math.abs(hash) % AVATAR_CATALOGUE.length
+  return Math.abs(hash) % DERIVED_POOL.length
 }
 
 /**
@@ -70,7 +89,7 @@ export function packIndex(variant: number | string): number {
  * played, the first time this shipped.
  */
 export function characterForSeed(seed: number | string): CampusCharacter {
-  return AVATAR_CATALOGUE[packIndex(seed)]
+  return DERIVED_POOL[packIndex(seed)]
 }
 
 /** What to draw for a player: their choice when they have one, else their id. */

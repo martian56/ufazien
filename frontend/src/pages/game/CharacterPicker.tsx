@@ -62,9 +62,24 @@ export interface CharacterPickerProps {
   /** What they have chosen, or '' if they never have. */
   chosen: string
   onChosen: (id: string) => void
+  /**
+   * Where this is being shown.
+   *
+   * `sidebar` is the narrow column beside the lobby list on a wide screen:
+   * everything stacks. `sheet` is the panel a phone opens over the page, where
+   * there is width to put the choices beside the preview and the height is
+   * what is scarce. Same component either way — the difference is which axis
+   * is short, and that is not worth a second implementation.
+   */
+  layout?: 'sidebar' | 'sheet'
 }
 
-export default function CharacterPicker({ userId, chosen, onChosen }: CharacterPickerProps) {
+export default function CharacterPicker({
+  userId,
+  chosen,
+  onChosen,
+  layout = 'sidebar',
+}: CharacterPickerProps) {
   // What the preview shows: follows the saved value, but moves the instant you
   // click so the turntable does not wait on a round trip.
   const [previewing, setPreviewing] = useState<CampusCharacter>(() =>
@@ -102,15 +117,16 @@ export default function CharacterPicker({ userId, chosen, onChosen }: CharacterP
     }
   }
 
-  return (
-    <div className="bg-white rounded-lg border border-gray-200 p-4 sm:p-5">
-      <div className="flex items-center gap-2 mb-3">
-        <User className="w-5 h-5 text-blue-500 shrink-0" />
-        <h2 className="text-lg font-semibold text-gray-900">Your character</h2>
-      </div>
+  const stacked = layout === 'sidebar'
 
-      <div className="flex flex-col sm:flex-row gap-4">
-        <div className="w-full sm:w-44 h-56 rounded-lg bg-gradient-to-b from-slate-100 to-slate-200 border border-gray-200 overflow-hidden shrink-0">
+  return (
+    <div>
+      <div className={stacked ? 'flex flex-col gap-3' : 'flex flex-row gap-4'}>
+        <div
+          className={`rounded-lg bg-gradient-to-b from-slate-100 to-slate-200 border border-gray-200 overflow-hidden shrink-0 ${
+            stacked ? 'w-full h-48' : 'w-32 h-44 sm:w-40 sm:h-52'
+          }`}
+        >
           <Canvas
             // Framed to hold the whole figure with air over the head: the
             // characters are 1.72 m, and 32° from 2.5 m sees 1.43 m of them —
@@ -133,38 +149,51 @@ export default function CharacterPicker({ userId, chosen, onChosen }: CharacterP
               : 'You have not picked one, so the campus gives you this. Choose to keep it or change it.'}
           </p>
 
-          <div
-            className="flex flex-wrap gap-2 max-w-md"
-            role="radiogroup"
-            aria-label="Campus character"
-          >
-            {AVATAR_CATALOGUE.map((entry) => {
-              const selected = entry.id === chosen
+          {/* Grouped, because with six of them an ungrouped row has two
+              "Casual" and two "Suit" in it and the only thing telling them
+              apart is the preview you have not hovered yet. */}
+          <div className="space-y-3" role="radiogroup" aria-label="Campus character">
+            {(['men', 'women'] as const).map((group) => {
+              const entries = AVATAR_CATALOGUE.filter((entry) => entry.group === group)
+              if (entries.length === 0) return null
               return (
-                <button
-                  key={entry.id}
-                  type="button"
-                  role="radio"
-                  aria-checked={selected}
-                  disabled={saving !== null}
-                  onMouseEnter={() => setPreviewing(entry)}
-                  onFocus={() => setPreviewing(entry)}
-                  onMouseLeave={() => setPreviewing(characterFor(chosen, userId))}
-                  onBlur={() => setPreviewing(characterFor(chosen, userId))}
-                  onClick={() => choose(entry)}
-                  className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-colors disabled:opacity-60 ${
-                    selected
-                      ? 'border-blue-500 bg-blue-50 text-blue-700'
-                      : 'border-gray-300 text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  <span>{entry.label}</span>
-                  {saving === entry.id ? (
-                    <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-                  ) : selected ? (
-                    <Check className="w-4 h-4 shrink-0" />
-                  ) : null}
-                </button>
+                <div key={group}>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">
+                    {group === 'men' ? 'Men' : 'Women'}
+                  </p>
+                  <div className={`gap-2 ${stacked ? 'grid grid-cols-2' : 'flex flex-wrap'}`}>
+                    {entries.map((entry) => {
+                      const selected = entry.id === chosen
+                      return (
+                        <button
+                          key={entry.id}
+                          type="button"
+                          role="radio"
+                          aria-checked={selected}
+                          aria-label={`${group === 'men' ? 'Man' : 'Woman'}, ${entry.label}`}
+                          disabled={saving !== null}
+                          onMouseEnter={() => setPreviewing(entry)}
+                          onFocus={() => setPreviewing(entry)}
+                          onMouseLeave={() => setPreviewing(characterFor(chosen, userId))}
+                          onBlur={() => setPreviewing(characterFor(chosen, userId))}
+                          onClick={() => choose(entry)}
+                          className={`flex items-center justify-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-colors disabled:opacity-60 ${
+                            selected
+                              ? 'border-blue-500 bg-blue-50 text-blue-700'
+                              : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                          }`}
+                        >
+                          <span>{entry.label}</span>
+                          {saving === entry.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                          ) : selected ? (
+                            <Check className="w-4 h-4 shrink-0" />
+                          ) : null}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
               )
             })}
           </div>

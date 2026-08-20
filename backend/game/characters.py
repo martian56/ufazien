@@ -20,6 +20,9 @@ CAMPUS_CHARACTERS = (
     'casual-hoodie',
     'casual-2',
     'suit',
+    'women-casual',
+    'women-formal',
+    'women-suit',
 )
 
 #: Stored when a player has never chosen. Not a character: it means "whichever
