@@ -43,6 +43,7 @@ import {
   ChatBubble,
   NameTag,
   SpeakingRing,
+  LEAF_HEIGHT,
   THRESHOLD,
 } from '../../components/campus/CampusScenery'
 import { GltfCharacter } from '../../components/campus/GltfCharacter'
@@ -1001,6 +1002,10 @@ function CampusDoors({
           z={door.z}
           halfWidth={door.halfW}
           sill={THRESHOLD}
+          // To the transom, not to the head of the arch: the glazing above the
+          // leaves is fixed, as it is on the building.
+          height={LEAF_HEIGHT}
+          glazed
           swing={doorSwing(doors, exteriorDoorId(door.id), now)}
         />
       ))}

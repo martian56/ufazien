@@ -4,7 +4,15 @@ import * as THREE from 'three'
 
 import { daylight, type CampusBuilding, type TimeOfDay } from './campusLayout'
 import { flagTexture, lettersTexture } from './campusTextures'
-import { Entrance, OPENING_HALF_W, OPENING_HEIGHT, PORCH_DEPTH, THRESHOLD } from './CampusScenery'
+import WavingFlag from './WavingFlag'
+import {
+  Entrance,
+  OPENING_HALF_W,
+  OPENING_HEIGHT,
+  PORCH_DEPTH,
+  SPRING_HEIGHT,
+  THRESHOLD,
+} from './CampusScenery'
 
 /**
  * 183 Nizami Street: the building UFAZ actually occupies.
@@ -44,6 +52,16 @@ const FLOORS = 3
 
 /** How high the plinth stands, with its small square windows. */
 const PLINTH = 2.4
+
+/**
+ * Where the two flagpoles are fixed: flanking the entrance, over the plaques.
+ *
+ * Clear of the doorway's stone surround and of the plaques under them, and
+ * high enough that the flags fly over head height rather than in the way of
+ * somebody walking in.
+ */
+const FLAG_X = 6.4
+const FLAG_Y = 5.4
 
 // Near-white with a lavender cast, which is what the render actually is. The
 // first pass read it as mid-grey off a single overcast photograph; the flank
@@ -365,11 +383,43 @@ export default function UfazBuilding({ building, timeOfDay = 'day' }: UfazBuildi
           lights. Rendered the same colour as the wall above rather than a grey
           band: the real plinth is not a different material, it is the same
           render carried down, and only the cream sill course at its head marks
-          where the semi-basement ends. */}
-      <mesh position={[0, PLINTH / 2, 0]} castShadow receiveShadow>
-        <boxGeometry args={[width + 0.3, PLINTH, depth + 0.3]} />
-        <meshStandardMaterial color={PLINTH_COLOUR} roughness={0.95} />
-      </mesh>
+          where the semi-basement ends.
+
+          Cut around the doorway, in pieces, the same way the wall above it is.
+          It used to be one box across the whole footprint and it ran straight
+          through the opening — so the bottom two and a half metres of the
+          entrance were solid plinth, the lower half of each door leaf was
+          buried in it, and the cream surround died into the cream band at the
+          height where the two met. From the pavement the door looked welded to
+          the building. */}
+      {(() => {
+        const clear = OPENING_HALF_W + 0.7
+        const cheek = (width + 0.3) / 2 - clear
+        return (
+          <group>
+            {[-1, 1].map((side) => (
+              <mesh
+                key={side}
+                position={[side * (clear + cheek / 2), PLINTH / 2, 0]}
+                castShadow
+                receiveShadow
+              >
+                <boxGeometry args={[cheek, PLINTH, depth + 0.3]} />
+                <meshStandardMaterial color={PLINTH_COLOUR} roughness={0.95} />
+              </mesh>
+            ))}
+            {/* Behind the porch, where there is no opening to leave clear. */}
+            <mesh
+              position={[0, PLINTH / 2, -(PORCH_DEPTH + 0.3) / 2]}
+              castShadow
+              receiveShadow
+            >
+              <boxGeometry args={[clear * 2, PLINTH, depth + 0.3 - PORCH_DEPTH]} />
+              <meshStandardMaterial color={PLINTH_COLOUR} roughness={0.95} />
+            </mesh>
+          </group>
+        )
+      })()}
       {Array.from({ length: BAYS }, (_, i) => {
         const x = -halfW + bay * (i + 0.5)
         // Not across the doorway.
@@ -415,10 +465,32 @@ export default function UfazBuilding({ building, timeOfDay = 'day' }: UfazBuildi
                 <meshStandardMaterial color={RENDER_COLOUR} roughness={0.92} />
               </mesh>
             ))}
-            <mesh position={[0, top + (height - top) / 2, 0]} castShadow receiveShadow>
-              <boxGeometry args={[OPENING_HALF_W * 2, height - top, PORCH_DEPTH]} />
-              <meshStandardMaterial color={RENDER_COLOUR} roughness={0.92} />
-            </mesh>
+            {/* Over the opening, following the arch rather than sitting square
+                on top of it. One box across the whole width would be right for
+                a rectangular hole; over an arched one it leaves the two
+                spandrels — the corners between the curve and the square — as
+                holes straight through the facade. Cut into columns, each
+                starting where the arch passes under it. */}
+            {Array.from({ length: 24 }, (_, i) => {
+              const columnWidth = (OPENING_HALF_W * 2) / 24
+              const x = -OPENING_HALF_W + columnWidth * (i + 0.5)
+              // The arch is a semicircle on the springing line, so its height
+              // over any point is the circle's. Slightly inside the opening
+              // half-width, or the outermost columns come out zero-height.
+              const rise = Math.sqrt(Math.max(0, OPENING_HALF_W ** 2 - x ** 2))
+              const from = SPRING_HEIGHT + rise
+              return (
+                <mesh
+                  key={i}
+                  position={[x, from + (height - from) / 2, 0]}
+                  castShadow
+                  receiveShadow
+                >
+                  <boxGeometry args={[columnWidth + 0.01, height - from, PORCH_DEPTH]} />
+                  <meshStandardMaterial color={RENDER_COLOUR} roughness={0.92} />
+                </mesh>
+              )
+            })}
           </group>
         )
       })()}
@@ -429,14 +501,27 @@ export default function UfazBuilding({ building, timeOfDay = 'day' }: UfazBuildi
           in its facade with nothing drawn in it at all. */}
       <Entrance depth={depth} trim={DRESSING} accent={RENDER_COLOUR} />
 
-      {/* String course between the plinth and the first floor, and a cornice
-          under the roofline. Both run right round. */}
-      {[PLINTH + 0.1, height - 0.5].map((y, i) => (
-        <mesh key={i} position={[0, y, 0]} castShadow>
-          <boxGeometry args={[width + 0.5, i === 0 ? 0.28 : 0.5, depth + 0.5]} />
-          <meshStandardMaterial color={DRESSING} roughness={0.88} />
-        </mesh>
-      ))}
+      {/* Cornice under the roofline, running right round. */}
+      <mesh position={[0, height - 0.5, 0]} castShadow>
+        <boxGeometry args={[width + 0.5, 0.5, depth + 0.5]} />
+        <meshStandardMaterial color={DRESSING} roughness={0.88} />
+      </mesh>
+
+      {/* String course over the plinth. In two lengths, stopped either side of
+          the entrance: it used to run right round and so straight across the
+          doorway at head height, which put a cream band over the doors and
+          gave the surround something to dissolve into. On the building it
+          dies into the stone architrave and starts again beyond it. */}
+      {(() => {
+        const clear = OPENING_HALF_W + 0.7
+        const run = (width + 0.5) / 2 - clear
+        return [-1, 1].map((side) => (
+          <mesh key={side} position={[side * (clear + run / 2), PLINTH + 0.1, 0]} castShadow>
+            <boxGeometry args={[run, 0.28, depth + 0.5]} />
+            <meshStandardMaterial color={DRESSING} roughness={0.88} />
+          </mesh>
+        ))
+      })()}
 
       {/* Every window on the building, in one instanced pass. */}
       <DressedWindows spots={windows} />
@@ -553,20 +638,48 @@ export default function UfazBuilding({ building, timeOfDay = 'day' }: UfazBuildi
         </mesh>
       )}
 
-      {/* Two flags: the university is a joint Strasbourg and ASOIU project. */}
+      {/* Two flags: the university is a joint Strasbourg and ASOIU project.
+
+          On poles that come out of the wall. They used to be tilted about Z,
+          which leans a pole sideways *in the plane of the facade* rather than
+          projecting it from the face — so both read as sticks lying diagonally
+          across the windows, halfway up the ground floor and nowhere near the
+          door. A facade flagpole rakes outwards and up, and it flanks the
+          entrance. */}
       {flags.map((flag, i) => {
         if (!flag) return null
         const side = i === 0 ? -1 : 1
+        // From vertical: mostly out from the wall, still climbing.
+        const rake = 1.05
+        const length = 3.2
+        const along = (d: number): [number, number, number] => [
+          0,
+          Math.cos(rake) * d,
+          Math.sin(rake) * d,
+        ]
+        const [, poleY, poleZ] = along(length / 2)
+        const [, flagY, flagZ] = along(length * 0.42)
+
         return (
-          <group key={i} position={[side * bay * 2, PLINTH + 1.4, halfD + 0.5]}>
-            <mesh rotation={[0, 0, -side * 0.5]} castShadow>
-              <cylinderGeometry args={[0.06, 0.06, 3.2, 8]} />
+          <group key={i} position={[side * FLAG_X, FLAG_Y, halfD + 0.08]}>
+            <mesh position={[0, poleY, poleZ]} rotation={[rake, 0, 0]} castShadow>
+              <cylinderGeometry args={[0.05, 0.06, length, 8]} />
               <meshStandardMaterial color="#43484f" roughness={0.5} metalness={0.5} />
             </mesh>
-            <mesh position={[side * 0.85, 1.35, 0]} rotation={[0, 0, -side * 0.5]}>
-              <planeGeometry args={[1.5, 0.95]} />
-              <meshStandardMaterial map={flag} side={THREE.DoubleSide} roughness={0.8} />
+            {/* A finial, so the pole ends rather than stopping. */}
+            <mesh position={along(length)} castShadow>
+              <sphereGeometry args={[0.1, 10, 8]} />
+              <meshStandardMaterial color="#c9a227" roughness={0.3} metalness={0.8} />
             </mesh>
+            {/* Hung from the pole and flying outwards, away from the entrance,
+                with its face parallel to the facade so it reads from in front
+                rather than edge-on. */}
+            <group
+              position={[side * 0.78, flagY - 0.42, flagZ]}
+              rotation={[0, side < 0 ? Math.PI : 0, 0]}
+            >
+              <WavingFlag width={1.5} height={0.95} texture={flag} phase={i * 1.7} wind={1} />
+            </group>
           </group>
         )
       })}

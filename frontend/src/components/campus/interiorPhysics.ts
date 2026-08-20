@@ -19,7 +19,7 @@ import type { InteriorKind } from './campusLayout'
 import { INTERIOR_SPECS, interiorHalfExtent } from './interiorSpecs'
 import { fitProjector } from './projectorFit'
 import { LECTURE_SEATING, LECTURE_ROWS } from './lectureSeating'
-import { STEP_UP, type Collider, type Platform } from './campusPhysics'
+import { STEP_UP, isCircle, type Collider, type Platform } from './campusPhysics'
 import { ARCADE_PIERS } from './verticalCirculation'
 import {
   FLOORS,
@@ -62,6 +62,15 @@ export interface Seat {
   /** How high the seat pan is above `y`. */
   seatHeight: number
   kind: 'chair' | 'bench' | 'sofa' | 'tiered'
+  /**
+   * The shape of the thing this seat is part of, filled in from `on`.
+   *
+   * Not written by hand — `linkCarriers` looks it up once, so it cannot drift
+   * from the collider it describes. Its purpose is reach: you can sit on a
+   * bench from anywhere along it, so how far away you are is measured to the
+   * bench, not to the point in the middle of it where the sitter ends up.
+   */
+  carrier?: Collider
   /**
    * The solid object this seat is part of, when there is one.
    *
@@ -118,6 +127,17 @@ export const UFAZ_DESK_X = -9.4
  * both were on the west side of the hall.
  */
 export const UFAZ_BENCH_Z = [-10, -4, 2]
+
+/**
+ * Where the waiting benches stand, and how high their seat is.
+ *
+ * Shared with what draws them. They used to be stated twice — once here for
+ * the collider and the seat, once in the renderer for the mesh — and when the
+ * collider moved east to clear the arcade the mesh did not follow. Sitting
+ * down put the player three metres from the bench, in mid-air.
+ */
+export const UFAZ_BENCH_X = -11
+export const UFAZ_BENCH_SEAT_HEIGHT = 0.58
 
 /**
  * The lift core.
@@ -234,15 +254,15 @@ function ufazGroundFurniture(): InteriorPhysics {
     const id = `ufaz-bench-${z}`
     // Clear of the arcade. At -half + 8 the bench and the pier at z -8 overlapped
     // by a quarter of a metre, which is a wedge rather than a wall.
-    colliders.push({ id, x: -half + 11, z, halfW: 0.8, halfD: 2.2, height: 0.6 })
+    colliders.push({ id, x: UFAZ_BENCH_X, z, halfW: 0.8, halfD: 2.2, height: 0.6 })
     seats.push({
       id,
-      x: -half + 11,
+      x: UFAZ_BENCH_X,
       z,
       y: 0,
       // Facing back into the hall, away from the wall behind them.
       ry: Math.PI / 2,
-      seatHeight: 0.58,
+      seatHeight: UFAZ_BENCH_SEAT_HEIGHT,
       kind: 'bench',
       on: id,
     })
@@ -711,14 +731,36 @@ function sportsPhysics(): InteriorPhysics {
 
 /* ------------------------------------------------------------------ */
 
+/**
+ * Gives every seat the shape of the thing it sits on.
+ *
+ * A seat names its carrier by id; this is where that name is resolved, once,
+ * against the colliders of the same room. Done here rather than at each of the
+ * hundred-odd places a seat is declared, so the two cannot disagree — which is
+ * exactly how the entrance hall's benches came to be drawn three metres from
+ * the seats that belonged to them.
+ */
+function linkCarriers(physics: InteriorPhysics): InteriorPhysics {
+  const byId = new Map<string, Collider>()
+  for (const collider of physics.colliders) {
+    if (collider.id) byId.set(collider.id, collider)
+  }
+  return {
+    ...physics,
+    seats: physics.seats.map((seat) =>
+      seat.on && byId.has(seat.on) ? { ...seat, carrier: byId.get(seat.on) } : seat,
+    ),
+  }
+}
+
 const PHYSICS: Record<InteriorKind, InteriorPhysics> = {
-  'ufaz-core': ufazCorePhysics(),
-  library: libraryPhysics(),
-  lab: labPhysics(),
-  lecture: lecturePhysics(),
-  'student-center': studentCentrePhysics(),
-  cafeteria: cafeteriaPhysics(),
-  sports: sportsPhysics(),
+  'ufaz-core': linkCarriers(ufazCorePhysics()),
+  library: linkCarriers(libraryPhysics()),
+  lab: linkCarriers(labPhysics()),
+  lecture: linkCarriers(lecturePhysics()),
+  'student-center': linkCarriers(studentCentrePhysics()),
+  cafeteria: linkCarriers(cafeteriaPhysics()),
+  sports: linkCarriers(sportsPhysics()),
 }
 
 export function interiorColliders(kind: InteriorKind | undefined): Collider[] {
@@ -741,10 +783,44 @@ export const ALL_INTERIOR_SEATS: { kind: InteriorKind; seat: Seat }[] = (
 /**
  * How far a player can be from a seat and still be offered it.
  *
- * Wide enough to catch the seat you are obviously standing at, tight enough
- * that a row of chairs does not all offer themselves at once.
+ * Measured to the piece of furniture, not to the point on it where the sitter
+ * ends up — see `reachDistance`. Wide enough to catch the seat you are
+ * obviously standing at, tight enough that a row of chairs does not all offer
+ * themselves at once.
  */
 export const SEAT_REACH = 1.6
+
+/**
+ * How far a player is from being able to sit down.
+ *
+ * To the edge of the thing the seat is part of, when it is part of something.
+ * Measuring to the seat point meant a bench 4.4 m long could only be taken
+ * from a narrow spot beside its middle: stand at either end — squarely against
+ * the bench, plainly at it — and you were 2.5 m from a point 1.6 m away, so
+ * nothing was offered. A bench is somewhere you sit along, not a spot.
+ *
+ * Loose seats keep their point. A chair *is* its own footprint, and a chair
+ * that offered itself from a metre past its back would be worse.
+ */
+export function reachDistance(x: number, z: number, seat: Seat): number {
+  const carrier = seat.carrier
+  if (!carrier) return Math.hypot(x - seat.x, z - seat.z)
+
+  if (isCircle(carrier)) {
+    return Math.max(0, Math.hypot(x - carrier.x, z - carrier.z) - carrier.radius)
+  }
+
+  // Nearest point on the box, in the box's own frame so a turned bench is
+  // measured to its actual edge rather than to a bounding rectangle.
+  const angle = carrier.ry ?? 0
+  const dx = x - carrier.x
+  const dz = z - carrier.z
+  const localX = angle ? dx * Math.cos(-angle) - dz * Math.sin(-angle) : dx
+  const localZ = angle ? dx * Math.sin(-angle) + dz * Math.cos(-angle) : dz
+  const outX = Math.max(0, Math.abs(localX) - carrier.halfW)
+  const outZ = Math.max(0, Math.abs(localZ) - carrier.halfD)
+  return Math.hypot(outX, outZ)
+}
 
 /** The seat nearest a position, if one is within reach. */
 export function nearestSeat(
@@ -757,6 +833,9 @@ export function nearestSeat(
 ): Seat | null {
   let best: Seat | null = null
   let bestDistance = reach
+  // Two seats on one sofa are both nought from the sofa, so how far away the
+  // sitter would be decides between them.
+  let bestOnSeat = Infinity
 
   for (const seat of seats) {
     if (taken.has(seat.id)) continue
@@ -765,10 +844,13 @@ export function nearestSeat(
     // so without this a player on one tier is offered the row above and below
     // and sitting teleports them to a different height.
     if (feet !== undefined && Math.abs(seat.y - feet) > STEP_UP) continue
-    const distance = Math.hypot(x - seat.x, z - seat.z)
-    if (distance <= bestDistance) {
+    const distance = reachDistance(x, z, seat)
+    if (distance > bestDistance) continue
+    const onSeat = Math.hypot(x - seat.x, z - seat.z)
+    if (distance < bestDistance || onSeat < bestOnSeat) {
       best = seat
       bestDistance = distance
+      bestOnSeat = onSeat
     }
   }
 

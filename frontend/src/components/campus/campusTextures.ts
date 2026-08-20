@@ -338,6 +338,97 @@ export function flagTexture(country: 'az' | 'fr') {
 }
 
 /** Carved lettering for the parapet of the main building. */
+/**
+ * One of the two plaques beside the front door.
+ *
+ * The real building has a pair of them either side of the entrance, glass on
+ * standoff fixings: the ministry's name small at the top over a rule, and the
+ * university's name in bold under it — Azerbaijani on the left, French on the
+ * right. They are the only writing on the facade at eye level, and without
+ * them the doorway is a hole in a blank wall.
+ */
+export function plaqueTexture(ministry: string, name: string[]) {
+  const key = `plaque:${ministry}:${name.join('|')}`
+  const hit = cache.get(key)
+  if (hit) return hit
+  if (typeof document === 'undefined') return null
+
+  const width = 512
+  const height = 640
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return null
+
+  // Pale glass, not white: it is a sheet held off a white wall, so it reads a
+  // shade darker than the render behind it.
+  ctx.fillStyle = '#e9eaec'
+  ctx.fillRect(0, 0, width, height)
+
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+
+  // The state emblem, small, at the top. Suggested rather than drawn: at the
+  // size this is seen from the pavement it is a coloured roundel, and a bad
+  // rendering of a coat of arms is worse than a good abstraction of one.
+  const cx = width / 2
+  ctx.beginPath()
+  ctx.arc(cx, 96, 34, 0, Math.PI * 2)
+  ctx.fillStyle = '#2f9fd0'
+  ctx.fill()
+  ctx.beginPath()
+  ctx.arc(cx, 96, 24, 0, Math.PI * 2)
+  ctx.fillStyle = '#d64545'
+  ctx.fill()
+  ctx.beginPath()
+  ctx.arc(cx, 96, 13, 0, Math.PI * 2)
+  ctx.fillStyle = '#3f9e5a'
+  ctx.fill()
+
+  ctx.fillStyle = '#3c4148'
+  ctx.font = '500 21px "Helvetica Neue", Arial, sans-serif'
+  for (const [i, line] of wrapToWidth(ctx, ministry, width - 90).entries()) {
+    ctx.fillText(line, cx, 168 + i * 26)
+  }
+
+  ctx.strokeStyle = '#9aa0a6'
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  ctx.moveTo(96, 266)
+  ctx.lineTo(width - 96, 266)
+  ctx.stroke()
+
+  ctx.fillStyle = '#1d2126'
+  ctx.font = '700 42px "Helvetica Neue", Arial, sans-serif'
+  const start = 360 - ((name.length - 1) * 52) / 2
+  name.forEach((line, i) => ctx.fillText(line, cx, start + i * 52))
+
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.colorSpace = THREE.SRGBColorSpace
+  texture.anisotropy = 4
+  cache.set(key, texture)
+  return texture
+}
+
+/** Break `text` into lines that fit `max` pixels wide at the current font. */
+function wrapToWidth(ctx: CanvasRenderingContext2D, text: string, max: number): string[] {
+  const words = text.split(' ')
+  const lines: string[] = []
+  let line = ''
+  for (const word of words) {
+    const candidate = line ? `${line} ${word}` : word
+    if (line && ctx.measureText(candidate).width > max) {
+      lines.push(line)
+      line = word
+    } else {
+      line = candidate
+    }
+  }
+  if (line) lines.push(line)
+  return lines
+}
+
 export function lettersTexture(text: string, color = '#6b5b40') {
   const key = `letters:${text}:${color}`
   const hit = cache.get(key)
