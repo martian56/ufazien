@@ -134,8 +134,14 @@ export function clipFor(activity: Activity, speed: number, isMoving: boolean): C
   if (isMoving || speed > 0.4) {
     return speed > (WALK_SPEED + RUN_SPEED) / 2 ? 'Run' : 'Walk'
   }
-  if (activity === 'waving' || activity === 'hand_raised') return 'Wave'
-  if (activity === 'clapping' || activity === 'pointing') return 'Interact'
+  if (activity === 'waving') return 'Wave'
+  // Clapping, a raised hand and pointing are posed by hand over a still idle —
+  // the pack has no clip for any of them, and borrowing `Wave` for a raised
+  // hand or `Interact` for a clap plays a different gesture rather than a near
+  // miss. See `EMOTE_POSES`.
+  if (activity === 'clapping' || activity === 'hand_raised' || activity === 'pointing') {
+    return 'Idle_Neutral'
+  }
   // Sitting and leaning are posed on top of a still idle: the pack has no clip
   // for either, and a seated character playing a breathing idle sways.
   if (activity === 'sitting' || activity === 'leaning') return 'Idle_Neutral'
@@ -187,6 +193,61 @@ const SEATED: [string, number, 'parent' | 'local'][] = [
 ]
 
 /**
+ * Arm poses for the emotes the pack has no clip for.
+ *
+ * The pack ships twenty-four animations and not one of them is a clap, a raised
+ * hand or a point — the rest are combat. So these are posed by hand over a
+ * still `Idle_Neutral`, the way sitting is.
+ *
+ * ## Aimed, not rotated by an angle
+ *
+ * A bone is pointed *at a direction* rather than turned by so many radians
+ * about some axis. These bones rest in an A-pose and their parents are twisted
+ * with them — the right shoulder's rest quaternion is nowhere near
+ * axis-aligned — so "rotate the upper arm 2.5 about Z" swings it somewhere
+ * nobody can predict, and tuning it is guessing. The first attempt at a raised
+ * hand put the arm straight out sideways. Asking for "point this bone up" is
+ * exact, and it reads as what it is.
+ *
+ * Directions are in the body's own space: `+Y` up, `+Z` the way they are
+ * facing, `+X` to their left. So a raised hand is up whichever way the player
+ * has turned, and a point is forward from *their* shoulder rather than towards
+ * a fixed corner of the campus.
+ */
+interface ArmAim {
+  joint: string
+  /** Where the bone should point, in body space. */
+  aim: [number, number, number]
+  /** A second direction it moves towards on the beat, for emotes with one. */
+  beat?: [number, number, number]
+}
+
+export const EMOTE_POSES: Record<string, ArmAim[]> = {
+  // One arm straight up, the other left alone. A raised hand is a question,
+  // and a question is one arm.
+  hand_raised: [
+    { joint: joint('UpperArm.R'), aim: [0.25, 1, 0] },
+    { joint: joint('LowerArm.R'), aim: [0.1, 1, 0] },
+  ],
+  // Forearms in towards the middle, meeting and parting on the beat. The upper
+  // arms stay down and forward, which is where hands meet to clap.
+  clapping: [
+    { joint: joint('UpperArm.L'), aim: [-0.55, -0.35, 0.75] },
+    { joint: joint('UpperArm.R'), aim: [0.55, -0.35, 0.75] },
+    { joint: joint('LowerArm.L'), aim: [-0.15, 0.1, 1], beat: [0.3, 0.1, 1] },
+    { joint: joint('LowerArm.R'), aim: [0.15, 0.1, 1], beat: [-0.3, 0.1, 1] },
+  ],
+  // One arm out in front, level, elbow straight.
+  pointing: [
+    { joint: joint('UpperArm.R'), aim: [0.2, 0, 1] },
+    { joint: joint('LowerArm.R'), aim: [0.1, 0, 1] },
+  ],
+}
+
+/** How fast a clap claps, in radians per second of phase. */
+const CLAP_RATE = 7.5
+
+/**
  * Picks a pack from a seed of either shape, deterministically.
  *
  * Re-exported from the catalogue, which owns it now that a player can also
@@ -198,6 +259,13 @@ export { packIndex }
 /** Scratch objects, so a seated player does not allocate two per joint per frame. */
 const HINGE = new THREE.Vector3(1, 0, 0)
 const FOLD = new THREE.Quaternion()
+const AXIS = new THREE.Vector3()
+const BEAT = new THREE.Vector3()
+const BONE_AXIS = new THREE.Vector3(0, 1, 0)
+const WORLD_AIM = new THREE.Quaternion()
+const PARENT_QUAT = new THREE.Quaternion()
+const BODY_QUAT = new THREE.Quaternion()
+const IDENTITY = new THREE.Quaternion()
 
 export function GltfCharacter({
   variant = 0,
@@ -234,9 +302,18 @@ export function GltfCharacter({
   }, [gltf.animations, mixer, scene])
 
   const bones = useMemo(() => {
-    const map = new Map<string, THREE.Object3D>()
+    const map = new Map<string, { bone: THREE.Object3D; rest: THREE.Quaternion }>()
     scene.traverse((object) => {
-      if ((object as THREE.Bone).isBone) map.set(joint(object.name), object)
+      if ((object as THREE.Bone).isBone) {
+        // The rest orientation is captured here, once, before any clip has run.
+        // An emote needs it: composing an arm angle onto whatever `Idle_Neutral`
+        // happened to leave the shoulder at means the angle is off by however
+        // far the clip had moved it, which for these arms is most of a right
+        // angle. Sitting can compose, because folding a hip by a fixed amount
+        // from wherever it is reads correctly; an arm pointing somewhere
+        // specific cannot.
+        map.set(joint(object.name), { bone: object, rest: object.quaternion.clone() })
+      }
     })
     return map
   }, [scene])
@@ -284,7 +361,7 @@ export function GltfCharacter({
     }
   }, [mixer])
 
-  useFrame((_, delta) => {
+  useFrame((state, delta) => {
     const want = clipFor(pose, ground, isMoving)
     if (want !== current.current) {
       const next = actions.get(want)
@@ -319,13 +396,47 @@ export function GltfCharacter({
       }
     }
 
-    if (pose !== 'sitting') return
-    for (const [name, angle, frame] of SEATED) {
-      const bone = bones.get(name)
-      if (!bone) continue
-      FOLD.setFromAxisAngle(HINGE, angle)
-      if (frame === 'parent') bone.quaternion.premultiply(FOLD)
-      else bone.quaternion.multiply(FOLD)
+    if (pose === 'sitting') {
+      for (const [name, angle, frame] of SEATED) {
+        const found = bones.get(name)
+        if (!found) continue
+        FOLD.setFromAxisAngle(HINGE, angle)
+        if (frame === 'parent') found.bone.quaternion.premultiply(FOLD)
+        else found.bone.quaternion.multiply(FOLD)
+      }
+      return
+    }
+
+    // The emotes the pack has no clip for. Posed from the rest orientation
+    // rather than composed onto the clip — see `EMOTE_POSES` — and after the
+    // mixer, which has just written the whole skeleton.
+    const aims = EMOTE_POSES[pose]
+    if (!aims) return
+
+    // Nought to one and back, so a clap closes and opens rather than swinging
+    // through and out the other side.
+    const beat = (Math.sin(state.clock.elapsedTime * CLAP_RATE) + 1) / 2
+    const bodyQuat = group ? group.getWorldQuaternion(BODY_QUAT) : IDENTITY
+
+    for (const aim of aims) {
+      const found = bones.get(aim.joint)
+      if (!found) continue
+
+      AXIS.set(aim.aim[0], aim.aim[1], aim.aim[2])
+      if (aim.beat) {
+        BEAT.set(aim.beat[0], aim.beat[1], aim.beat[2])
+        AXIS.lerp(BEAT, beat)
+      }
+      if (AXIS.lengthSq() < 1e-8) continue
+      // Body space to world, so "up" survives the player turning round.
+      AXIS.normalize().applyQuaternion(bodyQuat)
+
+      // The rotation that takes the bone's own axis to where it should point.
+      // A bone runs down its local +Y here — the pack parents each joint at
+      // [0, length, 0] from the last — so that is the vector being aimed.
+      WORLD_AIM.setFromUnitVectors(BONE_AXIS, AXIS)
+      found.bone.parent?.getWorldQuaternion(PARENT_QUAT)
+      found.bone.quaternion.copy(PARENT_QUAT).invert().multiply(WORLD_AIM)
     }
   })
 

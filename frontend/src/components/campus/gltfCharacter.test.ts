@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { AVATAR_MODELS, FACING, clipFor, packIndex } from './GltfCharacter'
+import { AVATAR_MODELS, EMOTE_POSES, FACING, clipFor, packIndex } from './GltfCharacter'
 import { ACTIVITIES, RUN_SPEED, WALK_SPEED } from './avatarPose'
 
 /**
@@ -128,5 +128,88 @@ describe('the cardinal fallback', () => {
     // friends are absent; a function reaching Euler.y arrives as NaN.
     expect(FACING.get('constructor')).toBeUndefined()
     expect(FACING.get('toString')).toBeUndefined()
+  })
+})
+
+describe('the emotes the pack has no clip for', () => {
+  it('stops playing a different gesture instead', () => {
+    // Asking for a raised hand played `Wave`, and clapping played `Interact`.
+    // Those are not near misses, they are other gestures — a wave is a wave
+    // whatever you asked for.
+    expect(clipFor('hand_raised', 0, false)).not.toBe('Wave')
+    expect(clipFor('clapping', 0, false)).not.toBe('Interact')
+    expect(clipFor('pointing', 0, false)).not.toBe('Interact')
+  })
+
+  it('holds the body still, so the arms are the whole statement', () => {
+    for (const emote of ['hand_raised', 'clapping', 'pointing'] as const) {
+      expect(clipFor(emote, 0, false)).toBe('Idle_Neutral')
+    }
+  })
+
+  it('has a pose for each of them', () => {
+    for (const emote of ['hand_raised', 'clapping', 'pointing'] as const) {
+      expect(EMOTE_POSES[emote], emote).toBeDefined()
+      expect(EMOTE_POSES[emote].length).toBeGreaterThan(0)
+    }
+  })
+
+  it('raises one arm, not both', () => {
+    // A raised hand is a question, and a question is one arm. Both is a
+    // surrender.
+    const joints = new Set(EMOTE_POSES.hand_raised.map((fold) => fold.joint))
+    expect([...joints].some((name) => name.endsWith('r'))).toBe(true)
+    expect([...joints].some((name) => name.endsWith('l'))).toBe(false)
+  })
+
+  it('gives clapping a beat and the others none', () => {
+    // A clap that does not move is two hands held together.
+    expect(EMOTE_POSES.clapping.some((aim) => aim.beat !== undefined)).toBe(true)
+    for (const emote of ['hand_raised', 'pointing'] as const) {
+      expect(EMOTE_POSES[emote].every((aim) => aim.beat === undefined), emote).toBe(true)
+    }
+  })
+
+  it('aims every joint somewhere, rather than at nothing', () => {
+    // A zero-length direction has no rotation that reaches it, and the joint
+    // would be left wherever the clip put it — an emote that silently does
+    // nothing for one arm.
+    for (const [emote, aims] of Object.entries(EMOTE_POSES)) {
+      for (const aim of aims) {
+        const length = Math.hypot(...aim.aim)
+        expect(length, `${emote} ${aim.joint}`).toBeGreaterThan(0.1)
+        if (aim.beat) {
+          expect(Math.hypot(...aim.beat), `${emote} ${aim.joint} beat`).toBeGreaterThan(0.1)
+        }
+      }
+    }
+  })
+
+  it('raises the hand above the shoulder rather than out to the side', () => {
+    // The first attempt rotated by an angle about an axis and put the arm
+    // straight out sideways, because these bones rest in an A-pose and their
+    // parents are twisted with them. Up has to dominate.
+    for (const aim of EMOTE_POSES.hand_raised) {
+      const [x, y] = aim.aim
+      expect(y, aim.joint).toBeGreaterThan(Math.abs(x))
+    }
+  })
+
+  it('points forwards rather than up or sideways', () => {
+    for (const aim of EMOTE_POSES.pointing) {
+      const [x, y, z] = aim.aim
+      expect(z, aim.joint).toBeGreaterThan(Math.abs(x))
+      expect(z, aim.joint).toBeGreaterThan(Math.abs(y))
+    }
+  })
+
+  it('names joints the way the bone map does', () => {
+    // `joint()` strips punctuation and lower-cases, so a pose naming
+    // "UpperArm.R" would silently match nothing and the emote would do nothing.
+    for (const folds of Object.values(EMOTE_POSES)) {
+      for (const fold of folds) {
+        expect(fold.joint, fold.joint).toMatch(/^[a-z0-9]+$/)
+      }
+    }
   })
 })
