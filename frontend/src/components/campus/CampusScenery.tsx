@@ -13,6 +13,8 @@ import {
   DOOR_HALF_WIDTH,
   daylight,
   campusBenches,
+  campusBushes,
+  campusRocks,
   campusLamps,
   campusTrees,
   type BuildingStyle,
@@ -53,14 +55,23 @@ const MODEL_TREE_SPECIES = [
   '/props/CommonTree_3.glb',
 ]
 
+/** Undergrowth. Cheap enough that a hundred of them cost almost nothing. */
+const MODEL_BUSH_SPECIES = ['/props/Bush_1.glb', '/props/Bush_2.glb']
+const MODEL_ROCK_SPECIES = ['/props/Rock_1.glb', '/props/Rock_2.glb']
+
 /**
- * Whether this page load asked for the model trees rather than the drawn ones —
- * `?trees=model`. Read once: it is a URL a developer typed.
+ * Whether to draw the trees from primitives instead of the models —
+ * `?trees=drawn`. Read once: it is a URL a developer typed.
+ *
+ * The models are what ships. This is kept so the two can still be put side by
+ * side from the same viewpoint, which is how the choice was made: models cost
+ * three more draw calls and 222k more triangles, and look like trees rather
+ * than like lollipops. See CLAUDE.md.
  */
-const modelTrees =
+const drawnTrees =
   import.meta.env.DEV &&
   typeof window !== 'undefined' &&
-  new URLSearchParams(window.location.search).get('trees') === 'model'
+  new URLSearchParams(window.location.search).get('trees') === 'drawn'
 
 /**
  * Procedural campus scenery.
@@ -1054,6 +1065,11 @@ export function CampusProps({
   const trees = useMemo(() => campusTrees(treeCount), [treeCount])
   const lamps = useMemo(() => campusLamps(), [])
   const benches = useMemo(() => campusBenches(), [])
+  // Only built when they are going to be drawn: the drawn-tree comparison has
+  // no undergrowth, and scattering ninety bushes to throw them away is work
+  // for nothing.
+  const bushes = useMemo(() => (drawnTrees ? [] : campusBushes()), [])
+  const rocks = useMemo(() => (drawnTrees ? [] : campusRocks()), [])
 
   const config = daylight(timeOfDay)
   const canopyColors = config.lampsOn ? CANOPY_DUSK : CANOPY_DAY
@@ -1077,9 +1093,7 @@ export function CampusProps({
           way, so the two can be photographed from the same viewpoint and
           measured with the same probe. Development only, and a comparison
           rather than a setting — see `ModelTrees`. */}
-      {modelTrees ? (
-        <ModelTrees items={trees} urls={MODEL_TREE_SPECIES} />
-      ) : (
+      {drawnTrees ? (
         TRUNK_COLORS.map((trunkColor, variant) => (
           <TreeVariant
             key={variant}
@@ -1088,6 +1102,13 @@ export function CampusProps({
             canopyColor={canopyColors[variant]}
           />
         ))
+      ) : (
+        <>
+          <ModelTrees items={trees} urls={MODEL_TREE_SPECIES} />
+          {/* Ground cover between the trees. Not solid — see `campusBushes`. */}
+          <ModelTrees items={bushes} urls={MODEL_BUSH_SPECIES} height={1.1} />
+          <ModelTrees items={rocks} urls={MODEL_ROCK_SPECIES} height={0.7} />
+        </>
       )}
 
       <Lamps items={lamps} on={config.lampsOn} />

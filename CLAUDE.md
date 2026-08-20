@@ -119,8 +119,10 @@ Baseline, at 1440×900 on `main`, no models:
 | spine-south | 454 | 50.7k |
 
 **Draw calls are the metric that has bitten this project; triangles are the one
-that bites phones.** Swapping the 150 procedural trees for models cost −7 draw
-calls and +222k triangles. Both are worth knowing before a decision.
+that bites phones.** The outdoor set as it ships — 150 trees of four species,
+90 bushes, 40 rocks — costs +10 draw calls and +256k triangles against the
+procedural version it replaced. `?trees=drawn` still renders the old one, which
+is how that was decided.
 
 ## Deployment
 
