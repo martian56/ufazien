@@ -16,10 +16,10 @@ import * as THREE from 'three'
  * ## Instancing
  *
  * One `InstancedMesh` per primitive of the model, sharing one set of transforms.
- * The pack's trees are two primitives — bark and leaves, one material each — so
- * a hundred and fifty of them cost two draw calls, the same order as the three
- * the procedural version costs. Anything that does not instance does not ship;
- * see CLAUDE.md.
+ * The four species shipped carry 3, 4, 2 and 3 primitives, so the whole scatter
+ * is twelve instanced meshes however many trees are in it — the drawn version
+ * it replaced cost nine. Anything that does not instance does not ship; see
+ * CLAUDE.md.
  *
  * The matrices are written once in a layout effect, not per frame. The scatter
  * is fixed for the life of the session.

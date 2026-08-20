@@ -119,10 +119,15 @@ Baseline, at 1440×900 on `main`, no models:
 | spine-south | 454 | 50.7k |
 
 **Draw calls are the metric that has bitten this project; triangles are the one
-that bites phones.** The outdoor set as it ships — 150 trees of four species,
-90 bushes, 40 rocks — costs +10 draw calls and +256k triangles against the
+that bites phones.** Everything outdoors as it ships — 150 trees of four
+species, 90 bushes, 40 rocks and the street planting — measures **444 draw
+calls and 339.4k triangles** at the spawn, against 425 and 45.8k for the
 procedural version it replaced. `?trees=drawn` still renders the old one, which
 is how that was decided.
+
+The four tree species carry 3, 4, 2 and 3 primitives, so the campus scatter is
+twelve instanced meshes however many trees are in it, and the street planting
+three more.
 
 **There are two tree scatters, and they are in different files.** The campus
 grounds are `CampusProps` in `CampusScenery`; the street planting along Nizami
@@ -132,10 +137,12 @@ happened. Both draw models now — the campus mixes four species, the street use
 one, because a municipality plants one tree down a road.
 
 Indoors the win is the other way round. The cafeteria drew sixteen tables and
-sixty-four chairs as separate objects — 448 meshes, computed from the
+sixty-four chairs as separate objects — 464 meshes, computed from the
 components rather than measured, because reaching an interior with the probe
-means walking there. As two instanced models that is four draw calls, and the
-sixty-fifth chair is free.
+means walking there. (`Table` is five meshes and `Chair` six: the legs are
+inside a `.map`, so counting JSX tags undercounts them, which is how this was
+first written down as 448.) As two instanced models that is four draw calls,
+and the sixty-fifth chair is free.
 
 **Furniture and the seat it carries must read the same constants.** A seat says
 where a player is put; the model says where the furniture looks. Stated twice

@@ -142,7 +142,14 @@ export default function RenderProbe({ viewpoints = PROBE_VIEWPOINTS }: { viewpoi
     }
 
     raf = requestAnimationFrame(step)
-    return () => cancelAnimationFrame(raf)
+    return () => {
+      cancelAnimationFrame(raf)
+      // Strict Mode mounts, unmounts and mounts again. Left set, the second
+      // mount returns immediately and the sweep never runs — the probe reports
+      // nothing at all, which looks like a broken scene rather than a broken
+      // probe.
+      done.current = false
+    }
   }, [gl, camera, viewpoints])
 
   return null

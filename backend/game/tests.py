@@ -362,6 +362,129 @@ class LobbyConsumerTests(TestCase):
         connected, _ = await communicator.connect()
         return communicator, connected
 
+    def test_the_snapshot_says_what_everyone_is_wearing(self):
+        """
+        `lobby_state.members` carries `campus_character`.
+
+        Everyone in the room draws everyone else, so this is how a peer knows
+        which body to load. Tested over the socket and not just through the
+        serializer, because the two disagree about shape: the socket builds a
+        flat member dict of its own and adding the field to `UserSerializer`
+        did nothing for it.
+        """
+        from asgiref.sync import async_to_sync
+
+        self.host.campus_character = 'suit'
+        self.host.save()
+
+        async def scenario():
+            communicator, _ = await self._connect(self.host)
+            try:
+                while True:
+                    message = await communicator.receive_json_from(timeout=3)
+                    if message.get('type') == 'lobby_state':
+                        return message
+            finally:
+                await communicator.disconnect()
+
+        state = async_to_sync(scenario)()
+        wearing = {
+            member['user_id']: member.get('campus_character')
+            for member in state['members']
+        }
+        self.assertEqual(wearing[self.host.id], 'suit')
+        # And the sentinel survives: blank means "never chose", which the
+        # client turns back into the body their id has always given them.
+        self.assertEqual(wearing[self.player.id], '')
+
+    def test_the_snapshot_still_carries_nobody_email(self):
+        """The rule this codebase leaked once. Adding a field must not widen it."""
+        import json
+
+        from asgiref.sync import async_to_sync
+
+        async def scenario():
+            communicator, _ = await self._connect(self.host)
+            try:
+                while True:
+                    message = await communicator.receive_json_from(timeout=3)
+                    if message.get('type') == 'lobby_state':
+                        return message
+            finally:
+                await communicator.disconnect()
+
+        state = async_to_sync(scenario)()
+        self.assertNotIn('email', json.dumps(state))
+        self.assertNotIn(self.host.email, json.dumps(state))
+
+    def test_somebody_arriving_says_what_they_are_wearing(self):
+        """
+        `user_joined` carries it too.
+
+        Everyone already in the room got it in the snapshot; somebody walking in
+        afterwards has to announce it, or they are drawn as whoever their id
+        happens to hash to until the next snapshot.
+        """
+        from asgiref.sync import async_to_sync
+
+        self.player.campus_character = 'women-formal'
+        self.player.save()
+
+        async def scenario():
+            watcher, _ = await self._connect(self.host)
+            try:
+                # Drain the watcher's own arrival before the one being tested.
+                while True:
+                    message = await watcher.receive_json_from(timeout=3)
+                    if message.get('type') == 'lobby_state':
+                        break
+
+                arriving, _ = await self._connect(self.player)
+                try:
+                    while True:
+                        message = await watcher.receive_json_from(timeout=3)
+                        if (
+                            message.get('type') == 'user_joined'
+                            and message.get('user_id') == self.player.id
+                        ):
+                            return message
+                finally:
+                    await arriving.disconnect()
+            finally:
+                await watcher.disconnect()
+
+        joined = async_to_sync(scenario)()
+        self.assertEqual(joined.get('campus_character'), 'women-formal')
+
+    def test_somebody_arriving_unchosen_says_so(self):
+        """Blank rather than absent, so a peer can tell "none" from "unknown"."""
+        from asgiref.sync import async_to_sync
+
+        async def scenario():
+            watcher, _ = await self._connect(self.host)
+            try:
+                while True:
+                    message = await watcher.receive_json_from(timeout=3)
+                    if message.get('type') == 'lobby_state':
+                        break
+
+                arriving, _ = await self._connect(self.player)
+                try:
+                    while True:
+                        message = await watcher.receive_json_from(timeout=3)
+                        if (
+                            message.get('type') == 'user_joined'
+                            and message.get('user_id') == self.player.id
+                        ):
+                            return message
+                finally:
+                    await arriving.disconnect()
+            finally:
+                await watcher.disconnect()
+
+        joined = async_to_sync(scenario)()
+        self.assertEqual(joined.get('campus_character'), '')
+
     def test_member_can_connect(self):
         from asgiref.sync import async_to_sync
 

@@ -39,6 +39,7 @@
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 /** glTF component and target constants, so the numbers below have names. */
 const FLOAT = 5126
@@ -309,7 +310,10 @@ function main() {
 }
 
 // Only when run, so the parser can be imported and tested. `import.meta.main`
-// is not in Node yet; comparing argv[1] to this file is the portable form.
-if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {
+// is not in Node yet, so this compares argv[1] against this module's URL —
+// through `pathToFileURL`, because a hand-built `file://${path}` does not
+// percent-encode spaces and is not the canonical form on Windows. Either would
+// make the comparison fail and the script do nothing at all.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main()
 }

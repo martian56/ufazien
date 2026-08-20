@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 
@@ -48,6 +48,12 @@ export default function WavingFlag({
     () => Float32Array.from(geometry.attributes.position.array),
     [geometry],
   )
+
+  // The geometry is made here rather than declared as JSX, so nothing disposes
+  // it when the flag goes. The interior flags mount and unmount every time a
+  // player enters or leaves a room, and the buffers would pile up for the
+  // length of a session.
+  useEffect(() => () => geometry.dispose(), [geometry])
 
   useFrame(({ clock }) => {
     const target = mesh.current

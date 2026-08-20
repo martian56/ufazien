@@ -655,10 +655,17 @@ function Fanlight() {
         )
       })}
 
-      {/* The hub they run to, and the rib they cross. */}
-      <mesh position={[0, SPRING_HEIGHT, 0.02]}>
-        <cylinderGeometry args={[hub, hub, 0.06, 16, 1, false, 0, Math.PI]} />
-        <meshStandardMaterial color={timber} roughness={0.6} />
+      {/* The hub they run to, and the rib they cross.
+
+          A `circleGeometry` facing the doorway, not a cylinder. A cylinder's
+          axis is Y and the fanlight lies in the XY plane, so the hub was a
+          vertical disc seen edge-on — a thin line rather than something the
+          bars could converge behind. Its `thetaStart`/`thetaLength` cut about
+          that same Y axis too, taking a horizontal half instead of the lower
+          one. */}
+      <mesh position={[0, SPRING_HEIGHT, 0.03]}>
+        <circleGeometry args={[hub, 20, 0, Math.PI]} />
+        <meshStandardMaterial color={timber} roughness={0.6} side={THREE.DoubleSide} />
       </mesh>
       {archPoints(rib).map(({ x, y, angle }, i) => (
         <mesh key={`rib${i}`} position={[x, y, 0.02]} rotation={[0, 0, angle - Math.PI / 2]}>
@@ -771,7 +778,26 @@ function EntrancePlaques() {
   )
 }
 
-export function Entrance({ depth, trim, accent }: { depth: number; trim: string; accent: string }) {
+export function Entrance({
+  depth,
+  trim,
+  accent,
+  plaques = false,
+}: {
+  depth: number
+  trim: string
+  accent: string
+  /**
+   * Whether to hang the university's two plaques beside the door.
+   *
+   * Off by default, because `Entrance` is shared by every enterable building
+   * and the plaques name one of them: the ministry's wording and the two
+   * university titles belong to the facade on Nizami Street, not to a sports
+   * hall. Only the main building has an outdoor facade today, so nothing else
+   * was wearing them — but the moment a second one appeared it would have.
+   */
+  plaques?: boolean
+}) {
   return (
     <group position={[0, 0, depth / 2 + 0.06]}>
       {/* No steps. You walk in off the paving — see `THRESHOLD`. */}
@@ -810,7 +836,7 @@ export function Entrance({ depth, trim, accent }: { depth: number; trim: string;
 
       <Transom from={LEAF_HEIGHT} to={SPRING_HEIGHT} />
       <Fanlight />
-      <EntrancePlaques />
+      {plaques && <EntrancePlaques />}
 
       <DoorLobby trim={trim} accent={accent} sill={THRESHOLD} />
 

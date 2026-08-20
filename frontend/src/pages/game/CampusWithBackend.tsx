@@ -30,7 +30,10 @@ import RenderProbe from '../../components/campus/RenderProbe'
  * `window` access in the render path for no reason.
  */
 const probeRequested =
-  typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('probe')
+  typeof window !== 'undefined' &&
+  // Exactly `?probe=1`. `has()` also fired for `?probe=0` and `?probe=false`,
+  // so anything carrying the word moved the camera.
+  new URLSearchParams(window.location.search).get('probe') === '1'
 import { useCampusVoice } from '../../hooks/useCampusVoice'
 import VoicePanel, { ScreenShareStage } from '../../components/campus/VoicePanel'
 import HudDock from '../../components/campus/HudDock'

@@ -499,7 +499,7 @@ export default function UfazBuilding({ building, timeOfDay = 'day' }: UfazBuildi
           surround and a lobby you can see into — because the collider already
           leaves the opening here and without it the main building had a hole
           in its facade with nothing drawn in it at all. */}
-      <Entrance depth={depth} trim={DRESSING} accent={RENDER_COLOUR} />
+      <Entrance depth={depth} trim={DRESSING} accent={RENDER_COLOUR} plaques />
 
       {/* Cornice under the roofline, running right round. */}
       <mesh position={[0, height - 0.5, 0]} castShadow>

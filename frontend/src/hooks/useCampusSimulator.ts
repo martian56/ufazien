@@ -425,8 +425,21 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
         campusWebSocket.on('userJoined', (data: any) => {
             // Whatever they are wearing, so somebody who walks in mid-session
             // is drawn as themselves rather than as whoever their id hashes to.
-            if (data?.campus_character) {
-                setCharacters(prev => ({ ...prev, [Number(data.user_id)]: String(data.campus_character) }));
+            //
+            // And *cleared* when they arrive wearing nothing: only writing
+            // non-empty values meant a player who left, went back to no choice
+            // and returned kept their old body on every peer's screen until the
+            // next snapshot happened along.
+            {
+                const id = Number(data?.user_id);
+                if (Number.isFinite(id)) {
+                    setCharacters(prev => {
+                        const next = { ...prev };
+                        if (data?.campus_character) next[id] = String(data.campus_character);
+                        else delete next[id];
+                        return next;
+                    });
+                }
             }
             setLobbyMembers(prev => {
                 const exists = prev.some(member => member.user_id === data.user_id);
@@ -445,6 +458,12 @@ export const useCampusSimulator = (lobbyId: string | null = null) => {
         // User left lobby
         campusWebSocket.on('userLeft', (data: any) => {
             setLobbyMembers(prev => prev.filter(member => member.user_id !== data.user_id));
+            // Forget what they were wearing with the rest of them.
+            setCharacters(prev => {
+                const next = { ...prev };
+                delete next[Number(data.user_id)];
+                return next;
+            });
             setPlayerPositions(prev => {
                 const newPositions = new Map(prev);
                 newPositions.delete(data.user_id);
