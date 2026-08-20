@@ -27,7 +27,7 @@ import {
   UFAZ_TURNSTILE_Z,
   BUILDING_HEIGHT,
   SLAB_THICKNESS,
-  storeyHeight,
+  clearHeight,
   UFAZ_STAIR,
   VENDING_MACHINES,
   libraryAisleHalf,
@@ -804,7 +804,12 @@ function Turnstiles() {
  */
 function LiftCore({ ceiling }: { ceiling: number }) {
   const { x, z, halfW, halfD } = UFAZ_LIFTS
-  const shaft = Math.min(ceiling - 0.6, 8.2)
+  // Whatever it is asked for, less a little headroom. It used to be capped at
+  // 8.2 m, from when an interior was a single room rather than a stack of
+  // them: the glazing stopped between the first and second floors while the
+  // shaft's walls ran the full height, so the car rose out of its own shaft
+  // and the steel head hung in the air halfway up.
+  const shaft = ceiling - 0.6
 
   return (
     <group position={[x, 0, z]}>
@@ -1165,7 +1170,10 @@ function UfazGroundLevel({ spec, whiteboard }: InteriorProps) {
     <group>
       <HeritageWindows spec={spec} />
       <Turnstiles />
-      <LiftCore ceiling={spec.ceiling} />
+      {/* The shaft is drawn once for the whole building, by `UfazCore`, since
+          it runs through all four floors. This level used to draw its own as
+          well, from back when the ground floor was the only interior there
+          was, and the two overlapped. */}
       <Arcade half={half} ceiling={spec.ceiling} />
       <ClassroomDoors half={half} />
 
@@ -2155,14 +2163,19 @@ function UfazCore({ spec, whiteboard, liftHeight }: InteriorProps) {
         // Each level is told how much clear height it has, because the hall
         // has more than the floors above it and the things that reach the
         // ceiling — the arcade, the windows — are set out from it.
+        //
+        // Clear height rather than the floor-to-floor pitch: `spec.ceiling` is
+        // where the ceiling surface goes, and the slab above starts
+        // `SLAB_THICKNESS` below the next floor. Given the pitch, every wall
+        // and coffer would run 280 mm up inside the slab.
         <group key={floor} position={[0, floorLevel(floor), 0]}>
           {floor === 0 ? (
             <UfazGroundLevel
-              spec={{ ...spec, ceiling: storeyHeight(floor) }}
+              spec={{ ...spec, ceiling: clearHeight(floor) }}
               whiteboard={whiteboard}
             />
           ) : (
-            <UfazUpperLevel spec={{ ...spec, ceiling: storeyHeight(floor) }} />
+            <UfazUpperLevel spec={{ ...spec, ceiling: clearHeight(floor) }} />
           )}
         </group>
       ))}

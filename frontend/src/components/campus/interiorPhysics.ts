@@ -27,6 +27,7 @@ import {
   liftShaftWalls,
   BUILDING_HEIGHT,
   SLAB_THICKNESS,
+  clearHeight,
   UFAZ_STAIR,
   storeyHeight,
   coreGuards,
@@ -42,7 +43,7 @@ import {
  * because moving them was what broke a cycle: this module needs the slabs and
  * the flights, and those need the profile.
  */
-export { BUILDING_HEIGHT, SLAB_THICKNESS, UFAZ_STAIR, storeyHeight }
+export { BUILDING_HEIGHT, SLAB_THICKNESS, UFAZ_STAIR, clearHeight, storeyHeight }
 
 /** Somewhere a player can sit, and which way they face once they do. */
 export interface Seat {

@@ -143,6 +143,26 @@ describe('how tall the storeys are', () => {
     expect(clearHeight(0)).toBeCloseTo(storeyHeight(0) - SLAB_THICKNESS, 9)
   })
 
+it('is the geometry this building was actually set out to', () => {
+    // The relational tests above would all still pass if every storey shrank
+    // together, so the numbers themselves are pinned here. Change them
+    // deliberately; do not let them drift.
+    expect(risersPerHalf(0), 'hall').toBe(16)
+    for (const floor of [1, 2] as Floor[]) {
+      expect(risersPerHalf(floor), `floor ${floor}`).toBe(14)
+    }
+
+    expect(storeyHeight(0)).toBeCloseTo(5.6, 9)
+    expect(clearHeight(0)).toBeCloseTo(5.32, 9)
+    expect(storeyHeight(1)).toBeCloseTo(4.9, 9)
+    expect(clearHeight(1)).toBeCloseTo(4.62, 9)
+
+    expect(FLOORS.map(floorLevel)).toEqual(
+      [0, 5.6, 10.5, 15.4].map((level) => expect.closeTo(level, 9)),
+    )
+    expect(BUILDING_HEIGHT).toBeCloseTo(20.3, 9)
+  })
+
   it('makes every storey a whole number of the same riser', () => {
     // Which is why the stair did not have to change its going or its pitch to
     // make the hall taller: a taller storey is more steps, not bigger ones.
