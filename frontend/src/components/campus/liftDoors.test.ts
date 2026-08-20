@@ -86,3 +86,35 @@ describe('calling the car from a landing', () => {
     }
   })
 })
+
+describe('what is drawn and what is solid', () => {
+  it('agrees about which landing is open', () => {
+    // The renderer draws leaves on every floor except the car's, and
+    // `liftLandingDoors` drops the collider on exactly that floor. They are the
+    // same fact and were briefly two: leaves were drawn on all four, so the
+    // landing the car was at showed a shut pair of doors you walked through.
+    for (const at of FLOORS) {
+      const solid = new Set(liftLandingDoors(at).map((door) => door.id))
+      for (const floor of FLOORS) {
+        const drawn = floor !== at
+        expect(solid.has(`lift-door-${floor}`), `car at ${at}, floor ${floor}`).toBe(drawn)
+      }
+    }
+  })
+
+  it('puts the call button somewhere a hand reaches on every floor', () => {
+    // The button is drawn inside a group already translated to its landing, so
+    // its own y is a local coordinate. Subtracting the level again — which it
+    // did — cancels that translation and stacks every floor's button at the
+    // height of the ground floor's.
+    expect(LIFT_CALL_BUTTON.y).toBeGreaterThan(0.8)
+    expect(LIFT_CALL_BUTTON.y).toBeLessThan(1.6)
+
+    // And it is offered from the landing the player is standing on, whichever
+    // that is — the logic reads their feet, not the button's model.
+    for (const floor of FLOORS) {
+      expect(withinCallButton(LIFT_CALL_BUTTON.x, LIFT_CALL_BUTTON.z, floorLevel(floor)))
+        .toBe(floor)
+    }
+  })
+})

@@ -860,10 +860,17 @@ function LiftCore({ ceiling, carFloor }: { ceiling: number; carFloor: Floor }) {
           `liftLandingDoors`, which is the collision half of the same thing. */}
       {FLOORS.map((floor) => {
         const level = floorLevel(floor)
+        const open = floor === carFloor
         return (
           <group key={floor} position={[0, level, halfD]}>
-            {/* Two leaves meeting in the middle. */}
-            {[-1, 1].map((side) => (
+            {/* Leaves only where the car is not.
+
+                `liftLandingDoors` drops the *collider* on the car's floor so
+                you can walk in — but these were drawn on every floor, so the
+                landing the car was at showed a shut pair of doors you then
+                walked straight through. Shut doors and a solid opening are the
+                same fact and have to be drawn from the same one. */}
+            {!open && [-1, 1].map((side) => (
               <mesh key={side} position={[side * 0.62, LIFT_DOOR_HEIGHT / 2, 0.02]} castShadow>
                 <boxGeometry args={[1.2, LIFT_DOOR_HEIGHT, 0.1]} />
                 {/* Brushed, not chromed. This project has no environment map,
@@ -873,7 +880,7 @@ function LiftCore({ ceiling, carFloor }: { ceiling: number; carFloor: Floor }) {
               </mesh>
             ))}
             {/* A vision panel in each leaf, so a lit car shows through. */}
-            {[-1, 1].map((side) => (
+            {!open && [-1, 1].map((side) => (
               <mesh key={`glass${side}`} position={[side * 0.62, LIFT_DOOR_HEIGHT * 0.62, 0.08]}>
                 <planeGeometry args={[0.5, 0.8]} />
                 <meshStandardMaterial
@@ -903,11 +910,14 @@ function LiftCore({ ceiling, carFloor }: { ceiling: number; carFloor: Floor }) {
             {/* The call button, beside the opening at switch height. Pressing
                 E here brings the car — without it, shutting the doors would
                 have traded a hole in the floor for a lift nobody can use. */}
-            <mesh position={[halfW + 0.45, LIFT_CALL_BUTTON.y - level, -0.3]} castShadow>
+            {/* Local to this landing's group, which is already at `level` —
+                subtracting it again put every button on every floor at the
+                height of the ground floor's. */}
+            <mesh position={[halfW + 0.45, LIFT_CALL_BUTTON.y, -0.3]} castShadow>
               <boxGeometry args={[0.16, 0.26, 0.06]} />
               <meshStandardMaterial color="#e8e5de" roughness={0.7} />
             </mesh>
-            <mesh position={[halfW + 0.45, LIFT_CALL_BUTTON.y - level, -0.26]}>
+            <mesh position={[halfW + 0.45, LIFT_CALL_BUTTON.y, -0.26]}>
               <circleGeometry args={[0.045, 12]} />
               <meshStandardMaterial
                 color="#f0b429"
