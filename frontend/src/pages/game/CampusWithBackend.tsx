@@ -66,6 +66,9 @@ import {
   insideLiftCar,
   liftFloorPlatform,
   liftHeightAt,
+  liftLandingDoors,
+  withinCallButton,
+  LIFT_DOOR_HEIGHT,
   liftFloorNames,
 } from '../../components/campus/ufazCore'
 import {
@@ -1054,6 +1057,7 @@ function Player({
   onInLift,
   doors,
   onOpenDoor,
+  onCallLift,
   poseRef,
 }: {
   campusHook: CampusHook
@@ -1081,6 +1085,8 @@ function Player({
   doors: DoorState
   /** Work the handle on a door in reach. */
   onOpenDoor: (id: string) => void
+  /** Calling the car to the floor the player is standing on. */
+  onCallLift: (floor: 0 | 1 | 2 | 3) => void
   /** Where the player is, for the map, written rather than rendered. */
   poseRef: MutableRefObject<Pose>
   /**
@@ -1266,12 +1272,24 @@ function Player({
     const wantsDoor = Boolean(raw.interact) || Boolean(touch?.current?.interact)
     if (wantsDoor && !doorHeld.current && !typing) {
       const now = performance.now()
+      // Which floor the player is standing on, for the lift's call button.
+      // Read from the camera rather than the resolved ground, which has not
+      // been computed yet this frame.
+      const feetNow = camera.position.y - EYE_HEIGHT
       if (insideBuilding) {
-        const inner = interiorDoorFor(insideBuilding.interior)
-        const near =
-          Math.abs(camera.position.x - inner.x) <= inner.halfW + DOOR_REACH &&
-          Math.abs(camera.position.z - inner.z) <= DOOR_REACH
-        if (near) onOpenDoor(interiorDoorId(insideBuilding.id))
+        // The lift's call button comes first: it is on the same key and it
+        // sits beside the shaft, well away from the room's own door, so the
+        // two cannot both be within reach.
+        const landing = withinCallButton(camera.position.x, camera.position.z, feetNow)
+        if (landing !== null) {
+          onCallLift(landing)
+        } else {
+          const inner = interiorDoorFor(insideBuilding.interior)
+          const near =
+            Math.abs(camera.position.x - inner.x) <= inner.halfW + DOOR_REACH &&
+            Math.abs(camera.position.z - inner.z) <= DOOR_REACH
+          if (near) onOpenDoor(interiorDoorId(insideBuilding.id))
+        }
       } else {
         const door = doorWithinReach(camera.position.x, camera.position.z)
         if (door) onOpenDoor(exteriorDoorId(door.id))
@@ -1315,6 +1333,11 @@ function Player({
           ...collidersAt(interiorColliders(insideBuilding.interior), feet),
           ...blockingPlatforms(platforms, feet),
           ...interiorClosedDoor(insideBuilding, doors, doorNow),
+          // The lift's landing doors, shut wherever the car is not. Appended
+          // per frame like the car's own floor, because which ones are shut
+          // changes as it travels. Without them the shaft's open side is a
+          // hole in the building on three floors out of four.
+          ...collidersAt(liftLandingDoors(floorAt(carY)), feet),
         ]
       : [...SOLID_CAMPUS, ...closedDoorColliders(doors, doorNow)]
 
@@ -2549,6 +2572,7 @@ const CampusWithBackend = () => {
               }}
               doors={doors}
               onOpenDoor={openDoorById}
+              onCallLift={campusHook.callLift}
               poseRef={selfPose}
             />
             <SeatController

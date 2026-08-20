@@ -28,6 +28,8 @@ import {
   UFAZ_TURNSTILES,
   UFAZ_TURNSTILE_Z,
   BUILDING_HEIGHT,
+  LIFT_CALL_BUTTON,
+  LIFT_DOOR_HEIGHT,
   SLAB_THICKNESS,
   clearHeight,
   UFAZ_STAIR,
@@ -43,6 +45,7 @@ import {
   arrivalLandingPlatform,
   coreGuards,
   coreSlabs,
+  floorAt,
   floorLevel,
   halfFlightPlatforms,
   halfLandingPlatform,
@@ -805,7 +808,7 @@ function Turnstiles() {
  * curtain wall here is a dozen mullions and four sheets of glass per face, and
  * this room has already been the most expensive thing in the scene once.
  */
-function LiftCore({ ceiling }: { ceiling: number }) {
+function LiftCore({ ceiling, carFloor }: { ceiling: number; carFloor: Floor }) {
   const { x, z, halfW, halfD } = UFAZ_LIFTS
   // Whatever it is asked for, less a little headroom. It used to be capped at
   // 8.2 m, from when an interior was a single room rather than a stack of
@@ -823,9 +826,9 @@ function LiftCore({ ceiling }: { ceiling: number }) {
         <meshStandardMaterial
           color="#8ea3ad"
           transparent
-          opacity={0.28}
+          opacity={0.24}
           roughness={0.08}
-          metalness={0.5}
+          metalness={0.15}
           side={THREE.DoubleSide}
         />
       </mesh>
@@ -834,33 +837,83 @@ function LiftCore({ ceiling }: { ceiling: number }) {
         [-1, 1].map((sz) => (
           <mesh key={`${sx}${sz}`} position={[sx * halfW, shaft / 2, sz * halfD]} castShadow>
             <boxGeometry args={[0.16, shaft, 0.16]} />
-            <meshStandardMaterial color="#6d7a83" roughness={0.5} metalness={0.6} />
+            <meshStandardMaterial color="#6d7a83" roughness={0.5} metalness={0.3} />
           </mesh>
         )),
       )}
       <mesh position={[0, shaft, 0]} castShadow>
         <boxGeometry args={[halfW * 2 + 0.2, 0.2, halfD * 2 + 0.2]} />
-        <meshStandardMaterial color="#6d7a83" roughness={0.5} metalness={0.6} />
+        <meshStandardMaterial color="#6d7a83" roughness={0.5} metalness={0.3} />
       </mesh>
 
-      {/* The two cars, doors facing the hall. */}
-      {[-1, 1].map((side) => (
-        <group key={side} position={[side * 2.1, 0, halfD]}>
-          <mesh position={[0, 1.2, 0.02]} castShadow>
-            <boxGeometry args={[1.8, 2.4, 0.12]} />
-            <meshStandardMaterial color="#c3cad0" roughness={0.28} metalness={0.9} />
-          </mesh>
-          {/* The joint down the middle, which is what makes it read as doors. */}
-          <mesh position={[0, 1.2, 0.09]}>
-            <boxGeometry args={[0.05, 2.4, 0.03]} />
-            <meshStandardMaterial color="#8f979e" roughness={0.4} metalness={0.7} />
-          </mesh>
-          <mesh position={[0, 2.62, 0.06]}>
-            <planeGeometry args={[0.34, 0.14]} />
-            <meshStandardMaterial color="#c0392b" emissive="#c0392b" emissiveIntensity={0.7} />
-          </mesh>
-        </group>
-      ))}
+      {/* A set of landing doors at every floor, not two at the bottom.
+
+          There were two panels side by side on the ground floor and nothing
+          above, which drew a building with two lifts serving one storey while
+          the mechanism was one car serving four. Now each floor has the doors
+          it has, and they are solid whenever the car is elsewhere — see
+          `liftLandingDoors`, which is the collision half of the same thing. */}
+      {FLOORS.map((floor) => {
+        const level = floorLevel(floor)
+        return (
+          <group key={floor} position={[0, level, halfD]}>
+            {/* Two leaves meeting in the middle. */}
+            {[-1, 1].map((side) => (
+              <mesh key={side} position={[side * 0.62, LIFT_DOOR_HEIGHT / 2, 0.02]} castShadow>
+                <boxGeometry args={[1.2, LIFT_DOOR_HEIGHT, 0.1]} />
+                {/* Brushed, not chromed. This project has no environment map,
+                    and metalness near one renders black — CLAUDE.md. These
+                    were at 0.9 and read as black plastic. */}
+                <meshStandardMaterial color="#c3cad0" roughness={0.42} metalness={0.3} />
+              </mesh>
+            ))}
+            {/* A vision panel in each leaf, so a lit car shows through. */}
+            {[-1, 1].map((side) => (
+              <mesh key={`glass${side}`} position={[side * 0.62, LIFT_DOOR_HEIGHT * 0.62, 0.08]}>
+                <planeGeometry args={[0.5, 0.8]} />
+                <meshStandardMaterial
+                  color="#b9d9ef"
+                  roughness={0.12}
+                  metalness={0.2}
+                  transparent
+                  opacity={0.45}
+                />
+              </mesh>
+            ))}
+            {/* The frame around the opening. */}
+            <mesh position={[0, LIFT_DOOR_HEIGHT + 0.08, 0.04]} castShadow>
+              <boxGeometry args={[halfW * 2 + 0.24, 0.16, 0.16]} />
+              <meshStandardMaterial color="#8f979e" roughness={0.5} metalness={0.3} />
+            </mesh>
+            {/* The indicator over the head, lit when the car is at this floor. */}
+            <mesh position={[0, LIFT_DOOR_HEIGHT + 0.34, 0.06]}>
+              <planeGeometry args={[0.42, 0.18]} />
+              <meshStandardMaterial
+                color={carFloor === floor ? '#7ad48a' : '#3d444b'}
+                emissive={carFloor === floor ? '#7ad48a' : '#000000'}
+                emissiveIntensity={carFloor === floor ? 1.2 : 0}
+                toneMapped={false}
+              />
+            </mesh>
+            {/* The call button, beside the opening at switch height. Pressing
+                E here brings the car — without it, shutting the doors would
+                have traded a hole in the floor for a lift nobody can use. */}
+            <mesh position={[halfW + 0.45, LIFT_CALL_BUTTON.y - level, -0.3]} castShadow>
+              <boxGeometry args={[0.16, 0.26, 0.06]} />
+              <meshStandardMaterial color="#e8e5de" roughness={0.7} />
+            </mesh>
+            <mesh position={[halfW + 0.45, LIFT_CALL_BUTTON.y - level, -0.26]}>
+              <circleGeometry args={[0.045, 12]} />
+              <meshStandardMaterial
+                color="#f0b429"
+                emissive="#f0b429"
+                emissiveIntensity={0.55}
+                toneMapped={false}
+              />
+            </mesh>
+          </group>
+        )
+      })}
     </group>
   )
 }
@@ -2203,7 +2256,9 @@ function UfazCore({ spec, whiteboard, liftHeight }: InteriorProps) {
         ))}
 
       <DogLegStair />
-      <LiftCore ceiling={BUILDING_HEIGHT} />
+      {/* The car's live floor, so the landing indicators light as it passes
+          and the doors it is behind are the ones that open. */}
+      <LiftCore ceiling={BUILDING_HEIGHT} carFloor={floorAt(liftHeight ? liftHeight() : 0)} />
       {liftHeight && <LiftCarBody height={liftHeight} />}
 
       {FLOORS.map((floor) => (
