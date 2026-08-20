@@ -57,6 +57,8 @@ import {
 import { INTERIOR_SPECS, type FloorKind, type InteriorSpec } from './interiorSpecs'
 import { interiorDoorFacing, interiorDoors } from './doorways'
 import { LECTURE_BOARD_REACH, LECTURE_ROWS, LECTURE_SEATING } from './lectureSeating'
+import WavingFlag from './WavingFlag'
+import InstancedModel, { type Placement } from './InstancedModel'
 
 /**
  * How far a tier's tread stands above the surface underneath it.
@@ -66,8 +68,6 @@ import { LECTURE_BOARD_REACH, LECTURE_ROWS, LECTURE_SEATING } from './lectureSea
  * the physics tiers are unchanged and still sit on the row's own height.
  */
 const TIER_LIFT = 0.012
-import WavingFlag from './WavingFlag'
-import InstancedModel, { type Placement } from './InstancedModel'
 import {
   carpetTexture,
   ceilingTexture,
