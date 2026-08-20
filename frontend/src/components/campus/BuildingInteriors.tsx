@@ -22,6 +22,9 @@ import {
   UFAZ_BENCH_X,
   UFAZ_BENCH_SEAT_HEIGHT,
   UFAZ_BENCH_Z,
+  CAFE_SEAT_OFFSETS,
+  CAFE_TABLE_X,
+  CAFE_TABLE_Z,
   UFAZ_DESK_X,
   UFAZ_FLAGS,
   UFAZ_LIFTS,
@@ -54,6 +57,7 @@ import {
 import { INTERIOR_SPECS, type FloorKind, type InteriorSpec } from './interiorSpecs'
 import { LECTURE_ROWS, LECTURE_SEATING } from './lectureSeating'
 import WavingFlag from './WavingFlag'
+import InstancedModel, { type Placement } from './InstancedModel'
 import {
   carpetTexture,
   ceilingTexture,
@@ -1981,6 +1985,26 @@ function StudentCentreInterior({ spec }: { spec: InteriorSpec }) {
 /* Cafeteria                                                            */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Where the cafeteria's tables stand, and the chairs round them.
+ *
+ * Read from the same constants the seats are built from rather than written
+ * out again — a chair drawn where no seat is, or a seat with no chair under
+ * it, is the bug the entrance hall's benches had.
+ */
+const CAFE_TABLES: Placement[] = CAFE_TABLE_Z.flatMap((z) =>
+  CAFE_TABLE_X.map((x) => ({ x, z })),
+)
+
+const CAFE_CHAIRS: Placement[] = CAFE_TABLES.flatMap(({ x, z }) =>
+  CAFE_SEAT_OFFSETS.map((offset) => ({
+    x: x + offset.x,
+    z: z + offset.z,
+    // Chairs face their table, which is the way the sitter will face.
+    ry: offset.ry,
+  })),
+)
+
 function CafeteriaInterior({ spec }: { spec: InteriorSpec }) {
   const half = spec.halfExtent
 
@@ -2028,18 +2052,19 @@ function CafeteriaInterior({ spec }: { spec: InteriorSpec }) {
         <meshStandardMaterial color="#8d959c" roughness={0.3} metalness={0.8} />
       </mesh>
 
-      {/* Dining tables */}
-      {[-8, -1, 6, 13].map((z) =>
-        [-11, -3.5, 4, 11.5].map((x) => (
-          <group key={`${x}-${z}`} position={[x, 0, z]}>
-            <Table position={[0, 0, 0]} size={[3, 0.1, 1.5]} topColor="#c8a27a" legColor="#5c646b" />
-            <Chair position={[-0.8, 0, 1.4]} rotation={Math.PI} seat="#c2703f" />
-            <Chair position={[0.8, 0, 1.4]} rotation={Math.PI} seat="#c2703f" />
-            <Chair position={[-0.8, 0, -1.4]} seat="#c2703f" />
-            <Chair position={[0.8, 0, -1.4]} seat="#c2703f" />
-          </group>
-        )),
-      )}
+      {/* Dining tables and chairs, instanced.
+
+          Sixteen tables and sixty-four chairs, drawn as sixteen groups of five
+          objects each, was where this room's draw calls went — the seats alone
+          were the better part of three hundred. As two models they are four
+          instanced meshes between them, and the sixty-fifth chair is free.
+
+          The seats they stand at are unchanged: `interiorSeats('cafeteria')`
+          still decides where a player sits, and these are what that looks
+          like. Furniture and its seat drifting apart is the bug the hall's
+          benches had. */}
+      <InstancedModel url="/props/Table.glb" placements={CAFE_TABLES} height={0.78} />
+      <InstancedModel url="/props/Chair.glb" placements={CAFE_CHAIRS} height={0.95} />
 
       {/* Menu boards over the servery */}
       {[-9, 0, 9].map((x) => (

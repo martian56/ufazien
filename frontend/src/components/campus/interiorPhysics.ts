@@ -635,6 +635,18 @@ export const CAFE_BINS = [-5.2, -3, 3]
 
 export const CAFE_TABLE_X = [-11, -3.5, 4, 11.5]
 export const CAFE_TABLE_Z = [-8, -1, 6, 13]
+
+/**
+ * Where the four chairs sit relative to their table.
+ *
+ * Exported because what is *drawn* has to read the same numbers the seats are
+ * built from. Stated twice — once here for the seat, once in the renderer for
+ * the model — is how the entrance hall ended up with benches three metres from
+ * the seats that belonged to them.
+ */
+export const CAFE_SEAT_OFFSETS = [-0.8, 0.8].flatMap((x) =>
+  [-1.4, 1.4].map((z) => ({ x, z, ry: z > 0 ? Math.PI : 0 })),
+)
 /**
  * The heat lamps over the servery, lowered.
  *
@@ -669,18 +681,16 @@ function cafeteriaPhysics(): InteriorPhysics {
   for (const z of CAFE_TABLE_Z) {
     for (const x of CAFE_TABLE_X) {
       colliders.push({ x, z, halfW: 1.5, halfD: 0.75, height: 0.85 })
-      for (const seatX of [-0.8, 0.8]) {
-        for (const seatZ of [-1.4, 1.4]) {
-          seats.push({
-            id: `cafe-${x}-${z}-${seatX}-${seatZ}`,
-            x: x + seatX,
-            z: z + seatZ,
-            y: 0,
-            ry: seatZ > 0 ? Math.PI : 0,
-            seatHeight: 0.5,
-            kind: 'chair',
-          })
-        }
+      for (const offset of CAFE_SEAT_OFFSETS) {
+        seats.push({
+          id: `cafe-${x}-${z}-${offset.x}-${offset.z}`,
+          x: x + offset.x,
+          z: z + offset.z,
+          y: 0,
+          ry: offset.ry,
+          seatHeight: 0.5,
+          kind: 'chair',
+        })
       }
     }
   }

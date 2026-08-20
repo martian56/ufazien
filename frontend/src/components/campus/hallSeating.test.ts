@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest'
 
 import {
   ALL_INTERIOR_SEATS,
+  CAFE_SEAT_OFFSETS,
+  CAFE_TABLE_X,
+  CAFE_TABLE_Z,
   SEAT_REACH,
   UFAZ_BENCH_SEAT_HEIGHT,
   UFAZ_BENCH_X,
@@ -97,6 +100,46 @@ describe('reaching a seat', () => {
       // Standing at one seat's own position, that seat wins even though every
       // seat on the piece is nought from the piece itself.
       expect(nearestSeat(first.x, first.z, group)?.id).toBe(first.id)
+    }
+  })
+})
+
+describe('the cafeteria, now that its furniture is instanced models', () => {
+  const seats = ALL_INTERIOR_SEATS
+    .filter(({ kind }) => kind === 'cafeteria')
+    .map(({ seat }) => seat)
+
+  it('seats four at every table and no more', () => {
+    expect(CAFE_SEAT_OFFSETS).toHaveLength(4)
+    expect(seats).toHaveLength(CAFE_TABLE_X.length * CAFE_TABLE_Z.length * 4)
+  })
+
+  it('puts a seat exactly where a chair is drawn', () => {
+    // The renderer builds its chair placements from these same constants. If
+    // that ever stops being true this fails, which is the point: the hall's
+    // benches were drawn three metres from their seats because the position
+    // was written out twice.
+    const drawn = new Set(
+      CAFE_TABLE_Z.flatMap((z) =>
+        CAFE_TABLE_X.flatMap((x) =>
+          CAFE_SEAT_OFFSETS.map((offset) => `${x + offset.x},${z + offset.z}`),
+        ),
+      ),
+    )
+    for (const seat of seats) {
+      expect(drawn.has(`${seat.x},${seat.z}`), `seat ${seat.id} has no chair`).toBe(true)
+    }
+    expect(drawn.size).toBe(seats.length)
+  })
+
+  it('faces every sitter at their own table', () => {
+    for (const seat of seats) {
+      const table = CAFE_TABLE_Z.flatMap((z) => CAFE_TABLE_X.map((x) => ({ x, z })))
+        .find((spot) => Math.abs(spot.x - seat.x) <= 0.81 && Math.abs(spot.z - seat.z) <= 1.41)
+      expect(table, `seat ${seat.id} belongs to no table`).toBeDefined()
+      // Zero faces +Z, so a chair south of its table looks north and vice versa.
+      const expected = seat.z > (table as { z: number }).z ? Math.PI : 0
+      expect(seat.ry, seat.id).toBe(expected)
     }
   })
 })

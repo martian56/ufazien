@@ -124,6 +124,17 @@ that bites phones.** The outdoor set as it ships — 150 trees of four species,
 procedural version it replaced. `?trees=drawn` still renders the old one, which
 is how that was decided.
 
+Indoors the win is the other way round. The cafeteria drew sixteen tables and
+sixty-four chairs as separate objects — 448 meshes, computed from the
+components rather than measured, because reaching an interior with the probe
+means walking there. As two instanced models that is four draw calls, and the
+sixty-fifth chair is free.
+
+**Furniture and the seat it carries must read the same constants.** A seat says
+where a player is put; the model says where the furniture looks. Stated twice
+they drift, and the player sits in mid-air — which happened to the entrance
+hall's benches, three metres apart for months.
+
 ## Deployment
 
 Coolify on a Hetzner VPS, not from CI. `ci.yml` runs tests and a frontend build only. Do not add a deploy step to it.
