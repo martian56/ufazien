@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { Component, useState, useEffect, type ReactNode } from "react"
 import { api } from "../../lib/api/client"
 import { setTokens } from "../../lib/api/tokens"
 import { useNavigate, useSearchParams } from "react-router-dom"
@@ -8,7 +8,18 @@ import { GoogleOAuthProvider, useGoogleLogin } from "@react-oauth/google"
 import { Button } from "../../components/ui/button"
 import Spinner from "../../components/ui/Spinner"
 
-const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID
+/**
+ * Google's OAuth client, from the environment.
+ *
+ * Unset in a fresh clone: `frontend/.env.example` declares it but CONTRIBUTING
+ * never said to copy it, so following the setup to the letter left it
+ * undefined. Google Identity Services is then handed `client_id: undefined`,
+ * throws from inside its own minified code, and — with nothing catching it —
+ * React unmounts the whole tree. The sign-in page went blank, including the
+ * email and password form, which has nothing to do with Google. It worked in
+ * production because the deployment sets the variable.
+ */
+const GOOGLE_CLIENT_ID: string | undefined = import.meta.env.VITE_GOOGLE_CLIENT_ID
 
 interface ProviderButtonProps {
   loadingProvider: string | null
@@ -105,14 +116,62 @@ function GoogleLoginButton({ loadingProvider, setLoadingProvider }: ProviderButt
    dj-rest-auth, no allauth, no facebook view. It could not succeed anywhere.
    Google sign-in is real and stays. */
 
+/**
+ * Whether a client id is one you could actually sign in with.
+ *
+ * Takes the id rather than reading the environment, so that "nobody
+ * configured this" is expressible in a test. A default parameter could not
+ * say it: passing `undefined` explicitly triggers the default, so the absent
+ * case would silently read whatever the environment happened to hold.
+ */
+export function isClientIdUsable(clientId: string | undefined): boolean {
+  return typeof clientId === "string" && clientId.trim().length > 0
+}
+
+/** Whether social sign-in is configured in this build. */
+export function socialAuthConfigured(): boolean {
+  return isClientIdUsable(GOOGLE_CLIENT_ID)
+}
+
+/**
+ * Keeps a broken social button from taking the sign-in page with it.
+ *
+ * Signing in with an email address does not involve Google, and must not stop
+ * working because Google's script is unhappy — a malformed client id throws
+ * from inside its code just as an absent one does, and this component cannot
+ * validate what it is given. So a failure here costs the buttons and nothing
+ * else.
+ */
+class SocialAuthBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false }
+
+  static getDerivedStateFromError() {
+    return { failed: true }
+  }
+
+  componentDidCatch(error: unknown) {
+    console.error("Social sign-in is unavailable:", error)
+  }
+
+  render() {
+    return this.state.failed ? null : this.props.children
+  }
+}
+
 export default function SocialAuth() {
   const [loadingProvider, setLoadingProvider] = useState<string | null>(null);
 
+  // Nothing to offer without a client id, and offering it anyway is what broke
+  // the page. Email and password sign-in stands on its own.
+  if (!socialAuthConfigured()) return null
+
   return (
-    <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
-      <div className="space-y-3">
-        <GoogleLoginButton loadingProvider={loadingProvider} setLoadingProvider={setLoadingProvider} />
-      </div>
-    </GoogleOAuthProvider>
+    <SocialAuthBoundary>
+      <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID as string}>
+        <div className="space-y-3">
+          <GoogleLoginButton loadingProvider={loadingProvider} setLoadingProvider={setLoadingProvider} />
+        </div>
+      </GoogleOAuthProvider>
+    </SocialAuthBoundary>
   );
 }

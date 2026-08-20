@@ -4,7 +4,7 @@ import { useState } from "react"
 import UfazienMark from "../../components/ui/UfazienMark"
 import SignInForm from "./SignInForm"
 import SignUpForm from "./SignUpForm"
-import SocialAuth from "./SocialAuth"
+import SocialAuth, { socialAuthConfigured } from "./SocialAuth"
 import { Helmet } from "react-helmet"
 
 export default function AuthPage() {
@@ -70,18 +70,24 @@ export default function AuthPage() {
               {activeTab === "signup" && <SignUpForm />}
             </div>
 
-            {/* Divider */}
-            <div className="relative my-6">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300" />
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-gray-500">Or continue with</span>
-              </div>
-            </div>
+            {/* Divider and the social buttons under it. Both or neither: with
+                no Google client id configured there is nothing to continue
+                with, and a rule captioned "Or continue with" over an empty gap
+                reads as something that failed to load. */}
+            {socialAuthConfigured() && (
+              <>
+                <div className="relative my-6">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-gray-300" />
+                  </div>
+                  <div className="relative flex justify-center text-sm">
+                    <span className="px-2 bg-white text-gray-500">Or continue with</span>
+                  </div>
+                </div>
 
-            {/* Social Auth */}
-            <SocialAuth />
+                <SocialAuth />
+              </>
+            )}
           </div>
         </div>
 
