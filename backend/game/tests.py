@@ -3,6 +3,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from rest_framework.test import APIClient
 
+from .characters import CAMPUS_CHARACTERS
 from .models import Lobby, LobbyMember, SavedLobby
 
 User = get_user_model()
@@ -360,6 +361,129 @@ class LobbyConsumerTests(TestCase):
         communicator = self._communicator(user)
         connected, _ = await communicator.connect()
         return communicator, connected
+
+    def test_the_snapshot_says_what_everyone_is_wearing(self):
+        """
+        `lobby_state.members` carries `campus_character`.
+
+        Everyone in the room draws everyone else, so this is how a peer knows
+        which body to load. Tested over the socket and not just through the
+        serializer, because the two disagree about shape: the socket builds a
+        flat member dict of its own and adding the field to `UserSerializer`
+        did nothing for it.
+        """
+        from asgiref.sync import async_to_sync
+
+        self.host.campus_character = 'suit'
+        self.host.save()
+
+        async def scenario():
+            communicator, _ = await self._connect(self.host)
+            try:
+                while True:
+                    message = await communicator.receive_json_from(timeout=3)
+                    if message.get('type') == 'lobby_state':
+                        return message
+            finally:
+                await communicator.disconnect()
+
+        state = async_to_sync(scenario)()
+        wearing = {
+            member['user_id']: member.get('campus_character')
+            for member in state['members']
+        }
+        self.assertEqual(wearing[self.host.id], 'suit')
+        # And the sentinel survives: blank means "never chose", which the
+        # client turns back into the body their id has always given them.
+        self.assertEqual(wearing[self.player.id], '')
+
+    def test_the_snapshot_still_carries_nobody_email(self):
+        """The rule this codebase leaked once. Adding a field must not widen it."""
+        import json
+
+        from asgiref.sync import async_to_sync
+
+        async def scenario():
+            communicator, _ = await self._connect(self.host)
+            try:
+                while True:
+                    message = await communicator.receive_json_from(timeout=3)
+                    if message.get('type') == 'lobby_state':
+                        return message
+            finally:
+                await communicator.disconnect()
+
+        state = async_to_sync(scenario)()
+        self.assertNotIn('email', json.dumps(state))
+        self.assertNotIn(self.host.email, json.dumps(state))
+
+    def test_somebody_arriving_says_what_they_are_wearing(self):
+        """
+        `user_joined` carries it too.
+
+        Everyone already in the room got it in the snapshot; somebody walking in
+        afterwards has to announce it, or they are drawn as whoever their id
+        happens to hash to until the next snapshot.
+        """
+        from asgiref.sync import async_to_sync
+
+        self.player.campus_character = 'women-formal'
+        self.player.save()
+
+        async def scenario():
+            watcher, _ = await self._connect(self.host)
+            try:
+                # Drain the watcher's own arrival before the one being tested.
+                while True:
+                    message = await watcher.receive_json_from(timeout=3)
+                    if message.get('type') == 'lobby_state':
+                        break
+
+                arriving, _ = await self._connect(self.player)
+                try:
+                    while True:
+                        message = await watcher.receive_json_from(timeout=3)
+                        if (
+                            message.get('type') == 'user_joined'
+                            and message.get('user_id') == self.player.id
+                        ):
+                            return message
+                finally:
+                    await arriving.disconnect()
+            finally:
+                await watcher.disconnect()
+
+        joined = async_to_sync(scenario)()
+        self.assertEqual(joined.get('campus_character'), 'women-formal')
+
+    def test_somebody_arriving_unchosen_says_so(self):
+        """Blank rather than absent, so a peer can tell "none" from "unknown"."""
+        from asgiref.sync import async_to_sync
+
+        async def scenario():
+            watcher, _ = await self._connect(self.host)
+            try:
+                while True:
+                    message = await watcher.receive_json_from(timeout=3)
+                    if message.get('type') == 'lobby_state':
+                        break
+
+                arriving, _ = await self._connect(self.player)
+                try:
+                    while True:
+                        message = await watcher.receive_json_from(timeout=3)
+                        if (
+                            message.get('type') == 'user_joined'
+                            and message.get('user_id') == self.player.id
+                        ):
+                            return message
+                finally:
+                    await arriving.disconnect()
+            finally:
+                await watcher.disconnect()
+
+        joined = async_to_sync(scenario)()
+        self.assertEqual(joined.get('campus_character'), '')
 
     def test_member_can_connect(self):
         from asgiref.sync import async_to_sync
@@ -1882,4 +2006,101 @@ class DevelopmentServerTests(TestCase):
             1,
             'the campus client connects to /ws/game/lobby/<id>/ and exactly one '
             'route should answer it',
+        )
+
+
+class CampusCharacterTests(TestCase):
+    """
+    Choosing which body you wear in the campus.
+
+    The field is `campus_character` and not `avatar`, because `avatar` on the
+    user model is the profile photograph and has been for far longer.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='wearer', password='pw')
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    def test_nobody_starts_with_one_chosen(self):
+        # Blank means "whichever body this player has always had", which the
+        # campus derives from their id. A real default here would have
+        # restyled every existing player the day this shipped.
+        self.assertEqual(self.user.campus_character, '')
+
+    def test_a_player_can_choose_one(self):
+        response = self.client.patch(
+            '/api/auth/user/', {'campus_character': 'suit'}, format='json'
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.campus_character, 'suit')
+
+    def test_a_player_can_go_back_to_not_having_chosen(self):
+        self.user.campus_character = 'suit'
+        self.user.save()
+        response = self.client.patch(
+            '/api/auth/user/', {'campus_character': ''}, format='json'
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.campus_character, '')
+
+    def test_a_body_the_campus_does_not_have_is_refused(self):
+        # Stored happily, it would fail to load for everyone who met this
+        # player — a broken avatar for the whole room rather than an error for
+        # the one who asked for it.
+        response = self.client.patch(
+            '/api/auth/user/', {'campus_character': 'wizard'}, format='json'
+        )
+        self.assertEqual(response.status_code, 400)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.campus_character, '')
+
+    def test_nobody_can_dress_anybody_else(self):
+        other = User.objects.create_user(username='someone-else', password='pw')
+        response = self.client.patch(
+            f'/api/auth/user/{other.id}/', {'campus_character': 'suit'}, format='json'
+        )
+        self.assertEqual(response.status_code, 403)
+        other.refresh_from_db()
+        self.assertEqual(other.campus_character, '')
+
+    def test_the_room_is_told_what_everyone_is_wearing(self):
+        # Everyone has to draw everyone else, so it goes out with the member.
+        from .serializers import UserSerializer
+
+        self.user.campus_character = 'casual-2'
+        self.user.save()
+        data = UserSerializer(self.user).data
+        self.assertEqual(data['campus_character'], 'casual-2')
+
+    def test_the_room_is_still_not_told_anybody_email(self):
+        # The rule this codebase leaked once. Adding a field must not widen it.
+        from .serializers import UserSerializer
+
+        self.assertNotIn('email', UserSerializer(self.user).data)
+
+    def test_catalogue_matches_the_client(self):
+        """
+        The server's list and the client's are the same list.
+
+        They are declared twice, in two languages, and a picker offering a body
+        the server refuses — or a stored body the client cannot draw — is the
+        failure. Read rather than trusted.
+        """
+        import re
+        from pathlib import Path
+
+        catalogue = (
+            Path(__file__).resolve().parents[2]
+            / 'frontend' / 'src' / 'components' / 'campus' / 'avatarCatalogue.ts'
+        )
+        if not catalogue.exists():
+            self.skipTest('client catalogue not present in this checkout')
+
+        ids = re.findall(r"id:\s*'([a-z0-9-]+)'", catalogue.read_text(encoding='utf-8'))
+        self.assertEqual(
+            list(CAMPUS_CHARACTERS), ids,
+            'the server and client character catalogues have drifted apart',
         )

@@ -87,7 +87,11 @@ export const INTERIOR_SPECS: Record<InteriorKind, InteriorSpec> = {
   // conference suite, not a classroom in a restored Baku townhouse.
   lecture: {
     halfExtent: 22, ceiling: 12, wall: '#edeeec', accent: '#4a4640', floor: 'wood',
-    projector: [0, 6.2, -21.2], spawn: [-11, 1.7, -10], spawnLookAt: [3, 4.5, -19],
+    projector: [0, 6.2, -21.2], spawn: [-11, 1.7, -10],
+    // Into the room, up the rake. The doors are beside the board on the −Z
+    // wall now, so facing the board means facing the wall you just walked
+    // through — see `interiorDoors`.
+    spawnLookAt: [0, 3.2, 6],
     lightColor: '#fff6e8', lightIntensity: 0.95,
     floorTint: '#4e3b2e',
     // A flat dark grid over white panels with linear tubes in it. This was

@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest'
 
 import {
   ALL_INTERIOR_SEATS,
+  CAFE_SEAT_OFFSETS,
+  CAFE_TABLE_X,
+  CAFE_TABLE_Z,
   SEAT_REACH,
   UFAZ_BENCH_SEAT_HEIGHT,
   UFAZ_BENCH_X,
@@ -80,23 +83,76 @@ describe('reaching a seat', () => {
   it('leaves a loose seat measured from its own point', () => {
     // A chair is its own footprint. One that offered itself from a metre past
     // its back would be worse than the bug this fixes.
-    const loose = seats.find((seat) => !seat.carrier)
-    if (!loose) return
-    expect(reachDistance(loose.x + 0.9, loose.z, loose)).toBeCloseTo(0.9, 6)
+    //
+    // Drawn from the cafeteria, not the hall: every seat in the hall is on a
+    // bench, so this ran `find` over three carried seats, got `undefined` and
+    // returned before asserting anything at all.
+    const loose = interiorSeats('cafeteria').find((seat) => !seat.carrier)
+    expect(loose, 'no loose seat to test with').toBeDefined()
+    expect(reachDistance(loose!.x + 0.9, loose!.z, loose!)).toBeCloseTo(0.9, 6)
   })
 
   it('picks the nearer end when one piece carries several seats', () => {
-    const shared = new Map<string, typeof seats>()
-    for (const seat of seats) {
+    // From the student centre, whose booths and sofas seat two apiece. The
+    // hall's benches carry one seat each, so this looped over three groups of
+    // one, hit `continue` every time, and asserted nothing — the tie-break it
+    // exists to cover was never run.
+    const centre = interiorSeats('student-center')
+    const shared = new Map<string, typeof centre>()
+    for (const seat of centre) {
       if (!seat.on) continue
       shared.set(seat.on, [...(shared.get(seat.on) ?? []), seat])
     }
-    for (const [, group] of shared) {
-      if (group.length < 2) continue
-      const [first] = group
-      // Standing at one seat's own position, that seat wins even though every
-      // seat on the piece is nought from the piece itself.
-      expect(nearestSeat(first.x, first.z, group)?.id).toBe(first.id)
+
+    const groups = [...shared.values()].filter((group) => group.length > 1)
+    expect(groups.length, 'no piece carries more than one seat').toBeGreaterThan(0)
+
+    for (const group of groups) {
+      for (const seat of group) {
+        // Standing at one seat's own position, that seat wins — even though
+        // every seat on the piece is nought away from the piece itself.
+        expect(nearestSeat(seat.x, seat.z, group)?.id, seat.id).toBe(seat.id)
+      }
+    }
+  })
+})
+
+describe('the cafeteria, now that its furniture is instanced models', () => {
+  const seats = ALL_INTERIOR_SEATS
+    .filter(({ kind }) => kind === 'cafeteria')
+    .map(({ seat }) => seat)
+
+  it('seats four at every table and no more', () => {
+    expect(CAFE_SEAT_OFFSETS).toHaveLength(4)
+    expect(seats).toHaveLength(CAFE_TABLE_X.length * CAFE_TABLE_Z.length * 4)
+  })
+
+  it('puts a seat exactly where a chair is drawn', () => {
+    // The renderer builds its chair placements from these same constants. If
+    // that ever stops being true this fails, which is the point: the hall's
+    // benches were drawn three metres from their seats because the position
+    // was written out twice.
+    const drawn = new Set(
+      CAFE_TABLE_Z.flatMap((z) =>
+        CAFE_TABLE_X.flatMap((x) =>
+          CAFE_SEAT_OFFSETS.map((offset) => `${x + offset.x},${z + offset.z}`),
+        ),
+      ),
+    )
+    for (const seat of seats) {
+      expect(drawn.has(`${seat.x},${seat.z}`), `seat ${seat.id} has no chair`).toBe(true)
+    }
+    expect(drawn.size).toBe(seats.length)
+  })
+
+  it('faces every sitter at their own table', () => {
+    for (const seat of seats) {
+      const table = CAFE_TABLE_Z.flatMap((z) => CAFE_TABLE_X.map((x) => ({ x, z })))
+        .find((spot) => Math.abs(spot.x - seat.x) <= 0.81 && Math.abs(spot.z - seat.z) <= 1.41)
+      expect(table, `seat ${seat.id} belongs to no table`).toBeDefined()
+      // Zero faces +Z, so a chair south of its table looks north and vice versa.
+      const expected = seat.z > (table as { z: number }).z ? Math.PI : 0
+      expect(seat.ry, seat.id).toBe(expected)
     }
   })
 })

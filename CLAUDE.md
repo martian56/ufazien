@@ -79,6 +79,76 @@ starts at the API client, so a browser check still matters for anything visual. 
 
 **Emoji in `print()` crashes on Windows** under cp1252. Use logging.
 
+## 3D assets
+
+Almost everything in the campus is generated in code. What is not is listed
+here, and these are the decisions it is built on.
+
+**Models are built from packs, and only the output is committed.** The packs are
+tens of megabytes and live nobody-knows-where; the built `.glb` is small and
+lives in `frontend/public`. Re-running a build script is a deliberate act, not
+part of `bun run build`.
+
+- `scripts/build-avatars.mjs` — rigged characters, from Quaternius's Ultimate
+  Modular Men and Women. Keeps 6 of the 24 clips and strips weapons.
+- `scripts/build-props.mjs` — static props, from Ultimate Nature Pack (2019).
+  Reads OBJ, because that pack has no glTF and its materials are flat `Kd`
+  colours with no texture maps, which is what the rest of the campus looks like.
+  The newer Stylized Nature pack *does* ship glTF and is textured — bark
+  normals, leaf alpha, a megabyte per species — which is the wrong style and the
+  wrong budget.
+
+**No mesh compression, and none needed.** The whole outdoor prop set — four
+trees, two bushes, two rocks — is 400 KB uncompressed, less than half of one
+avatar. Draco or Meshopt would each add a decoder to fetch before anything
+renders, to save a couple of hundred kilobytes. Revisit if the props ever pass
+about 3 MB; until then the budget is the mechanism.
+
+**Everything repeated is instanced, and the numbers are measured, not guessed.**
+`RenderProbe` (`?probe=1` on the campus, development only) walks the camera to
+fixed viewpoints and reads `gl.info.render.calls`, leaving the result on
+`window.__campusProbe`. Quote before and after when a change adds anything to
+the scene.
+
+Baseline, at 1440×900 on `main`, no models:
+
+| viewpoint | draw calls | triangles |
+| --- | --- | --- |
+| spawn | 425 | 45.8k |
+| quad-north | 393 | 41.0k |
+| spine-south | 454 | 50.7k |
+
+**Draw calls are the metric that has bitten this project; triangles are the one
+that bites phones.** Everything outdoors as it ships — 150 trees of four
+species, 90 bushes, 40 rocks and the street planting — measures **444 draw
+calls and 339.4k triangles** at the spawn, against 425 and 45.8k for the
+procedural version it replaced. `?trees=drawn` still renders the old one, which
+is how that was decided.
+
+The four tree species carry 3, 4, 2 and 3 primitives, so the campus scatter is
+twelve instanced meshes however many trees are in it, and the street planting
+three more.
+
+**There are two tree scatters, and they are in different files.** The campus
+grounds are `CampusProps` in `CampusScenery`; the street planting along Nizami
+Street is `StreetTrees` in `NizamiDistrict`. Changing one and not the other
+leaves half the trees looking like the old ones, which is exactly what
+happened. Both draw models now — the campus mixes four species, the street uses
+one, because a municipality plants one tree down a road.
+
+Indoors the win is the other way round. The cafeteria drew sixteen tables and
+sixty-four chairs as separate objects — 464 meshes, computed from the
+components rather than measured, because reaching an interior with the probe
+means walking there. (`Table` is five meshes and `Chair` six: the legs are
+inside a `.map`, so counting JSX tags undercounts them, which is how this was
+first written down as 448.) As two instanced models that is four draw calls,
+and the sixty-fifth chair is free.
+
+**Furniture and the seat it carries must read the same constants.** A seat says
+where a player is put; the model says where the furniture looks. Stated twice
+they drift, and the player sits in mid-air — which happened to the entrance
+hall's benches, three metres apart for months.
+
 ## Deployment
 
 Coolify on a Hetzner VPS, not from CI. `ci.yml` runs tests and a frontend build only. Do not add a deploy step to it.

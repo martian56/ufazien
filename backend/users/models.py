@@ -23,6 +23,14 @@ class User(AbstractUser):
     )
     bio = models.TextField(max_length=500, blank=True, null=True)
     avatar = models.ImageField(upload_to='avatars/', null=True, blank=True)
+    #: Which body this player wears in the campus simulator.
+    #:
+    #: Not `avatar` — that is the profile photograph above, and the two are
+    #: unrelated. Blank means the player has never chosen, and the campus keeps
+    #: deriving their body from their user id as it always has; defaulting this
+    #: to a real character would have restyled everybody who has ever played,
+    #: the first time it shipped. See `game.characters`.
+    campus_character = models.CharField(max_length=32, blank=True, default='')
     phone = models.CharField(max_length=20, blank=True, null=True)
     year = models.CharField(max_length=2, default='1')
     major = models.CharField(

@@ -210,6 +210,10 @@ class LobbyConsumer(AsyncWebsocketConsumer):
                 'type': 'user_joined',
                 'user_id': self.user.id,
                 'username': self.user.username,
+                # The body they wear, so somebody arriving mid-session is drawn
+                # as themselves rather than as whoever their id happens to hash
+                # to. Everyone already here got it in the lobby snapshot.
+                'campus_character': self.user.campus_character,
             }
         )
 
@@ -721,6 +725,7 @@ class LobbyConsumer(AsyncWebsocketConsumer):
             'type': 'user_joined',
             'user_id': event['user_id'],
             'username': event['username'],
+            'campus_character': event.get('campus_character', ''),
         }))
 
     async def user_left(self, event):
@@ -905,6 +910,10 @@ class LobbyConsumer(AsyncWebsocketConsumer):
             {
                 'user_id': member.user.id,
                 'username': member.user.username,
+                # Which body they wear, so everyone can draw everyone else.
+                # Blank means they never chose and the client derives it from
+                # their id, as it always has.
+                'campus_character': member.user.campus_character,
                 # LobbyMember model doesn't have is_host; compute from lobby.host
                 'is_host': member.user.id == lobby_state['lobby'].host_id,
                 'joined_at': member.joined_at.isoformat(),

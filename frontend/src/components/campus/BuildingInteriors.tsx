@@ -22,12 +22,17 @@ import {
   UFAZ_BENCH_X,
   UFAZ_BENCH_SEAT_HEIGHT,
   UFAZ_BENCH_Z,
+  CAFE_SEAT_OFFSETS,
+  CAFE_TABLE_X,
+  CAFE_TABLE_Z,
   UFAZ_DESK_X,
   UFAZ_FLAGS,
   UFAZ_LIFTS,
   UFAZ_TURNSTILES,
   UFAZ_TURNSTILE_Z,
   BUILDING_HEIGHT,
+  LIFT_CALL_BUTTON,
+  LIFT_DOOR_HEIGHT,
   SLAB_THICKNESS,
   clearHeight,
   UFAZ_STAIR,
@@ -43,14 +48,26 @@ import {
   arrivalLandingPlatform,
   coreGuards,
   coreSlabs,
+  floorAt,
   floorLevel,
   halfFlightPlatforms,
   halfLandingPlatform,
   type Floor,
 } from './ufazCore'
 import { INTERIOR_SPECS, type FloorKind, type InteriorSpec } from './interiorSpecs'
-import { LECTURE_ROWS, LECTURE_SEATING } from './lectureSeating'
+import { interiorDoorFacing, interiorDoors } from './doorways'
+import { LECTURE_BOARD_REACH, LECTURE_ROWS, LECTURE_SEATING } from './lectureSeating'
 import WavingFlag from './WavingFlag'
+import InstancedModel, { type Placement } from './InstancedModel'
+
+/**
+ * How far a tier's tread stands above the surface underneath it.
+ *
+ * Twelve millimetres: enough that the depth buffer can order the two, far too
+ * little to see or to trip on, and it does not move where a player stands —
+ * the physics tiers are unchanged and still sit on the row's own height.
+ */
+const TIER_LIFT = 0.012
 import {
   carpetTexture,
   ceilingTexture,
@@ -114,87 +131,71 @@ const INNER_DOOR_HEIGHT = 4.4
  * the thickness and daylight beyond it, so that the leaves have something to
  * hang in and the way out is somewhere you can see from across the room.
  */
-function InteriorDoorway({ spec }: { spec: InteriorSpec }) {
-  const z = spec.halfExtent
-  const half = INNER_DOOR_HALF_W
-  const pier = spec.halfExtent - half
+function InteriorDoorway({ spec, kind }: { spec: InteriorSpec; kind: InteriorKind }) {
+  const doors = interiorDoors(kind)
+  const facing = doors[0].facing
+  const half = spec.halfExtent
+
+  // The solid runs between the openings, from one corner to the other. Sorted
+  // so a wall with two doors in it — the amphitheatre's — comes out as three
+  // piers rather than three overlapping ones.
+  const openings = [...doors].sort((a, b) => a.x - b.x)
+  const piers: { centre: number; width: number }[] = []
+  let from = -half
+  for (const door of openings) {
+    const left = door.x - door.halfW
+    if (left > from) piers.push({ centre: (from + left) / 2, width: left - from })
+    from = door.x + door.halfW
+  }
+  if (half > from) piers.push({ centre: (from + half) / 2, width: half - from })
 
   return (
-    <group position={[0, 0, z]} rotation={[0, Math.PI, 0]}>
-      {/* The wall, in pieces: two piers and a head. */}
-      {[-1, 1].map((side) => (
-        <mesh key={side} position={[(side * (half + pier / 2)), spec.ceiling / 2, 0]} receiveShadow>
-          <planeGeometry args={[pier, spec.ceiling]} />
+    <group position={[0, 0, facing * half]} rotation={[0, facing === 1 ? Math.PI : 0, 0]}>
+      {/* The wall, in pieces around the openings. */}
+      {piers.map((pier) => (
+        <mesh
+          key={pier.centre}
+          position={[facing === 1 ? -pier.centre : pier.centre, spec.ceiling / 2, 0]}
+          receiveShadow
+        >
+          <planeGeometry args={[pier.width, spec.ceiling]} />
           <meshStandardMaterial color={spec.wall} roughness={0.95} side={THREE.DoubleSide} />
         </mesh>
       ))}
-      <mesh
-        position={[0, INNER_DOOR_HEIGHT + (spec.ceiling - INNER_DOOR_HEIGHT) / 2, 0]}
-        receiveShadow
-      >
-        <planeGeometry args={[half * 2, spec.ceiling - INNER_DOOR_HEIGHT]} />
-        <meshStandardMaterial color={spec.wall} roughness={0.95} side={THREE.DoubleSide} />
-      </mesh>
 
-      {/* Skirting and picture rail, carried across the piers so the doorway
-          does not break the line the rest of the room runs at. */}
-      {[-1, 1].map((side) => (
-        <group key={`t${side}`}>
-          <mesh position={[side * (half + pier / 2), 0.2, 0]}>
-            <boxGeometry args={[pier, 0.4, 0.3]} />
-            <meshStandardMaterial color={spec.accent} roughness={0.8} />
-          </mesh>
-          <mesh position={[side * (half + pier / 2), spec.ceiling - 0.35, 0]}>
-            <boxGeometry args={[pier, 0.3, 0.35]} />
-            <meshStandardMaterial color={spec.accent} roughness={0.8} />
-          </mesh>
-        </group>
-      ))}
+      {/* A head over each opening, and a reveal showing the wall's thickness
+          with daylight beyond it — without which the leaves hang in a hole
+          onto nothing. */}
+      {openings.map((door) => {
+        const x = facing === 1 ? -door.x : door.x
+        return (
+          <group key={door.x} position={[x, 0, 0]}>
+            <mesh
+              position={[0, INNER_DOOR_HEIGHT + (spec.ceiling - INNER_DOOR_HEIGHT) / 2, 0]}
+              receiveShadow
+            >
+              <planeGeometry args={[door.halfW * 2, spec.ceiling - INNER_DOOR_HEIGHT]} />
+              <meshStandardMaterial color={spec.wall} roughness={0.95} side={THREE.DoubleSide} />
+            </mesh>
+            <mesh position={[0, INNER_DOOR_HEIGHT / 2, -0.35]}>
+              <boxGeometry args={[door.halfW * 2, INNER_DOOR_HEIGHT, 0.7]} />
+              <meshStandardMaterial color="#2b3038" roughness={0.9} side={THREE.BackSide} />
+            </mesh>
+          </group>
+        )
+      })}
 
-      {/* The frame, which is what makes it read as a door rather than a gap. */}
-      {[-1, 1].map((side) => (
-        <mesh key={`f${side}`} position={[side * (half + 0.22), INNER_DOOR_HEIGHT / 2, 0.12]} castShadow>
-          <boxGeometry args={[0.44, INNER_DOOR_HEIGHT + 0.44, 0.36]} />
-          <meshStandardMaterial color={spec.accent} roughness={0.7} />
+      {/* Skirting carried across the piers, so the doorway reads as an opening
+          in a wall rather than a gap between two panels. */}
+      {piers.map((pier) => (
+        <mesh
+          key={`skirt${pier.centre}`}
+          position={[facing === 1 ? -pier.centre : pier.centre, 0.2, 0]}
+        >
+          <boxGeometry args={[pier.width, 0.4, 0.3]} />
+          <meshStandardMaterial color={spec.accent} roughness={0.8} />
         </mesh>
       ))}
-      <mesh position={[0, INNER_DOOR_HEIGHT + 0.22, 0.12]} castShadow>
-        <boxGeometry args={[half * 2 + 0.88, 0.44, 0.36]} />
-        <meshStandardMaterial color={spec.accent} roughness={0.7} />
-      </mesh>
-
-      {/* The reveal: the thickness of the wall, seen from inside. */}
-      {[-1, 1].map((side) => (
-        <mesh key={`r${side}`} position={[side * half, INNER_DOOR_HEIGHT / 2, -0.45]} rotation={[0, side * Math.PI / 2, 0]}>
-          <planeGeometry args={[0.9, INNER_DOOR_HEIGHT]} />
-          <meshStandardMaterial color="#cfc8bb" roughness={0.9} side={THREE.DoubleSide} />
-        </mesh>
-      ))}
-
-      {/* Daylight beyond. Not the campus itself — that is a whole scene, and
-          the point of the interiors being their own scene is that it is not
-          resident here. A bright panel at the end of the reveal reads as
-          outside, which is all the doorway has to say. */}
-      <mesh position={[0, INNER_DOOR_HEIGHT / 2, -0.9]}>
-        <planeGeometry args={[half * 2, INNER_DOOR_HEIGHT]} />
-        <meshStandardMaterial
-          color="#b9cfe4"
-          emissive="#9fc0dd"
-          emissiveIntensity={0.65}
-          side={THREE.DoubleSide}
-        />
-      </mesh>
-
-      {/* An exit sign over it, so the way out is findable with the lights off. */}
-      <mesh position={[0, INNER_DOOR_HEIGHT + 0.7, 0.2]}>
-        <planeGeometry args={[1.1, 0.34]} />
-        <meshStandardMaterial
-          color="#0f2a17"
-          emissive="#57e08a"
-          emissiveIntensity={1.6}
-          toneMapped={false}
-        />
-      </mesh>
     </group>
   )
 }
@@ -377,9 +378,12 @@ function gableEnd(half: number, rise: number): THREE.Shape {
 
 function RoomShell({
   spec,
+  kind,
   lit = true,
   children,
 }: {
+  /** Which interior this is, so the doorway knows which wall it is in. */
+  kind: InteriorKind
   spec: InteriorSpec
   /**
    * Whether the lights are on.
@@ -411,8 +415,12 @@ function RoomShell({
 
   // Every wall but the one with the door in it, which is built in pieces
   // around the opening below.
+  const doorFacing = interiorDoorFacing(kind)
   const walls: [number, number, number, number][] = [
-    [0, spec.ceiling / 2, -spec.halfExtent, 0],
+    // The wall opposite the doors, whichever end that is. The amphitheatre's
+    // doors are on −Z, so for that room this is the +Z wall behind the seating
+    // and the −Z one is built in pieces below.
+    [0, spec.ceiling / 2, -doorFacing * spec.halfExtent, doorFacing === 1 ? 0 : Math.PI],
     [-spec.halfExtent, spec.ceiling / 2, 0, Math.PI / 2],
     [spec.halfExtent, spec.ceiling / 2, 0, -Math.PI / 2],
   ]
@@ -541,7 +549,7 @@ function RoomShell({
         </group>
       ))}
 
-      <InteriorDoorway spec={spec} />
+      <InteriorDoorway spec={spec} kind={kind} />
 
       {children}
     </group>
@@ -805,7 +813,7 @@ function Turnstiles() {
  * curtain wall here is a dozen mullions and four sheets of glass per face, and
  * this room has already been the most expensive thing in the scene once.
  */
-function LiftCore({ ceiling }: { ceiling: number }) {
+function LiftCore({ ceiling, carFloor }: { ceiling: number; carFloor: Floor }) {
   const { x, z, halfW, halfD } = UFAZ_LIFTS
   // Whatever it is asked for, less a little headroom. It used to be capped at
   // 8.2 m, from when an interior was a single room rather than a stack of
@@ -823,9 +831,9 @@ function LiftCore({ ceiling }: { ceiling: number }) {
         <meshStandardMaterial
           color="#8ea3ad"
           transparent
-          opacity={0.28}
+          opacity={0.24}
           roughness={0.08}
-          metalness={0.5}
+          metalness={0.15}
           side={THREE.DoubleSide}
         />
       </mesh>
@@ -834,33 +842,93 @@ function LiftCore({ ceiling }: { ceiling: number }) {
         [-1, 1].map((sz) => (
           <mesh key={`${sx}${sz}`} position={[sx * halfW, shaft / 2, sz * halfD]} castShadow>
             <boxGeometry args={[0.16, shaft, 0.16]} />
-            <meshStandardMaterial color="#6d7a83" roughness={0.5} metalness={0.6} />
+            <meshStandardMaterial color="#6d7a83" roughness={0.5} metalness={0.3} />
           </mesh>
         )),
       )}
       <mesh position={[0, shaft, 0]} castShadow>
         <boxGeometry args={[halfW * 2 + 0.2, 0.2, halfD * 2 + 0.2]} />
-        <meshStandardMaterial color="#6d7a83" roughness={0.5} metalness={0.6} />
+        <meshStandardMaterial color="#6d7a83" roughness={0.5} metalness={0.3} />
       </mesh>
 
-      {/* The two cars, doors facing the hall. */}
-      {[-1, 1].map((side) => (
-        <group key={side} position={[side * 2.1, 0, halfD]}>
-          <mesh position={[0, 1.2, 0.02]} castShadow>
-            <boxGeometry args={[1.8, 2.4, 0.12]} />
-            <meshStandardMaterial color="#c3cad0" roughness={0.28} metalness={0.9} />
-          </mesh>
-          {/* The joint down the middle, which is what makes it read as doors. */}
-          <mesh position={[0, 1.2, 0.09]}>
-            <boxGeometry args={[0.05, 2.4, 0.03]} />
-            <meshStandardMaterial color="#8f979e" roughness={0.4} metalness={0.7} />
-          </mesh>
-          <mesh position={[0, 2.62, 0.06]}>
-            <planeGeometry args={[0.34, 0.14]} />
-            <meshStandardMaterial color="#c0392b" emissive="#c0392b" emissiveIntensity={0.7} />
-          </mesh>
-        </group>
-      ))}
+      {/* A set of landing doors at every floor, not two at the bottom.
+
+          There were two panels side by side on the ground floor and nothing
+          above, which drew a building with two lifts serving one storey while
+          the mechanism was one car serving four. Now each floor has the doors
+          it has, and they are solid whenever the car is elsewhere — see
+          `liftLandingDoors`, which is the collision half of the same thing. */}
+      {FLOORS.map((floor) => {
+        const level = floorLevel(floor)
+        const open = floor === carFloor
+        return (
+          <group key={floor} position={[0, level, halfD]}>
+            {/* Leaves only where the car is not.
+
+                `liftLandingDoors` drops the *collider* on the car's floor so
+                you can walk in — but these were drawn on every floor, so the
+                landing the car was at showed a shut pair of doors you then
+                walked straight through. Shut doors and a solid opening are the
+                same fact and have to be drawn from the same one. */}
+            {!open && [-1, 1].map((side) => (
+              <mesh key={side} position={[side * 0.62, LIFT_DOOR_HEIGHT / 2, 0.02]} castShadow>
+                <boxGeometry args={[1.2, LIFT_DOOR_HEIGHT, 0.1]} />
+                {/* Brushed, not chromed. This project has no environment map,
+                    and metalness near one renders black — CLAUDE.md. These
+                    were at 0.9 and read as black plastic. */}
+                <meshStandardMaterial color="#c3cad0" roughness={0.42} metalness={0.3} />
+              </mesh>
+            ))}
+            {/* A vision panel in each leaf, so a lit car shows through. */}
+            {!open && [-1, 1].map((side) => (
+              <mesh key={`glass${side}`} position={[side * 0.62, LIFT_DOOR_HEIGHT * 0.62, 0.08]}>
+                <planeGeometry args={[0.5, 0.8]} />
+                <meshStandardMaterial
+                  color="#b9d9ef"
+                  roughness={0.12}
+                  metalness={0.2}
+                  transparent
+                  opacity={0.45}
+                />
+              </mesh>
+            ))}
+            {/* The frame around the opening. */}
+            <mesh position={[0, LIFT_DOOR_HEIGHT + 0.08, 0.04]} castShadow>
+              <boxGeometry args={[halfW * 2 + 0.24, 0.16, 0.16]} />
+              <meshStandardMaterial color="#8f979e" roughness={0.5} metalness={0.3} />
+            </mesh>
+            {/* The indicator over the head, lit when the car is at this floor. */}
+            <mesh position={[0, LIFT_DOOR_HEIGHT + 0.34, 0.06]}>
+              <planeGeometry args={[0.42, 0.18]} />
+              <meshStandardMaterial
+                color={carFloor === floor ? '#7ad48a' : '#3d444b'}
+                emissive={carFloor === floor ? '#7ad48a' : '#000000'}
+                emissiveIntensity={carFloor === floor ? 1.2 : 0}
+                toneMapped={false}
+              />
+            </mesh>
+            {/* The call button, beside the opening at switch height. Pressing
+                E here brings the car — without it, shutting the doors would
+                have traded a hole in the floor for a lift nobody can use. */}
+            {/* Local to this landing's group, which is already at `level` —
+                subtracting it again put every button on every floor at the
+                height of the ground floor's. */}
+            <mesh position={[halfW + 0.45, LIFT_CALL_BUTTON.y, -0.3]} castShadow>
+              <boxGeometry args={[0.16, 0.26, 0.06]} />
+              <meshStandardMaterial color="#e8e5de" roughness={0.7} />
+            </mesh>
+            <mesh position={[halfW + 0.45, LIFT_CALL_BUTTON.y, -0.26]}>
+              <circleGeometry args={[0.045, 12]} />
+              <meshStandardMaterial
+                color="#f0b429"
+                emissive="#f0b429"
+                emissiveIntensity={0.55}
+                toneMapped={false}
+              />
+            </mesh>
+          </group>
+        )
+      })}
     </group>
   )
 }
@@ -1686,8 +1754,22 @@ function LectureInterior({ spec, whiteboard }: { spec: InteriorSpec; whiteboard?
         const y = row * LECTURE_SEATING.riser
         return (
           <group key={row} position={[0, y, z]}>
-            {/* The step itself */}
-            <mesh castShadow receiveShadow position={[0, -LECTURE_SEATING.riser / 2, 0]}>
+            {/* The step itself, standing a hair proud of what is under it.
+
+                The front row's step runs from one riser below the floor to
+                exactly the floor, so its top face and the room's floor were at
+                the same depth — which the depth buffer cannot order, and the
+                first row flickered black with the floor showing through it.
+                The same fault as the lift car's floor, in a different room.
+
+                Lifted on every row, not just the front one: the rows stack
+                bottom-to-top so they still meet exactly, and a rake where one
+                step is offset from the rest is a thing waiting to be noticed. */}
+            <mesh
+              castShadow
+              receiveShadow
+              position={[0, -LECTURE_SEATING.riser / 2 + TIER_LIFT, 0]}
+            >
               <boxGeometry args={[half * 1.85, LECTURE_SEATING.riser, LECTURE_SEATING.rowDepth]} />
               <meshStandardMaterial color="#8f8a7c" roughness={0.95} />
             </mesh>
@@ -1748,13 +1830,16 @@ function LectureInterior({ spec, whiteboard }: { spec: InteriorSpec; whiteboard?
 
       {/* A whiteboard one side, today's real timetable the other. The board
           used to be a second blank rectangle. */}
+      {/* The boards reach to `LECTURE_BOARD_REACH` either side, and the doors
+          in this wall are placed from that same number — so a board that grows
+          pushes the door rather than being cut through by it. */}
       {whiteboard ?? (
-        <mesh castShadow position={[-13, 4.4, -half + 0.5]}>
+        <mesh castShadow position={[-(LECTURE_BOARD_REACH - 3.75), 4.4, -half + 0.5]}>
           <boxGeometry args={[7.5, 4, 0.2]} />
           <meshStandardMaterial color="#f4f6f4" roughness={0.25} />
         </mesh>
       )}
-      <ScheduleBoard position={[13, 4.4, -half + 0.65]} />
+      <ScheduleBoard position={[LECTURE_BOARD_REACH - 3.5, 4.4, -half + 0.65]} />
 
       {/* A dark band behind the screen, so a projected image has contrast */}
       <mesh position={[0, 5.6, -half + 0.42]} receiveShadow>
@@ -1928,6 +2013,26 @@ function StudentCentreInterior({ spec }: { spec: InteriorSpec }) {
 /* Cafeteria                                                            */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Where the cafeteria's tables stand, and the chairs round them.
+ *
+ * Read from the same constants the seats are built from rather than written
+ * out again — a chair drawn where no seat is, or a seat with no chair under
+ * it, is the bug the entrance hall's benches had.
+ */
+const CAFE_TABLES: Placement[] = CAFE_TABLE_Z.flatMap((z) =>
+  CAFE_TABLE_X.map((x) => ({ x, z })),
+)
+
+const CAFE_CHAIRS: Placement[] = CAFE_TABLES.flatMap(({ x, z }) =>
+  CAFE_SEAT_OFFSETS.map((offset) => ({
+    x: x + offset.x,
+    z: z + offset.z,
+    // Chairs face their table, which is the way the sitter will face.
+    ry: offset.ry,
+  })),
+)
+
 function CafeteriaInterior({ spec }: { spec: InteriorSpec }) {
   const half = spec.halfExtent
 
@@ -1975,18 +2080,19 @@ function CafeteriaInterior({ spec }: { spec: InteriorSpec }) {
         <meshStandardMaterial color="#8d959c" roughness={0.3} metalness={0.8} />
       </mesh>
 
-      {/* Dining tables */}
-      {[-8, -1, 6, 13].map((z) =>
-        [-11, -3.5, 4, 11.5].map((x) => (
-          <group key={`${x}-${z}`} position={[x, 0, z]}>
-            <Table position={[0, 0, 0]} size={[3, 0.1, 1.5]} topColor="#c8a27a" legColor="#5c646b" />
-            <Chair position={[-0.8, 0, 1.4]} rotation={Math.PI} seat="#c2703f" />
-            <Chair position={[0.8, 0, 1.4]} rotation={Math.PI} seat="#c2703f" />
-            <Chair position={[-0.8, 0, -1.4]} seat="#c2703f" />
-            <Chair position={[0.8, 0, -1.4]} seat="#c2703f" />
-          </group>
-        )),
-      )}
+      {/* Dining tables and chairs, instanced.
+
+          Sixteen tables and sixty-four chairs, drawn as sixteen groups of five
+          objects each, was where this room's draw calls went — the seats alone
+          were the better part of three hundred. As two models they are four
+          instanced meshes between them, and the sixty-fifth chair is free.
+
+          The seats they stand at are unchanged: `interiorSeats('cafeteria')`
+          still decides where a player sits, and these are what that looks
+          like. Furniture and its seat drifting apart is the bug the hall's
+          benches had. */}
+      <InstancedModel url="/props/Table.glb" placements={CAFE_TABLES} height={0.78} />
+      <InstancedModel url="/props/Chair.glb" placements={CAFE_CHAIRS} height={0.95} />
 
       {/* Menu boards over the servery */}
       {[-9, 0, 9].map((x) => (
@@ -2203,7 +2309,9 @@ function UfazCore({ spec, whiteboard, liftHeight }: InteriorProps) {
         ))}
 
       <DogLegStair />
-      <LiftCore ceiling={BUILDING_HEIGHT} />
+      {/* The car's live floor, so the landing indicators light as it passes
+          and the doors it is behind are the ones that open. */}
+      <LiftCore ceiling={BUILDING_HEIGHT} carFloor={floorAt(liftHeight ? liftHeight() : 0)} />
       {liftHeight && <LiftCarBody height={liftHeight} />}
 
       {FLOORS.map((floor) => (
@@ -2266,7 +2374,7 @@ export function BuildingInterior({
   const Contents = CONTENTS[kind] ?? LectureInterior
 
   return (
-    <RoomShell spec={spec} lit={lit}>
+    <RoomShell spec={spec} kind={kind ?? 'lecture'} lit={lit}>
       <Contents spec={spec} whiteboard={whiteboard} liftHeight={liftHeight} />
       {children}
     </RoomShell>

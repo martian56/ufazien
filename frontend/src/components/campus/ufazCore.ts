@@ -569,6 +569,62 @@ export function coreGuards(): Collider[] {
  * unusable for exactly that reason before it was a lift at all, when the thing
  * you had to stand in was a trigger inside the shaft's own footprint.
  */
+/**
+ * How tall a set of landing doors is, and how far they stand proud of the wall.
+ */
+export const LIFT_DOOR_HEIGHT = 2.4
+const LIFT_DOOR_THICKNESS = 0.16
+
+/**
+ * The doors across the shaft's open face, on every floor the car is not at.
+ *
+ * The fourth side of the shaft is left open so you can walk into the car. That
+ * is right on the floor the car is standing at and a hole in the building on
+ * every other one: the shaft is cut out of every slab, so walking at the
+ * opening on the third floor put you in the void and dropped you a storey into
+ * the car below. Nothing marked the difference, and there was no way to call
+ * the car from outside, so the opening's only offer was the fall.
+ *
+ * A landing set is solid whenever the car is elsewhere, exactly like the doors
+ * on a real lift, and it is the same shape the glazing draws.
+ *
+ * `at` is the floor the car is at — pass the *live* floor, not the one that was
+ * requested, or the doors open before the car arrives.
+ */
+export function liftLandingDoors(at: Floor): Collider[] {
+  const midX = (LIFT_SHAFT.x0 + LIFT_SHAFT.x1) / 2
+  return FLOORS.filter((floor) => floor !== at).map((floor) => ({
+    id: `lift-door-${floor}`,
+    x: midX,
+    z: LIFT_SHAFT.z1 - LIFT_DOOR_THICKNESS / 2,
+    halfW: (LIFT_SHAFT.x1 - LIFT_SHAFT.x0) / 2,
+    halfD: LIFT_DOOR_THICKNESS / 2,
+    base: floorLevel(floor),
+    height: floorLevel(floor) + LIFT_DOOR_HEIGHT,
+  }))
+}
+
+/**
+ * Where the button to call the car lives, on each landing.
+ *
+ * Beside the opening rather than in it, at the height a light switch is, so
+ * reaching it does not mean standing where the doors are.
+ */
+export const LIFT_CALL_BUTTON = {
+  x: LIFT_SHAFT.x1 + 0.45,
+  z: LIFT_SHAFT.z1 - 0.3,
+  y: 1.15,
+  /** How close you have to be for it to be offered. */
+  reach: 1.7,
+}
+
+/** Whether a player standing here can call the lift. */
+export function withinCallButton(x: number, z: number, feet: number): Floor | null {
+  const floor = floorAt(feet)
+  const distance = Math.hypot(x - LIFT_CALL_BUTTON.x, z - LIFT_CALL_BUTTON.z)
+  return distance <= LIFT_CALL_BUTTON.reach ? floor : null
+}
+
 export function liftShaftWalls(): Collider[] {
   const thickness = 0.25
   // One `id` across all three, because they are one enclosure. Walls meeting

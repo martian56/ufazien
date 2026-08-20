@@ -20,6 +20,20 @@ import {
   type DoorState,
 } from '../../components/campus/doorState'
 import DoorLeaf from '../../components/campus/DoorLeaf'
+import RenderProbe from '../../components/campus/RenderProbe'
+
+/**
+ * Whether this page load asked to be measured — `?probe=1`.
+ *
+ * Read once at module scope: it is a URL a developer typed, not something that
+ * changes while the campus is open, and re-reading it per render would put a
+ * `window` access in the render path for no reason.
+ */
+const probeRequested =
+  typeof window !== 'undefined' &&
+  // Exactly `?probe=1`. `has()` also fired for `?probe=0` and `?probe=false`,
+  // so anything carrying the word moved the camera.
+  new URLSearchParams(window.location.search).get('probe') === '1'
 import { useCampusVoice } from '../../hooks/useCampusVoice'
 import VoicePanel, { ScreenShareStage } from '../../components/campus/VoicePanel'
 import HudDock from '../../components/campus/HudDock'
@@ -55,6 +69,9 @@ import {
   insideLiftCar,
   liftFloorPlatform,
   liftHeightAt,
+  liftLandingDoors,
+  withinCallButton,
+  LIFT_DOOR_HEIGHT,
   liftFloorNames,
 } from '../../components/campus/ufazCore'
 import {
@@ -94,7 +111,8 @@ import {
   doorstep,
   doorwayFor,
   interiorDoorFor,
-  interiorLimit,
+  interiorBounds,
+  interiorDoors,
   leavingThroughDoor,
 } from '../../components/campus/doorways'
 import {
@@ -454,6 +472,7 @@ function PlayerAvatar({
   position,
   userData,
   seed,
+  character = null,
   bubble,
   speaking,
   isPresenting,
@@ -470,8 +489,10 @@ function PlayerAvatar({
   position: { x: number; y: number; z: number }
   /** Loose: the same component renders both a socket payload and local state. */
   userData: Record<string, unknown>
-  /** The player's user id, which decides everything about how they look. */
+  /** The player's user id, which decides how they look if they never chose. */
   seed: string | number
+  /** The body they chose, when they have chosen one. */
+  character?: string | null
   /** Their most recent chat message, while it is still fresh. */
   bubble?: string | null
   /** Whether proximity voice currently hears them. */
@@ -509,6 +530,7 @@ function PlayerAvatar({
         // the old model used for its appearance, so a given player keeps the
         // same look between sessions instead of being reshuffled on reconnect.
         variant={seed}
+        character={character}
       />
       <NameTag
         name={name}
@@ -562,7 +584,11 @@ function InteriorCameraPlacement({
       // Just inside the door you came through, which is now a real place in
       // the room rather than a spawn point chosen per interior.
       if (arrival) camera.position.set(arrival.x, spec.spawn[1], arrival.z)
-      else camera.position.set(door.x, spec.spawn[1], door.z - 1.5)
+      // A pace *into* the room, which is not always a smaller z: the
+      // amphitheatre's doors are in its −Z wall, and subtracting there put the
+      // player outside the room to be clamped back through the doorway they
+      // had just come in by.
+      else camera.position.set(door.x, spec.spawn[1], door.z - door.facing * 1.5)
       const look = spec.spawnLookAt ?? spec.projector
       // lookAt leaves roll at zero, so the pointer-lock controls pick this up
       // as an ordinary heading and pitch.
@@ -981,15 +1007,22 @@ function CampusDoors({
   const now = performance.now()
 
   if (insideBuilding) {
-    const inner = interiorDoorFor(insideBuilding.interior)
     return (
-      <DoorLeaf
-        x={inner.x}
-        z={inner.z}
-        halfWidth={inner.halfW}
-        swing={doorSwing(doors, interiorDoorId(insideBuilding.id), now)}
-        facing={-1}
-      />
+      <>
+        {interiorDoors(insideBuilding.interior).map((inner, index) => (
+          <DoorLeaf
+            key={`${inner.x},${inner.z}`}
+            x={inner.x}
+            z={inner.z}
+            halfWidth={inner.halfW}
+            // Its own state, not the room's: the amphitheatre has two, and one
+            // key between them swung both at once.
+            swing={doorSwing(doors, interiorDoorId(insideBuilding.id, index), now)}
+            // Leaves swing away from the room, whichever wall they are in.
+            facing={inner.facing === 1 ? -1 : 1}
+          />
+        ))}
+      </>
     )
   }
 
@@ -1018,9 +1051,12 @@ function interiorClosedDoor(
   doors: DoorState,
   now: number,
 ): Collider[] {
-  if (isDoorOpen(doors, interiorDoorId(building.id), now)) return []
-  const door = interiorDoorFor(building.interior)
-  return [{ x: door.x, z: door.z, halfW: door.halfW, halfD: 0.2 }]
+  // Each door on its own, so opening one does not let the player through the
+  // other. A room with one door is the same thing with a list of one.
+  return interiorDoors(building.interior)
+    .map((door, index) => ({ door, index }))
+    .filter(({ index }) => !isDoorOpen(doors, interiorDoorId(building.id, index), now))
+    .map(({ door }) => ({ x: door.x, z: door.z, halfW: door.halfW, halfD: 0.2 }))
 }
 
 function Player({
@@ -1039,6 +1075,7 @@ function Player({
   onInLift,
   doors,
   onOpenDoor,
+  onCallLift,
   poseRef,
 }: {
   campusHook: CampusHook
@@ -1066,6 +1103,8 @@ function Player({
   doors: DoorState
   /** Work the handle on a door in reach. */
   onOpenDoor: (id: string) => void
+  /** Calling the car to the floor the player is standing on. */
+  onCallLift: (floor: 0 | 1 | 2 | 3) => void
   /** Where the player is, for the map, written rather than rendered. */
   poseRef: MutableRefObject<Pose>
   /**
@@ -1251,12 +1290,27 @@ function Player({
     const wantsDoor = Boolean(raw.interact) || Boolean(touch?.current?.interact)
     if (wantsDoor && !doorHeld.current && !typing) {
       const now = performance.now()
+      // Which floor the player is standing on, for the lift's call button.
+      // Read from the camera rather than the resolved ground, which has not
+      // been computed yet this frame.
+      const feetNow = camera.position.y - EYE_HEIGHT
       if (insideBuilding) {
-        const inner = interiorDoorFor(insideBuilding.interior)
-        const near =
-          Math.abs(camera.position.x - inner.x) <= inner.halfW + DOOR_REACH &&
-          Math.abs(camera.position.z - inner.z) <= DOOR_REACH
-        if (near) onOpenDoor(interiorDoorId(insideBuilding.id))
+        // The lift's call button comes first: it is on the same key and it
+        // sits beside the shaft, well away from the room's own door, so the
+        // two cannot both be within reach.
+        const landing = withinCallButton(camera.position.x, camera.position.z, feetNow)
+        if (landing !== null) {
+          onCallLift(landing)
+        } else {
+          // Whichever of the room's doors is within reach — the amphitheatre
+          // has two, and reaching for one must not open the other.
+          const nearIndex = interiorDoors(insideBuilding.interior).findIndex(
+            (inner) =>
+              Math.abs(camera.position.x - inner.x) <= inner.halfW + DOOR_REACH &&
+              Math.abs(camera.position.z - inner.z) <= DOOR_REACH,
+          )
+          if (nearIndex >= 0) onOpenDoor(interiorDoorId(insideBuilding.id, nearIndex))
+        }
       } else {
         const door = doorWithinReach(camera.position.x, camera.position.z)
         if (door) onOpenDoor(exteriorDoorId(door.id))
@@ -1300,6 +1354,11 @@ function Player({
           ...collidersAt(interiorColliders(insideBuilding.interior), feet),
           ...blockingPlatforms(platforms, feet),
           ...interiorClosedDoor(insideBuilding, doors, doorNow),
+          // The lift's landing doors, shut wherever the car is not. Appended
+          // per frame like the car's own floor, because which ones are shut
+          // changes as it travels. Without them the shaft's open side is a
+          // hole in the building on three floors out of four.
+          ...collidersAt(liftLandingDoors(floorAt(carY)), feet),
         ]
       : [...SOLID_CAMPUS, ...closedDoorColliders(doors, doorNow)]
 
@@ -1307,11 +1366,13 @@ function Player({
       // Walking out through the door, which has to be asked before the clamp:
       // afterwards the position has already been pulled back inside the room
       // and there is nothing left to detect.
-      const door = interiorDoorFor(insideBuilding.interior)
-      if (
-        isDoorOpen(doors, interiorDoorId(insideBuilding.id), doorNow) &&
-        leavingThroughDoor(camera.position.x, camera.position.z, door)
-      ) {
+      // Through a door that is *itself* open, rather than any of them being.
+      const leavingBy = interiorDoors(insideBuilding.interior).findIndex(
+        (door, index) =>
+          isDoorOpen(doors, interiorDoorId(insideBuilding.id, index), doorNow) &&
+          leavingThroughDoor(camera.position.x, camera.position.z, door),
+      )
+      if (leavingBy >= 0) {
         // A room inside the building opens onto its corridor; only the ground
         // floor opens onto the street. Walking out of the library on the
         // fourth floor and finding yourself on Nizami Street is the sort of
@@ -1350,9 +1411,9 @@ function Player({
       // into the opening instead of stopping at an invisible line in front of
       // it — which is what the door being in the wall means.
       const side = interiorHalfExtent(insideBuilding.interior)
-      const ahead = interiorLimit(insideBuilding.interior, camera.position.x, camera.position.z)
+      const bounds = interiorBounds(insideBuilding.interior, camera.position.x)
       camera.position.x = MathUtils.clamp(camera.position.x, -side, side)
-      camera.position.z = MathUtils.clamp(camera.position.z, -side, ahead)
+      camera.position.z = MathUtils.clamp(camera.position.z, bounds.minZ, bounds.maxZ)
     } else {
       camera.position.x = MathUtils.clamp(camera.position.x, -CAMPUS_LIMIT, CAMPUS_LIMIT)
       camera.position.z = MathUtils.clamp(camera.position.z, -CAMPUS_LIMIT, CAMPUS_LIMIT)
@@ -1668,6 +1729,7 @@ const CampusWithBackend = () => {
     error,
     currentLobby,
     lobbyMembers,
+    characters,
     playerPositions,
     userPosition,
     disconnect,
@@ -2369,6 +2431,10 @@ const CampusWithBackend = () => {
           }}
           camera={{ position: SPAWN, fov: 70, near: 0.1, far: 2200 }}
         >
+          {/* Measures what a frame costs, at fixed viewpoints, when the URL
+              asks for it. Development only. See `RenderProbe`. */}
+          {import.meta.env.DEV && probeRequested && <RenderProbe />}
+
           {/* Keeps the view the same width whatever shape the window is. */}
           <FieldOfView />
           {/* Drops the resolution on a machine that cannot hold frame rate,
@@ -2444,6 +2510,7 @@ const CampusWithBackend = () => {
                     position={avatar.position}
                     userData={avatar.userData}
                     seed={avatar.id}
+                    character={characters[Number(avatar.id)] ?? null}
                     bubble={bubbleFor(avatar.id, spokenMessages, bubbleClock)}
                     speaking={isSpeaking(avatar.id, voice.participants)}
                     isPresenting={isSameParticipant(voice.screenShare?.identity, avatar.id)}
@@ -2485,6 +2552,7 @@ const CampusWithBackend = () => {
                     position={avatar.position}
                     userData={avatar.userData}
                     seed={avatar.id}
+                    character={characters[Number(avatar.id)] ?? null}
                     bubble={bubbleFor(avatar.id, spokenMessages, bubbleClock)}
                     speaking={isSpeaking(avatar.id, voice.participants)}
                     isPresenting={isSameParticipant(voice.screenShare?.identity, avatar.id)}
@@ -2527,6 +2595,7 @@ const CampusWithBackend = () => {
               }}
               doors={doors}
               onOpenDoor={openDoorById}
+              onCallLift={campusHook.callLift}
               poseRef={selfPose}
             />
             <SeatController

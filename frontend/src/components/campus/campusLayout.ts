@@ -444,6 +444,31 @@ export function campusTrees(count = TREE_COUNT): ScatterItem[] {
   return scatterProps({ count, seed: 20240917, blocked: KEEP_CLEAR, clearance: 5, variants: 3 })
 }
 
+/** How much undergrowth there is. Bushes read as ground cover, not as objects. */
+export const BUSH_COUNT = 90
+export const ROCK_COUNT = 40
+
+/**
+ * Bushes and rocks, on a different seed from the trees.
+ *
+ * The same seed would stand every bush at the foot of a tree, because the
+ * scatter is deterministic and the blocked regions are the same. A different
+ * one puts them between the trees, which is where undergrowth is.
+ *
+ * Neither is solid. A knee-high bush that stops a player dead is a worse thing
+ * than one they walk through, and the campus already has enough that you cannot
+ * walk past — the collision rule is that nothing may sit closer to anything
+ * else than a player is wide, and ninety more circles in the scatter would
+ * start failing it against the trees.
+ */
+export function campusBushes(count = BUSH_COUNT): ScatterItem[] {
+  return scatterProps({ count, seed: 811327, blocked: KEEP_CLEAR, clearance: 3, variants: 2 })
+}
+
+export function campusRocks(count = ROCK_COUNT): ScatterItem[] {
+  return scatterProps({ count, seed: 55129, blocked: KEEP_CLEAR, clearance: 3, variants: 2 })
+}
+
 /** Lamps line the routes rather than scattering, because that is what lamps do. */
 export function campusLamps(): { x: number; z: number }[] {
   const items: { x: number; z: number }[] = []

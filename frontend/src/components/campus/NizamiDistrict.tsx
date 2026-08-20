@@ -3,6 +3,7 @@ import { Instance, Instances } from '@react-three/drei'
 import * as THREE from 'three'
 
 import { daylight, type TimeOfDay } from './campusLayout'
+import InstancedModel from './InstancedModel'
 import {
   DISTRICT_BUILDINGS,
   DISTRICT_STREETS,
@@ -378,39 +379,39 @@ function streetFurniture(streets: readonly DistrictStreet[]) {
 }
 
 /**
- * The street planting, as three instanced meshes rather than three per tree.
+ * The street planting.
  *
  * Drawn as individual meshes this was four hundred and twenty-six draw calls
  * for the trees and lamps alone, every one of them casting a shadow, and the
- * campus dropped to a slideshow the moment the district came into view. Trunks,
- * canopies and lamps are each one instanced mesh now.
+ * campus dropped to a slideshow the moment the district came into view. That is
+ * why it is instanced, and it stays instanced now that it is a model: one
+ * `InstancedMesh` per material, whatever the count.
+ *
+ * A single species, unlike the campus scatter's four. Street planting is
+ * uniform — a municipality plants one tree down a road — and the campus grounds
+ * behind it being mixed is part of what tells the two apart.
+ *
+ * The canopy colour the district used to tint by is gone with the primitives:
+ * the model carries its own materials, and a tint would have meant cloning them
+ * per district. If seasons want to reach these again it wants a colour on the
+ * material rather than a prop here.
  */
-function StreetTrees({
-  trees,
-  canopy,
-}: {
-  trees: { x: number; z: number; scale: number }[]
-  canopy: string
-}) {
-  if (!trees.length) return null
-  return (
-    <group>
-      <Instances limit={trees.length} range={trees.length} castShadow>
-        <cylinderGeometry args={[0.22, 0.34, 4.8, 6]} />
-        <meshStandardMaterial color="#5b432c" roughness={0.95} />
-        {trees.map((tree, i) => (
-          <Instance key={i} position={[tree.x, 2.4 * tree.scale, tree.z]} scale={tree.scale} />
-        ))}
-      </Instances>
-      <Instances limit={trees.length} range={trees.length} castShadow>
-        <icosahedronGeometry args={[2.5, 0]} />
-        <meshStandardMaterial color={canopy} roughness={0.95} flatShading />
-        {trees.map((tree, i) => (
-          <Instance key={i} position={[tree.x, 5.9 * tree.scale, tree.z]} scale={tree.scale} />
-        ))}
-      </Instances>
-    </group>
+function StreetTrees({ trees }: { trees: { x: number; z: number; scale: number }[] }) {
+  const placements = useMemo(
+    () =>
+      trees.map((tree, i) => ({
+        x: tree.x,
+        z: tree.z,
+        scale: tree.scale,
+        // Turned by index rather than randomly: the same street looks the same
+        // on every load, and no two neighbours present an identical silhouette.
+        ry: (i * 2.399963) % (Math.PI * 2),
+      })),
+    [trees],
   )
+
+  if (!trees.length) return null
+  return <InstancedModel url="/props/CommonTree_4.glb" placements={placements} height={8.6} />
 }
 
 /**
@@ -456,7 +457,6 @@ export function NizamiDistrict({ timeOfDay = 'day' }: DistrictProps) {
   const glowing = upper.filter((s) => s.lit)
   const shops = spots.filter((s) => s.shop)
   const { trees, lamps } = useMemo(() => streetFurniture(DISTRICT_STREETS), [])
-  const canopy = lampsOn ? '#26401f' : '#3f7a34'
 
   return (
     <group>
@@ -464,7 +464,7 @@ export function NizamiDistrict({ timeOfDay = 'day' }: DistrictProps) {
         <Street key={i} street={street} />
       ))}
 
-      <StreetTrees trees={trees} canopy={canopy} />
+      <StreetTrees trees={trees} />
       <StreetLamps lamps={lamps} lit={lampsOn} />
 
       {DISTRICT_BUILDINGS.map((building, i) => (

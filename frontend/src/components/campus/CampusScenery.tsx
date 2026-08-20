@@ -13,6 +13,8 @@ import {
   DOOR_HALF_WIDTH,
   daylight,
   campusBenches,
+  campusBushes,
+  campusRocks,
   campusLamps,
   campusTrees,
   type BuildingStyle,
@@ -36,6 +38,40 @@ import {
   stoneTexture,
 } from './campusTextures'
 import CampusWindows from './CampusWindows'
+import ModelTrees from './ModelTrees'
+
+/**
+ * The species the model scatter uses, cheapest silhouettes first.
+ *
+ * Chosen by triangle count as much as by looks: the pack's trees run from 676
+ * faces to 1476, and the first one tried was one of the two heaviest — a
+ * hundred and fifty of it put 423,000 triangles on the quad where the drawn
+ * trees had cost about twelve.
+ */
+const MODEL_TREE_SPECIES = [
+  '/props/CommonTree_4.glb',
+  '/props/BirchTree_2.glb',
+  '/props/PineTree_2.glb',
+  '/props/CommonTree_3.glb',
+]
+
+/** Undergrowth. Cheap enough that a hundred of them cost almost nothing. */
+const MODEL_BUSH_SPECIES = ['/props/Bush_1.glb', '/props/Bush_2.glb']
+const MODEL_ROCK_SPECIES = ['/props/Rock_1.glb', '/props/Rock_2.glb']
+
+/**
+ * Whether to draw the trees from primitives instead of the models —
+ * `?trees=drawn`. Read once: it is a URL a developer typed.
+ *
+ * The models are what ships. This is kept so the two can still be put side by
+ * side from the same viewpoint, which is how the choice was made: models cost
+ * three more draw calls and 222k more triangles, and look like trees rather
+ * than like lollipops. See CLAUDE.md.
+ */
+const drawnTrees =
+  import.meta.env.DEV &&
+  typeof window !== 'undefined' &&
+  new URLSearchParams(window.location.search).get('trees') === 'drawn'
 
 /**
  * Procedural campus scenery.
@@ -619,10 +655,17 @@ function Fanlight() {
         )
       })}
 
-      {/* The hub they run to, and the rib they cross. */}
-      <mesh position={[0, SPRING_HEIGHT, 0.02]}>
-        <cylinderGeometry args={[hub, hub, 0.06, 16, 1, false, 0, Math.PI]} />
-        <meshStandardMaterial color={timber} roughness={0.6} />
+      {/* The hub they run to, and the rib they cross.
+
+          A `circleGeometry` facing the doorway, not a cylinder. A cylinder's
+          axis is Y and the fanlight lies in the XY plane, so the hub was a
+          vertical disc seen edge-on — a thin line rather than something the
+          bars could converge behind. Its `thetaStart`/`thetaLength` cut about
+          that same Y axis too, taking a horizontal half instead of the lower
+          one. */}
+      <mesh position={[0, SPRING_HEIGHT, 0.03]}>
+        <circleGeometry args={[hub, 20, 0, Math.PI]} />
+        <meshStandardMaterial color={timber} roughness={0.6} side={THREE.DoubleSide} />
       </mesh>
       {archPoints(rib).map(({ x, y, angle }, i) => (
         <mesh key={`rib${i}`} position={[x, y, 0.02]} rotation={[0, 0, angle - Math.PI / 2]}>
@@ -735,7 +778,26 @@ function EntrancePlaques() {
   )
 }
 
-export function Entrance({ depth, trim, accent }: { depth: number; trim: string; accent: string }) {
+export function Entrance({
+  depth,
+  trim,
+  accent,
+  plaques = false,
+}: {
+  depth: number
+  trim: string
+  accent: string
+  /**
+   * Whether to hang the university's two plaques beside the door.
+   *
+   * Off by default, because `Entrance` is shared by every enterable building
+   * and the plaques name one of them: the ministry's wording and the two
+   * university titles belong to the facade on Nizami Street, not to a sports
+   * hall. Only the main building has an outdoor facade today, so nothing else
+   * was wearing them — but the moment a second one appeared it would have.
+   */
+  plaques?: boolean
+}) {
   return (
     <group position={[0, 0, depth / 2 + 0.06]}>
       {/* No steps. You walk in off the paving — see `THRESHOLD`. */}
@@ -774,7 +836,7 @@ export function Entrance({ depth, trim, accent }: { depth: number; trim: string;
 
       <Transom from={LEAF_HEIGHT} to={SPRING_HEIGHT} />
       <Fanlight />
-      <EntrancePlaques />
+      {plaques && <EntrancePlaques />}
 
       <DoorLobby trim={trim} accent={accent} sill={THRESHOLD} />
 
@@ -1029,6 +1091,11 @@ export function CampusProps({
   const trees = useMemo(() => campusTrees(treeCount), [treeCount])
   const lamps = useMemo(() => campusLamps(), [])
   const benches = useMemo(() => campusBenches(), [])
+  // Only built when they are going to be drawn: the drawn-tree comparison has
+  // no undergrowth, and scattering ninety bushes to throw them away is work
+  // for nothing.
+  const bushes = useMemo(() => (drawnTrees ? [] : campusBushes()), [])
+  const rocks = useMemo(() => (drawnTrees ? [] : campusRocks()), [])
 
   const config = daylight(timeOfDay)
   const canopyColors = config.lampsOn ? CANOPY_DUSK : CANOPY_DAY
@@ -1046,15 +1113,29 @@ export function CampusProps({
     <group>
       {/* One instanced mesh per colour variant: instanceColor would also work,
           but three separate meshes keep flat shading crisp and are still only
-          three draw calls each. */}
-      {TRUNK_COLORS.map((trunkColor, variant) => (
-        <TreeVariant
-          key={variant}
-          items={treesByVariant[variant]}
-          trunkColor={trunkColor}
-          canopyColor={canopyColors[variant]}
-        />
-      ))}
+          three draw calls each.
+
+          `?trees=model` swaps them for a Quaternius model, instanced the same
+          way, so the two can be photographed from the same viewpoint and
+          measured with the same probe. Development only, and a comparison
+          rather than a setting — see `ModelTrees`. */}
+      {drawnTrees ? (
+        TRUNK_COLORS.map((trunkColor, variant) => (
+          <TreeVariant
+            key={variant}
+            items={treesByVariant[variant]}
+            trunkColor={trunkColor}
+            canopyColor={canopyColors[variant]}
+          />
+        ))
+      ) : (
+        <>
+          <ModelTrees items={trees} urls={MODEL_TREE_SPECIES} />
+          {/* Ground cover between the trees. Not solid — see `campusBushes`. */}
+          <ModelTrees items={bushes} urls={MODEL_BUSH_SPECIES} height={1.1} />
+          <ModelTrees items={rocks} urls={MODEL_ROCK_SPECIES} height={0.7} />
+        </>
+      )}
 
       <Lamps items={lamps} on={config.lampsOn} />
       <Benches items={benches} />

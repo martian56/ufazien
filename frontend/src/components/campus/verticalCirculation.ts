@@ -22,7 +22,8 @@
  * Pure, so the whole graph can be walked in a test without a canvas.
  */
 
-import type { InteriorKind } from './campusLayout'
+import { CAMPUS_BUILDINGS, type InteriorKind } from './campusLayout'
+import { interiorDoorFor } from './doorways'
 
 /** Ground, then the three floors above it. */
 export type Floor = 0 | 1 | 2 | 3
@@ -164,12 +165,31 @@ export function portalsFrom(roomId: number): Portal[] {
       z: CORRIDOR_DOORS[i] ?? 0,
       halfW: 1.2,
       halfD: 1.6,
-      spawn: { x: 0, z: 0 },
+      // Just inside that room's own door, not at its middle.
+      //
+      // The middle was fine while every room was flat and its door was on the
+      // far wall — you arrived in open floor and turned round. The amphitheatre
+      // is neither: its middle is halfway up the raked seating, so walking in
+      // put the player standing among the desks. Arriving at the door you would
+      // have come through is what the room's geometry says should happen.
+      spawn: roomEntry(room.id),
       label: room.name,
     })
   })
 
   return portals
+}
+
+/**
+ * Where a player arriving in a room is put: a pace inside its first door.
+ *
+ * Read from the room's own doors rather than assumed, so a room that moves its
+ * doors moves its arrival with them.
+ */
+export function roomEntry(roomId: number): { x: number; z: number } {
+  const building = CAMPUS_BUILDINGS.find((candidate) => candidate.id === roomId)
+  const door = interiorDoorFor(building?.interior)
+  return { x: door.x, z: door.z - door.facing * 1.5 }
 }
 
 /**

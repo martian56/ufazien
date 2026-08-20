@@ -8,11 +8,14 @@ import {
   doorstep,
   doorwayFor,
   interiorDoorFor,
-  interiorLimit,
+  interiorBounds,
+  interiorDoors,
   leavingThroughDoor,
 } from './doorways'
+import { interiorDoorId, isDoorOpen, openDoor } from './doorState'
 import { CAMPUS_BUILDINGS, PLAYER_RADIUS, type InteriorKind } from './campusLayout'
 import { INTERIOR_SPECS, interiorHalfExtent } from './interiorSpecs'
+import { LECTURE_BOARD_REACH } from './lectureSeating'
 import { insideCollider, resolveColliders, type Collider } from './campusPhysics'
 import { interiorColliders } from './interiorPhysics'
 
@@ -132,8 +135,12 @@ describe('the door on the inside', () => {
     // behind it — which is exactly what it did, and in the library it stood in
     // the issue desk.
     for (const kind of KINDS as InteriorKind[]) {
-      expect(interiorDoorFor(kind).z).toBeCloseTo(INTERIOR_SPECS[kind].halfExtent)
-      expect(interiorDoorFor(kind).z).toBeGreaterThan(interiorHalfExtent(kind))
+      for (const door of interiorDoors(kind)) {
+        // In the wall, whichever wall that is — the distance from the middle
+        // of the room is the room's own half extent, not the clamp's.
+        expect(Math.abs(door.z), kind).toBeCloseTo(INTERIOR_SPECS[kind].halfExtent)
+        expect(Math.abs(door.z), kind).toBeGreaterThan(interiorHalfExtent(kind))
+      }
     }
   })
 
@@ -142,28 +149,77 @@ describe('the door on the inside', () => {
     // it: you would walk up to an invisible line and watch the way out from
     // there.
     for (const kind of KINDS as InteriorKind[]) {
-      const door = interiorDoorFor(kind)
-      expect(interiorLimit(kind, 0, door.z - 1)).toBeCloseTo(door.z)
-      // And nowhere else: the wall is still a wall a pace to the side.
-      expect(interiorLimit(kind, door.halfW + 1, door.z - 1)).toBeCloseTo(
-        interiorHalfExtent(kind),
-      )
+      for (const door of interiorDoors(kind)) {
+        const inDoorway = interiorBounds(kind, door.x)
+        const opened = door.facing === 1 ? inDoorway.maxZ : inDoorway.minZ
+        expect(opened, `${kind} doorway`).toBeCloseTo(door.z)
+
+        // And nowhere else: the wall is still a wall a pace to the side.
+        const beside = interiorBounds(kind, door.x + door.halfW + 1)
+        const clamped = door.facing === 1 ? beside.maxZ : beside.minZ
+        expect(Math.abs(clamped), `${kind} beside the doorway`).toBeCloseTo(
+          interiorHalfExtent(kind),
+        )
+      }
     }
   })
 
-  it('keeps the far side of the room clamped', () => {
-    // The doorway is on +Z only. An opening at the back as well would let a
-    // player walk out through the projector wall.
+  it('keeps the wall opposite the doors clamped', () => {
+    // An opening at both ends would let a player walk out backwards through a
+    // solid wall. Whichever wall the doors are in, the other one holds.
     for (const kind of KINDS as InteriorKind[]) {
-      expect(interiorLimit(kind, 0, -5)).toBeCloseTo(interiorHalfExtent(kind))
+      const facing = interiorDoors(kind)[0].facing
+      const bounds = interiorBounds(kind, 0)
+      const opposite = facing === 1 ? bounds.minZ : bounds.maxZ
+      expect(Math.abs(opposite), kind).toBeCloseTo(interiorHalfExtent(kind))
     }
   })
 
-  it('is on the opposite wall to the projector in every room', () => {
+  it('puts the amphitheatre\'s doors where they can be reached', () => {
+    // Its seating is raked towards +Z, so a door in that wall comes out behind
+    // and under the top tier: invisible from the floor, and reachable only by
+    // climbing the seats. Both of its doors are on the board wall instead.
+    const doors = interiorDoors('lecture')
+    expect(doors).toHaveLength(2)
+    for (const door of doors) {
+      expect(door.facing, 'amphitheatre door is on the seating wall').toBe(-1)
+      expect(door.z).toBeCloseTo(-INTERIOR_SPECS.lecture.halfExtent)
+    }
+    // One each side, and neither across the board at x 0.
+    expect(doors[0].x).toBeLessThan(0)
+    expect(doors[1].x).toBeGreaterThan(0)
+    for (const door of doors) {
+      // Hard against the corners: the middle of that wall is a whiteboard, the
+      // timetable and the projection band between them. A door cut through a
+      // whiteboard is what this is here to stop.
+      expect(Math.abs(door.x) - door.halfW, 'door overlaps a board')
+        .toBeGreaterThan(LECTURE_BOARD_REACH)
+      expect(Math.abs(door.x) + door.halfW, 'door runs past the corner')
+        .toBeLessThan(INTERIOR_SPECS.lecture.halfExtent)
+    }
+  })
+
+  it('lets you leave the amphitheatre by either door and not between them', () => {
+    const doors = interiorDoors('lecture')
+    for (const door of doors) {
+      expect(leavingThroughDoor(door.x, door.z - 0.1, door)).toBe(true)
+      // Standing at the board, between the two, is not leaving.
+      expect(leavingThroughDoor(0, door.z - 0.1, door)).toBe(false)
+    }
+  })
+
+  it('is opposite the projector in every room but the amphitheatre', () => {
     // Which is where the spawn already faced, so walking in and turning round
-    // has always led back this way.
+    // has always led back this way. The amphitheatre is the exception and its
+    // doors are beside the board, because the wall opposite is raked seating.
     for (const kind of KINDS as InteriorKind[]) {
-      expect(interiorDoorFor(kind).z).toBeGreaterThan(0)
+      const door = interiorDoorFor(kind)
+      const board = INTERIOR_SPECS[kind].projector[2]
+      if (kind === 'lecture') {
+        expect(Math.sign(door.z), kind).toBe(Math.sign(board))
+      } else {
+        expect(Math.sign(door.z), kind).toBe(-Math.sign(board))
+      }
     }
   })
 
@@ -234,3 +290,27 @@ describe('the way out is clear', () => {
  * hall rather than straight down the middle, which is how a raked hall works.
  */
 const APPROACH = 2.5
+
+describe('a room with two doors keeps them apart', () => {
+  it('gives each one its own state key', () => {
+    // Keyed by building alone they shared a state: opening one swung both, and
+    // walking at the shut one let you through it.
+    const doors = interiorDoors('lecture')
+    const keys = doors.map((_, index) => interiorDoorId(4, index))
+    expect(new Set(keys).size, 'both doors share a key').toBe(doors.length)
+  })
+
+  it('opens only the one that was opened', () => {
+    const now = 1_000
+    // Open the second door of room 4 and nothing else.
+    const state = openDoor({}, interiorDoorId(4, 1), now)
+    expect(isDoorOpen(state, interiorDoorId(4, 1), now)).toBe(true)
+    expect(isDoorOpen(state, interiorDoorId(4, 0), now)).toBe(false)
+  })
+
+  it('keeps a single-door room working unchanged', () => {
+    // Every other room passes no index, and must land on the same key it always
+    // would have.
+    expect(interiorDoorId(2)).toBe(interiorDoorId(2, 0))
+  })
+})
