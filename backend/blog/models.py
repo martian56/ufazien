@@ -52,6 +52,11 @@ class BlogPost(models.Model):
     visibility = models.CharField(
         max_length=20, choices=Visibility.choices, default=Visibility.PUBLIC
     )
+    # When the author's followers were told about this, and null until they
+    # have been. It is the record that stops them being told twice: a post
+    # that is unpublished and published again is the same post, and the
+    # notification fires on the transition. See `announce_new_post`.
+    followers_notified_at = models.DateTimeField(null=True, blank=True, editable=False)
 
     class Meta:
         # Drafts have no published_at, so fall back to when they were created.
@@ -61,6 +66,21 @@ class BlogPost(models.Model):
     def is_scheduled(self):
         """Published, but dated forward, so not live yet."""
         return bool(self.is_published and self.published_at and self.published_at > timezone.now())
+
+    @property
+    def is_announceable(self):
+        """
+        Whether this post is one the author's followers should hear about.
+
+        Live, and meant for an audience. A scheduled post is not announced
+        until its date arrives — a notification about something nobody can
+        open yet is worse than none. Unlisted posts stay out of listings by
+        definition, and announcing one to every follower is the listing;
+        private posts are for the author.
+        """
+        if not self.is_published or self.is_scheduled:
+            return False
+        return self.visibility in (self.Visibility.PUBLIC, self.Visibility.FOLLOWERS)
 
     def save(self, *args, **kwargs):
         # Stamp the moment it actually goes live, and clear it if unpublished
