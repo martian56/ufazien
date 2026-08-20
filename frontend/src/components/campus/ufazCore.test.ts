@@ -5,8 +5,13 @@ import {
   FLIGHT_X,
   FLOORS,
   HALF_FLIGHTS,
-  HALF_RUN,
+  halfRun,
+  risersPerHalf,
+  storeyHeight,
   LIFT_SHAFT,
+  BUILDING_HEIGHT,
+  SLAB_THICKNESS,
+  clearHeight,
   STAIRWELL,
   arrivalLandingPlatform,
   coreGuards,
@@ -26,7 +31,7 @@ import {
   slabPieces,
   type Floor,
 } from './ufazCore'
-import { STOREY_HEIGHT, UFAZ_STAIR } from './interiorPhysics'
+import { UFAZ_STAIR } from './interiorPhysics'
 import {
   HEADROOM,
   STEP_UP,
@@ -111,8 +116,8 @@ function walk(from: Spot, waypoints: Spot[], secondsEach = 12) {
 function storeyRoute(floor: Floor): Spot[] {
   const up = HALF_FLIGHTS.find((f) => f.from === floor && f.half === 0)!
   const back = HALF_FLIGHTS.find((f) => f.from === floor && f.half === 1)!
-  const topOfUp = up.startZ + up.direction * HALF_RUN
-  const topOfBack = back.startZ + back.direction * HALF_RUN
+  const topOfUp = up.startZ + up.direction * halfRun(floor)
+  const topOfBack = back.startZ + back.direction * halfRun(floor)
   return [
     // Stand at the foot of the west run.
     { x: up.x, z: up.startZ + 1.0 },
@@ -125,20 +130,108 @@ function storeyRoute(floor: Floor): Spot[] {
   ]
 }
 
+describe('how tall the storeys are', () => {
+  it('gives the hall more height than the floors above it', () => {
+    // It is a restored 1900s building: an entrance storey of some ceremony,
+    // and ordinary floors over it. Every storey used to be the same 4.55 m,
+    // which left 4.27 m of clear height in a hall 44 m across.
+    for (const floor of [1, 2, 3] as Floor[]) {
+      expect(storeyHeight(0)).toBeGreaterThan(storeyHeight(floor))
+    }
+    expect(clearHeight(0), 'the hall is not a hall').toBeGreaterThan(5.2)
+    expect(clearHeight(1), 'the floors above lost height').toBeGreaterThan(4.27)
+    expect(clearHeight(0)).toBeCloseTo(storeyHeight(0) - SLAB_THICKNESS, 9)
+  })
+
+it('is the geometry this building was actually set out to', () => {
+    // The relational tests above would all still pass if every storey shrank
+    // together, so the numbers themselves are pinned here. Change them
+    // deliberately; do not let them drift.
+    expect(risersPerHalf(0), 'hall').toBe(16)
+    for (const floor of [1, 2] as Floor[]) {
+      expect(risersPerHalf(floor), `floor ${floor}`).toBe(14)
+    }
+
+    expect(storeyHeight(0)).toBeCloseTo(5.6, 9)
+    expect(clearHeight(0)).toBeCloseTo(5.32, 9)
+    expect(storeyHeight(1)).toBeCloseTo(4.9, 9)
+    expect(clearHeight(1)).toBeCloseTo(4.62, 9)
+
+    expect(FLOORS.map(floorLevel)).toEqual(
+      [0, 5.6, 10.5, 15.4].map((level) => expect.closeTo(level, 9)),
+    )
+    expect(BUILDING_HEIGHT).toBeCloseTo(20.3, 9)
+  })
+
+  it('makes every storey a whole number of the same riser', () => {
+    // Which is why the stair did not have to change its going or its pitch to
+    // make the hall taller: a taller storey is more steps, not bigger ones.
+    for (const floor of FLOORS) {
+      const risers = storeyHeight(floor) / UFAZ_STAIR.rise
+      expect(Math.abs(risers - Math.round(risers))).toBeLessThan(1e-9)
+      expect(Math.round(risers) % 2, 'a dog-leg splits its risers in half').toBe(0)
+    }
+  })
+
+  it('still fits inside the building it is drawn in', () => {
+    // The exterior is 25 m to the eaves. Stack the floors past that and the
+    // top one is above the roof it is supposed to be under.
+    expect(BUILDING_HEIGHT).toBeLessThan(25)
+  })
+
+  it('leaves every floor level exactly a storey above the one below', () => {
+    for (const floor of [0, 1, 2] as Floor[]) {
+      expect(floorLevel((floor + 1) as Floor) - floorLevel(floor)).toBeCloseTo(
+        storeyHeight(floor),
+        9,
+      )
+    }
+  })
+})
+
+describe('the well the stair turns in', () => {
+  it('stops clear of the lift shaft rather than leaving a ribbon of slab', () => {
+    // A taller hall means a longer flight, and a longer flight turns further
+    // north. Far enough and the hole meets the lift shaft's, with a strip of
+    // floor between them too narrow to stand on. This is what limits how tall
+    // the hall can be, so it is asserted rather than left as a comment.
+    const gap = LIFT_SHAFT.z1 - STAIRWELL.z0
+    expect(gap, 'the well has run into the lift shaft').toBeLessThan(0)
+    expect(Math.abs(gap), 'slab between the two holes is too narrow to stand on')
+      .toBeGreaterThan(PLAYER_RADIUS * 2)
+  })
+
+  it('starts every flight somewhere you can step onto it from', () => {
+    // The foot of a flight is not on the slab — it is over the hole, on the
+    // arrival landing of the flight below. Move it past that landing and it
+    // hangs in the void: the climb reaches the first floor and stops. That is
+    // a real failure this arrangement produced once, so it is pinned here.
+    for (const floor of [1, 2] as Floor[]) {
+      const foot = HALF_FLIGHTS.find((f) => f.from === floor && f.half === 0)!
+      const below = arrivalLandingPlatform((floor - 1) as Floor)
+      expect(foot.startZ, `floor ${floor} starts north of its landing`)
+        .toBeGreaterThanOrEqual(below.z - below.halfD - UFAZ_STAIR.going / 2 - 1e-9)
+      expect(foot.startZ, `floor ${floor} starts south of its landing`)
+        .toBeLessThanOrEqual(below.z + below.halfD + 1e-9)
+      expect(below.top).toBeCloseTo(floorLevel(floor), 9)
+    }
+  })
+})
+
 describe('which floor you are on', () => {
   it('is read off how high you are, not off a trigger you walked into', () => {
     for (const floor of FLOORS) {
       expect(floorAt(floorLevel(floor))).toBe(floor)
-      expect(floorAt(floorLevel(floor) + STOREY_HEIGHT - 0.01)).toBe(floor)
+      expect(floorAt(floorLevel(floor) + storeyHeight(floor) - 0.01)).toBe(floor)
     }
   })
 
   it('keeps you on the floor you left until you arrive at the next', () => {
     // Halfway up a flight is still the floor below: the room you are in is not
     // supposed to flicker with every tread.
-    expect(floorAt(STOREY_HEIGHT / 2)).toBe(0)
-    expect(floorAt(STOREY_HEIGHT - 0.001)).toBe(0)
-    expect(floorAt(STOREY_HEIGHT)).toBe(1)
+    expect(floorAt(storeyHeight(0) / 2)).toBe(0)
+    expect(floorAt(storeyHeight(0) - 0.001)).toBe(0)
+    expect(floorAt(storeyHeight(0))).toBe(1)
   })
 
   it('is exact at a floor level, not a hair under it', () => {
@@ -152,7 +245,7 @@ describe('which floor you are on', () => {
     // And a hair under a floor level really is the floor below: that is the
     // correct answer for someone on the last tread, and the reason the caller
     // must pass the surface rather than the camera.
-    expect(floorAt(STOREY_HEIGHT - 0.005)).toBe(0)
+    expect(floorAt(storeyHeight(0) - 0.005)).toBe(0)
   })
 
   it('never reports a floor that does not exist', () => {
@@ -344,7 +437,7 @@ describe('the dog-leg', () => {
     // them.
     const up = HALF_FLIGHTS.find((f) => f.from === 0 && f.half === 0)!
     const end = walk({ x: up.x, z: up.startZ + 1 }, [
-      { x: up.x, z: up.startZ + up.direction * HALF_RUN - 0.9 },
+      { x: up.x, z: up.startZ + up.direction * halfRun(0) - 0.9 },
       // Straight on past the turn, off the north end.
       { x: up.x, z: STAIRWELL.z0 - 4 },
     ])
