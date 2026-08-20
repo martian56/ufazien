@@ -25,7 +25,9 @@ import {
   UFAZ_LIFTS,
   UFAZ_TURNSTILES,
   UFAZ_TURNSTILE_Z,
-  STOREY_HEIGHT,
+  BUILDING_HEIGHT,
+  SLAB_THICKNESS,
+  storeyHeight,
   UFAZ_STAIR,
   VENDING_MACHINES,
   libraryAisleHalf,
@@ -2128,7 +2130,6 @@ function LiftCarBody({ height }: { height: () => number }) {
 }
 
 function UfazCore({ spec, whiteboard, liftHeight }: InteriorProps) {
-  const levelSpec = { ...spec, ceiling: STOREY_HEIGHT }
 
   return (
     <group>
@@ -2136,22 +2137,32 @@ function UfazCore({ spec, whiteboard, liftHeight }: InteriorProps) {
       {coreSlabs()
         .filter((slab) => slab.top > 0)
         .map((slab, i) => (
-          <mesh key={i} receiveShadow position={[slab.x, slab.top - 0.14, slab.z]}>
-            <boxGeometry args={[slab.halfW * 2, 0.28, slab.halfD * 2]} />
+          <mesh
+            key={i}
+            receiveShadow
+            position={[slab.x, slab.top - SLAB_THICKNESS / 2, slab.z]}
+          >
+            <boxGeometry args={[slab.halfW * 2, SLAB_THICKNESS, slab.halfD * 2]} />
             <meshStandardMaterial color="#d8d4cc" roughness={0.8} />
           </mesh>
         ))}
 
       <DogLegStair />
-      <LiftCore ceiling={STOREY_HEIGHT * 4} />
+      <LiftCore ceiling={BUILDING_HEIGHT} />
       {liftHeight && <LiftCarBody height={liftHeight} />}
 
       {FLOORS.map((floor) => (
+        // Each level is told how much clear height it has, because the hall
+        // has more than the floors above it and the things that reach the
+        // ceiling — the arcade, the windows — are set out from it.
         <group key={floor} position={[0, floorLevel(floor), 0]}>
           {floor === 0 ? (
-            <UfazGroundLevel spec={levelSpec} whiteboard={whiteboard} />
+            <UfazGroundLevel
+              spec={{ ...spec, ceiling: storeyHeight(floor) }}
+              whiteboard={whiteboard}
+            />
           ) : (
-            <UfazUpperLevel spec={levelSpec} />
+            <UfazUpperLevel spec={{ ...spec, ceiling: storeyHeight(floor) }} />
           )}
         </group>
       ))}

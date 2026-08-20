@@ -30,18 +30,14 @@
 import type { Collider, Platform } from './campusPhysics'
 
 /**
- * Floor to floor, in metres.
+ * The height of one riser, in metres.
  *
- * The one number the whole building is set out from: the stair divides it into
- * risers and the landing arrives at exactly the next floor level, so a change
- * here carries the flight, the landing and everything derived from them.
- */
-export const STOREY_HEIGHT = 4.55
-
-/**
- * How many risers make up a storey.
+ * The one dimension the whole building is set out from. Every storey is a
+ * whole number of these, so the landing arrives at exactly the next floor
+ * level however tall that storey is, and a stair in the hall feels the same
+ * underfoot as a stair on the third floor.
  *
- * Twenty-six of 175 mm. It was fourteen of 300 mm with a 620 mm going — a
+ * 175 mm. It was fourteen risers of 300 mm with a 620 mm going — a
  * thirty-centimetre hop onto a sixty-two-centimetre shelf, roughly twice human
  * size in both directions. That reads as stadium terracing rather than a
  * stair, and in first person the camera lurched a foot per step.
@@ -52,7 +48,50 @@ export const STOREY_HEIGHT = 4.55
  * an ordinary stair, and `2R + G` is 630 mm — the middle of the range a stair
  * is comfortable to walk in.
  */
-const RISERS_PER_STOREY = 26
+export const RISER = 0.175
+
+/**
+ * Risers in each half of the dog-leg, for the storey that starts at each floor.
+ *
+ * The hall is taller than the floors above it, which is what the building
+ * being a restored 1900s one means: an entrance storey of some ceremony, and
+ * ordinary floors over it. Every storey used to be 4.55 m, and since the slab
+ * is 280 mm thick that left 4.27 m of clear height everywhere — generous
+ * upstairs, but low for a hall, and low against a floorplate 44 m across.
+ *
+ * Sixteen risers per half make the hall 5.60 m floor to floor, so 5.32 m
+ * clear. Fourteen make the floors above it 4.90 m, so 4.62 m clear. Both are
+ * whole numbers of the same riser, so neither stair had to change its going or
+ * its pitch to get there — there are simply more steps in the taller one. What
+ * stops the hall being taller still is the well, not the room: see `FOOT_Z`.
+ *
+ * Indexed by the floor the storey rises *from*, so the top floor has no entry:
+ * nothing climbs out of it.
+ */
+const RISERS_PER_HALF_BY_FLOOR: readonly number[] = [16, 14, 14]
+
+/** Risers in each half of the dog-leg leaving `floor`. */
+export function risersPerHalf(floor: Floor): number {
+  return RISERS_PER_HALF_BY_FLOOR[floor] ?? RISERS_PER_HALF_BY_FLOOR[1]
+}
+
+/**
+ * How thick a floor slab is, in metres.
+ *
+ * It comes off the storey: the height you can actually see is the pitch less
+ * this, which is why 4.55 m floor to floor read as a 4.27 m ceiling.
+ */
+export const SLAB_THICKNESS = 0.28
+
+/** The clear height under the slab above, which is the ceiling you see. */
+export function clearHeight(floor: Floor): number {
+  return storeyHeight(floor) - SLAB_THICKNESS
+}
+
+/** Floor to floor, in metres, for the storey rising from `floor`. */
+export function storeyHeight(floor: Floor): number {
+  return 2 * risersPerHalf(floor) * RISER
+}
 
 export const UFAZ_STAIR = {
   // Narrower and further in than the first attempt at moving it. At x 12.5
@@ -60,10 +99,7 @@ export const UFAZ_STAIR = {
   // inside the colonnade at 17 — the rail ran straight through a column.
   x: 10.5,
   z: -10,
-  // Treads, which is one fewer than the risers: the last riser puts you on the
-  // landing rather than on another tread.
-  steps: RISERS_PER_STOREY - 1,
-  rise: STOREY_HEIGHT / RISERS_PER_STOREY,
+  rise: RISER,
   going: 0.28,
   halfW: 3.5,
 }
@@ -88,10 +124,25 @@ export const FLOORS: readonly Floor[] = [0, 1, 2, 3]
 /** How far the player may walk from the centre, on any floor. */
 export const CORE_HALF = 22
 
+/**
+ * The height of each floor's walking surface, measured up from the hall.
+ *
+ * A running total rather than a multiplication, because the storeys are no
+ * longer all the same height — see `RISERS_PER_HALF_BY_FLOOR`.
+ */
+const FLOOR_LEVELS: readonly number[] = [0, 1, 2, 3].reduce<number[]>(
+  (levels, floor) =>
+    floor === 0 ? [0] : [...levels, levels[floor - 1] + storeyHeight((floor - 1) as Floor)],
+  [],
+)
+
 /** The height of a floor's walking surface. */
 export function floorLevel(floor: Floor): number {
-  return floor * STOREY_HEIGHT
+  return FLOOR_LEVELS[floor]
 }
+
+/** Floor to roof: the top floor's level plus its own storey. */
+export const BUILDING_HEIGHT = FLOOR_LEVELS[3] + storeyHeight(3)
 
 /**
  * Which floor a given height belongs to.
@@ -104,10 +155,14 @@ export function floorLevel(floor: Floor): number {
  */
 export function floorAt(y: number): Floor {
   if (!Number.isFinite(y)) return 0
-  const floor = Math.floor(y / STOREY_HEIGHT + 1e-6)
-  if (floor < 0) return 0
-  if (floor > 3) return 3
-  return floor as Floor
+  if (y < FLOOR_LEVELS[1] - 1e-6) return 0
+  // Downwards, so the first level `y` clears is the floor it is on. A search
+  // rather than a division: the storeys are not all the same height, so there
+  // is no single number to divide by.
+  for (let floor = 3; floor > 0; floor -= 1) {
+    if (y >= FLOOR_LEVELS[floor] - 1e-6) return floor as Floor
+  }
+  return 0
 }
 
 /** A rectangle on the plan, as two ranges. */
@@ -137,20 +192,47 @@ export interface PlanRect {
 export const FLIGHT_HALF_W = 1.5
 /** The two runs, west and east, either side of the well. */
 export const FLIGHT_X = [8.7, 12.3] as const
-/** Risers in each half of the dog-leg; two halves make a storey. */
-const RISERS_PER_HALF = 13
-const TREADS_PER_HALF = RISERS_PER_HALF - 1
-/** Horizontal distance from the first tread of a half-flight to its last. */
-export const HALF_RUN = (TREADS_PER_HALF - 1) * UFAZ_STAIR.going
 
-/** Where the foot of the first half-flight sits, and the turn beyond it. */
-const FOOT_Z = -10
+/** Treads in each half of the dog-leg leaving `floor`. */
+export function treadsPerHalf(floor: Floor): number {
+  return risersPerHalf(floor) - 1
+}
+
+/** Horizontal distance from the first tread of a half-flight to its last. */
+export function halfRun(floor: Floor): number {
+  return (treadsPerHalf(floor) - 1) * UFAZ_STAIR.going
+}
+
 const HALF_LANDING_DEPTH = 1.4
 
-const TOP_OF_HALF_ONE = FOOT_Z - HALF_RUN
+/**
+ * Every flight starts in the same place; the turn is what moves.
+ *
+ * The hall's flight is longer than the ones above it and that length has to go
+ * somewhere. It cannot go south: the foot of a flight is not on the slab, it
+ * is on the arrival landing of the flight below, and moving it out past that
+ * landing leaves it hanging over the hole with nothing to step onto it from.
+ * The walking test caught exactly that — the climb reached the first floor and
+ * stopped, because the next flight began over the well.
+ *
+ * So the foot stays where it has always been and a longer flight turns further
+ * north. That is what bounds how tall the hall can be: the well cannot reach
+ * the lift shaft at z −17.2, and it has to stop a clear player's width short
+ * of it rather than leaving a ribbon of slab too narrow to stand on. Sixteen
+ * risers per half is the most that fits, and it is what the hall has —
+ * seventeen leaves 1.06 m between the two holes, and a player is 1.10 m wide.
+ */
+const FOOT_Z = -10
+
 /** The edge of the half-landing you arrive at, and leave from. */
-const TURN_EDGE = TOP_OF_HALF_ONE - UFAZ_STAIR.going / 2
-const HALF_LANDING_Z0 = TURN_EDGE - HALF_LANDING_DEPTH
+export function turnEdge(floor: Floor): number {
+  return FOOT_Z - halfRun(floor) - UFAZ_STAIR.going / 2
+}
+
+/** The north edge of the well: the deepest turn of any storey, the hall's. */
+const DEEPEST_LANDING_Z0 = Math.min(
+  ...([0, 1, 2] as Floor[]).map((floor) => turnEdge(floor) - HALF_LANDING_DEPTH),
+)
 
 /**
  * The head of the well, which is now closed.
@@ -177,7 +259,7 @@ const HALF_LANDING_Z0 = TURN_EDGE - HALF_LANDING_DEPTH
  * The same mistake one level up: the next storey's first flight rises over the
  * arrival landing, so that landing has to stop where the flight begins.
  */
-const HALF_TWO_FOOT = TURN_EDGE
+
 
 /**
  * The well the whole dog-leg sits in, and the hole it needs in every slab.
@@ -191,7 +273,9 @@ const HALF_TWO_FOOT = TURN_EDGE
 export const STAIRWELL: PlanRect = {
   x0: FLIGHT_X[0] - FLIGHT_HALF_W - 0.6,
   x1: FLIGHT_X[1] + FLIGHT_HALF_W + 0.6,
-  z0: HALF_LANDING_Z0 - 0.4,
+  // The longest flight decides, because one hole serves every storey: cut it
+  // to the short flights and the hall's would turn inside the slab beside it.
+  z0: DEEPEST_LANDING_Z0 - 0.4,
   z1: FOOT_Z + 0.9,
 }
 
@@ -281,11 +365,13 @@ export interface HalfFlight {
   direction: -1 | 1
   /** Height of the floor or landing it leaves. */
   baseY: number
+  /** How many treads this half has, which depends on how tall its storey is. */
+  treads: number
 }
 
 /** Height of the half-landing partway up a storey. */
 export function halfLandingLevel(floor: Floor): number {
-  return floorLevel(floor) + RISERS_PER_HALF * UFAZ_STAIR.rise
+  return floorLevel(floor) + risersPerHalf(floor) * UFAZ_STAIR.rise
 }
 
 export const HALF_FLIGHTS: HalfFlight[] = ([0, 1, 2] as Floor[]).flatMap((floor) => [
@@ -297,21 +383,23 @@ export const HALF_FLIGHTS: HalfFlight[] = ([0, 1, 2] as Floor[]).flatMap((floor)
     startZ: FOOT_Z,
     direction: -1 as const,
     baseY: floorLevel(floor),
+    treads: treadsPerHalf(floor),
   },
   {
     from: floor,
     half: 1 as const,
     x: FLIGHT_X[1],
     halfW: FLIGHT_HALF_W,
-    startZ: HALF_TWO_FOOT,
+    startZ: turnEdge(floor),
     direction: 1 as const,
     baseY: halfLandingLevel(floor),
+    treads: treadsPerHalf(floor),
   },
 ])
 
 /** The treads of one half-flight. */
 export function halfFlightPlatforms(flight: HalfFlight): Platform[] {
-  return Array.from({ length: TREADS_PER_HALF }, (_, i) => ({
+  return Array.from({ length: flight.treads }, (_, i) => ({
     x: flight.x,
     z: flight.startZ + flight.direction * i * UFAZ_STAIR.going,
     halfW: flight.halfW,
@@ -323,7 +411,7 @@ export function halfFlightPlatforms(flight: HalfFlight): Platform[] {
 
 /** The half-landing you turn on, spanning both runs. */
 export function halfLandingPlatform(floor: Floor): Platform {
-  const z1 = TURN_EDGE
+  const z1 = turnEdge(floor)
   const z0 = STAIRWELL.z0
   return {
     x: (STAIRWELL.x0 + STAIRWELL.x1) / 2,
@@ -343,7 +431,7 @@ export function halfLandingPlatform(floor: Floor): Platform {
  * height rather than across a gap the width of a rounding error.
  */
 export function arrivalLandingPlatform(floor: Floor): Platform {
-  const topTreadZ = HALF_TWO_FOOT + (TREADS_PER_HALF - 1) * UFAZ_STAIR.going
+  const topTreadZ = turnEdge(floor) + (treadsPerHalf(floor) - 1) * UFAZ_STAIR.going
   const z0 = topTreadZ + UFAZ_STAIR.going / 2
   const z1 = STAIRWELL.z1 + 0.6
   return {
@@ -483,7 +571,7 @@ export function liftShaftWalls(): Collider[] {
   // vocabulary this codebase already uses for "these are the same object",
   // the way a sofa's seat names the sofa it sits on.
   const id = 'lift-shaft'
-  const top = floorLevel(3) + STOREY_HEIGHT
+  const top = BUILDING_HEIGHT
   const midX = (LIFT_SHAFT.x0 + LIFT_SHAFT.x1) / 2
   const midZ = (LIFT_SHAFT.z0 + LIFT_SHAFT.z1) / 2
   return [
