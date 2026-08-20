@@ -2,10 +2,14 @@ import { describe, expect, it } from 'vitest'
 
 import {
   ALL_INTERIOR_SEATS,
+  SEAT_REACH,
   UFAZ_BENCH_SEAT_HEIGHT,
   UFAZ_BENCH_X,
   UFAZ_BENCH_Z,
   interiorColliders,
+  interiorSeats,
+  nearestSeat,
+  reachDistance,
 } from './interiorPhysics'
 
 describe('the benches in the entrance hall', () => {
@@ -41,6 +45,58 @@ describe('the benches in the entrance hall', () => {
       const box = carrier as { x: number; z: number; halfW?: number; halfD?: number }
       expect(Math.abs(seat.x - box.x)).toBeLessThanOrEqual(box.halfW ?? 0)
       expect(Math.abs(seat.z - box.z)).toBeLessThanOrEqual(box.halfD ?? 0)
+    }
+  })
+})
+
+describe('reaching a seat', () => {
+  const seats = interiorSeats('ufaz-core')
+  const bench = seats.find((seat) => seat.id === 'ufaz-bench-2')!
+  // The hall benches are 1.6 wide and 4.4 long, so half of each.
+  const halfLength = 2.2
+  const beside = UFAZ_BENCH_X - 1.4
+
+  it('measures to the bench, not to the spot on it', () => {
+    // Standing squarely against one end of the bench. To the seat point in the
+    // middle that is 2.5 m — further than the 1.6 m reach — which is why a
+    // bench you were plainly standing at offered you nothing.
+    const endZ = bench.z + halfLength
+    expect(Math.hypot(beside - bench.x, endZ - bench.z)).toBeGreaterThan(SEAT_REACH)
+    expect(reachDistance(beside, endZ, bench)).toBeLessThan(SEAT_REACH)
+  })
+
+  it('offers the bench from anywhere along it', () => {
+    for (const z of [bench.z - halfLength, bench.z, bench.z + halfLength]) {
+      expect(nearestSeat(beside, z, seats)?.id, `not offered at z ${z}`).toBe(bench.id)
+    }
+  })
+
+  it('still refuses it from across the room', () => {
+    // Widening the reach must not mean every bench in the hall is on offer.
+    expect(nearestSeat(UFAZ_BENCH_X + 6, bench.z, seats)?.id).not.toBe(bench.id)
+    expect(reachDistance(UFAZ_BENCH_X + 6, bench.z, bench)).toBeGreaterThan(SEAT_REACH)
+  })
+
+  it('leaves a loose seat measured from its own point', () => {
+    // A chair is its own footprint. One that offered itself from a metre past
+    // its back would be worse than the bug this fixes.
+    const loose = seats.find((seat) => !seat.carrier)
+    if (!loose) return
+    expect(reachDistance(loose.x + 0.9, loose.z, loose)).toBeCloseTo(0.9, 6)
+  })
+
+  it('picks the nearer end when one piece carries several seats', () => {
+    const shared = new Map<string, typeof seats>()
+    for (const seat of seats) {
+      if (!seat.on) continue
+      shared.set(seat.on, [...(shared.get(seat.on) ?? []), seat])
+    }
+    for (const [, group] of shared) {
+      if (group.length < 2) continue
+      const [first] = group
+      // Standing at one seat's own position, that seat wins even though every
+      // seat on the piece is nought from the piece itself.
+      expect(nearestSeat(first.x, first.z, group)?.id).toBe(first.id)
     }
   })
 })
