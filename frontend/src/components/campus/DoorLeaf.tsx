@@ -25,6 +25,7 @@ export default function DoorLeaf({
   swing,
   /** Which way the leaves swing away from the player. */
   facing = 1,
+  glazed = false,
 }: {
   x: number
   z: number
@@ -35,6 +36,12 @@ export default function DoorLeaf({
   /** 0 shut, 1 fully open. */
   swing: number
   facing?: 1 | -1
+  /**
+   * Glazed over most of the leaf, in small panes, with a solid panel at the
+   * foot. The front door of the main building is like this; the doors off the
+   * corridors inside are not, so it is off by default.
+   */
+  glazed?: boolean
 }) {
   const left = useRef<Group>(null)
   const right = useRef<Group>(null)
@@ -77,27 +84,88 @@ export default function DoorLeaf({
   })
 
   const leafWidth = halfWidth
+  // Where the glazing starts on a glazed leaf: a solid panel at the foot, the
+  // rest glass in small panes.
+  const panelTop = height * 0.28
+  const columns = 2
+  const rows = 4
+
   const panel = (
     <>
-      <mesh position={[leafWidth / 2, height / 2, 0]} castShadow>
-        <boxGeometry args={[leafWidth, height, 0.12]} />
-        <meshStandardMaterial color="#5a4632" roughness={0.55} metalness={0.12} />
-      </mesh>
-      {/* A glazed upper panel, so a lit room shows through a shut door. On
-          both faces: the right leaf is mounted turned about, so a panel on one
-          side only showed the outside world a blank slab. */}
-      {[0.07, -0.07].map((face) => (
-        <mesh key={face} position={[leafWidth / 2, height * 0.68, face]}>
-          <boxGeometry args={[leafWidth * 0.62, height * 0.34, 0.02]} />
-          <meshStandardMaterial
-            color="#9fd6ff"
-            roughness={0.15}
-            metalness={0.35}
-            transparent
-            opacity={0.55}
-          />
-        </mesh>
-      ))}
+      {glazed ? (
+        <>
+          {/* The stiles and rails, as a frame rather than a slab, so the
+              glazing is a hole in the leaf and not a sticker on it. */}
+          <mesh position={[leafWidth / 2, panelTop / 2, 0]} castShadow>
+            <boxGeometry args={[leafWidth, panelTop, 0.12]} />
+            <meshStandardMaterial color="#5a4632" roughness={0.55} metalness={0.12} />
+          </mesh>
+          {[0.06, leafWidth - 0.06].map((sx) => (
+            <mesh key={sx} position={[sx, (panelTop + height) / 2, 0]} castShadow>
+              <boxGeometry args={[0.12, height - panelTop, 0.12]} />
+              <meshStandardMaterial color="#5a4632" roughness={0.55} metalness={0.12} />
+            </mesh>
+          ))}
+          <mesh position={[leafWidth / 2, height - 0.06, 0]} castShadow>
+            <boxGeometry args={[leafWidth, 0.12, 0.12]} />
+            <meshStandardMaterial color="#5a4632" roughness={0.55} metalness={0.12} />
+          </mesh>
+
+          {/* The glass. */}
+          <mesh position={[leafWidth / 2, (panelTop + height) / 2, 0]}>
+            <boxGeometry args={[leafWidth - 0.12, height - panelTop - 0.12, 0.03]} />
+            <meshStandardMaterial
+              color="#b9d9ef"
+              roughness={0.12}
+              metalness={0.3}
+              transparent
+              opacity={0.5}
+            />
+          </mesh>
+
+          {/* The glazing bars that make it small panes rather than one sheet. */}
+          {Array.from({ length: columns - 1 }, (_, i) => (
+            <mesh
+              key={`c${i}`}
+              position={[(leafWidth * (i + 1)) / columns, (panelTop + height) / 2, 0]}
+            >
+              <boxGeometry args={[0.05, height - panelTop, 0.14]} />
+              <meshStandardMaterial color="#4a3421" roughness={0.6} />
+            </mesh>
+          ))}
+          {Array.from({ length: rows - 1 }, (_, i) => (
+            <mesh
+              key={`r${i}`}
+              position={[leafWidth / 2, panelTop + ((height - panelTop) * (i + 1)) / rows, 0]}
+            >
+              <boxGeometry args={[leafWidth, 0.05, 0.14]} />
+              <meshStandardMaterial color="#4a3421" roughness={0.6} />
+            </mesh>
+          ))}
+        </>
+      ) : (
+        <>
+          <mesh position={[leafWidth / 2, height / 2, 0]} castShadow>
+            <boxGeometry args={[leafWidth, height, 0.12]} />
+            <meshStandardMaterial color="#5a4632" roughness={0.55} metalness={0.12} />
+          </mesh>
+          {/* A glazed upper panel, so a lit room shows through a shut door. On
+              both faces: the right leaf is mounted turned about, so a panel on
+              one side only showed the outside world a blank slab. */}
+          {[0.07, -0.07].map((face) => (
+            <mesh key={face} position={[leafWidth / 2, height * 0.68, face]}>
+              <boxGeometry args={[leafWidth * 0.62, height * 0.34, 0.02]} />
+              <meshStandardMaterial
+                color="#9fd6ff"
+                roughness={0.15}
+                metalness={0.35}
+                transparent
+                opacity={0.55}
+              />
+            </mesh>
+          ))}
+        </>
+      )}
       {/* The handle, which is the thing that tells you it opens at all. */}
       {[0.1, -0.1].map((face) => (
         <mesh key={face} position={[leafWidth * 0.88, height * 0.44, face]}>

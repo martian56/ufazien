@@ -32,6 +32,7 @@ import {
   chatBubbleTexture,
   nameTagTexture,
   pathTexture,
+  plaqueTexture,
   stoneTexture,
 } from './campusTextures'
 import CampusWindows from './CampusWindows'
@@ -413,20 +414,29 @@ export const PORCH_DEPTH = 3.4
 
 /** The clear opening, matching the gap left in the collider exactly. */
 export const OPENING_HALF_W = DOOR_HALF_WIDTH
-export const OPENING_HEIGHT = 4.4
+
+/** How tall the swinging leaves are; fixed glazing fills the rest. */
+export const LEAF_HEIGHT = 2.72
+
+/** Where the arch springs from, and how far it rises: a true semicircle. */
+export const SPRING_HEIGHT = 4.0
+export const ARCH_RISE = OPENING_HALF_W
+export const OPENING_HEIGHT = SPRING_HEIGHT + ARCH_RISE
 
 /**
  * Height of the threshold above the ground.
  *
- * Three steps up, matching the flight outside. Everything in the opening —
- * the reveal, the leaves and the lobby floor — is measured from here, because
- * a doorway that starts at ground level starts below the step you walk up.
+ * Nothing: you walk straight in off the pavement, which is what the building
+ * does. There were three steps up to a sill at 0.89 and they were wrong twice
+ * over. The real entrance on Nizami Street has no steps at all — the threshold
+ * is flush with the paving — and ours had no colliders either, so they were a
+ * flight you could not climb, standing in front of a door whose lower half was
+ * buried in the plinth behind them.
+ *
+ * Everything in the opening is still measured from here, so that the constant
+ * keeps saying what it says rather than being deleted from a dozen sums.
  */
-// The top *surface* of the top step, not its centre. The steps are boxes of
-// height 0.3 at 0.18 + i * 0.28, so the top one is centred at 0.74 and you walk
-// on 0.89 — at 0.74 the lobby floor, the reveal and the door leaves all sat a
-// hand's width below the step outside them.
-export const THRESHOLD = 0.89
+export const THRESHOLD = 0
 
 /**
  * The lobby you can see through an open door.
@@ -521,33 +531,203 @@ function DoorLobby({ trim, accent, sill }: { trim: string; accent: string; sill:
  * panel on an unbroken facade. The opening is real now, and `Building` builds
  * the wall around it rather than as one box.
  */
+/** How many facets the arch is cut into. Enough that it reads as a curve. */
+const ARCH_FACETS = 20
+
+/** Points along the arch's centreline, from one springing to the other. */
+function archPoints(radius: number): { x: number; y: number; angle: number }[] {
+  return Array.from({ length: ARCH_FACETS }, (_, i) => {
+    const angle = (Math.PI * (i + 0.5)) / ARCH_FACETS
+    return {
+      x: Math.cos(angle) * radius,
+      y: SPRING_HEIGHT + Math.sin(angle) * radius,
+      angle,
+    }
+  })
+}
+
+/**
+ * The moulded arch over the door, cut into flat facets.
+ *
+ * A ring of small boxes set along the arc rather than a torus: the surround
+ * either side is square in section and the arch has to match it, and a torus
+ * is round in section, so the two met at the springing with a step in the
+ * profile.
+ */
+function Archivolt({ trim }: { trim: string }) {
+  const radius = OPENING_HALF_W + 0.35
+  const facetWidth = (Math.PI * radius) / ARCH_FACETS + 0.04
+
+  return (
+    <group>
+      {archPoints(radius).map(({ x, y, angle }, i) => (
+        <mesh key={i} castShadow position={[x, y, 0.05]} rotation={[0, 0, angle - Math.PI / 2]}>
+          <boxGeometry args={[0.7, facetWidth, 0.45]} />
+          <meshStandardMaterial color={trim} roughness={0.85} />
+        </mesh>
+      ))}
+    </group>
+  )
+}
+
+/**
+ * The fanlight in the head of the arch.
+ *
+ * Glass with bars radiating from the centre of the springing line, which is
+ * the pattern in the doorway's photograph and the reason the arch is worth
+ * having at all: a plain arched hole reads as a tunnel mouth.
+ */
+function Fanlight() {
+  const radius = OPENING_HALF_W - 0.04
+
+  return (
+    <group position={[0, 0, -0.06]}>
+      <mesh position={[0, SPRING_HEIGHT, 0]} rotation={[0, 0, 0]}>
+        <circleGeometry args={[radius, 32, 0, Math.PI]} />
+        <meshStandardMaterial
+          color="#b9d9ef"
+          roughness={0.12}
+          metalness={0.25}
+          transparent
+          opacity={0.5}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+
+      {/* The radiating bars, and the rim they run to. */}
+      {Array.from({ length: 9 }, (_, i) => {
+        const angle = (Math.PI * (i + 1)) / 10
+        return (
+          <mesh
+            key={i}
+            position={[(Math.cos(angle) * radius) / 2, SPRING_HEIGHT + (Math.sin(angle) * radius) / 2, 0.03]}
+            rotation={[0, 0, angle - Math.PI / 2]}
+          >
+            <boxGeometry args={[0.045, radius * 0.94, 0.05]} />
+            <meshStandardMaterial color="#4a3421" roughness={0.6} />
+          </mesh>
+        )
+      })}
+      {archPoints(radius * 0.66).map(({ x, y, angle }, i) => (
+        <mesh key={`r${i}`} position={[x, y, 0.03]} rotation={[0, 0, angle - Math.PI / 2]}>
+          <boxGeometry args={[0.045, (Math.PI * radius * 0.66) / ARCH_FACETS + 0.03, 0.05]} />
+          <meshStandardMaterial color="#4a3421" roughness={0.6} />
+        </mesh>
+      ))}
+    </group>
+  )
+}
+
+/**
+ * The transom: fixed glazing between the door leaves and the springing line.
+ *
+ * The leaves are two and a bit metres, the opening is four before the arch
+ * even starts, and without this the difference is an empty gap over the doors.
+ */
+function Transom({ from, to }: { from: number; to: number }) {
+  const height = to - from
+  const bays = 4
+
+  return (
+    <group position={[0, 0, -0.06]}>
+      <mesh position={[0, (from + to) / 2, 0]}>
+        <planeGeometry args={[OPENING_HALF_W * 2 - 0.08, height]} />
+        <meshStandardMaterial
+          color="#b9d9ef"
+          roughness={0.12}
+          metalness={0.25}
+          transparent
+          opacity={0.5}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+      {/* The rail under it and the mullions across it. */}
+      <mesh position={[0, from, 0.03]}>
+        <boxGeometry args={[OPENING_HALF_W * 2, 0.16, 0.1]} />
+        <meshStandardMaterial color="#4a3421" roughness={0.6} />
+      </mesh>
+      {Array.from({ length: bays - 1 }, (_, i) => (
+        <mesh
+          key={i}
+          position={[(-OPENING_HALF_W * 2 * (i + 1)) / bays + OPENING_HALF_W, (from + to) / 2, 0.03]}
+        >
+          <boxGeometry args={[0.07, height, 0.07]} />
+          <meshStandardMaterial color="#4a3421" roughness={0.6} />
+        </mesh>
+      ))}
+    </group>
+  )
+}
+
+/**
+ * The two plaques either side of the door.
+ *
+ * Left in Azerbaijani, right in French, as they are on the building. Mounted
+ * on the wall face rather than the surround, clear of the plinth's head.
+ */
+function EntrancePlaques() {
+  const left = plaqueTexture('Azərbaycan Respublikası Təhsil Nazirliyi', [
+    'Azərbaycan-',
+    'Fransız',
+    'Universiteti',
+  ])
+  const right = plaqueTexture("Ministère de l'Éducation de la République d'Azerbaïdjan", [
+    'Université',
+    'Franco-',
+    'Azerbaïdjanaise',
+  ])
+
+  return (
+    <group>
+      {([[-1, left], [1, right]] as [number, THREE.Texture | null][]).map(([side, map]) =>
+        map ? (
+          <group key={side} position={[side * (OPENING_HALF_W + 2.35), 2.85, 0.16]}>
+            <mesh castShadow>
+              <boxGeometry args={[1.5, 1.85, 0.05]} />
+              <meshStandardMaterial color="#e9eaec" roughness={0.35} metalness={0.05} />
+            </mesh>
+            <mesh position={[0, 0, 0.031]}>
+              <planeGeometry args={[1.5, 1.85]} />
+              <meshStandardMaterial map={map} roughness={0.35} />
+            </mesh>
+            {/* Standoff fixings, one at each corner. */}
+            {[[-0.62, 0.76], [0.62, 0.76], [-0.62, -0.76], [0.62, -0.76]].map(([px, py]) => (
+              <mesh key={`${px},${py}`} position={[px, py, 0.05]} rotation={[Math.PI / 2, 0, 0]}>
+                <cylinderGeometry args={[0.045, 0.045, 0.05, 8]} />
+                <meshStandardMaterial color="#9aa0a6" roughness={0.3} metalness={0.8} />
+              </mesh>
+            ))}
+          </group>
+        ) : null,
+      )}
+    </group>
+  )
+}
+
 export function Entrance({ depth, trim, accent }: { depth: number; trim: string; accent: string }) {
   return (
     <group position={[0, 0, depth / 2 + 0.06]}>
-      {/* Steps up to the threshold */}
-      {[0, 1, 2].map((i) => (
-        <mesh key={i} receiveShadow castShadow position={[0, 0.18 + i * 0.28, 1.5 - i * 0.5]}>
-          <boxGeometry args={[7.5 - i * 0.6, 0.3, 1.1]} />
-          <meshStandardMaterial color={trim} roughness={0.95} />
-        </mesh>
-      ))}
+      {/* No steps. You walk in off the paving — see `THRESHOLD`. */}
 
-      {/* Surround, as a frame around the opening rather than a slab across it:
-          two slim jambs and a head, so the doorway stays clear. */}
+      {/* The surround: two jambs to the springing line, and an archivolt
+          turning over them. A frame around the opening rather than a slab
+          across it, so the doorway stays clear.
+
+          The jambs run to the ground rather than stopping at the sill. Stone
+          standing on paving is what the photograph shows, and it is what stops
+          the doorway dissolving into the plinth — see the note on the plinth
+          in `UfazBuilding`. */}
       {[-1, 1].map((side) => (
         <mesh
           key={side}
           castShadow
-          position={[side * (OPENING_HALF_W + 0.35), THRESHOLD + OPENING_HEIGHT / 2, 0.05]}
+          position={[side * (OPENING_HALF_W + 0.35), SPRING_HEIGHT / 2, 0.05]}
         >
-          <boxGeometry args={[0.7, OPENING_HEIGHT + 0.7, 0.45]} />
+          <boxGeometry args={[0.7, SPRING_HEIGHT, 0.45]} />
           <meshStandardMaterial color={trim} roughness={0.85} />
         </mesh>
       ))}
-      <mesh castShadow position={[0, THRESHOLD + OPENING_HEIGHT + 0.35, 0.05]}>
-        <boxGeometry args={[OPENING_HALF_W * 2 + 1.4, 0.7, 0.45]} />
-        <meshStandardMaterial color={trim} roughness={0.85} />
-      </mesh>
+      <Archivolt trim={trim} />
 
       {/* The reveal: the thickness of the wall, seen from outside. */}
       {[-1, 1].map((side) => (
@@ -560,6 +740,10 @@ export function Entrance({ depth, trim, accent }: { depth: number; trim: string;
         <planeGeometry args={[OPENING_HALF_W * 2, PORCH_DEPTH]} />
         <meshStandardMaterial color="#bdb6a9" roughness={0.9} side={THREE.DoubleSide} />
       </mesh>
+
+      <Transom from={LEAF_HEIGHT} to={SPRING_HEIGHT} />
+      <Fanlight />
+      <EntrancePlaques />
 
       <DoorLobby trim={trim} accent={accent} sill={THRESHOLD} />
 

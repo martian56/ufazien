@@ -59,16 +59,19 @@ export const RISER = 0.175
  * is 280 mm thick that left 4.27 m of clear height everywhere — generous
  * upstairs, but low for a hall, and low against a floorplate 44 m across.
  *
- * Sixteen risers per half make the hall 5.60 m floor to floor, so 5.32 m
+ * Twenty-four risers per half make the hall 8.40 m floor to floor, so 8.12 m
  * clear. Fourteen make the floors above it 4.90 m, so 4.62 m clear. Both are
  * whole numbers of the same riser, so neither stair had to change its going or
- * its pitch to get there — there are simply more steps in the taller one. What
- * stops the hall being taller still is the well, not the room: see `FOOT_Z`.
+ * its pitch to get there — there are simply more steps in the taller one.
+ *
+ * The hall was 5.32 m clear and still read as low, because the room is 44 m
+ * across and height has to answer width. What limits it is the well rather
+ * than the room: see `FOOT_Z`.
  *
  * Indexed by the floor the storey rises *from*, so the top floor has no entry:
  * nothing climbs out of it.
  */
-const RISERS_PER_HALF_BY_FLOOR: readonly number[] = [16, 14, 14]
+const RISERS_PER_HALF_BY_FLOOR: readonly number[] = [24, 14, 14]
 
 /** Risers in each half of the dog-leg leaving `floor`. */
 export function risersPerHalf(floor: Floor): number {
@@ -218,11 +221,14 @@ const HALF_LANDING_DEPTH = 1.4
  * So the foot stays where it has always been and a longer flight turns further
  * north. That is what bounds how tall the hall can be: the well cannot reach
  * the lift shaft at z −17.2, and it has to stop a clear player's width short
- * of it rather than leaving a ribbon of slab too narrow to stand on. Sixteen
- * risers per half is the most that fits, and it is what the hall has —
- * seventeen leaves 1.06 m between the two holes, and a player is 1.10 m wide.
+ * of it rather than leaving a ribbon of slab too narrow to stand on.
+ *
+ * Which is why this moved south. At −10 the hall could not exceed sixteen
+ * risers per half without the well running into the shaft; at −7.8 it takes
+ * twenty-four, and the stair simply starts a couple of metres further into the
+ * room — a room that is 44 m deep and had the space to give.
  */
-const FOOT_Z = -10
+const FOOT_Z = -7.8
 
 /** The edge of the half-landing you arrive at, and leave from. */
 export function turnEdge(floor: Floor): number {

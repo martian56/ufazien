@@ -33,7 +33,7 @@ import {
   libraryAisleHalf,
 } from './interiorPhysics'
 import { NoticeBoard, ScheduleBoard, SitesBoard } from './CampusBoards'
-import { ARCADE_PIERS, CORRIDOR_DOORS } from './verticalCirculation'
+import { ARCADE_PIERS, CORRIDOR_DOORS, FLOOR_PLANS } from './verticalCirculation'
 import {
   FLOORS,
   HALF_FLIGHTS,
@@ -48,6 +48,7 @@ import {
 } from './ufazCore'
 import { INTERIOR_SPECS, type FloorKind, type InteriorSpec } from './interiorSpecs'
 import { LECTURE_ROWS, LECTURE_SEATING } from './lectureSeating'
+import WavingFlag from './WavingFlag'
 import {
   carpetTexture,
   ceilingTexture,
@@ -938,19 +939,29 @@ function Arcade({ half, ceiling }: { half: number; ceiling: number }) {
  * suspended ceiling with the tiles left out.
  */
 function LightRings({ ceiling }: { ceiling: number }) {
+  // How far each hangs below the ceiling, as a fraction of the room's height
+  // rather than a fixed drop in metres.
+  //
+  // They were fixed drops of 2.2 to 3.2 m, which suited the ten-metre room
+  // these were first drawn for. In a hall they put the fittings between 2.1
+  // and 3.1 m off the floor — a hand's breadth over a tall person's head, so
+  // you walked under them ducking, and from anywhere in the room they cut
+  // across the view at eye level. A pendant hangs a little below the ceiling;
+  // it does not hang down to meet you.
   const rings: { x: number; z: number; size: number; drop: number; spin: number }[] = [
-    { x: -6, z: 12, size: 2.6, drop: 2.2, spin: 0.18 },
-    { x: 4, z: 8, size: 3.4, drop: 3.0, spin: -0.12 },
-    { x: -2, z: 0, size: 2.9, drop: 2.4, spin: 0.26 },
-    { x: 8, z: -4, size: 2.4, drop: 3.2, spin: -0.2 },
-    { x: -9, z: -8, size: 3.1, drop: 2.6, spin: 0.1 },
-    { x: 2, z: -14, size: 2.7, drop: 3.0, spin: -0.24 },
+    { x: -6, z: 12, size: 2.6, drop: 0.16, spin: 0.18 },
+    { x: 4, z: 8, size: 3.4, drop: 0.22, spin: -0.12 },
+    { x: -2, z: 0, size: 2.9, drop: 0.18, spin: 0.26 },
+    { x: 8, z: -4, size: 2.4, drop: 0.24, spin: -0.2 },
+    { x: -9, z: -8, size: 3.1, drop: 0.19, spin: 0.1 },
+    { x: 2, z: -14, size: 2.7, drop: 0.22, spin: -0.24 },
   ]
 
   return (
     <group>
       {rings.map((ring, i) => {
-        const y = ceiling - ring.drop
+        const drop = ceiling * ring.drop
+        const y = ceiling - drop
         const half = ring.size / 2
         return (
           <group key={i} position={[ring.x, y, ring.z]} rotation={[0, ring.spin, 0]}>
@@ -975,8 +986,8 @@ function LightRings({ ceiling }: { ceiling: number }) {
             {/* The drops, which are what makes it read as suspended rather than
                 as a shape painted on the ceiling. */}
             {[-half * 0.6, half * 0.6].map((t) => (
-              <mesh key={t} position={[t, ring.drop / 2, 0]}>
-                <cylinderGeometry args={[0.012, 0.012, ring.drop, 4]} />
+              <mesh key={t} position={[t, drop / 2, 0]}>
+                <cylinderGeometry args={[0.012, 0.012, drop, 4]} />
                 <meshStandardMaterial color="#9aa0a6" />
               </mesh>
             ))}
@@ -1105,11 +1116,26 @@ function DogLegStair() {
   )
 }
 
-function ClassroomDoors({ half }: { half: number }) {
+/**
+ * A door per room on this floor, and no more.
+ *
+ * There were always four, at four fixed positions, on every floor — but the
+ * doors that *work* come from the floor's plan, and no floor has four rooms:
+ * the entrance hall and the library floor have one each, the two between them
+ * have two. So three doors in the hall and two on the middle floors were
+ * joinery you could walk into and nothing else, and the one that opened was
+ * indistinguishable from the ones that did not.
+ *
+ * Driven off the same list the portals are, so a door exists exactly when
+ * there is a room behind it.
+ */
+function ClassroomDoors({ half, floor }: { half: number; floor: Floor }) {
+  const rooms = FLOOR_PLANS[floor]?.rooms ?? []
+
   return (
     <group>
-      {CORRIDOR_DOORS.map((z) => (
-        <group key={z} position={[-half + 7.4, 0, z]}>
+      {rooms.map((room, i) => (
+        <group key={room.id} position={[-half + 7.4, 0, CORRIDOR_DOORS[i] ?? 0]}>
           <mesh position={[0, 1.6, 0]} castShadow>
             <boxGeometry args={[0.12, 3.2, 2.2]} />
             <meshStandardMaterial color="#5a3b25" roughness={0.6} />
@@ -1132,7 +1158,7 @@ function ClassroomDoors({ half }: { half: number }) {
   )
 }
 
-function UfazUpperLevel({ spec }: { spec: InteriorSpec }) {
+function UfazUpperLevel({ spec, floor }: { spec: InteriorSpec; floor: Floor }) {
   const half = spec.halfExtent
 
   return (
@@ -1140,7 +1166,7 @@ function UfazUpperLevel({ spec }: { spec: InteriorSpec }) {
       <HeritageWindows spec={spec} />
       <Arcade half={half} ceiling={spec.ceiling} />
 
-      <ClassroomDoors half={half} />
+      <ClassroomDoors half={half} floor={floor} />
 
       {/* Corridor benches in the window bays. Forward of the stairwell — see
           the note on their colliders. */}
@@ -1175,7 +1201,7 @@ function UfazGroundLevel({ spec, whiteboard }: InteriorProps) {
           well, from back when the ground floor was the only interior there
           was, and the two overlapped. */}
       <Arcade half={half} ceiling={spec.ceiling} />
-      <ClassroomDoors half={half} />
+      <ClassroomDoors half={half} floor={0} />
 
       {/* The corridor floor west of the arcade: dark boards, not the tile of
           the entrance hall. The two surfaces meeting at the arcade is the
@@ -1253,10 +1279,11 @@ function UfazGroundLevel({ spec, whiteboard }: InteriorProps) {
             <cylinderGeometry args={[0.05, 0.07, 3.4, 8]} />
             <meshStandardMaterial color="#c9c4bb" roughness={0.4} metalness={0.5} />
           </mesh>
-          <mesh castShadow position={[0.55, 2.7, 0]}>
-            <planeGeometry args={[1.1, 0.7]} />
-            <meshStandardMaterial color={flagColor} side={THREE.DoubleSide} roughness={0.85} />
-          </mesh>
+          {/* Indoors there is no wind to speak of, so these barely stir — but
+              a flag on a stand that is perfectly flat reads as painted card. */}
+          <group position={[0.55, 2.7, 0]}>
+            <WavingFlag width={1.1} height={0.7} color={flagColor} wind={0.35} phase={x} />
+          </group>
           <mesh position={[0, 0.06, 0]}>
             <cylinderGeometry args={[0.4, 0.45, 0.12, 12]} />
             <meshStandardMaterial color="#2f3640" roughness={0.5} metalness={0.4} />
@@ -2175,7 +2202,7 @@ function UfazCore({ spec, whiteboard, liftHeight }: InteriorProps) {
               whiteboard={whiteboard}
             />
           ) : (
-            <UfazUpperLevel spec={{ ...spec, ceiling: clearHeight(floor) }} />
+            <UfazUpperLevel spec={{ ...spec, ceiling: clearHeight(floor) }} floor={floor} />
           )}
         </group>
       ))}
