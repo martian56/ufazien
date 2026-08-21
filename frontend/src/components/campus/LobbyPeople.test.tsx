@@ -40,16 +40,37 @@ describe('handing out the host powers', () => {
   it('lets the host grant one', () => {
     const { onSetPrivilege } = show(HOST)
 
-    const boxes = screen.getAllByRole('checkbox', { name: /change the lobby/i })
-    act(() => boxes[0].click())
+    act(() => screen.getByRole('button', { name: /rashad: change the lobby/i }).click())
 
     expect(onSetPrivilege).toHaveBeenCalledWith(DEPUTY, 'manage', true)
   })
 
+  it('takes one back that is already given', () => {
+    const { onSetPrivilege } = show(HOST)
+
+    // Rashad has `kick` in the fixture.
+    act(() => screen.getByRole('button', { name: /rashad: remove people/i }).click())
+
+    expect(onSetPrivilege).toHaveBeenCalledWith(DEPUTY, 'kick', false)
+  })
+
+  it('says which are on, for a screen reader as well as by colour', () => {
+    show(HOST)
+    expect(screen.getByRole('button', { name: /rashad: remove people/i })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    expect(screen.getByRole('button', { name: /rashad: mute people/i })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
+  })
+
   it('offers nothing to grant to the host themselves', () => {
     show(HOST)
-    // Two members besides the host, four powers each.
-    expect(screen.getAllByRole('checkbox')).toHaveLength(8)
+    // The host holds all four implicitly; there is nothing to hand them.
+    const hostRow = screen.getByText('Aysel').closest('li')
+    expect(hostRow!.querySelectorAll('button')).toHaveLength(0)
   })
 
   it('does not offer granting to anybody else', () => {
@@ -57,7 +78,17 @@ describe('handing out the host powers', () => {
     // be able to promote themselves further, or promote a friend and lock the
     // host out of their own room.
     show(DEPUTY)
-    expect(screen.queryAllByRole('checkbox')).toHaveLength(0)
+    expect(screen.queryByRole('button', { name: /nigar: change the lobby/i })).not.toBeInTheDocument()
+  })
+
+  it('keeps each person to one line, so a full lobby is not a long scroll', () => {
+    // Spelled out under each name it was four labelled rows per member, and a
+    // lobby holds twenty.
+    show(HOST)
+    const row = screen.getByText('Nigar').closest('li')
+    expect(row).not.toBeNull()
+    // Four grants, mute and remove — six controls, all on the row itself.
+    expect(row!.querySelectorAll('button')).toHaveLength(6)
   })
 })
 
@@ -115,6 +146,59 @@ describe('removing somebody', () => {
   it('is not offered for yourself — that is leaving', () => {
     show(DEPUTY)
     expect(screen.queryByRole('button', { name: /remove rashad/i })).not.toBeInTheDocument()
+  })
+})
+
+/**
+ * A lobby holds twenty. Past a handful, finding one person by eye is the slow
+ * part, so the list offers a search rather than a longer scroll.
+ */
+describe('a lobby with a lot of people in it', () => {
+  const crowd: LobbyMemberPermissions[] = [
+    members[0],
+    ...Array.from({ length: 9 }, (_, i) => ({
+      user_id: 100 + i,
+      username: `student${i}`,
+      full_name: `Student ${i}`,
+      is_online: true,
+    })),
+  ]
+
+  it('offers a search once there are enough of them', () => {
+    show(HOST, { members: crowd })
+    expect(screen.getByRole('searchbox', { name: /search people/i })).toBeInTheDocument()
+  })
+
+  it('does not clutter a small lobby with one', () => {
+    show(HOST)
+    expect(screen.queryByRole('searchbox')).not.toBeInTheDocument()
+  })
+
+  it('narrows the list to what was typed', () => {
+    show(HOST, { members: crowd })
+    const box = screen.getByRole('searchbox', { name: /search people/i })
+
+    act(() => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
+      setter.call(box, 'student3')
+      box.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+
+    expect(screen.getByText('Student 3')).toBeInTheDocument()
+    expect(screen.queryByText('Student 4')).not.toBeInTheDocument()
+  })
+
+  it('says so when nobody matches, rather than showing an empty list', () => {
+    show(HOST, { members: crowd })
+    const box = screen.getByRole('searchbox', { name: /search people/i })
+
+    act(() => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
+      setter.call(box, 'nobody by that name')
+      box.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+
+    expect(screen.getByText(/nobody here matches/i)).toBeInTheDocument()
   })
 })
 

@@ -52,6 +52,9 @@ export interface LobbyPeopleProps {
   onRemove: (userId: number | string) => Promise<void> | void
 }
 
+/** Above this many people, the list gets a search box rather than more scroll. */
+export const SEARCHABLE_FROM = 6
+
 const same = (a: number | string | null | undefined, b: number | string | null | undefined) =>
   a !== null && a !== undefined && b !== null && b !== undefined && String(a) === String(b)
 
@@ -82,9 +85,18 @@ export default function LobbyPeople({
     () => members.find((member) => same(member.user_id, meId)),
     [members, meId],
   )
+  const [query, setQuery] = useState('')
   const iAmHost = same(meId, hostId)
   const iMayKick = mayDo(me, hostId, 'kick')
   const iMayMute = mayDo(me, hostId, 'mute')
+
+  const shown = useMemo(() => {
+    const needle = query.trim().toLowerCase()
+    if (!needle) return members
+    return members.filter((member) =>
+      `${member.full_name ?? ''} ${member.username}`.toLowerCase().includes(needle),
+    )
+  }, [members, query])
 
   const run = async (key: string, action: () => Promise<void> | void) => {
     setBusy(key)
@@ -112,9 +124,21 @@ export default function LobbyPeople({
           What you can do here
         </p>
         {iAmHost ? (
-          <p className="text-sm text-slate-300">
-            You host this lobby, so you can do everything — and it stays yours when you leave.
-          </p>
+          <>
+            <p className="text-sm text-slate-300">
+              You host this lobby, so you can do everything — and it stays yours when you leave.
+            </p>
+            {/* What the buttons beside each name mean. Said once here rather
+                than spelled out per person, which is what made the list long. */}
+            <ul className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 border-t border-white/10 pt-2">
+              {PRIVILEGES.map(({ id, label, icon: Icon }) => (
+                <li key={id} className="flex items-center gap-1.5 text-[11px] text-slate-400">
+                  <Icon className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+                  {label}
+                </li>
+              ))}
+            </ul>
+          </>
         ) : (
           <ul className="space-y-1 text-sm">
             {PRIVILEGES.map(({ id, label }) => (
@@ -134,15 +158,31 @@ export default function LobbyPeople({
 
       {error && <p className="text-sm text-red-400">{error}</p>}
 
-      <ul className="space-y-2">
-        {members.map((member) => {
+      {/* A lobby holds twenty. Past a handful, finding one person by eye is the
+          slow part, so offer the search rather than a longer scroll. */}
+      {members.length > SEARCHABLE_FROM && (
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={`Search ${members.length} people…`}
+          aria-label="Search people"
+          className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-white placeholder-slate-500 outline-none focus:border-white/25"
+        />
+      )}
+
+      <ul className="space-y-1.5">
+        {shown.length === 0 && (
+          <li className="py-2 text-sm text-slate-400">Nobody here matches “{query}”.</li>
+        )}
+        {shown.map((member) => {
           const isHost = same(member.user_id, hostId)
           const isMe = same(member.user_id, meId)
           const name = member.full_name || member.username
           const key = String(member.user_id)
 
           return (
-            <li key={key} className="rounded-lg border border-white/10 bg-white/5 p-3">
+            <li key={key} className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5">
               <div className="flex items-center gap-2">
                 <span
                   aria-hidden
@@ -158,6 +198,43 @@ export default function LobbyPeople({
                   <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium text-amber-300">
                     <Crown className="h-3 w-3" />
                     Host
+                  </span>
+                )}
+
+                {/* Handing out the host's powers, on the person's own line.
+                    Spelled out under each name it was four labelled rows each,
+                    and a lobby holds twenty — the host was scrolling past a
+                    screenful per person. The legend above says what the icons
+                    mean, once, instead of repeating it per member.
+
+                    Only the host sees these: a member allowed to manage the
+                    lobby must not be able to promote themselves further, or
+                    promote a friend and lock the host out of their own room. */}
+                {iAmHost && !isHost && (
+                  <span className="flex shrink-0 items-center gap-0.5">
+                    {PRIVILEGES.map(({ id, label, icon: Icon }) => {
+                      const granted = Boolean(member[id])
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          aria-pressed={granted}
+                          aria-label={`${name}: ${label.toLowerCase()}`}
+                          title={`${label} — ${granted ? 'allowed' : 'not allowed'}`}
+                          disabled={busy !== null}
+                          onClick={() =>
+                            run(`${key}:${id}`, () => onSetPrivilege(member.user_id, id, !granted))
+                          }
+                          className={`rounded-md p-1 transition disabled:opacity-50 ${
+                            granted
+                              ? 'bg-blue-600/80 text-white hover:bg-blue-600'
+                              : 'bg-white/5 text-slate-500 hover:bg-white/15 hover:text-slate-300'
+                          }`}
+                        >
+                          <Icon className="h-3.5 w-3.5" />
+                        </button>
+                      )
+                    })}
                   </span>
                 )}
 
@@ -192,41 +269,6 @@ export default function LobbyPeople({
                   </button>
                 )}
               </div>
-
-              {/* Handing out the host's powers. Only the host does this: a
-                  member allowed to manage the lobby must not be able to promote
-                  themselves further, or promote a friend and lock the host out
-                  of their own room. */}
-              {iAmHost && !isHost && (
-                <div className="mt-2 grid gap-1 border-t border-white/10 pt-2">
-                  {PRIVILEGES.map(({ id, label, hint, icon: Icon }) => {
-                    const granted = Boolean(member[id])
-                    return (
-                      <label
-                        key={id}
-                        className="flex cursor-pointer items-start gap-2 rounded px-1 py-1 text-xs transition hover:bg-white/5"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={granted}
-                          disabled={busy !== null}
-                          onChange={(e) =>
-                            run(`${key}:${id}`, () =>
-                              onSetPrivilege(member.user_id, id, e.target.checked),
-                            )
-                          }
-                          className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-blue-500"
-                        />
-                        <Icon className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${granted ? 'text-blue-300' : 'text-slate-500'}`} />
-                        <span className="min-w-0">
-                          <span className={granted ? 'text-slate-200' : 'text-slate-400'}>{label}</span>
-                          <span className="block text-[11px] text-slate-500">{hint}</span>
-                        </span>
-                      </label>
-                    )
-                  })}
-                </div>
-              )}
 
               {confirming !== null && same(confirming, member.user_id) && (
                 <div className="mt-2 rounded-md border border-red-500/30 bg-red-950/40 p-2">
