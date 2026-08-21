@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { changedFields } from './EditLobbyDialog'
+import { changedFields, needsPassword } from './EditLobbyDialog'
 import type { Lobby } from '../../services/campusTypes'
 
 const lobby = {
@@ -63,5 +63,36 @@ describe('working out what to save', () => {
   it('treats a lobby with no description as having an empty one', () => {
     const undescribed = { ...lobby, description: null } as unknown as Lobby
     expect(changedFields(undescribed, { ...form, description: '' })).toEqual({})
+  })
+})
+
+
+/**
+ * A private lobby has to have a password.
+ *
+ * `join_lobby` reads `if lobby.is_private and lobby.password and ...`, so one
+ * with a blank password skips the check altogether and lets anybody in — while
+ * the listing shows it locked and offers "Join (Password Required)".
+ */
+describe('switching privacy on', () => {
+  const open = { is_private: false } as Pick<Lobby, 'is_private'>
+  const shut = { is_private: true } as Pick<Lobby, 'is_private'>
+
+  it('will not go private with an empty box', () => {
+    expect(needsPassword(open, { is_private: true, password: '' })).toBe(true)
+    expect(needsPassword(open, { is_private: true, password: '   ' })).toBe(true)
+  })
+
+  it('is happy once one is typed', () => {
+    expect(needsPassword(open, { is_private: true, password: 'hunter2' })).toBe(false)
+  })
+
+  it('does not ask again of a lobby that already has one', () => {
+    // A blank box there means "keep the password it has".
+    expect(needsPassword(shut, { is_private: true, password: '' })).toBe(false)
+  })
+
+  it('asks nothing of a public lobby', () => {
+    expect(needsPassword(open, { is_private: false, password: '' })).toBe(false)
   })
 })

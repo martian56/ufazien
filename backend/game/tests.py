@@ -2471,3 +2471,151 @@ class KickTests(TestCase):
     def test_removing_yourself_is_leaving(self):
         response = self.kick(self.host, self.host)
         self.assertEqual(response.status_code, 400)
+
+
+class EmptyLobbyTests(TestCase):
+    """
+    A lobby nobody is in should not be listed, counted or joinable.
+
+    The deactivation used to be gated on the person leaving being the host,
+    which held while leaving handed the lobby on — the last one out was always
+    the host by then. Now the host keeps it, so the last one out is usually
+    somebody else, and the lobby was left active and empty for ever.
+    """
+
+    def setUp(self):
+        self.host = User.objects.create_user(
+            username="departed", email="departed@example.com", password="pw"
+        )
+        self.player = User.objects.create_user(
+            username="lastout", email="lastout@example.com", password="pw"
+        )
+        self.lobby = Lobby.objects.create(name="Emptying", host=self.host)
+        LobbyMember.objects.create(lobby=self.lobby, user=self.host)
+        LobbyMember.objects.create(lobby=self.lobby, user=self.player)
+        self.api = APIClient()
+
+    def leave(self, user):
+        self.api.force_authenticate(user=user)
+        return self.api.post(f'/api/game/lobbies/{self.lobby.id}/leave/')
+
+    def test_the_last_one_out_closes_it_even_when_it_is_not_the_host(self):
+        self.leave(self.host)
+        self.lobby.refresh_from_db()
+        self.assertTrue(self.lobby.is_active, 'the lobby closed while somebody was still in it')
+
+        self.leave(self.player)
+
+        self.lobby.refresh_from_db()
+        self.assertFalse(
+            self.lobby.is_active,
+            'an empty lobby stayed active: listed, counted, and joinable with nobody in it',
+        )
+
+    def test_it_stays_open_while_anybody_is_left(self):
+        self.leave(self.player)
+        self.lobby.refresh_from_db()
+        self.assertTrue(self.lobby.is_active)
+        self.assertEqual(self.lobby.host, self.host)
+
+
+class PrivateLobbyPasswordTests(TestCase):
+    """
+    A private lobby has to have a password.
+
+    `join_lobby` reads `if lobby.is_private and lobby.password and ...`, so a
+    private lobby with a blank password skips the check altogether and lets
+    anybody in — while the listing shows it locked and offers "Join (Password
+    Required)". The host believes the room is shut and it is open.
+    """
+
+    def setUp(self):
+        self.host = User.objects.create_user(
+            username="locker", email="locker@example.com", password="pw"
+        )
+        self.stranger = User.objects.create_user(
+            username="stranger", email="stranger@example.com", password="pw"
+        )
+        self.api = APIClient()
+        self.api.force_authenticate(user=self.host)
+
+    def test_a_private_lobby_cannot_be_created_without_one(self):
+        response = self.api.post('/api/game/lobbies/', {
+            'name': 'Locked, allegedly',
+            'is_private': True,
+            'password': '',
+            'max_players': 10,
+        }, format='json')
+
+        self.assertEqual(response.status_code, 400, response.content[:200])
+        self.assertIn('password', response.json())
+
+    def test_a_public_lobby_needs_none(self):
+        response = self.api.post('/api/game/lobbies/', {
+            'name': 'Open house', 'is_private': False, 'max_players': 10,
+        }, format='json')
+        self.assertEqual(response.status_code, 201, response.content[:200])
+
+    def test_privacy_cannot_be_switched_on_without_one(self):
+        lobby = Lobby.objects.create(name='Open', host=self.host, is_private=False)
+        LobbyMember.objects.create(lobby=lobby, user=self.host)
+
+        response = self.api.put(
+            f'/api/game/lobbies/{lobby.id}/', {'is_private': True}, format='json'
+        )
+
+        self.assertEqual(response.status_code, 400, response.content[:200])
+        lobby.refresh_from_db()
+        self.assertFalse(lobby.is_private, 'the lobby went private with nothing to check against')
+
+    def test_editing_a_private_lobby_keeps_the_password_it_has(self):
+        """A blank box means "leave it alone", not "take the lock off"."""
+        lobby = Lobby.objects.create(
+            name='Locked', host=self.host, is_private=True, password='hunter2'
+        )
+        LobbyMember.objects.create(lobby=lobby, user=self.host)
+
+        response = self.api.put(
+            f'/api/game/lobbies/{lobby.id}/', {'name': 'Renamed'}, format='json'
+        )
+
+        self.assertEqual(response.status_code, 200, response.content[:200])
+        lobby.refresh_from_db()
+        self.assertEqual(lobby.password, 'hunter2')
+
+    def test_going_public_forgets_the_password(self):
+        """
+        Kept, it silently comes back the next time privacy is switched on — and
+        the host has no idea which password the lobby now has.
+        """
+        lobby = Lobby.objects.create(
+            name='Locked', host=self.host, is_private=True, password='hunter2'
+        )
+        LobbyMember.objects.create(lobby=lobby, user=self.host)
+
+        self.api.put(f'/api/game/lobbies/{lobby.id}/', {'is_private': False}, format='json')
+
+        lobby.refresh_from_db()
+        self.assertFalse(lobby.is_private)
+        self.assertFalse(lobby.password, 'the old password was still on the row')
+
+    def test_a_private_lobby_with_no_password_would_let_anybody_in(self):
+        """
+        The reason the rule above exists, stated as the behaviour it prevents.
+        Built directly, because the API no longer allows making one.
+        """
+        wide_open = Lobby.objects.create(
+            name='Locked, allegedly', host=self.host, is_private=True, password=''
+        )
+        LobbyMember.objects.create(lobby=wide_open, user=self.host)
+
+        self.api.force_authenticate(user=self.stranger)
+        response = self.api.post(
+            '/api/game/join/', {'lobby_id': wide_open.id, 'password': 'anything at all'},
+            format='json',
+        )
+
+        self.assertEqual(
+            response.status_code, 200,
+            'if this now refuses, the join check has changed and this rule can be revisited',
+        )

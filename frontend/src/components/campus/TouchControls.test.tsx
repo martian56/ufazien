@@ -158,6 +158,51 @@ describe('holding a button down', () => {
 })
 
 /**
+ * Reaching the buttons without a pointer.
+ *
+ * `HoldButton` started a press only from `onPointerDown`, and the
+ * `preventDefault` there also suppresses the click a browser would synthesize.
+ * Assistive technology activates a button by dispatching `click` on its own —
+ * so Sit, Pick up, Enter and Jump were unreachable with a screen reader, on a
+ * device with no keyboard to fall back to.
+ */
+describe('activating a button another way', () => {
+  it('answers a plain click', () => {
+    vi.useFakeTimers()
+    try {
+      const state = mount({ canInteract: true })
+
+      act(() => {
+        screen.getByRole('button', { name: /enter/i }).click()
+      })
+      expect(state.current.interact, 'a screen reader could not open the door').toBe(true)
+
+      act(() => {
+        vi.advanceTimersByTime(EMOTE_PRESS_MS + 1)
+      })
+      expect(state.current.interact, 'the pulse never ended').toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('does not fire twice when a real tap synthesizes one', () => {
+    const state = mount()
+    const jump = screen.getByRole('button', { name: /jump/i })
+
+    act(() => {
+      jump.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
+      jump.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }))
+      jump.click()
+    })
+
+    // The pointer press already ran and released; the click that follows it
+    // must not start another one.
+    expect(state.current.jump).toBe(false)
+  })
+})
+
+/**
  * A tap is a press the frame loop has to be able to see. Down and up inside one
  * frame is a control nobody ever observed, which is a button that does nothing
  * every so often.

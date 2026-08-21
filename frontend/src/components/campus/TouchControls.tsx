@@ -220,6 +220,13 @@ function HoldButton({
   // before lifting never sends the button its own pointerup, and the control
   // would stay down.
   const holding = useRef(false)
+  // Whether a pointer drove this press. Assistive technology activates a button
+  // by dispatching `click` on its own, with no pointer sequence at all — and
+  // `preventDefault` on the pointer handler suppresses the synthesized click
+  // that would otherwise follow. Without this, Sit, Pick up, Enter and Jump
+  // were unreachable with a screen reader, on a device with no keyboard to
+  // fall back to.
+  const pressedByPointer = useRef(false)
   // Through a ref, so the listener below can be bound once and still call the
   // current handler rather than the one from the first render.
   const onHoldRef = useRef(onHold)
@@ -251,12 +258,25 @@ function HoldButton({
       onPointerDown={(e) => {
         e.stopPropagation()
         e.preventDefault()
+        pressedByPointer.current = true
         holding.current = true
         onHoldRef.current(true)
       }}
       onPointerUp={release}
       onPointerCancel={release}
       onPointerLeave={release}
+      onClick={() => {
+        // A click with no pointer press before it is somebody activating the
+        // button another way. Pulse the control for long enough that the frame
+        // loop sees the edge, which is the same thing a tap does.
+        if (pressedByPointer.current) {
+          pressedByPointer.current = false
+          return
+        }
+        holding.current = true
+        onHoldRef.current(true)
+        window.setTimeout(release, EMOTE_PRESS_MS)
+      }}
       className={`flex h-14 w-14 flex-col items-center justify-center rounded-full border text-white shadow-lg backdrop-blur-sm transition active:scale-95 ${tone} ${className}`}
       aria-label={hint ? `${label}. ${hint}` : label}
     >

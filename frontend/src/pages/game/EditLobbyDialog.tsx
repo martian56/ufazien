@@ -43,6 +43,22 @@ export function changedFields(
   return changes
 }
 
+/**
+ * Whether this edit would leave a private lobby with nothing to check against.
+ *
+ * Only when privacy is being switched on for a lobby that has none stored:
+ * editing one that is already private may leave the box blank, which means
+ * "keep the password it has" rather than "take the lock off".
+ */
+export function needsPassword(
+  lobby: Pick<Lobby, 'is_private'>,
+  form: { is_private: boolean; password: string },
+): boolean {
+  if (!form.is_private) return false
+  if (lobby.is_private) return false
+  return form.password.trim() === ''
+}
+
 export default function EditLobbyDialog({ lobby, busy = false, onCancel, onSave }: EditLobbyDialogProps) {
   const [form, setForm] = useState({
     name: lobby.name,
@@ -55,6 +71,11 @@ export default function EditLobbyDialog({ lobby, busy = false, onCancel, onSave 
   const changes = changedFields(lobby, form)
   const nothingToSave = Object.keys(changes).length === 0
   const nameIsEmpty = form.name.trim() === ''
+  // Turning privacy on for a lobby that has never had a password has to set
+  // one. The server refuses it either way — a private lobby with nothing to
+  // check against is one anybody walks into, past a listing that shows it
+  // locked — but being told before you press Save is better than after.
+  const needsAPassword = needsPassword(lobby, form)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 p-4">
@@ -137,6 +158,11 @@ export default function EditLobbyDialog({ lobby, busy = false, onCancel, onSave 
                 placeholder={lobby.is_private ? 'Leave blank to keep the current one' : 'Set a password…'}
                 className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 placeholder-gray-400"
               />
+              {needsAPassword && (
+                <p className="mt-1 text-xs text-amber-600">
+                  A private lobby needs a password, or the lock on it keeps nobody out.
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -150,7 +176,7 @@ export default function EditLobbyDialog({ lobby, busy = false, onCancel, onSave 
           </button>
           <button
             onClick={() => onSave(changes)}
-            disabled={busy || nothingToSave || nameIsEmpty}
+            disabled={busy || nothingToSave || nameIsEmpty || needsAPassword}
             className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
           >
             {busy && <Loader2 className="h-4 w-4 animate-spin" />}

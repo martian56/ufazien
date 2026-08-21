@@ -90,10 +90,10 @@ def lobby_list_create(request):
         page = paginator.paginate_queryset(queryset, request)
         
         if page is not None:
-            serializer = LobbyListSerializer(page, many=True)
+            serializer = LobbyListSerializer(page, many=True, context={'request': request})
             return paginator.get_paginated_response(serializer.data)
         
-        serializer = LobbyListSerializer(queryset, many=True)
+        serializer = LobbyListSerializer(queryset, many=True, context={'request': request})
         return Response(serializer.data)
     
     elif request.method == 'POST':
@@ -227,11 +227,16 @@ def leave_lobby(request, lobby_id):
         # to moderate a room the host is not in. That is what the granted
         # privileges are for: the host hands out the individual powers rather
         # than the whole role. See `game/privileges.py`.
-        if lobby.host == request.user and not LobbyMember.objects.filter(lobby=lobby).exists():
-            # Nobody left at all. The line that did this was commented out, so
-            # an empty lobby stayed active for ever — listed, counted in the
-            # stats, and joinable by people who then found nobody in it. The
-            # `lobby.save()` underneath it saved nothing at all.
+        if not LobbyMember.objects.filter(lobby=lobby).exists():
+            # Nobody left at all — whoever walked out last, which is no longer
+            # always the host now that the lobby stays with them. Asked of the
+            # membership rather than of who is leaving: gated on the host, a
+            # lobby the host had already left stayed active and empty for ever
+            # once the last of the others went.
+            #
+            # The line that did this was commented out to begin with, which is
+            # the same state by a different route: listed, counted in the stats,
+            # and joinable by people who then found nobody in it.
             lobby.is_active = False
             lobby.save(update_fields=['is_active'])
         
@@ -309,7 +314,7 @@ def my_lobbies(request):
     ).select_related('lobby', 'lobby__host')
     
     lobbies = [membership.lobby for membership in user_memberships]
-    serializer = LobbyListSerializer(lobbies, many=True)
+    serializer = LobbyListSerializer(lobbies, many=True, context={'request': request})
     
     return Response(serializer.data)
 
@@ -559,8 +564,14 @@ def kick_member(request, lobby_id, user_id):
 
     member = get_object_or_404(LobbyMember, lobby=lobby, user_id=user_id)
     username = member.user.username
+    removed_user = member.user
     member.delete()
     PlayerPosition.objects.filter(lobby=lobby, user_id=user_id).delete()
+
+    # And off the call. LiveKit is a separate service that knows nothing about
+    # the row we just deleted, so without this somebody turned out of a lobby
+    # stayed on the voice channel — still heard, still watching a screen share.
+    livekit_service.remove_participant(lobby, removed_user)
 
     _tell_the_lobby(lobby_id, {'type': 'member_removed', 'user_id': int(user_id)})
 

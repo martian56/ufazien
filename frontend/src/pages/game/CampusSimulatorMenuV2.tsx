@@ -207,8 +207,18 @@ const CampusSimulatorMenu = () => {
     }
   };
 
-  /** Whether this is a lobby the signed-in player owns. */
-  const iHost = (lobby: Lobby) => Boolean(me && String(lobby.host?.id) === String(me.id));
+  /**
+   * Whether this is a lobby the signed-in player owns.
+   *
+   * The server says so. It used to be worked out by comparing the host against
+   * the profile fetched for the character picker — and that request is
+   * deliberately quiet about failing, so one failed call took Edit and Close
+   * off the only page a host can reach their own lobby from, with nothing on
+   * screen to explain it. The comparison stays as a fallback for a backend that
+   * does not send the field yet.
+   */
+  const iHost = (lobby: Lobby) =>
+    lobby.is_host ?? Boolean(me && String(lobby.host?.id) === String(me.id));
 
   /**
    * Save the changes made in the edit dialog.

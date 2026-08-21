@@ -109,6 +109,50 @@ async def _apply_permissions(lobby, user, member, is_host):
         await client.aclose()
 
 
+async def _remove(lobby, user):
+    from livekit import api
+
+    api_key, api_secret, url = _credentials()
+    client = api.LiveKitAPI(url=url, api_key=api_key, api_secret=api_secret)
+    try:
+        await client.room.remove_participant(
+            api.RoomParticipantIdentity(
+                room=room_name(lobby.id),
+                identity=participant_identity(user),
+            )
+        )
+    finally:
+        await client.aclose()
+
+
+def remove_participant(lobby, user):
+    """
+    Disconnect somebody from the lobby's room.
+
+    Removing a member from the database is not enough on its own: LiveKit is a
+    separate service that knows nothing about it, so somebody turned out of a
+    lobby stayed on the call — still heard, still heard from, still watching a
+    screen share — until they closed the tab themselves.
+
+    Best effort, like the permission push beside it. A member who was not on
+    the call has nothing to disconnect, and that is not an error; nor is a
+    machine with no voice configured, which is the normal case in development.
+    """
+    import asyncio
+
+    try:
+        asyncio.run(_remove(lobby, user))
+        return True
+    except LiveKitNotConfigured:
+        return False
+    except Exception as exc:
+        logger.info(
+            "Could not disconnect %s from lobby %s: %s",
+            participant_identity(user), lobby.id, exc,
+        )
+        return False
+
+
 def sync_participant_permissions(lobby, user, member):
     """Push a permission change to a participant who is already connected.
 

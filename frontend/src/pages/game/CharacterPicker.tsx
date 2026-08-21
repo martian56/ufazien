@@ -42,7 +42,11 @@ const OPENING_ANGLE = -0.55
  */
 function TurnByHand({ children }: { children: React.ReactNode }) {
   const group = useRef<THREE.Group>(null)
-  const dragging = useRef(false)
+  // Which finger is turning them, by id. A second one landing on the canvas
+  // would otherwise take over mid-drag and the character would jump to wherever
+  // it happened to touch down — and lifting it would end a drag the first
+  // finger is still making.
+  const turning = useRef<number | null>(null)
   const lastX = useRef(0)
   const { gl } = useThree()
 
@@ -50,19 +54,21 @@ function TurnByHand({ children }: { children: React.ReactNode }) {
     const canvas = gl.domElement
 
     const down = (e: PointerEvent) => {
-      dragging.current = true
+      if (turning.current !== null) return
+      turning.current = e.pointerId
       lastX.current = e.clientX
       canvas.setPointerCapture?.(e.pointerId)
     }
     const move = (e: PointerEvent) => {
-      if (!dragging.current || !group.current) return
+      if (e.pointerId !== turning.current || !group.current) return
       // A drag across the full width turns them most of the way round, which
       // is the rate that feels like a hand on a shoulder rather than a dial.
       group.current.rotation.y += ((e.clientX - lastX.current) / canvas.clientWidth) * Math.PI * 2
       lastX.current = e.clientX
     }
     const up = (e: PointerEvent) => {
-      dragging.current = false
+      if (e.pointerId !== turning.current) return
+      turning.current = null
       canvas.releasePointerCapture?.(e.pointerId)
     }
 
