@@ -167,13 +167,21 @@ export default function Analytics() {
     // reading the wrong field.
     const days = analyticsData?.daily_data ?? []
     return days.map((day) => ({
-      date: new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      // `YYYY-MM-DD` on its own parses as midnight UTC, which renders as the
+      // day before anywhere west of it — every point on the chart labelled
+      // with the wrong date for half the world. The time makes it local.
+      date: new Date(`${day.date}T00:00:00`).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+      }),
       fullDate: day.date,
       visitors: day.unique_visitors ?? 0,
       pageViews: day.page_views ?? 0,
       bounceRate: day.bounce_rate ?? 0,
-      // Stored in bytes, charted in MB.
-      bandwidth: Math.round((day.bandwidth_used ?? 0) / (1024 * 1024)),
+      // Stored in bytes, charted in MB — to two decimals, because a small site
+      // serves well under a megabyte a day and rounding to whole ones flattened
+      // the line to zero. Which is the empty chart this page already had.
+      bandwidth: Number(((day.bandwidth_used ?? 0) / (1024 * 1024)).toFixed(2)),
     }))
   }, [analyticsData])
 

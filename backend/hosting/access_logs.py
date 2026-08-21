@@ -177,17 +177,21 @@ def aggregate(
         if not subdomain or day is None:
             continue
 
-        if not count_bots and is_bot(str(entry.get('ua', ''))):
-            continue
-
         into = traffic[(subdomain, day)]
 
-        # Bandwidth is every byte that left, whatever the response was: a 404
-        # page and a redirect both cost the quota.
+        # Bandwidth is every byte that left, whatever the response was and
+        # whoever asked: a 404 page, a redirect and a crawler all cost the
+        # quota, and the quota is what this figure is checked against. Counted
+        # before the crawler filter for exactly that reason — a site that only
+        # ever gets crawled has bandwidth and no readers, and both are true.
         try:
             into.bandwidth_used += max(0, int(entry.get('bytes', 0) or 0))
         except (TypeError, ValueError):
             pass
+
+        # Past here is readership, which a crawler is not.
+        if not count_bots and is_bot(str(entry.get('ua', ''))):
+            continue
 
         try:
             status = int(entry.get('status', 0) or 0)

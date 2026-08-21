@@ -1674,8 +1674,12 @@ def webhook_analytics(request):
             {'error': 'Analytics webhook is not configured.'}, status=503
         )
 
-    signature = request.headers.get('X-Ufazien-Signature', '')
-    expected = hmac.new(secret.encode(), request.body, hashlib.sha256).hexdigest()
+    # Compared as bytes. `compare_digest` raises TypeError on a str holding
+    # anything outside ASCII, so a header with one character of nonsense in it
+    # crashed the endpoint with a 500 rather than being refused with a 401 —
+    # which is a way of telling an attacker their guess was interesting.
+    signature = request.headers.get('X-Ufazien-Signature', '').encode('utf-8', 'ignore')
+    expected = hmac.new(secret.encode(), request.body, hashlib.sha256).hexdigest().encode()
     if not hmac.compare_digest(signature, expected):
         return JsonResponse({'error': 'Bad signature.'}, status=401)
 

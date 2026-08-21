@@ -150,6 +150,14 @@ class AggregationTests(TestCase):
         self.assertEqual(got.page_views, 1)
         self.assertEqual(len(got.visitors), 1)
 
+    def test_but_their_bandwidth_still_counts(self):
+        # A crawler is not a reader and its traffic is still traffic. The quota
+        # is spent on it either way, and this figure is what the quota is
+        # checked against.
+        got = self.totals([line(bytes=1000), line(ua='Googlebot/2.1', bytes=4000)])
+        self.assertEqual(got.bandwidth_used, 5000)
+        self.assertEqual(got.page_views, 1)
+
     def test_a_site_is_not_its_own_referrer(self):
         got = self.totals([
             line(ref='https://alice.ufazien.com/index.html'),
@@ -333,6 +341,16 @@ class WebhookTests(TestCase):
     def test_a_site_that_does_not_exist_is_a_404(self):
         response = self.post(self.payload(subdomain='nobody'))
         self.assertEqual(response.status_code, 404)
+
+    def test_a_signature_that_is_not_even_ascii_is_refused_not_crashed(self):
+        """
+        `hmac.compare_digest` raises TypeError on a str holding anything outside
+        ASCII, so one character of nonsense in the header turned a refusal into
+        a 500 — which tells whoever sent it that their guess was interesting.
+        """
+        response = self.post(self.payload(), signature='héllo-not-a-signature')
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(WebsiteAnalytics.objects.count(), 0)
 
     def test_a_bad_date_is_refused(self):
         self.assertEqual(self.post(self.payload(date='yesterday')).status_code, 400)
