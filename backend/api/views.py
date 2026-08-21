@@ -236,22 +236,45 @@ class PlatformStatsView(APIView):
     direction the platform happened to grow.
 
     Aggregate counts only. Nothing here identifies anyone, which is why it can
-    be served to a signed-out visitor.
+    be served to a signed-out visitor — and why every figure is a bare count
+    with no filter that could narrow it to one person.
+
+    Cached briefly. This is the first request a visitor makes and it is now a
+    dozen `COUNT`s; a landing page does not need them to the second, and
+    without this every refresh by every visitor runs the lot.
     """
 
     permission_classes = []
 
+    #: How long a figure may be out of date. Long enough to absorb a burst of
+    #: traffic, short enough that somebody who signs up sees the count move.
+    CACHE_SECONDS = 300
+    CACHE_KEY = 'platform-stats'
+
     def get(self, request):
+        from django.core.cache import cache
+
+        stats = cache.get(self.CACHE_KEY)
+        if stats is None:
+            stats = self.count()
+            cache.set(self.CACHE_KEY, stats, self.CACHE_SECONDS)
+        return Response(stats)
+
+    @staticmethod
+    def count():
         from django.contrib.auth import get_user_model
+        from ai_tools.models import AITask, TaskStatus
         from blog.models import BlogPost
         from average.models import AverageSchema, UserSchemaGrades
+        from community.models import ForumPost, Group
+        from game.models import Lobby
         from gpa.models import UserGPA
-        from hosting.models import Website
-        from community.models import Group
+        from hosting.models import Database, Deployment, Website
+        from schedule.models import CalendarEvent
 
         User = get_user_model()
 
-        return Response({
+        return {
             "students": User.objects.filter(is_active=True).count(),
             "gpa_calculations": UserGPA.objects.count(),
             "average_calculations": UserSchemaGrades.objects.count(),
@@ -261,4 +284,15 @@ class PlatformStatsView(APIView):
                 is_published=True, visibility=BlogPost.Visibility.PUBLIC
             ).count(),
             "study_groups": Group.objects.count(),
-        })
+            # The rest of the platform, which the page had no figure for at all
+            # — the community, the hosting beyond the sites themselves, the
+            # campus, the AI tools and the calendar.
+            "forum_posts": ForumPost.objects.count(),
+            "hosted_databases": Database.objects.count(),
+            "deployments": Deployment.objects.count(),
+            "campus_lobbies": Lobby.objects.count(),
+            # Completed only: a task that failed is not something the platform
+            # did for anybody.
+            "ai_tasks": AITask.objects.filter(status=TaskStatus.COMPLETED).count(),
+            "calendar_events": CalendarEvent.objects.count(),
+        }

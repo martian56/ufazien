@@ -123,3 +123,74 @@ class SearchPermissionTests(TestCase):
         anon = APIClient()
         response = anon.get("/api/search/", {"q": "Quantum"})
         self.assertIn(response.status_code, (401, 403))
+
+
+class PlatformStatsTests(TestCase):
+    """
+    The figures on the landing page.
+
+    They were literals in the JSX once. Now they come from here, and the page
+    shows every one of them — it used to fetch seven and render four.
+    """
+
+    def test_it_is_public(self):
+        """The landing page is, so the counts behind it have to be."""
+        from rest_framework.test import APIClient
+
+        response = APIClient().get('/api/stats/')
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_it_counts_the_whole_platform(self):
+        from rest_framework.test import APIClient
+
+        body = APIClient().get('/api/stats/').json()
+
+        for name in (
+            'students', 'gpa_calculations', 'average_calculations',
+            'average_schemas', 'hosted_websites', 'blog_posts', 'study_groups',
+            'forum_posts', 'hosted_databases', 'deployments',
+            'campus_lobbies', 'ai_tasks', 'calendar_events',
+        ):
+            self.assertIn(name, body, f'the landing page has no figure for {name}')
+            self.assertIsInstance(body[name], int)
+
+    def test_every_figure_is_a_count_and_nothing_else(self):
+        """
+        Served to a signed-out visitor, so nothing here may identify anybody:
+        no names, no emails, no ids — thirteen whole numbers.
+        """
+        from rest_framework.test import APIClient
+
+        body = APIClient().get('/api/stats/').json()
+
+        self.assertTrue(all(isinstance(value, int) for value in body.values()), body)
+
+    def test_the_counts_are_real(self):
+        from django.contrib.auth import get_user_model
+        from rest_framework.test import APIClient
+        from game.models import Lobby
+
+        User = get_user_model()
+        host = User.objects.create_user(username='counted', email='c@e.com', password='pw')
+        Lobby.objects.create(name='One', host=host)
+        Lobby.objects.create(name='Two', host=host)
+
+        from api.views import PlatformStatsView
+
+        # Read past the cache, which exists so a landing page does not run a
+        # dozen COUNTs per visitor.
+        counted = PlatformStatsView.count()
+
+        self.assertEqual(counted['campus_lobbies'], 2)
+        self.assertGreaterEqual(counted['students'], 1)
+
+    def test_it_is_cached_so_a_visitor_does_not_run_a_dozen_counts(self):
+        from django.core.cache import cache
+        from rest_framework.test import APIClient
+
+        cache.delete('platform-stats')
+        client = APIClient()
+        client.get('/api/stats/')
+
+        self.assertIsNotNone(cache.get('platform-stats'))

@@ -21,6 +21,17 @@ export interface PlatformStats {
   hosted_websites: number
   blog_posts: number
   study_groups: number
+  /**
+   * The rest of the platform. Optional so the page still renders against a
+   * deployment that has not been updated yet — a missing figure is left out
+   * rather than shown as a zero it never measured.
+   */
+  forum_posts?: number
+  hosted_databases?: number
+  deployments?: number
+  campus_lobbies?: number
+  ai_tasks?: number
+  calendar_events?: number
 }
 
 /** 1,240 -> "1,240"; 0 stays "0" rather than becoming a hopeful "0+". */
