@@ -209,7 +209,7 @@ export default function CharacterPicker({
             // characters are 1.72 m, and 32° from 2.5 m sees 1.43 m of them —
             // which cuts them off at the neck. Slightly above eye level and
             // looking very slightly down, the way you would hold a figure up.
-            camera={{ position: [0, 0.15, 2.85], fov: 38 }}
+            camera={{ position: [0, 0.1, 3.15], fov: 38 }}
             dpr={[1, 2]}
             // The menu is not the campus: one figure does not need a frame
             // budget, and a menu that spins a fan is a bad first impression of
@@ -226,7 +226,9 @@ export default function CharacterPicker({
           {/* Said once, quietly. Nothing about a still figure suggests it can
               be turned, and the whole point of stopping the spin is that the
               player decides which way it faces. */}
-          <p className="pointer-events-none absolute inset-x-0 bottom-1.5 text-center text-[11px] font-medium text-slate-500">
+          {/* Off the figure rather than across its feet, and on something, so
+              it is legible against whatever is behind it. */}
+          <p className="pointer-events-none absolute right-2 top-2 rounded-full bg-slate-900/50 px-2 py-0.5 text-[11px] font-medium text-white backdrop-blur-sm">
             Drag to turn
           </p>
         </div>

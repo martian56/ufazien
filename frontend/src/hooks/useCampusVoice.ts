@@ -148,6 +148,17 @@ export function useCampusVoice({ lobbyId, userPosition, playerPositions, enabled
     return data
   }, [lobbyId])
 
+  // Asked for as soon as there is a lobby, not once voice connects. Who is in
+  // the lobby and what they are allowed to do is a fact about the lobby; tying
+  // it to LiveKit meant the People panel was empty on every deployment without
+  // voice configured — including every developer's machine — and the host
+  // could not hand anything out from there at all.
+  useEffect(() => {
+    if (lobbyId) loadPermissions().catch(() => {})
+  }, [lobbyId, loadPermissions])
+
+  // And again when voice arrives, because connecting can change what the
+  // server says about publishing rights.
   useEffect(() => {
     if (connected) loadPermissions().catch(() => {})
   }, [connected, loadPermissions])
