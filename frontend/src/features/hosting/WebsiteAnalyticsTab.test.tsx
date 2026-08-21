@@ -149,13 +149,17 @@ describe('reading the numbers', () => {
   it('adds up to 100 however the counts fall', () => {
     // Rounded one at a time, three equal counts give 33 apiece and the panel
     // shows 99%.
-    for (const counts of [
+    // Typed, because a bare array of differently-shaped literals widens to a
+    // union whose optional keys are `undefined`, which is not a
+    // `Record<string, number>`.
+    const splits: Record<string, number>[] = [
       { desktop: 1, mobile: 1, tablet: 1 },
       { desktop: 2, mobile: 1 },
       { desktop: 7, mobile: 7, tablet: 7 },
       { desktop: 1, mobile: 1, tablet: 1, other: 1, more: 1, again: 1 },
       { desktop: 100, mobile: 1 },
-    ]) {
+    ]
+    for (const counts of splits) {
       const share = deviceShare(counts)
       expect(
         share.reduce((total, d) => total + d.percentage, 0),

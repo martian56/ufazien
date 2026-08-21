@@ -72,7 +72,6 @@ export default function Analytics() {
   const { 
     fetchWebsiteAnalytics, 
     fetchBandwidthUsage, 
-    getWebsiteAnalytics, 
     getBandwidthAnalytics 
   } = useDashboard()
   const { getBandwidthUsage } = useSubscription()
@@ -81,7 +80,9 @@ export default function Analytics() {
   const [selectedWebsite, setSelectedWebsite] = useState<Website | null>(null)
   const [selectedPeriod, setSelectedPeriod] = useState('7d')
   const [analyticsData, setAnalyticsData] = useState<WebsiteAnalytics | null>(null)
-  const [bandwidthData, setBandwidthData] = useState<unknown>(null)
+  // Only ever written. Kept because the fetch below populates the hook's
+  // cache through it, which the bandwidth panel reads.
+  const [, setBandwidthData] = useState<unknown>(null)
   const [error, setError] = useState<string | null>(null)
 
   // Load analytics data
@@ -146,14 +147,6 @@ export default function Analytics() {
     if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`
     if (num >= 1000) return `${(num / 1000).toFixed(1)}K`
     return num.toString()
-  }
-
-  // Format bytes
-  const formatBytes = (bytes?: number | null) => {
-    if (!bytes) return '0 B'
-    const sizes = ['B', 'KB', 'MB', 'GB']
-    const i = Math.floor(Math.log(bytes) / Math.log(1024))
-    return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${sizes[i]}`
   }
 
   // Get mock data for demonstration (until real analytics data is available)
