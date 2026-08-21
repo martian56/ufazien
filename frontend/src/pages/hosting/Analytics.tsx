@@ -22,6 +22,8 @@ interface AnalyticsDay {
  */
 interface WebsiteAnalytics {
   daily_data?: AnalyticsDay[]
+  top_pages?: { path: string; views: number }[]
+  referrers?: { referrer: string; visits: number }[]
   summary?: {
     total_page_views?: number
     total_unique_visitors?: number
@@ -99,10 +101,19 @@ export default function Analytics() {
         }
 
         // Load website analytics if a website is selected
-        if (selectedWebsite && fetchWebsiteAnalytics && getWebsiteAnalytics) {
-          await fetchWebsiteAnalytics(selectedWebsite.id, selectedPeriod)
-          const websiteAnalytics = getWebsiteAnalytics(selectedWebsite.id, selectedPeriod)
-          setAnalyticsData(websiteAnalytics)
+        if (selectedWebsite && fetchWebsiteAnalytics) {
+          // What the fetch returned, rather than what the store held a moment
+          // ago. `getWebsiteAnalytics` reads state through the closure from
+          // this render, so immediately after the await it still answers with
+          // whatever was there before — `null` on the first pass, which is
+          // every pass, because nothing re-runs this effect afterwards. The
+          // figures arrived, went into the store, and the page set itself to
+          // null and showed zeroes for ever.
+          const websiteAnalytics = await fetchWebsiteAnalytics(
+            selectedWebsite.id,
+            selectedPeriod,
+          )
+          setAnalyticsData(websiteAnalytics as WebsiteAnalytics)
         }
 
       } catch (err) {
@@ -368,9 +379,17 @@ export default function Analytics() {
                         <TrendingUp className="h-6 w-6 text-yellow-600" />
                       </div>
                       <div className="ml-4">
+                        {/* Not a measurement. A request log is not a session,
+                            so neither this nor the one beside it can be worked
+                            out from one — both need a script on the visitor's
+                            page. Shown as 0.0% they read as measured and very
+                            good, which is worse than saying nothing. */}
                         <p className="text-sm font-medium text-gray-600">Bounce Rate</p>
                         <p className="text-2xl font-bold text-gray-900">
-                          {(summary?.avg_bounce_rate ?? 0).toFixed(1)}%
+                          {summary?.avg_bounce_rate ? `${summary.avg_bounce_rate.toFixed(1)}%` : '—'}
+                        </p>
+                        <p className="text-xs text-gray-400">
+                          Needs a script on your pages
                         </p>
                       </div>
                     </div>
@@ -384,7 +403,12 @@ export default function Analytics() {
                       <div className="ml-4">
                         <p className="text-sm font-medium text-gray-600">Avg. Session</p>
                         <p className="text-2xl font-bold text-gray-900">
-                          {Math.floor((summary?.avg_session_duration ?? 0) / 60)}m {Math.round((summary?.avg_session_duration ?? 0) % 60)}s
+                          {summary?.avg_session_duration
+                            ? `${Math.floor(summary.avg_session_duration / 60)}m ${Math.round(summary.avg_session_duration % 60)}s`
+                            : '—'}
+                        </p>
+                        <p className="text-xs text-gray-400">
+                          Needs a script on your pages
                         </p>
                       </div>
                     </div>
@@ -469,13 +493,23 @@ export default function Analytics() {
                   <div className="bg-white rounded-lg border border-gray-200 p-6">
                     <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Pages</h3>
                     <div className="space-y-3">
-                      {/* The endpoint returns no per-page breakdown, so this
-                          used to list four invented pages with invented view
-                          counts. Saying nothing is better than saying that. */}
-                      <p className="text-sm text-gray-500">
-                        Per-page figures are not collected yet. Visits and page views
-                        above are counted for the whole site.
-                      </p>
+                      {/* Collected now, from the request logs. This listed four
+                          invented pages with invented counts, and then said
+                          nothing at all once those were taken out. */}
+                      {(analyticsData?.top_pages ?? []).length === 0 ? (
+                        <p className="text-sm text-gray-500">
+                          Nothing has been read yet.
+                        </p>
+                      ) : (
+                        (analyticsData?.top_pages ?? []).map((page) => (
+                          <div key={page.path} className="flex items-center justify-between gap-3">
+                            <span className="truncate text-sm text-gray-700">{page.path}</span>
+                            <span className="shrink-0 text-sm font-medium text-gray-900 tabular-nums">
+                              {page.views.toLocaleString()}
+                            </span>
+                          </div>
+                        ))
+                      )}
                     </div>
                   </div>
                 </div>
@@ -534,29 +568,29 @@ export default function Analytics() {
                   </div>
 
                   <div className="bg-white rounded-lg border border-gray-200 p-6">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Performance Metrics</h3>
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center">
-                          <Zap className="w-4 h-4 text-yellow-500 mr-2" />
-                          <span className="text-sm text-gray-600">Avg. Load Time</span>
-                        </div>
-                        <span className="text-sm font-medium">1.2s</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center">
-                          <Server className="w-4 h-4 text-green-500 mr-2" />
-                          <span className="text-sm text-gray-600">Uptime</span>
-                        </div>
-                        <span className="text-sm font-medium text-green-600">99.9%</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center">
-                          <Activity className="w-4 h-4 text-blue-500 mr-2" />
-                          <span className="text-sm text-gray-600">Status</span>
-                        </div>
-                        <span className="text-sm font-medium text-green-600">Healthy</span>
-                      </div>
+                    {/* "Avg. Load Time 1.2s", "Uptime 99.9%" and "Status
+                        Healthy" were typed into the markup. None of the three
+                        is measured anywhere, and all three would have read the
+                        same through an outage. Where readers came from is
+                        something the logs do know. */}
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Where readers came from</h3>
+                    <div className="space-y-3">
+                      {(analyticsData?.referrers ?? []).length === 0 ? (
+                        <p className="text-sm text-gray-500">
+                          {(summary?.total_page_views ?? 0) > 0
+                            ? 'Everyone arrived directly, with no referring page.'
+                            : 'No traffic recorded yet.'}
+                        </p>
+                      ) : (
+                        (analyticsData?.referrers ?? []).map((source) => (
+                          <div key={source.referrer} className="flex items-center justify-between gap-3">
+                            <span className="truncate text-sm text-gray-700">{source.referrer}</span>
+                            <span className="shrink-0 text-sm font-medium text-gray-900 tabular-nums">
+                              {source.visits.toLocaleString()}
+                            </span>
+                          </div>
+                        ))
+                      )}
                     </div>
                   </div>
                 </div>
