@@ -14,7 +14,8 @@ import {
   CheckCircle, BarChart3, Calendar, Award, Target, Zap,
   Globe, Shield, Rocket, Brain, Heart, Play, Menu,
   X, Star, Activity, Github, Twitter, Linkedin,
-  Instagram, Layers, House, SwatchBook, Gamepad2
+  Instagram, Layers, House, SwatchBook, Gamepad2,
+  Database, MessagesSquare, Building2, CalendarDays
 } from "lucide-react"
 
 import {
@@ -237,16 +238,35 @@ export default function Home() {
   // updated after it was written. Counted from the database now, and simply
   // absent when the request fails rather than showing a number nobody checked.
   const platformStats = usePlatformStats()
+  /**
+   * Every figure the endpoint gives, not the first four of them.
+   *
+   * The page fetched seven and rendered `stats.slice(0, 4)`, so Hosted
+   * Websites, Blog Posts and Study Groups were counted, sent over the wire and
+   * thrown away — three of the platform's features, invisible on the page
+   * meant to introduce them.
+   *
+   * A figure the endpoint does not send is left out rather than shown as a
+   * zero, so an older backend loses a tile instead of claiming nothing has
+   * ever happened.
+   */
   const stats = platformStats
-    ? [
-        { number: formatCount(platformStats.students), label: "Students", icon: Users, color: "text-blue-600" },
-        { number: formatCount(platformStats.gpa_calculations), label: "GPA Calculations", icon: Calculator, color: "text-green-600" },
-        { number: formatCount(platformStats.average_calculations), label: "Average Calculations", icon: Calculator, color: "text-red-600" },
-        { number: formatCount(platformStats.average_schemas), label: "Average Schemas", icon: SwatchBook, color: "text-purple-600" },
-        { number: formatCount(platformStats.hosted_websites), label: "Hosted Websites", icon: House, color: "text-cyan-600" },
-        { number: formatCount(platformStats.blog_posts), label: "Blog Posts", icon: PenTool, color: "text-purple-600" },
-        { number: formatCount(platformStats.study_groups), label: "Study Groups", icon: MessageCircle, color: "text-orange-600" },
-      ]
+    ? ([
+        { number: platformStats.students, label: "Students", icon: Users, color: "text-blue-600" },
+        { number: platformStats.gpa_calculations, label: "GPA Calculations", icon: Calculator, color: "text-green-600" },
+        { number: platformStats.average_calculations, label: "Average Calculations", icon: Calculator, color: "text-red-600" },
+        { number: platformStats.average_schemas, label: "Average Schemas", icon: SwatchBook, color: "text-purple-600" },
+        { number: platformStats.hosted_websites, label: "Hosted Websites", icon: House, color: "text-cyan-600" },
+        { number: platformStats.hosted_databases, label: "Databases", icon: Database, color: "text-sky-600" },
+        { number: platformStats.deployments, label: "Deployments", icon: Rocket, color: "text-indigo-600" },
+        { number: platformStats.blog_posts, label: "Blog Posts", icon: PenTool, color: "text-purple-600" },
+        { number: platformStats.study_groups, label: "Study Groups", icon: MessageCircle, color: "text-orange-600" },
+        { number: platformStats.forum_posts, label: "Forum Posts", icon: MessagesSquare, color: "text-amber-600" },
+        { number: platformStats.campus_lobbies, label: "Campus Lobbies", icon: Building2, color: "text-emerald-600" },
+        { number: platformStats.ai_tasks, label: "AI Tasks", icon: Sparkles, color: "text-fuchsia-600" },
+        { number: platformStats.calendar_events, label: "Calendar Events", icon: CalendarDays, color: "text-rose-600" },
+      ].filter((stat) => typeof stat.number === "number") as { number: number; label: string; icon: typeof Users; color: string }[])
+        .map((stat) => ({ ...stat, number: formatCount(stat.number) }))
     : []
 
   const testimonials = [
@@ -454,7 +474,8 @@ export default function Home() {
             ref={statsRef}
             className="flex flex-wrap justify-center gap-3 max-w-4xl mx-auto"
           >
-            {stats.slice(0, 4).map((stat) => (
+            {/* All of them. It rendered the first four and dropped the rest. */}
+            {stats.map((stat) => (
               <div
                 key={stat.label}
                 className="bg-white border border-gray-200 rounded-lg px-5 py-4 text-center min-w-[9rem] flex-1 sm:flex-none"
