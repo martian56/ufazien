@@ -503,6 +503,64 @@ class FindingTheSiteTests(TestCase):
         )
 
 
+class TotalVisitsTests(TestCase):
+    """
+    `Website.total_visits` is read by the site's own page, by the dashboard's
+    total, and by the public listing — which is *ordered* by it. Nothing has
+    ever written it, so it sat at zero everywhere and that ordering was
+    meaningless.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='counter', email='counter@example.com', password='pw'
+        )
+        self.site = make_site(self.user, 'Counted', subdomain='counted')
+
+    def run_over(self, lines):
+        from io import StringIO
+        import os
+        import tempfile
+
+        from django.core.management import call_command
+
+        directory = tempfile.mkdtemp()
+        path = os.path.join(directory, 'access.log')
+        with open(path, 'w') as handle:
+            handle.write('\n'.join(lines) + '\n')
+        call_command('aggregate_access_logs', logs=path, stdout=StringIO())
+
+    def views(self, count, day='2026-08-20', uri='/'):
+        return [
+            json.dumps({
+                't': f'{day}T10:00:00+04:00', 'host': 'counted.ufazien.com',
+                'method': 'GET', 'uri': uri, 'status': 200, 'bytes': 100,
+                'ip': f'203.0.113.{i}', 'ref': '-', 'ua': 'Mozilla/5.0',
+            })
+            for i in range(count)
+        ]
+
+    def test_it_is_filled_in_from_the_traffic(self):
+        self.run_over(self.views(4))
+
+        self.site.refresh_from_db()
+        self.assertEqual(self.site.total_visits, 4)
+
+    def test_running_it_twice_does_not_double_it(self):
+        lines = self.views(4)
+        self.run_over(lines)
+        self.run_over(lines)
+
+        self.site.refresh_from_db()
+        self.assertEqual(self.site.total_visits, 4, 'a second run counted the same visits again')
+
+    def test_it_adds_up_across_days(self):
+        self.run_over(self.views(4) + self.views(3, day='2026-08-21', uri='/about'))
+
+        self.site.refresh_from_db()
+        self.assertEqual(self.site.total_visits, 7)
+
+
 class RealisticSiteTests(TestCase):
     """The whole path, for a site built the way the create form builds one."""
 

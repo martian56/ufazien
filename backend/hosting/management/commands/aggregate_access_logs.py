@@ -10,6 +10,7 @@ import os
 
 from django.conf import settings
 from django.core.management.base import BaseCommand
+from django.db.models import Sum
 
 from hosting.access_logs import aggregate, read_lines, sites_by_host
 from hosting.models import WebsiteAnalytics
@@ -100,6 +101,21 @@ class Command(BaseCommand):
                     website=site, date=day, defaults=row
                 )
             written += 1
+
+        # `Website.total_visits` is read by the site's own page, by the
+        # dashboard's total, and by the public listing — which is *ordered* by
+        # it. Nothing has ever written it, so it was zero everywhere and that
+        # ordering meant nothing. Recomputed from the days rather than added
+        # to, for the same reason every other figure here is: running this
+        # twice must not double anybody's traffic.
+        if not options['dry_run'] and written:
+            for site in set(sites.values()):
+                total = WebsiteAnalytics.objects.filter(website=site).aggregate(
+                    total=Sum('page_views')
+                )['total'] or 0
+                if site.total_visits != total:
+                    site.total_visits = total
+                    site.save(update_fields=['total_visits'])
 
         verb = 'would write' if options['dry_run'] else 'wrote'
         self.stdout.write(self.style.SUCCESS(

@@ -313,6 +313,10 @@ class WebsiteAnalytics(models.Model):
     #: [{path, views}] and [{referrer, visits}], most first.
     top_pages = models.JSONField(default=list)
     referrers = models.JSONField(default=list)
+    #: {desktop, mobile, tablet} -> page views, from the user agent. Rough on
+    #: purpose — user agents lie — and a great deal closer than the invented
+    #: percentages the page used to show.
+    devices = models.JSONField(default=dict, blank=True)
     
     class Meta:
         unique_together = ['website', 'date']

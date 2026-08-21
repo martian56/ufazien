@@ -56,6 +56,29 @@ def is_bot(user_agent: str) -> bool:
     return bool(user_agent and _BOT.search(user_agent))
 
 
+#: Tablets first: an iPad says "Macintosh" and most Android tablets say
+#: "Android", so asking the mobile question first calls every one of them a
+#: phone.
+_TABLET = re.compile(r'ipad|tablet|kindle|silk|playbook|nexus (?:7|9|10)', re.IGNORECASE)
+_MOBILE = re.compile(r'mobi|iphone|ipod|android|windows phone|blackberry|opera mini', re.IGNORECASE)
+
+
+def device_of(user_agent: str) -> str:
+    """
+    Roughly what somebody was reading on.
+
+    Rough on purpose: user agents lie, and the panel this feeds shows three
+    bars. It is a great deal closer than the invented percentages it replaces.
+    """
+    if not user_agent:
+        return 'desktop'
+    if _TABLET.search(user_agent):
+        return 'tablet'
+    if _MOBILE.search(user_agent):
+        return 'mobile'
+    return 'desktop'
+
+
 def is_page(path: str) -> bool:
     """Whether this request is somebody looking at a page."""
     clean = path.split('?', 1)[0].split('#', 1)[0].lower().rstrip('/')
@@ -120,6 +143,7 @@ class DayTraffic:
     visitors: set[str] = field(default_factory=set)
     pages: Counter = field(default_factory=Counter)
     referrers: Counter = field(default_factory=Counter)
+    devices: Counter = field(default_factory=Counter)
 
     def as_row(self) -> dict:
         return {
@@ -134,6 +158,7 @@ class DayTraffic:
                 {'referrer': referrer, 'visits': visits}
                 for referrer, visits in self.referrers.most_common(TOP_N)
             ],
+            'devices': dict(self.devices),
         }
 
 
@@ -230,6 +255,8 @@ def aggregate(
             ip = str(entry.get('ip', '') or '')
             if ip:
                 into.visitors.add(visitor_key(ip, day, salt))
+
+            into.devices[device_of(str(entry.get('ua', '')))] += 1
 
             referrer = str(entry.get('ref', '') or '').strip()
             # `-` is nginx for "there wasn't one", and a site's own pages are

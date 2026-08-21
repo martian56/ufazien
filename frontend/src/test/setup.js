@@ -20,6 +20,18 @@ import { installStorageIfMissing } from './storage'
 // failures, so a missing Storage is replaced with a working one.
 installStorageIfMissing(globalThis)
 
+// jsdom has no ResizeObserver, and recharts' ResponsiveContainer constructs one
+// on mount — so any test that renders a chart dies with "ResizeObserver is not
+// defined" before it can assert anything. A stub is enough: nothing here
+// measures a layout, and jsdom reports every element as zero-sized anyway.
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+}
+
 afterEach(() => {
   cleanup()
   localStorage.clear()

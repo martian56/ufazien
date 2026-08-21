@@ -14,6 +14,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.pagination import PageNumberPagination
+from collections import Counter
 from datetime import datetime, timedelta
 import hashlib
 import hmac
@@ -463,7 +464,21 @@ class WebsiteViewSet(viewsets.ModelViewSet):
         avg_bounce_rate = sum(item['bounce_rate'] for item in analytics_data) / len(analytics_data) if analytics_data else 0
         avg_session_duration = sum(item['avg_session_duration'] for item in analytics_data) / len(analytics_data) if analytics_data else 0
         total_bandwidth = sum(item['bandwidth_used'] for item in analytics_data)
-        
+
+        # Merged across the window, because a chart of the period wants the
+        # period's totals rather than one day's. The tab that shows these was
+        # inventing all three, with the real figures fetched and unread.
+        pages = Counter()
+        referrers = Counter()
+        devices = Counter()
+        for row in analytics_queryset:
+            for entry in row.top_pages or []:
+                pages[entry.get('path', '')] += entry.get('views', 0)
+            for entry in row.referrers or []:
+                referrers[entry.get('referrer', '')] += entry.get('visits', 0)
+            for name, count in (row.devices or {}).items():
+                devices[name] += count
+
         return Response({
             'website_id': str(website.id),
             'website_name': website.name,
@@ -477,7 +492,16 @@ class WebsiteViewSet(viewsets.ModelViewSet):
                 'avg_session_duration': round(avg_session_duration, 2),
                 'total_bandwidth': total_bandwidth,
             },
-            'daily_data': analytics_data
+            'daily_data': analytics_data,
+            'top_pages': [
+                {'path': path, 'views': views}
+                for path, views in pages.most_common(10) if path
+            ],
+            'referrers': [
+                {'referrer': referrer, 'visits': visits}
+                for referrer, visits in referrers.most_common(10) if referrer
+            ],
+            'devices': dict(devices),
         })
     
     def perform_destroy(self, instance):
