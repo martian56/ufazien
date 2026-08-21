@@ -26,7 +26,6 @@ import {
   CAFE_TABLE_X,
   CAFE_TABLE_Z,
   UFAZ_DESK_X,
-  UFAZ_FLAGS,
   UFAZ_LIFTS,
   UFAZ_TURNSTILES,
   UFAZ_TURNSTILE_Z,
@@ -57,7 +56,6 @@ import {
 import { INTERIOR_SPECS, type FloorKind, type InteriorSpec } from './interiorSpecs'
 import { interiorDoorFacing, interiorDoors } from './doorways'
 import { LECTURE_BOARD_REACH, LECTURE_ROWS, LECTURE_SEATING } from './lectureSeating'
-import WavingFlag from './WavingFlag'
 import InstancedModel, { type Placement } from './InstancedModel'
 
 /**
@@ -1341,25 +1339,6 @@ function UfazGroundLevel({ spec, whiteboard }: InteriorProps) {
           hotel lobby; the room is white and modern above the cornice line and
           the lighting is the clearest statement of that. */}
       <LightRings ceiling={spec.ceiling} />
-
-      {/* Flags on stands, as they stand in the real lobby */}
-      {([[UFAZ_FLAGS[0], '#00b5e2'], [UFAZ_FLAGS[1], '#000091']] as [number, string][]).map(([x, flagColor]) => (
-        <group key={x} position={[x, 0, -half + 15]}>
-          <mesh castShadow position={[0, 1.7, 0]}>
-            <cylinderGeometry args={[0.05, 0.07, 3.4, 8]} />
-            <meshStandardMaterial color="#c9c4bb" roughness={0.4} metalness={0.5} />
-          </mesh>
-          {/* Indoors there is no wind to speak of, so these barely stir — but
-              a flag on a stand that is perfectly flat reads as painted card. */}
-          <group position={[0.55, 2.7, 0]}>
-            <WavingFlag width={1.1} height={0.7} color={flagColor} wind={0.35} phase={x} />
-          </group>
-          <mesh position={[0, 0.06, 0]}>
-            <cylinderGeometry args={[0.4, 0.45, 0.12, 12]} />
-            <meshStandardMaterial color="#2f3640" roughness={0.5} metalness={0.4} />
-          </mesh>
-        </group>
-      ))}
 
       {/* Seating for people waiting, and greenery */}
       {UFAZ_BENCH_Z.map((z) => (

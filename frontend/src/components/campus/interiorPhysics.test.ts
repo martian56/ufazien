@@ -424,3 +424,46 @@ function sameHeight(a: Collider, b: Collider): boolean {
   const base = (c: Collider) => c.base ?? 0
   return top(a) > base(b) + 1e-9 && top(b) > base(a) + 1e-9
 }
+
+/**
+ * The two flags that stood in the hall are gone.
+ *
+ * They were scenery nobody looked at, and each one carried a collider — so
+ * taking the meshes out on their own would have left two invisible posts in
+ * the middle of the floor for people to walk into. Both went together, and
+ * this is here so a later change cannot put one back without the other.
+ */
+describe('the hall floor where the flags stood', () => {
+  const WHERE_THEY_STOOD = [-3, 3]
+  // The spec's own half extent, which is what the collider builder measures
+  // from. `interiorHalfExtent` is that less 1.5 — the wall thickness a player
+  // is held back by — so measuring from it puts this a metre and a half off
+  // the spot, in open floor that was always clear.
+  const half = INTERIOR_SPECS['ufaz-core'].halfExtent
+
+  it('has nothing solid left in it', () => {
+    const colliders = interiorColliders('ufaz-core')
+
+    for (const x of WHERE_THEY_STOOD) {
+      const here = { x, z: -half + 15 }
+      const solid = colliders.some((collider) =>
+        insideCollider(here.x, here.z, collider, PLAYER_RADIUS),
+      )
+      expect(solid, `something invisible is still standing at x=${x}`).toBe(false)
+    }
+  })
+
+  it('lets a player walk straight through where they were', () => {
+    const colliders = interiorColliders('ufaz-core')
+    const z = -half + 15
+
+    // Across the pair, the way somebody crossing the hall would.
+    for (let x = -5; x <= 5; x += 0.5) {
+      const settled = resolveColliders(x, z, colliders, PLAYER_RADIUS)
+      expect(
+        Math.hypot(settled.x - x, settled.z - z),
+        `walking the hall is still pushed aside at x=${x}`,
+      ).toBeLessThan(0.01)
+    }
+  })
+})
