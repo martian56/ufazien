@@ -11,8 +11,8 @@ import os
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
-from hosting.access_logs import aggregate, read_lines
-from hosting.models import Website, WebsiteAnalytics
+from hosting.access_logs import aggregate, read_lines, sites_by_host
+from hosting.models import WebsiteAnalytics
 
 
 class Command(BaseCommand):
@@ -53,28 +53,29 @@ class Command(BaseCommand):
             return
 
         salt = getattr(settings, 'SECRET_KEY', '')
+        base = getattr(settings, 'HOSTING_BASE_DOMAIN', 'ufazien.com')
         traffic = aggregate(
             read_lines(paths),
             salt=salt,
-            base=getattr(settings, 'HOSTING_BASE_DOMAIN', 'ufazien.com'),
             count_bots=options['count_bots'],
         )
 
-        # One query rather than one per subdomain: a log covers every site on
-        # the box, and most of them appear in it.
-        wanted = {subdomain for subdomain, _ in traffic}
-        sites = {site.name: site for site in Website.objects.filter(name__in=wanted)}
+        # By host, through the domain. `Website.name` is the label the user
+        # typed, not the subdomain — see `sites_by_host`.
+        sites = sites_by_host({host for host, _ in traffic}, base)
 
         written = 0
         skipped_unknown = set()
         shrunk = 0
 
-        for (subdomain, day), totals in sorted(traffic.items()):
-            site = sites.get(subdomain)
+        for (host, day), totals in sorted(traffic.items()):
+            site = sites.get(host)
             if site is None:
                 # A host nobody owns: a deleted site, or somebody pointing a
-                # name at us. Not an error, and not ours to record.
-                skipped_unknown.add(subdomain)
+                # name at us. Not an error, and not ours to record — but said
+                # out loud, because a site quietly reporting nothing is the
+                # failure this command had.
+                skipped_unknown.add(host)
                 continue
 
             row = totals.as_row()
@@ -91,7 +92,7 @@ class Command(BaseCommand):
 
             if options['dry_run']:
                 self.stdout.write(
-                    f"{subdomain} {day}: {row['page_views']} views, "
+                    f"{host} {day}: {row['page_views']} views, "
                     f"{row['unique_visitors']} visitors, {row['bandwidth_used']} bytes"
                 )
             else:

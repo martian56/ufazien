@@ -64,21 +64,39 @@ def is_page(path: str) -> bool:
     return not clean.endswith(ASSET_SUFFIXES)
 
 
-def subdomain_of(host: str, base: str = 'ufazien.com') -> str | None:
+def clean_host(host: str) -> str | None:
     """
-    The site a request was for.
+    The host a request was for, tidied up.
 
-    `Website.name` is the subdomain — `Website.url` builds
-    `https://{name}.ufazien.com` from it — so the host is how a log line names
-    which site it belongs to.
+    The host is kept whole rather than being cut down to a subdomain. Which
+    site it belongs to is a question for the database — a site can be on
+    `portfolio.ufazien.com` or on a domain of its own, and both are hosts we
+    serve. Reducing it here threw the second kind away.
     """
     if not host:
         return None
     host = host.split(':', 1)[0].strip().lower().rstrip('.')
-    suffix = '.' + base.lower()
-    if not host.endswith(suffix):
+    return host or None
+
+
+def subdomain_of(host: str, base: str = 'ufazien.com') -> str | None:
+    """
+    The subdomain part of one of our own hosts, or None for anything else.
+
+    Only used to fall back to `Website.name` for a site that has no `Domain`
+    row. It is *not* how a site is normally found: `Website.name` is the label
+    the user typed — "My Portfolio" — while the subdomain lives on `Domain`,
+    and deployment roots the site's directory at the domain's name. Matching on
+    `Website.name` therefore missed every site made through the UI, which is
+    all of them, and reported zero.
+    """
+    cleaned = clean_host(host)
+    if not cleaned:
         return None
-    name = host[: -len(suffix)]
+    suffix = '.' + base.lower()
+    if not cleaned.endswith(suffix):
+        return None
+    name = cleaned[: -len(suffix)]
     return name or None
 
 
@@ -155,11 +173,15 @@ def entry_date(entry: dict) -> date | None:
 def aggregate(
     lines: Iterable[str],
     salt: str,
-    base: str = 'ufazien.com',
     count_bots: bool = False,
 ) -> dict[tuple[str, date], DayTraffic]:
     """
-    Roll log lines up into (subdomain, day) totals.
+    Roll log lines up into (host, day) totals.
+
+    Keyed by host, not by subdomain: a site can be on `x.ufazien.com` or on a
+    domain of its own, and cutting the host down to a subdomain dropped the
+    second kind on the floor. Which site a host belongs to is a question for
+    the database — see `sites_by_host`.
 
     Absolute totals for whatever it is given, not increments — so running it
     twice over the same log produces the same answer rather than doubling it,
@@ -172,12 +194,12 @@ def aggregate(
         if entry is None:
             continue
 
-        subdomain = subdomain_of(str(entry.get('host', '')), base)
+        host = clean_host(str(entry.get('host', '')))
         day = entry_date(entry)
-        if not subdomain or day is None:
+        if not host or day is None:
             continue
 
-        into = traffic[(subdomain, day)]
+        into = traffic[(host, day)]
 
         # Bandwidth is every byte that left, whatever the response was and
         # whoever asked: a 404 page, a redirect and a crawler all cost the
@@ -212,7 +234,7 @@ def aggregate(
             referrer = str(entry.get('ref', '') or '').strip()
             # `-` is nginx for "there wasn't one", and a site's own pages are
             # not referrers to itself.
-            if referrer and referrer != '-' and f'//{subdomain}.{base}' not in referrer:
+            if referrer and referrer != '-' and f'//{host}' not in referrer:
                 into.referrers[referrer[:200]] += 1
 
     return dict(traffic)
@@ -232,3 +254,52 @@ def read_lines(paths: Iterable[str]) -> Iterator[str]:
                 yield from handle
         except OSError:
             continue
+
+
+def sites_by_host(hosts, base='ufazien.com'):
+    """
+    Which `Website` each host belongs to.
+
+    The subdomain is on `Domain`, not on `Website`. `Website.name` is the label
+    the user typed on step one of the create form — "My Portfolio" — and the
+    subdomain is the separate field beside it, saved as a `Domain` row. What
+    deployment roots a site's directory at, and therefore what nginx serves it
+    under and what turns up as `$host` in the log, is the domain's name:
+
+        subdomain = instance.domain.name.split('.')[0]   # hosting/views.py
+
+    Matching a host against `Website.name` therefore missed every site made
+    through the UI and reported zero for it, in silence. `Website.url` has the
+    same two branches and I read only the second one.
+
+    The fallback is kept because it is real: a site with no `Domain` row is
+    served from a directory named after `Website.name`, by the `else` in that
+    same code. Those are the only ones the old lookup ever found — and the only
+    ones the tests built, which is why they were green.
+
+    One query, because a log covers every site on the box.
+    """
+    from django.db.models import Q
+
+    from .models import Website
+
+    hosts = {h for h in (clean_host(h) for h in hosts) if h}
+    if not hosts:
+        return {}
+
+    # Sites on one of our subdomains, by the label they were given, for the
+    # ones that never got a domain row.
+    subdomains = {sub for sub in (subdomain_of(h, base) for h in hosts) if sub}
+
+    found = {}
+    query = Website.objects.filter(
+        Q(domain__name__in=hosts) | Q(domain__isnull=True, name__in=subdomains)
+    ).select_related('domain')
+
+    for site in query:
+        if site.domain and site.domain.name:
+            found[clean_host(site.domain.name)] = site
+        else:
+            found[f'{site.name.lower()}.{base}'] = site
+
+    return found

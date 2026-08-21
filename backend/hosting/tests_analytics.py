@@ -18,17 +18,39 @@ from rest_framework.test import APIClient
 
 from .access_logs import (
     aggregate,
+    clean_host,
     is_bot,
     is_page,
     parse_line,
+    sites_by_host,
     subdomain_of,
     visitor_key,
 )
-from .models import Website, WebsiteAnalytics
+from .models import Domain, Website, WebsiteAnalytics
 
 User = get_user_model()
 
 SALT = 'a-test-salt'
+
+
+def make_site(user, label, subdomain=None, host=None):
+    """
+    A website the way the create form makes one.
+
+    `Website.name` is the label the user typed — "My Portfolio" — and the
+    subdomain is a separate field saved as a `Domain`. Building sites without
+    one is what hid the bug this file used to have: every fixture had the label
+    and the subdomain be the same string, so a lookup by label agreed with the
+    fixtures and found nothing in production.
+    """
+    domain = None
+    if subdomain or host:
+        domain = Domain.objects.create(
+            name=host or f'{subdomain}.ufazien.com',
+            domain_type='custom' if host else 'subdomain',
+            user=user,
+        )
+    return Website.objects.create(name=label, user=user, domain=domain)
 
 
 def line(**overrides):
@@ -105,18 +127,18 @@ class BadLinesTests(TestCase):
 
     def test_one_bad_line_does_not_stop_the_rest(self):
         traffic = aggregate([line(), 'not json at all', line(uri='/about')], salt=SALT)
-        self.assertEqual(traffic[('alice', date(2026, 8, 20))].page_views, 2)
+        self.assertEqual(traffic[('alice.ufazien.com', date(2026, 8, 20))].page_views, 2)
 
     def test_quotes_in_a_user_agent_do_not_break_the_line(self):
         # This is what `escape=json` in the nginx log_format is for.
         traffic = aggregate([line(ua='Mozilla "quoted" \\\\ backslash')], salt=SALT)
-        self.assertEqual(traffic[('alice', date(2026, 8, 20))].page_views, 1)
+        self.assertEqual(traffic[('alice.ufazien.com', date(2026, 8, 20))].page_views, 1)
 
 
 class AggregationTests(TestCase):
     def totals(self, lines, **kwargs):
         traffic = aggregate(lines, salt=SALT, **kwargs)
-        return traffic[('alice', date(2026, 8, 20))]
+        return traffic[('alice.ufazien.com', date(2026, 8, 20))]
 
     def test_counts_page_views_and_visitors(self):
         got = self.totals([
@@ -183,11 +205,18 @@ class AggregationTests(TestCase):
 
     def test_sites_are_kept_apart(self):
         traffic = aggregate([line(), line(host='bob.ufazien.com')], salt=SALT)
-        self.assertEqual(sorted(name for name, _ in traffic), ['alice', 'bob'])
+        self.assertEqual(sorted(name for name, _ in traffic),
+                         ['alice.ufazien.com', 'bob.ufazien.com'])
 
-    def test_a_host_that_is_not_ours_is_dropped(self):
+    def test_a_host_we_do_not_serve_is_left_for_the_lookup_to_reject(self):
+        """
+        Kept at this stage rather than dropped: a site on a domain of its own
+        is served here too, and cutting the host down to a subdomain threw
+        every one of them away. Whether we serve it is a question for the
+        database — `sites_by_host` — and anything unmatched is reported.
+        """
         traffic = aggregate([line(host='example.com')], salt=SALT)
-        self.assertEqual(traffic, {})
+        self.assertEqual(sorted(name for name, _ in traffic), ['example.com'])
 
     def test_running_it_twice_gives_the_same_answer(self):
         """
@@ -195,8 +224,8 @@ class AggregationTests(TestCase):
         got wrong: a retried delivery counted twice.
         """
         lines = [line(), line(uri='/about')]
-        once = aggregate(lines, salt=SALT)[('alice', date(2026, 8, 20))].as_row()
-        twice = aggregate(lines, salt=SALT)[('alice', date(2026, 8, 20))].as_row()
+        once = aggregate(lines, salt=SALT)[('alice.ufazien.com', date(2026, 8, 20))].as_row()
+        twice = aggregate(lines, salt=SALT)[('alice.ufazien.com', date(2026, 8, 20))].as_row()
         self.assertEqual(once, twice)
 
 
@@ -207,7 +236,7 @@ class CommandTests(TestCase):
         self.user = User.objects.create_user(
             username='alice', email='alice@example.com', password='pw'
         )
-        self.site = Website.objects.create(name='alice', user=self.user)
+        self.site = make_site(self.user, 'Alice’s Portfolio', subdomain='alice')
 
     def run_command(self, lines, **options):
         from io import StringIO
@@ -284,7 +313,7 @@ class WebhookTests(TestCase):
         self.user = User.objects.create_user(
             username='bob', email='bob@example.com', password='pw'
         )
-        self.site = Website.objects.create(name='bob', user=self.user)
+        self.site = make_site(self.user, 'Bob’s Blog', subdomain='bob')
         self.client = APIClient()
 
     def post(self, payload, signature=None, secret='shhh'):
@@ -379,7 +408,7 @@ class AnalyticsEndpointTests(TestCase):
         self.user = User.objects.create_user(
             username='carol', email='carol@example.com', password='pw'
         )
-        self.site = Website.objects.create(name='carol', user=self.user)
+        self.site = make_site(self.user, 'Carol’s Shop', subdomain='carol')
         self.api = APIClient()
         self.api.force_authenticate(user=self.user)
 
@@ -410,3 +439,107 @@ class AnalyticsEndpointTests(TestCase):
         summary = response.json()['summary']
         self.assertEqual(summary['total_page_views'], 42)
         self.assertEqual(summary['total_unique_visitors'], 17)
+
+
+class FindingTheSiteTests(TestCase):
+    """
+    Which website a host belongs to.
+
+    This is where the whole thing was broken and every test was green. The
+    subdomain lives on `Domain`; `Website.name` is the label the user typed on
+    step one of the create form. Deployment roots a site's directory at the
+    domain's name, so that is what nginx serves it under and what turns up as
+    `$host` in the log — and a lookup by label matched none of it.
+
+    Every fixture in this file used to be `Website.objects.create(name='alice')`
+    with no domain, so label and subdomain were the same string and the lookup
+    agreed with the fixtures while disagreeing with production.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='owner', email='owner@example.com', password='pw'
+        )
+
+    def test_finds_a_site_by_its_subdomain_not_its_label(self):
+        site = make_site(self.user, 'My Portfolio', subdomain='portfolio')
+
+        found = sites_by_host({'portfolio.ufazien.com'})
+
+        self.assertEqual(found, {'portfolio.ufazien.com': site})
+
+    def test_does_not_find_it_by_the_label(self):
+        make_site(self.user, 'My Portfolio', subdomain='portfolio')
+
+        # "My Portfolio" is not a host and never appears in a log.
+        self.assertEqual(sites_by_host({'my portfolio.ufazien.com'}), {})
+
+    def test_finds_a_site_on_a_domain_of_its_own(self):
+        """
+        Cutting the host down to a subdomain dropped these entirely, and
+        without even a line to say a host had gone unmatched.
+        """
+        site = make_site(self.user, 'Shop', host='example.com')
+
+        self.assertEqual(sites_by_host({'example.com'}), {'example.com': site})
+
+    def test_still_finds_a_site_that_never_got_a_domain(self):
+        """
+        The fallback is real: with no `Domain` row, deployment names the
+        directory after `Website.name`, by the `else` in the same code.
+        """
+        site = make_site(self.user, 'legacy')
+
+        self.assertEqual(sites_by_host({'legacy.ufazien.com'}), {'legacy.ufazien.com': site})
+
+    def test_ignores_a_host_nobody_owns(self):
+        self.assertEqual(sites_by_host({'nobody.ufazien.com', 'stranger.com'}), {})
+
+    def test_takes_the_port_and_the_case_off(self):
+        site = make_site(self.user, 'Portfolio', subdomain='portfolio')
+
+        self.assertEqual(
+            sites_by_host({'Portfolio.Ufazien.com:80'}), {'portfolio.ufazien.com': site}
+        )
+
+
+class RealisticSiteTests(TestCase):
+    """The whole path, for a site built the way the create form builds one."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='dave', email='dave@example.com', password='pw'
+        )
+        self.site = make_site(self.user, 'Dave’s Big Project', subdomain='dave')
+        self.api = APIClient()
+        self.api.force_authenticate(user=self.user)
+
+    def test_traffic_reaches_the_page_for_a_site_with_a_domain(self):
+        from io import StringIO
+        import os
+        import tempfile
+
+        from django.core.management import call_command
+
+        today = timezone.now().date().isoformat()
+        lines = [
+            json.dumps({
+                't': f'{today}T10:00:00+04:00', 'host': 'dave.ufazien.com',
+                'method': 'GET', 'uri': '/', 'status': 200, 'bytes': 900,
+                'ip': f'203.0.113.{i}', 'ref': '-', 'ua': 'Mozilla/5.0',
+            })
+            for i in range(3)
+        ]
+        directory = tempfile.mkdtemp()
+        path = os.path.join(directory, 'access.log')
+        with open(path, 'w') as handle:
+            handle.write('\n'.join(lines) + '\n')
+
+        call_command('aggregate_access_logs', logs=path, stdout=StringIO())
+
+        row = WebsiteAnalytics.objects.filter(website=self.site).first()
+        self.assertIsNotNone(row, 'a site made the normal way recorded nothing at all')
+        self.assertEqual(row.page_views, 3)
+
+        body = self.api.get(f'/api/hosting/websites/{self.site.id}/analytics/').json()
+        self.assertEqual(body['summary']['total_page_views'], 3)

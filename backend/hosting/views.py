@@ -22,6 +22,8 @@ import uuid
 
 from django.conf import settings
 
+from . import access_logs
+
 from .models import (
     SubscriptionPlan, UserSubscription, Website, Database, Domain,
     Deployment, SSLCertificate, BandwidthUsage, WebsiteAnalytics,
@@ -1688,8 +1690,15 @@ def webhook_analytics(request):
     except (ValueError, TypeError):
         return JsonResponse({'error': 'Invalid JSON.'}, status=400)
 
-    subdomain = str(data.get('subdomain') or '').strip().lower()
-    website = Website.objects.filter(name=subdomain).first() if subdomain else None
+    # By host, through the domain — `Website.name` is the label the user typed
+    # on the create form, and the subdomain is the separate field beside it,
+    # saved as a `Domain`. Looking a site up by its label found none of the
+    # ones made through the UI. `subdomain` is still accepted as the name of
+    # the field, and a full host may be sent instead for a custom domain.
+    base = getattr(settings, 'HOSTING_BASE_DOMAIN', 'ufazien.com')
+    given = str(data.get('host') or data.get('subdomain') or '').strip().lower()
+    host = given if '.' in given else f'{given}.{base}'
+    website = access_logs.sites_by_host({host}, base).get(access_logs.clean_host(host)) if given else None
     if website is None:
         return JsonResponse({'error': 'Unknown website.'}, status=404)
 
@@ -1723,7 +1732,7 @@ def webhook_analytics(request):
         website=website, date=day, defaults=fields
     )
 
-    return JsonResponse({'status': 'ok', 'website': subdomain, 'date': day.isoformat()})
+    return JsonResponse({'status': 'ok', 'website': host, 'date': day.isoformat()})
 
 
 @api_view(['POST'])
