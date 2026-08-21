@@ -66,6 +66,15 @@ describe('the figures on the tab', () => {
     expect(screen.getByText(/needs a script on your pages/i)).toBeInTheDocument()
   })
 
+  it('does not claim to count every visit', () => {
+    // It said "every visit is included", and crawlers, assets, redirects and
+    // errors are all left out of the reading figures.
+    render(<WebsiteAnalyticsTab website={website} analytics={payload} />)
+
+    expect(screen.queryByText(/every visit is included/i)).not.toBeInTheDocument()
+    expect(screen.getByText(/successfully served/i)).toBeInTheDocument()
+  })
+
   it('claims nothing about real-time activity', () => {
     // There was a panel counting "users online" that nothing measured.
     render(<WebsiteAnalyticsTab website={website} analytics={payload} />)
@@ -135,6 +144,30 @@ describe('reading the numbers', () => {
 
     expect(share.map((d) => d.device)).toEqual(['desktop', 'mobile', 'tablet'])
     expect(share.reduce((total, d) => total + d.percentage, 0)).toBe(100)
+  })
+
+  it('adds up to 100 however the counts fall', () => {
+    // Rounded one at a time, three equal counts give 33 apiece and the panel
+    // shows 99%.
+    for (const counts of [
+      { desktop: 1, mobile: 1, tablet: 1 },
+      { desktop: 2, mobile: 1 },
+      { desktop: 7, mobile: 7, tablet: 7 },
+      { desktop: 1, mobile: 1, tablet: 1, other: 1, more: 1, again: 1 },
+      { desktop: 100, mobile: 1 },
+    ]) {
+      const share = deviceShare(counts)
+      expect(
+        share.reduce((total, d) => total + d.percentage, 0),
+        `${JSON.stringify(counts)} did not total 100`,
+      ).toBe(100)
+    }
+  })
+
+  it('gives the spare point to the biggest remainder', () => {
+    const share = deviceShare({ desktop: 1, mobile: 1, tablet: 1 })
+    // 33.33 each: one of them takes the extra, and it is the first.
+    expect(share.map((d) => d.percentage).sort((a, b) => b - a)).toEqual([34, 33, 33])
   })
 
   it('has nothing to show when nothing was counted', () => {

@@ -39,9 +39,18 @@ ASSET_SUFFIXES = (
     '.pdf', '.zip', '.gz', '.json', '.xml', '.txt',
 )
 
-#: How many of each to keep. The page shows a handful; storing hundreds makes
-#: the row big and tells nobody anything.
-TOP_N = 10
+#: How many of each to keep per day.
+#:
+#: More than the ten a page shows, because the period's ranking is worked out
+#: by merging the days: a page eleventh every day for a week can beat one that
+#: was first on a single day, and if only ten are kept it can never be seen.
+#: Fifty covers any site this platform hosts; a site with a longer tail than
+#: that needs per-day counters in a table of their own, which is a bigger
+#: change than the ranking is worth.
+TOP_N = 50
+
+#: How many of them the page shows.
+SHOW_N = 10
 
 #: Anything that says it is a bot. Crawlers are most of the traffic to a small
 #: site and counting them as visitors makes the whole page a lie.
@@ -121,6 +130,43 @@ def subdomain_of(host: str, base: str = 'ufazien.com') -> str | None:
         return None
     name = cleaned[: -len(suffix)]
     return name or None
+
+
+def referrer_origin(referrer: str) -> str | None:
+    """
+    Where a reader came from, and nothing more.
+
+    Scheme and host only. A `Referer` carries the full URL of the page somebody
+    was on when they clicked, and that URL belongs to a *different* site than
+    the one being reported to — its path and query can hold a password-reset
+    token, an unsubscribe link, a session id, or somebody's email address.
+    Handing all of that to whoever owns the site that was linked to is exactly
+    what `CLAUDE.md` forbids: a user's email must never reach another user.
+
+    The panel only ever showed the source, so nothing is lost by never keeping
+    the rest.
+    """
+    referrer = (referrer or '').strip()
+    if not referrer or referrer == '-':
+        return None
+
+    try:
+        from urllib.parse import urlsplit
+
+        parts = urlsplit(referrer)
+    except ValueError:
+        return None
+
+    if not parts.scheme or not parts.netloc:
+        return None
+    if parts.scheme.lower() not in ('http', 'https'):
+        return None
+
+    # Credentials appear in netloc as user:pass@host, and are not ours to keep.
+    host = parts.netloc.rsplit('@', 1)[-1].lower()
+    if not host:
+        return None
+    return f'{parts.scheme.lower()}://{host}'[:200]
 
 
 def visitor_key(ip: str, day: date, salt: str) -> str:
@@ -262,11 +308,12 @@ def aggregate(
 
             into.devices[device_of(str(entry.get('ua', '')))] += 1
 
-            referrer = str(entry.get('ref', '') or '').strip()
-            # `-` is nginx for "there wasn't one", and a site's own pages are
-            # not referrers to itself.
-            if referrer and referrer != '-' and f'//{host}' not in referrer:
-                into.referrers[referrer[:200]] += 1
+            # Reduced to its origin before it is counted, so the rest is never
+            # stored at all — see `referrer_origin`. A site's own pages are not
+            # referrers to itself.
+            origin = referrer_origin(str(entry.get('ref', '') or ''))
+            if origin and not origin.endswith(f'//{host}'):
+                into.referrers[origin] += 1
 
     return dict(traffic)
 

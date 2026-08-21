@@ -73,18 +73,37 @@ export function dayLabel(date: string): string {
   })
 }
 
-/** The share each device took, as whole percentages that add to 100. */
+/**
+ * The share each device took, as whole percentages that add to 100.
+ *
+ * Rounding each one on its own does not: three equal counts round to 33 apiece
+ * and the panel shows 99%. The whole part is taken first and what is left over
+ * is handed out to the largest remainders, which is the ordinary way of making
+ * a set of rounded shares total what they started as.
+ */
 export function deviceShare(devices: Record<string, number> | undefined) {
   const entries = Object.entries(devices ?? {}).filter(([, count]) => count > 0)
   const total = entries.reduce((sum, [, count]) => sum + count, 0)
   if (total === 0) return []
-  return entries
+
+  const shares = entries
     .sort((a, b) => b[1] - a[1])
-    .map(([device, count]) => ({
-      device,
-      count,
-      percentage: Math.round((count / total) * 100),
-    }))
+    .map(([device, count]) => {
+      const exact = (count / total) * 100
+      const whole = Math.floor(exact)
+      return { device, count, percentage: whole, remainder: exact - whole }
+    })
+
+  // Biggest remainders first, so the leftover points go where they are most
+  // nearly owed. Ties keep the order above, which is by count.
+  let leftover = 100 - shares.reduce((sum, share) => sum + share.percentage, 0)
+  for (const share of [...shares].sort((a, b) => b.remainder - a.remainder)) {
+    if (leftover <= 0) break
+    share.percentage += 1
+    leftover -= 1
+  }
+
+  return shares.map(({ device, count, percentage }) => ({ device, count, percentage }))
 }
 
 function Stat({
@@ -347,9 +366,10 @@ export default function WebsiteAnalyticsTab({
         <Info className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />
         <p>
           Counted from the server's own request logs for{" "}
-          <span className="font-medium text-gray-900">{website.name}</span>, so every visit is
-          included and nothing has to be added to your pages. Updated periodically rather than
-          live. Crawlers are left out of visits and page views, and still count towards bandwidth.
+          <span className="font-medium text-gray-900">{website.name}</span>, so nothing has to be
+          added to your pages. A visit is a page that was successfully served: images,
+          stylesheets, redirects and errors are not counted as reading, and neither are crawlers
+          — all of them still count towards bandwidth. Updated periodically rather than live.
         </p>
       </div>
     </div>

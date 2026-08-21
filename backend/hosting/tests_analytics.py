@@ -17,8 +17,11 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from .access_logs import (
+    SHOW_N,
+    TOP_N,
     aggregate,
     clean_host,
+    referrer_origin,
     is_bot,
     is_page,
     parse_line,
@@ -185,8 +188,9 @@ class AggregationTests(TestCase):
             line(ref='https://alice.ufazien.com/index.html'),
             line(ref='https://news.example.com/story'),
         ])
+        # The origin, not the page: see ReferrerPrivacyTests.
         self.assertEqual([r['referrer'] for r in got.as_row()['referrers']],
-                         ['https://news.example.com/story'])
+                         ['https://news.example.com'])
 
     def test_top_pages_are_ordered_by_how_often_they_were_read(self):
         got = self.totals([line(uri='/about'), line(uri='/about'), line(uri='/')])
@@ -559,6 +563,91 @@ class TotalVisitsTests(TestCase):
 
         self.site.refresh_from_db()
         self.assertEqual(self.site.total_visits, 7)
+
+
+class ReferrerPrivacyTests(TestCase):
+    """
+    A referrer says which site somebody came from, and nothing else.
+
+    The `Referer` header carries the full URL of the page they were on, and
+    that page belongs to a *different* site than the one being reported to. Its
+    path and query can hold a password-reset token, an unsubscribe link, a
+    session id, or somebody's email address — and handing that to whoever owns
+    the site that was linked to is exactly what `CLAUDE.md` forbids: a user's
+    email must never reach another user.
+    """
+
+    def test_keeps_the_site_and_drops_the_rest(self):
+        self.assertEqual(
+            referrer_origin('https://mail.example.com/inbox?token=abc123'),
+            'https://mail.example.com',
+        )
+
+    def test_an_address_in_the_path_does_not_survive(self):
+        origin = referrer_origin('https://forum.example.com/u/someone@example.com/posts')
+
+        self.assertEqual(origin, 'https://forum.example.com')
+        self.assertNotIn('@example.com', origin)
+
+    def test_a_reset_link_does_not_survive(self):
+        origin = referrer_origin('https://bank.example.com/reset?token=9f3a&user=carol@x.com')
+
+        self.assertNotIn('token', origin)
+        self.assertNotIn('carol', origin)
+
+    def test_credentials_in_the_host_are_dropped(self):
+        self.assertEqual(
+            referrer_origin('https://user:hunter2@example.com/page'),
+            'https://example.com',
+        )
+
+    def test_nothing_useless_is_kept(self):
+        for value in ('', '-', 'not a url', 'javascript:alert(1)', 'about:blank'):
+            self.assertIsNone(referrer_origin(value), value)
+
+    def test_aggregation_never_stores_more_than_the_origin(self):
+        line = json.dumps({
+            't': '2026-08-20T10:00:00+04:00', 'host': 'alice.ufazien.com',
+            'method': 'GET', 'uri': '/', 'status': 200, 'bytes': 10,
+            'ip': '203.0.113.1', 'ua': 'Mozilla/5.0',
+            'ref': 'https://mail.example.com/message?to=nigar@example.com&token=s3cr3t',
+        })
+
+        row = aggregate([line], salt=SALT)[('alice.ufazien.com', date(2026, 8, 20))].as_row()
+
+        self.assertEqual(row['referrers'], [{'referrer': 'https://mail.example.com', 'visits': 1}])
+        self.assertNotIn('nigar', json.dumps(row))
+        self.assertNotIn('s3cr3t', json.dumps(row))
+
+    def test_two_pages_of_one_site_are_one_referrer(self):
+        """Which follows from keeping only the origin, and is what a reader wants."""
+        def line(path):
+            return json.dumps({
+                't': '2026-08-20T10:00:00+04:00', 'host': 'alice.ufazien.com',
+                'method': 'GET', 'uri': '/', 'status': 200, 'bytes': 10,
+                'ip': '203.0.113.1', 'ua': 'Mozilla/5.0',
+                'ref': f'https://news.example.com{path}',
+            })
+
+        row = aggregate([line('/one'), line('/two')], salt=SALT)[
+            ('alice.ufazien.com', date(2026, 8, 20))
+        ].as_row()
+
+        self.assertEqual(row['referrers'], [{'referrer': 'https://news.example.com', 'visits': 2}])
+
+
+class TruncationTests(TestCase):
+    """
+    A period's ranking is worked out by merging the days, so a page kept out of
+    every day's list can never appear in the period's — however often it was
+    read across the week.
+    """
+
+    def test_more_is_kept_per_day_than_is_ever_shown(self):
+        self.assertGreater(
+            TOP_N, SHOW_N,
+            'keeping only what is shown means the weekly ranking is built from truncated days',
+        )
 
 
 class BandwidthQuotaTests(TestCase):

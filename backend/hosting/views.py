@@ -475,7 +475,12 @@ class WebsiteViewSet(viewsets.ModelViewSet):
             for entry in row.top_pages or []:
                 pages[entry.get('path', '')] += entry.get('views', 0)
             for entry in row.referrers or []:
-                referrers[entry.get('referrer', '')] += entry.get('visits', 0)
+                # Reduced again on the way out, so a row written before this
+                # rule existed cannot hand somebody's reset token to the owner
+                # of the site it linked to.
+                origin = access_logs.referrer_origin(entry.get('referrer', ''))
+                if origin:
+                    referrers[origin] += entry.get('visits', 0)
             for name, count in (row.devices or {}).items():
                 devices[name] += count
 

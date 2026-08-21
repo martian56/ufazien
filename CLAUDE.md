@@ -194,6 +194,14 @@ Storage is separate and already worked: `manage.py compute_storage` measures
 `/srv/hosting/<subdomain>` and writes `Website.storage_used_mb`. Run it on a
 timer too.
 
+**Referrers are stored as an origin, never a full URL.** A `Referer` carries
+the whole address of the page somebody came from, and that page belongs to a
+different site than the one being reported to — its path and query can hold a
+reset token, an unsubscribe link or somebody's email address. Keeping only
+scheme and host is the same rule as the one about emails in `community`:
+somebody else's identifier must not reach a site owner. `scrub_referrers`
+reduces rows written before that rule.
+
 `webhooks/analytics/` is signed with `HOSTING_WEBHOOK_SECRET` and identifies a
 site by subdomain. A subdomain says which site a payload is about and nothing
 about who sent it, so without the signature anybody could post any figures for
