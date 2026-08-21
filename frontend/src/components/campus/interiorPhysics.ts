@@ -112,16 +112,6 @@ interface InteriorPhysics {
  * the door all the way to the screen.
  */
 /**
- * Where the two flags stand.
- *
- * Either side of the axis, which is where a lobby puts them. They were pushed
- * out to the east wall when the waiting benches were still over there and the
- * flags stood between them and the board; the benches have since moved west,
- * and out at 16.5 the stands were inside the colonnade at 17.
- */
-export const UFAZ_FLAGS = [-3, 3]
-
-/**
  * The reception desk, clear of the arcade beside it.
  *
  * At -11.8 its six-metre counter reached x -14.8 and the arcade pier's face is
@@ -251,12 +241,6 @@ function ufazGroundFurniture(): InteriorPhysics {
   // the column at -17, and a five-centimetre intersection is a seam the
   // collision resolver cannot settle a player on.
   colliders.push({ x: UFAZ_DESK_X, z: 8, halfW: 3, halfD: 0.9, height: 1.25 })
-
-  // Flag stands, moved out towards the walls. On the centre line they stood
-  // between the waiting benches and one corner of the board.
-  for (const x of UFAZ_FLAGS) {
-    colliders.push({ x, z: -half + 15, radius: 0.45, height: 3.4 })
-  }
 
   // Waiting benches down the west side. They were opposite, which put the
   // staircase balustrade between everyone sitting on them and the board.
