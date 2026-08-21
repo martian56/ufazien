@@ -66,13 +66,16 @@ describe('the figures on the tab', () => {
     expect(screen.getByText(/needs a script on your pages/i)).toBeInTheDocument()
   })
 
-  it('does not claim to count every visit', () => {
-    // It said "every visit is included", and crawlers, assets, redirects and
-    // errors are all left out of the reading figures.
+  it('does not explain itself at the reader', () => {
+    // There was a paragraph under the panels describing where the figures came
+    // from and what does and does not count. It said "every visit is included",
+    // which was not true — but the answer to that is not a more careful
+    // paragraph, it is not putting one on the page at all.
     render(<WebsiteAnalyticsTab website={website} analytics={payload} />)
 
     expect(screen.queryByText(/every visit is included/i)).not.toBeInTheDocument()
-    expect(screen.getByText(/successfully served/i)).toBeInTheDocument()
+    expect(screen.queryByText(/request logs/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/successfully served/i)).not.toBeInTheDocument()
   })
 
   it('claims nothing about real-time activity', () => {
