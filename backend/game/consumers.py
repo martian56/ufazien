@@ -742,6 +742,25 @@ class LobbyConsumer(AsyncWebsocketConsumer):
             'username': event['username'],
         }))
 
+    async def member_removed(self, event):
+        """
+        Somebody was removed from the lobby.
+
+        Everybody is told, so the room can stop drawing them, and the one who
+        was removed is closed out. Their membership is already gone, so the
+        socket has no business staying open: `check_lobby_membership` would
+        refuse the same connection a second later.
+        """
+        await self.send(text_data=json.dumps({
+            'type': 'member_removed',
+            'user_id': event['user_id'],
+        }))
+
+        if event['user_id'] == self.user.id:
+            # 4003 is what a non-member gets on connect, and the client already
+            # knows to stop trying rather than reconnecting into a refusal.
+            await self.close(code=4003)
+
     async def position_update(self, event):
         """Handle position update event."""
         # Don't send position updates back to the sender

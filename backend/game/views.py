@@ -9,9 +9,13 @@ from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
 from django.utils import timezone
 from datetime import timedelta
+import logging
 import random
 
-from . import livekit_service
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
+
+from . import livekit_service, privileges
 from .models import (
     Lobby, LobbyMember, PlayerPosition,
     ChatMessage, SavedLobby
@@ -21,6 +25,8 @@ from .serializers import (
     PlayerPositionSerializer, ChatMessageSerializer, SavedLobbySerializer,
     JoinLobbySerializer, QuickJoinSerializer
 )
+
+logger = logging.getLogger(__name__)
 
 
 #: How many candidates quick-join considers. It only has to pick one somebody
@@ -125,11 +131,10 @@ def lobby_detail(request, lobby_id):
         return Response(serializer.data)
     
     elif request.method == 'PUT':
-        if lobby.host != request.user:
-            return Response(
-                {'error': 'Only the host can modify this lobby'}, 
-                status=status.HTTP_403_FORBIDDEN
-            )
+        denied = _require(lobby, request.user, privileges.MANAGE,
+                          'Only the host, or somebody they have allowed, can change this lobby.')
+        if denied:
+            return denied
         
         serializer = LobbyCreateSerializer(lobby, data=request.data, partial=True)
         if serializer.is_valid():
@@ -139,14 +144,13 @@ def lobby_detail(request, lobby_id):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
     elif request.method == 'DELETE':
-        if lobby.host != request.user:
-            return Response(
-                {'error': 'Only the host can delete this lobby'}, 
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
+        denied = _require(lobby, request.user, privileges.MANAGE,
+                          'Only the host, or somebody they have allowed, can close this lobby.')
+        if denied:
+            return denied
+
         lobby.is_active = False
-        lobby.save()
+        lobby.save(update_fields=['is_active'])
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -215,39 +219,21 @@ def leave_lobby(request, lobby_id):
         # Remove player position
         PlayerPosition.objects.filter(lobby=lobby, user=request.user).delete()
         
-        # If the host leaves, hand the lobby to somebody else or close it.
-        if lobby.host == request.user:
-            remaining_members = LobbyMember.objects.filter(lobby=lobby)
-            if remaining_members.exists():
-                lobby.host = remaining_members.first().user
-                lobby.save(update_fields=['host'])
-
-                # The new host's LiveKit grants are minted from `is_host` at
-                # token time, so without this they cannot present until they
-                # reconnect. Best effort: it is a no-op for somebody who is not
-                # currently in the room.
-                #
-                # And it must not be able to stop somebody leaving. Voice is
-                # optional — `CONTRIBUTING.md` says so, and a dev without the
-                # credentials is the normal case — but
-                # `sync_participant_permissions` deliberately re-raises
-                # `LiveKitNotConfigured` so that the token endpoint can report
-                # it. Uncaught here, walking out of a lobby returns a 500 on
-                # every machine that has not set up LiveKit.
-                new_member = remaining_members.first()
-                try:
-                    livekit_service.sync_participant_permissions(
-                        lobby, new_member.user, new_member
-                    )
-                except livekit_service.LiveKitNotConfigured:
-                    pass
-            else:
-                # Nobody left. The line that did this was commented out, so an
-                # empty hostless lobby stayed active for ever — listed, counted
-                # in the stats, and joinable by people who then found nobody in
-                # it. The `lobby.save()` underneath it saved nothing at all.
-                lobby.is_active = False
-                lobby.save(update_fields=['is_active'])
+        # The host keeps the lobby. It used to be handed to whoever was left,
+        # so the person who made it lost it by stepping out for a minute — and
+        # got it back only if they happened to be the last one standing.
+        #
+        # What that handover was really solving is that somebody has to be able
+        # to moderate a room the host is not in. That is what the granted
+        # privileges are for: the host hands out the individual powers rather
+        # than the whole role. See `game/privileges.py`.
+        if lobby.host == request.user and not LobbyMember.objects.filter(lobby=lobby).exists():
+            # Nobody left at all. The line that did this was commented out, so
+            # an empty lobby stayed active for ever — listed, counted in the
+            # stats, and joinable by people who then found nobody in it. The
+            # `lobby.save()` underneath it saved nothing at all.
+            lobby.is_active = False
+            lobby.save(update_fields=['is_active'])
         
         return Response({'message': 'Left lobby successfully'})
     
@@ -427,14 +413,19 @@ def livekit_token(request, lobby_id):
     return Response(payload)
 
 
-def _require_host(lobby, user):
-    """Only the lobby host moderates. Returns an error Response, or None."""
-    if lobby.host_id != user.id:
-        return Response(
-            {'error': 'Only the lobby host can do that.'},
-            status=status.HTTP_403_FORBIDDEN,
-        )
-    return None
+def _require(lobby, user, privilege, message='Only the lobby host can do that.'):
+    """
+    Gate one action on one privilege. Returns an error Response, or None.
+
+    Host-only used to be the whole permission model, which is why leaving handed
+    the lobby on: with the host gone there was nobody left who could do
+    anything. The host keeps the lobby now and hands out powers instead, so
+    every gate asks what somebody may do rather than who they are.
+    """
+    member = LobbyMember.objects.filter(lobby=lobby, user=user).first()
+    if privileges.is_host(lobby, user) or privileges.member_may(lobby, member, privilege):
+        return None
+    return Response({'error': message}, status=status.HTTP_403_FORBIDDEN)
 
 
 @api_view(['POST'])
@@ -442,7 +433,8 @@ def _require_host(lobby, user):
 def set_member_muted(request, lobby_id, user_id):
     """Host mutes or unmutes a member."""
     lobby = get_object_or_404(Lobby, id=lobby_id, is_active=True)
-    denied = _require_host(lobby, request.user)
+    denied = _require(lobby, request.user, privileges.MUTE,
+                      'Only the host, or somebody they have allowed, can mute people.')
     if denied:
         return denied
 
@@ -469,7 +461,8 @@ def set_member_muted(request, lobby_id, user_id):
 def set_member_screen_share(request, lobby_id, user_id):
     """Host grants or revokes screen share for a member."""
     lobby = get_object_or_404(Lobby, id=lobby_id, is_active=True)
-    denied = _require_host(lobby, request.user)
+    denied = _require(lobby, request.user, privileges.MANAGE,
+                      'Only the host, or somebody they have allowed, can hand out screen sharing.')
     if denied:
         return denied
 
@@ -483,6 +476,112 @@ def set_member_screen_share(request, lobby_id, user_id):
         'is_muted': member.is_muted,
         'can_share_screen': member.can_share_screen,
     })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def set_member_privileges(request, lobby_id, user_id):
+    """
+    Hand a member one of the host's powers, or take it back.
+
+    Only the host does this. Granting is not itself grantable: somebody the
+    host allowed to manage the lobby must not be able to promote themselves
+    further, or to promote a friend and lock the host out of their own room.
+    """
+    lobby = get_object_or_404(Lobby, id=lobby_id, is_active=True)
+    if not privileges.is_host(lobby, request.user):
+        return Response(
+            {'error': 'Only the host can change what somebody is allowed to do.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    member = get_object_or_404(LobbyMember, lobby=lobby, user_id=user_id)
+    if member.user_id == lobby.host_id:
+        return Response(
+            {'error': 'The host already has every privilege.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    changed = []
+    for name, _label in privileges.PRIVILEGES:
+        if name not in request.data:
+            continue
+        field = privileges.PRIVILEGE_FIELDS[name]
+        setattr(member, field, bool(request.data[name]))
+        changed.append(field)
+
+    if not changed:
+        return Response(
+            {'error': f'Name at least one of: {", ".join(n for n, _ in privileges.PRIVILEGES)}.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    member.save(update_fields=changed)
+
+    # Screen sharing is minted into the LiveKit token, so a grant that is not
+    # pushed does nothing until they reconnect. Best effort: voice is optional
+    # here, and a machine without the credentials is the normal case in dev.
+    if 'can_share_screen' in changed:
+        try:
+            livekit_service.sync_participant_permissions(lobby, member.user, member)
+        except livekit_service.LiveKitNotConfigured:
+            pass
+
+    return Response({'user_id': member.user_id, **privileges.granted_to(lobby, member)})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def kick_member(request, lobby_id, user_id):
+    """
+    Remove somebody from the lobby.
+
+    Their membership and their position go, which is what leaving does; the
+    socket finds out because the group is told, and a client that ignores it
+    still cannot rejoin without going through `join_lobby` again.
+    """
+    lobby = get_object_or_404(Lobby, id=lobby_id, is_active=True)
+    denied = _require(lobby, request.user, privileges.KICK,
+                      'Only the host, or somebody they have allowed, can remove people.')
+    if denied:
+        return denied
+
+    if int(user_id) == lobby.host_id:
+        return Response(
+            {'error': 'The host cannot be removed from their own lobby.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if int(user_id) == request.user.id:
+        return Response(
+            {'error': 'Leave the lobby rather than removing yourself.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    member = get_object_or_404(LobbyMember, lobby=lobby, user_id=user_id)
+    username = member.user.username
+    member.delete()
+    PlayerPosition.objects.filter(lobby=lobby, user_id=user_id).delete()
+
+    _tell_the_lobby(lobby_id, {'type': 'member_removed', 'user_id': int(user_id)})
+
+    return Response({'user_id': int(user_id), 'username': username, 'removed': True})
+
+
+def _tell_the_lobby(lobby_id, message):
+    """
+    Push something to everyone on the lobby's socket, if there is a layer.
+
+    Best effort by design: this is a REST handler, and a channel layer that is
+    not configured — or a lobby nobody has a socket open on — must not turn
+    into a 500 on an action that has already happened in the database.
+    """
+    try:
+        layer = get_channel_layer()
+        if layer is None:
+            return
+        async_to_sync(layer.group_send)(f'lobby_{lobby_id}', message)
+    except Exception:
+        logger.exception('Could not reach lobby %s over the channel layer', lobby_id)
 
 
 @api_view(['GET'])
@@ -505,8 +604,13 @@ def lobby_permissions(request, lobby_id):
                 'username': m.user.username,
                 'full_name': m.user.get_full_name() or m.user.username,
                 'is_muted': m.is_muted,
-                'can_share_screen': m.can_share_screen or m.user_id == lobby.host_id,
                 'is_host': m.user_id == lobby.host_id,
+                'is_online': m.is_online,
+                # What they may do, host included — the host holds everything
+                # implicitly, so this is the only place it is spelled out.
+                **privileges.granted_to(lobby, m),
+                # Kept for the clients that already read this name.
+                'can_share_screen': privileges.member_may(lobby, m, privileges.PRESENT),
             }
             for m in members
         ],

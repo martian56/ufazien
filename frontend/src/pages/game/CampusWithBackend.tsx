@@ -48,6 +48,7 @@ import { errorMessage } from '../../lib/api/errors'
 import gpaApi from '../../lib/api/endpoints/gpa'
 import TouchControls, { createTouchState, useIsTouchDevice } from '../../components/campus/TouchControls'
 import type { TouchState } from '../../components/campus/TouchControls'
+import LobbyPeople from '../../components/campus/LobbyPeople'
 import { mergeTouch } from '../../components/campus/touchActions'
 import {
   CampusEnvironment,
@@ -2476,6 +2477,18 @@ const CampusWithBackend = () => {
             onSetMemberMuted={voice.setMemberMuted}
             onSetMemberScreenShare={voice.setMemberScreenShare}
             embedded
+          />
+        }
+        people={
+          <LobbyPeople
+            members={voice.permissions?.members ?? []}
+            meId={currentUser?.id ?? null}
+            hostId={voice.permissions?.host_id ?? null}
+            onSetMuted={voice.setMemberMuted}
+            onSetPrivilege={(userId, privilege, granted) =>
+              voice.setMemberPrivileges(userId, { [privilege]: granted })
+            }
+            onRemove={voice.removeMember}
           />
         }
       />

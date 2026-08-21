@@ -7,7 +7,8 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from .characters import CAMPUS_CHARACTERS
-from .models import Lobby, LobbyMember, SavedLobby
+from . import privileges
+from .models import Lobby, LobbyMember, PlayerPosition, SavedLobby
 
 User = get_user_model()
 
@@ -190,7 +191,16 @@ class LobbyRestTests(TestCase):
         lobby.refresh_from_db()
         self.assertFalse(lobby.is_active, 'an empty lobby is still active')
 
-    def test_a_lobby_the_host_leaves_passes_to_somebody_else(self):
+    def test_the_host_keeps_the_lobby_when_they_leave(self):
+        """
+        It used to pass to whoever was left, so the person who made the lobby
+        lost it by stepping out for a minute — and got it back only if they
+        happened to be the last one standing.
+
+        Somebody still has to be able to moderate a room the host is not in;
+        that is what the granted privileges are for, rather than handing over
+        the whole role.
+        """
         lobby = self._make_lobby(name='Handover')
         LobbyMember.objects.create(lobby=lobby, user=self.player)
 
@@ -198,14 +208,30 @@ class LobbyRestTests(TestCase):
 
         lobby.refresh_from_db()
         self.assertTrue(lobby.is_active, 'a lobby with somebody still in it was closed')
-        self.assertEqual(lobby.host, self.player)
+        self.assertEqual(lobby.host, self.host, 'the host lost their lobby by leaving it')
+
+    def test_the_host_still_has_it_when_they_come_back(self):
+        """The point of keeping it: stepping out and returning changes nothing."""
+        lobby = self._make_lobby(name='Back in a minute')
+        LobbyMember.objects.create(lobby=lobby, user=self.player)
+
+        self.api.post(f'/api/game/lobbies/{lobby.id}/leave/')
+        response = self.api.post('/api/game/join/', {'lobby_id': lobby.id})
+
+        self.assertEqual(response.status_code, 200, response.content[:200])
+        lobby.refresh_from_db()
+        self.assertEqual(lobby.host, self.host)
 
     def test_leaving_works_on_a_machine_with_no_livekit(self):
         """
         Voice is optional, and a developer without the credentials is the
-        normal case. Handing the lobby on pushes the new host's publishing
-        rights to LiveKit, and that call re-raises when it is not configured —
-        so uncaught, walking out of a lobby is a 500 for most people.
+        normal case. Leaving used to push the new host's publishing rights to
+        LiveKit, and that call re-raises when it is not configured — so
+        uncaught, walking out of a lobby was a 500 for most people.
+
+        Nothing on this path talks to LiveKit any more, now that leaving hands
+        nothing over. Kept because the requirement outlives the reason: walking
+        out must work on a machine with no voice.
         """
         lobby = self._make_lobby(name='No voice here')
         LobbyMember.objects.create(lobby=lobby, user=self.player)
@@ -213,15 +239,12 @@ class LobbyRestTests(TestCase):
         response = self.api.post(f'/api/game/lobbies/{lobby.id}/leave/')
 
         self.assertEqual(response.status_code, 200, response.content[:200])
-        lobby.refresh_from_db()
-        self.assertEqual(lobby.host, self.player)
 
-    def test_a_lobby_is_handed_on_even_when_the_others_are_offline(self):
+    def test_a_lobby_whose_others_are_all_offline_stays_open(self):
         """
-        The handover looked at `is_online`, which nothing ever set to False —
-        and now that something does, an offline member is still a member. A
-        lobby whose remaining players had all closed their tabs would otherwise
-        be closed out from under them.
+        An offline member is still a member. A lobby whose remaining players
+        had all closed their tabs would otherwise be closed out from under
+        them, and they would come back to nothing.
         """
         lobby = self._make_lobby(name='Quiet')
         make_member(lobby, self.player, online=False)
@@ -229,8 +252,8 @@ class LobbyRestTests(TestCase):
         self.api.post(f'/api/game/lobbies/{lobby.id}/leave/')
 
         lobby.refresh_from_db()
-        self.assertTrue(lobby.is_active)
-        self.assertEqual(lobby.host, self.player)
+        self.assertTrue(lobby.is_active, 'a lobby of offline members was closed on them')
+        self.assertEqual(lobby.host, self.host)
 
 
     def test_the_query_count_does_not_grow_with_the_number_of_lobbies(self):
@@ -2270,3 +2293,181 @@ class CampusCharacterTests(TestCase):
             list(CAMPUS_CHARACTERS), ids,
             'the server and client character catalogues have drifted apart',
         )
+
+
+class LobbyPrivilegeTests(TestCase):
+    """
+    What the host can hand out, now that leaving no longer hands over the lobby.
+
+    The handover existed because host-only was the whole permission model: with
+    the host gone there was nobody who could do anything. The host keeps the
+    lobby now, so the powers have to be separable from the role.
+    """
+
+    def setUp(self):
+        self.host = User.objects.create_user(
+            username="owner", email="owner@example.com", password="pw"
+        )
+        self.deputy = User.objects.create_user(
+            username="deputy", email="deputy@example.com", password="pw"
+        )
+        self.guest = User.objects.create_user(
+            username="guest", email="guest@example.com", password="pw"
+        )
+        self.lobby = Lobby.objects.create(name="Owned", host=self.host)
+        LobbyMember.objects.create(lobby=self.lobby, user=self.host)
+        self.deputy_member = LobbyMember.objects.create(lobby=self.lobby, user=self.deputy)
+        LobbyMember.objects.create(lobby=self.lobby, user=self.guest)
+
+        self.api = APIClient()
+
+    def as_(self, user):
+        self.api.force_authenticate(user=user)
+        return self.api
+
+    def grant(self, **what):
+        return self.as_(self.host).post(
+            f'/api/game/lobbies/{self.lobby.id}/members/{self.deputy.id}/privileges/',
+            what,
+            format='json',
+        )
+
+    def test_a_member_cannot_change_the_lobby(self):
+        response = self.as_(self.deputy).put(
+            f'/api/game/lobbies/{self.lobby.id}/', {'name': 'Mine now'}, format='json'
+        )
+        self.assertEqual(response.status_code, 403)
+        self.lobby.refresh_from_db()
+        self.assertEqual(self.lobby.name, 'Owned')
+
+    def test_the_host_can_let_somebody_change_it(self):
+        self.assertEqual(self.grant(manage=True).status_code, 200)
+
+        response = self.as_(self.deputy).put(
+            f'/api/game/lobbies/{self.lobby.id}/', {'name': 'Renamed'}, format='json'
+        )
+
+        self.assertEqual(response.status_code, 200, response.content[:200])
+        self.lobby.refresh_from_db()
+        self.assertEqual(self.lobby.name, 'Renamed')
+
+    def test_taking_it_back_takes_it_back(self):
+        self.grant(manage=True)
+        self.grant(manage=False)
+
+        response = self.as_(self.deputy).put(
+            f'/api/game/lobbies/{self.lobby.id}/', {'name': 'Nope'}, format='json'
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_granting_is_not_itself_grantable(self):
+        """
+        Somebody allowed to manage the lobby must not be able to promote
+        themselves further, or promote a friend and lock the host out of their
+        own room. Only the host hands things out.
+        """
+        self.grant(manage=True, kick=True)
+
+        response = self.as_(self.deputy).post(
+            f'/api/game/lobbies/{self.lobby.id}/members/{self.guest.id}/privileges/',
+            {'kick': True},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(
+            LobbyMember.objects.get(lobby=self.lobby, user=self.guest).can_kick
+        )
+
+    def test_the_host_needs_nothing_granted(self):
+        member = LobbyMember.objects.get(lobby=self.lobby, user=self.host)
+        self.assertFalse(member.can_manage, 'the host has a stored grant that could go stale')
+        self.assertTrue(privileges.member_may(self.lobby, member, privileges.MANAGE))
+        self.assertTrue(privileges.member_may(self.lobby, member, privileges.KICK))
+
+    def test_the_host_cannot_be_granted_things_they_already_have(self):
+        response = self.as_(self.host).post(
+            f'/api/game/lobbies/{self.lobby.id}/members/{self.host.id}/privileges/',
+            {'kick': True},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_naming_nothing_is_refused_rather_than_silently_doing_nothing(self):
+        self.assertEqual(self.grant().status_code, 400)
+
+
+class KickTests(TestCase):
+    """Removing somebody, which is what makes `kick` worth granting."""
+
+    def setUp(self):
+        self.host = User.objects.create_user(
+            username="kicker", email="kicker@example.com", password="pw"
+        )
+        self.deputy = User.objects.create_user(
+            username="second", email="second@example.com", password="pw"
+        )
+        self.nuisance = User.objects.create_user(
+            username="nuisance", email="nuisance@example.com", password="pw"
+        )
+        self.lobby = Lobby.objects.create(name="Moderated", host=self.host)
+        for user in (self.host, self.deputy, self.nuisance):
+            LobbyMember.objects.create(lobby=self.lobby, user=user)
+        PlayerPosition.objects.create(lobby=self.lobby, user=self.nuisance)
+        self.api = APIClient()
+
+    def kick(self, actor, target):
+        self.api.force_authenticate(user=actor)
+        return self.api.post(
+            f'/api/game/lobbies/{self.lobby.id}/members/{target.id}/kick/'
+        )
+
+    def test_the_host_can_remove_somebody(self):
+        response = self.kick(self.host, self.nuisance)
+
+        self.assertEqual(response.status_code, 200, response.content[:200])
+        self.assertFalse(
+            LobbyMember.objects.filter(lobby=self.lobby, user=self.nuisance).exists()
+        )
+        self.assertFalse(
+            PlayerPosition.objects.filter(lobby=self.lobby, user=self.nuisance).exists(),
+            'their body was left standing in the room',
+        )
+
+    def test_an_ordinary_member_cannot(self):
+        response = self.kick(self.deputy, self.nuisance)
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(
+            LobbyMember.objects.filter(lobby=self.lobby, user=self.nuisance).exists()
+        )
+
+    def test_somebody_the_host_allowed_can(self):
+        LobbyMember.objects.filter(lobby=self.lobby, user=self.deputy).update(can_kick=True)
+
+        response = self.kick(self.deputy, self.nuisance)
+
+        self.assertEqual(response.status_code, 200, response.content[:200])
+        self.assertFalse(
+            LobbyMember.objects.filter(lobby=self.lobby, user=self.nuisance).exists()
+        )
+
+    def test_the_host_cannot_be_removed_from_their_own_lobby(self):
+        """
+        Otherwise granting `kick` hands over the lobby by another route, which
+        is the thing keeping the host was meant to stop.
+        """
+        LobbyMember.objects.filter(lobby=self.lobby, user=self.deputy).update(can_kick=True)
+
+        response = self.kick(self.deputy, self.host)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertTrue(
+            LobbyMember.objects.filter(lobby=self.lobby, user=self.host).exists()
+        )
+        self.lobby.refresh_from_db()
+        self.assertEqual(self.lobby.host, self.host)
+
+    def test_removing_yourself_is_leaving(self):
+        response = self.kick(self.host, self.host)
+        self.assertEqual(response.status_code, 400)
