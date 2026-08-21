@@ -13,7 +13,7 @@ from django.core.management.base import BaseCommand
 from django.db.models import Sum
 
 from hosting.access_logs import aggregate, read_lines, sites_by_host
-from hosting.models import WebsiteAnalytics
+from hosting.models import BandwidthUsage, WebsiteAnalytics
 
 
 class Command(BaseCommand):
@@ -99,6 +99,24 @@ class Command(BaseCommand):
             else:
                 WebsiteAnalytics.objects.update_or_create(
                     website=site, date=day, defaults=row
+                )
+                # The same bytes, in the table the quota is read from.
+                # `BandwidthUsage` is read by the dashboard, by the bandwidth
+                # panel on the analytics page and by `usage_stats` — and was
+                # written by nothing at all, so all three reported zero however
+                # much anybody served. Megabytes, because that is the column,
+                # rounded up so a small site is not recorded as having used
+                # none.
+                BandwidthUsage.objects.update_or_create(
+                    website=site,
+                    date=day,
+                    defaults={
+                        'bandwidth_bytes': totals.bandwidth_used,
+                        # Rounded, not ceilinged: rounding up recorded a 14 KB
+                        # day as a whole megabyte, against a quota.
+                        'bandwidth_mb': round(totals.bandwidth_used / (1024 * 1024)),
+                        'requests_count': totals.requests,
+                    },
                 )
             written += 1
 

@@ -139,6 +139,9 @@ class DayTraffic:
     """One site, one day, accumulated."""
 
     page_views: int = 0
+    #: Every request, assets and errors and crawlers included. What the
+    #: bandwidth quota is actually spent on, and not the same as page views.
+    requests: int = 0
     bandwidth_used: int = 0
     visitors: set[str] = field(default_factory=set)
     pages: Counter = field(default_factory=Counter)
@@ -231,6 +234,7 @@ def aggregate(
         # quota, and the quota is what this figure is checked against. Counted
         # before the crawler filter for exactly that reason — a site that only
         # ever gets crawled has bandwidth and no readers, and both are true.
+        into.requests += 1
         try:
             into.bandwidth_used += max(0, int(entry.get('bytes', 0) or 0))
         except (TypeError, ValueError):

@@ -1597,8 +1597,11 @@ class BandwidthAnalyticsAPIView(APIView):
         if website_id:
             queryset = queryset.filter(website_id=website_id)
         
-        # Aggregate data
-        total_bandwidth = sum(usage.bandwidth_mb for usage in queryset)
+        # From the exact bytes. Summing the megabyte column loses every day a
+        # site served less than half of one, which on this platform is most of
+        # them — a month of real traffic added up to zero.
+        total_bytes = sum(usage.bandwidth_bytes for usage in queryset)
+        total_bandwidth = round(total_bytes / (1024 * 1024), 2)
         
         # Get user's subscription for limits
         try:
@@ -1611,14 +1614,13 @@ class BandwidthAnalyticsAPIView(APIView):
         daily_usage = {}
         for usage in queryset:
             date_str = usage.date.strftime('%Y-%m-%d')
-            if date_str not in daily_usage:
-                daily_usage[date_str] = 0
-            daily_usage[date_str] += usage.bandwidth_mb
-        
-        # Convert to list format for frontend
+            daily_usage[date_str] = daily_usage.get(date_str, 0) + usage.bandwidth_bytes
+
+        # Two decimals, for the same reason: a day of a few hundred kilobytes
+        # is not nothing, and a chart of whole megabytes drew it as nothing.
         chart_data = [
-            {'date': date, 'bandwidth_mb': mb}
-            for date, mb in sorted(daily_usage.items())
+            {'date': date, 'bandwidth_mb': round(byte_count / (1024 * 1024), 2), 'bandwidth_bytes': byte_count}
+            for date, byte_count in sorted(daily_usage.items())
         ]
         
         return Response({

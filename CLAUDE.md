@@ -180,6 +180,20 @@ rather than a quieter day.
 `bounce_rate` and `avg_session_duration` stay at zero, honestly: a log line is a
 request, not a session. They need a script on the page, which nothing serves.
 
+One run fills three tables: `WebsiteAnalytics` (the pages), `BandwidthUsage`
+(the quota) and `Website.total_visits` (the header, the dashboard total, and the
+public listing's sort order). All three were read by something and written by
+nothing.
+
+Bandwidth is stored in **bytes**. `BandwidthUsage.bandwidth_mb` is a whole
+number of megabytes and the sites here serve kilobytes a day: rounding down
+records a real day as nothing, rounding up records 14 KB as a megabyte. Read
+`bandwidth_bytes`; the megabyte column is kept for older readers.
+
+Storage is separate and already worked: `manage.py compute_storage` measures
+`/srv/hosting/<subdomain>` and writes `Website.storage_used_mb`. Run it on a
+timer too.
+
 `webhooks/analytics/` is signed with `HOSTING_WEBHOOK_SECRET` and identifies a
 site by subdomain. A subdomain says which site a payload is about and nothing
 about who sent it, so without the signature anybody could post any figures for

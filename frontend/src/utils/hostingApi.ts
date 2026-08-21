@@ -290,10 +290,20 @@ export const subscriptionHelpers = {
     return Math.round((used / limit) * 100);
   },
   
-  // Format storage size
+  /**
+   * A size in megabytes, written the way a person would say it.
+   *
+   * Sub-megabyte values go in KB: the sites here serve kilobytes a day, and
+   * `${0.02} MB` reads as nothing at all — which is what the bandwidth panel
+   * showed for a real day's traffic. Long decimals are rounded rather than
+   * printed raw, so 1234.5678 does not reach the page.
+   */
   formatStorage: (sizeInMB: number) => {
-    if (sizeInMB < 1024) return `${sizeInMB} MB`;
-    return `${(sizeInMB / 1024).toFixed(1)} GB`;
+    const mb = Number(sizeInMB) || 0;
+    if (mb <= 0) return '0 MB';
+    if (mb < 1) return `${Math.round(mb * 1024)} KB`;
+    if (mb < 1024) return `${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB`;
+    return `${(mb / 1024).toFixed(1)} GB`;
   },
   
   // Get plan color for UI

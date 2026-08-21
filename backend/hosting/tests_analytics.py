@@ -26,7 +26,7 @@ from .access_logs import (
     subdomain_of,
     visitor_key,
 )
-from .models import Domain, Website, WebsiteAnalytics
+from .models import BandwidthUsage, Domain, Website, WebsiteAnalytics
 
 User = get_user_model()
 
@@ -559,6 +559,103 @@ class TotalVisitsTests(TestCase):
 
         self.site.refresh_from_db()
         self.assertEqual(self.site.total_visits, 7)
+
+
+class BandwidthQuotaTests(TestCase):
+    """
+    `BandwidthUsage` is read by the dashboard, by the bandwidth panel and by
+    `get_usage_stats` — and was written by nothing at all, so all three
+    reported zero however much anybody served.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='served', email='served@example.com', password='pw'
+        )
+        self.site = make_site(self.user, 'Served', subdomain='served')
+
+    def run_over(self, lines):
+        from io import StringIO
+        import os
+        import tempfile
+
+        from django.core.management import call_command
+
+        directory = tempfile.mkdtemp()
+        path = os.path.join(directory, 'access.log')
+        with open(path, 'w') as handle:
+            handle.write('\n'.join(lines) + '\n')
+        call_command('aggregate_access_logs', logs=path, stdout=StringIO())
+
+    def request(self, byte_count, uri='/', ua='Mozilla/5.0'):
+        return json.dumps({
+            't': '2026-08-20T10:00:00+04:00', 'host': 'served.ufazien.com',
+            'method': 'GET', 'uri': uri, 'status': 200, 'bytes': byte_count,
+            'ip': '203.0.113.1', 'ref': '-', 'ua': ua,
+        })
+
+    def test_the_run_records_what_was_served(self):
+        self.run_over([self.request(4000), self.request(6000, uri='/a.css')])
+
+        usage = BandwidthUsage.objects.get(website=self.site, date=date(2026, 8, 20))
+        self.assertEqual(usage.bandwidth_bytes, 10_000)
+        self.assertEqual(usage.requests_count, 2)
+
+    def test_it_counts_requests_not_page_views(self):
+        """
+        Assets and crawlers spend the quota. Counting page views here would
+        report a fraction of what the server actually sent.
+        """
+        self.run_over([
+            self.request(1000),
+            self.request(1000, uri='/style.css'),
+            self.request(1000, ua='Googlebot/2.1'),
+        ])
+
+        usage = BandwidthUsage.objects.get(website=self.site, date=date(2026, 8, 20))
+        self.assertEqual(usage.requests_count, 3)
+        self.assertEqual(usage.bandwidth_bytes, 3000)
+
+    def test_a_small_day_is_not_rounded_up_to_a_megabyte(self):
+        """
+        Ceilinged, 14 KB became 1 MB — seventy times what it was, against a
+        quota. The exact bytes are what the readers use.
+        """
+        self.run_over([self.request(14_000)])
+
+        usage = BandwidthUsage.objects.get(website=self.site, date=date(2026, 8, 20))
+        self.assertEqual(usage.bandwidth_bytes, 14_000)
+        self.assertEqual(usage.bandwidth_mb, 0)
+
+    def test_running_it_twice_does_not_double_the_quota(self):
+        lines = [self.request(5000), self.request(5000)]
+        self.run_over(lines)
+        self.run_over(lines)
+
+        usage = BandwidthUsage.objects.get(website=self.site, date=date(2026, 8, 20))
+        self.assertEqual(usage.bandwidth_bytes, 10_000)
+        self.assertEqual(BandwidthUsage.objects.count(), 1)
+
+    def test_the_subscription_reports_it(self):
+        """
+        `get_usage_stats` summed the megabyte column, so a month of real
+        traffic on a small site added up to nothing.
+        """
+        from hosting.models import SubscriptionPlan, UserSubscription
+
+        plan = SubscriptionPlan.objects.create(
+            name='free', display_name='Free', price=0, max_websites=3,
+            max_databases=1, storage_limit_mb=1024, bandwidth_limit_mb=10240,
+        )
+        subscription = UserSubscription.objects.create(
+            user=self.user, plan=plan, status='active'
+        )
+        today = timezone.now().date()
+        BandwidthUsage.objects.create(
+            website=self.site, date=today, bandwidth_bytes=3_500_000, bandwidth_mb=3
+        )
+
+        self.assertAlmostEqual(subscription.get_usage_stats()['bandwidth_mb'], 3.34, places=1)
 
 
 class RealisticSiteTests(TestCase):
