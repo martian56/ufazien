@@ -26,6 +26,11 @@ services:
     restart: unless-stopped
     volumes:
       - /data/ufazien/hosting:/var/www/html
+      # Access logs, which the Django backend reads to build the analytics
+      # page. A second bind mount rather than a directory inside the webroot,
+      # because anything under there is servable — logs.ufazien.com would have
+      # handed out every visitor's address on the platform.
+      - /data/ufazien/logs:/var/log/hosting
     expose:
       - "80"
     depends_on:

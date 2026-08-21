@@ -162,3 +162,26 @@ Config lives in Coolify environment variables, not in the repo. `settings.py` re
 - Keep changes focused. Unrelated refactoring makes review and revert harder.
 - Commit the migration alongside a model change.
 - Verify before claiming. Run the tests, check the browser, and say what you actually did, including what you could not verify.
+
+## Hosting analytics
+
+Traffic comes from nginx's own access logs, not from anything in the user's
+site. `hosting/nginx/hosting.conf` writes one JSON object per request to
+`/var/log/hosting/access.log` — a bind mount the Django resource also sees, and
+deliberately outside the webroot, because anything under `/var/www/html` is
+servable and `logs.ufazien.com` would have handed out every visitor's address.
+
+`manage.py aggregate_access_logs` rolls those into one `WebsiteAnalytics` row
+per site per day. Run it on a timer. Everything it writes is an absolute total,
+so running it twice changes nothing — and it refuses to lower a day's figures
+unless given `--force`, because a log that holds less than it did is rotation
+rather than a quieter day.
+
+`bounce_rate` and `avg_session_duration` stay at zero, honestly: a log line is a
+request, not a session. They need a script on the page, which nothing serves.
+
+`webhooks/analytics/` is signed with `HOSTING_WEBHOOK_SECRET` and identifies a
+site by subdomain. A subdomain says which site a payload is about and nothing
+about who sent it, so without the signature anybody could post any figures for
+anybody's site. Unset, the endpoint refuses everything rather than accepting
+anything.

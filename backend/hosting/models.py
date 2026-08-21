@@ -287,13 +287,30 @@ class BandwidthUsage(models.Model):
 
 
 class WebsiteAnalytics(models.Model):
-    """Website analytics and metrics"""
+    """
+    One day of a website's traffic.
+
+    Filled in by `manage.py aggregate_access_logs`, which reads what nginx
+    already writes for every request. Nothing wrote to this table before: the
+    only writer was an unauthenticated webhook nothing called, so the analytics
+    page fell back to `random.randint` figures and no user has ever seen their
+    own traffic on it.
+    """
     website = models.ForeignKey(Website, on_delete=models.CASCADE, related_name='analytics')
     date = models.DateField()
     page_views = models.IntegerField(default=0)
     unique_visitors = models.IntegerField(default=0)
+    #: Bytes off the wire, all requests included — assets as well as pages,
+    #: because that is what the bandwidth quota is actually spent on. The
+    #: analytics page divides by 1024² to chart it in MB, so this is bytes and
+    #: big enough to hold a busy month.
+    bandwidth_used = models.BigIntegerField(default=0)
+    #: Both zero from log aggregation, and honestly so: a log line is a
+    #: request, not a session, so neither of these can be worked out from one.
+    #: They need a script on the page. Left here rather than invented.
     bounce_rate = models.FloatField(default=0.0)
     avg_session_duration = models.IntegerField(default=0)  # seconds
+    #: [{path, views}] and [{referrer, visits}], most first.
     top_pages = models.JSONField(default=list)
     referrers = models.JSONField(default=list)
     
