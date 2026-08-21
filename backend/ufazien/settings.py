@@ -454,3 +454,21 @@ SESSION_COOKIE_SAMESITE = "None"
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 USE_X_FORWARDED_HOST = True
+
+# Hosting analytics.
+#
+# nginx writes one JSON object per request for every user site (see
+# `hosting/nginx/hosting.conf`), and `manage.py aggregate_access_logs` rolls
+# those into a day per site. Nothing tracked user traffic before that: the
+# analytics table's only writer was a webhook nothing called, so the page fell
+# back to invented figures.
+HOSTING_ACCESS_LOGS = os.getenv("HOSTING_ACCESS_LOGS", "/var/log/hosting/access.log*")
+
+# The domain user sites hang off. A log line names its site by host, and
+# `Website.name` is the subdomain.
+HOSTING_BASE_DOMAIN = os.getenv("HOSTING_BASE_DOMAIN", "ufazien.com")
+
+# Signs the analytics webhook. Unset, the endpoint refuses everything rather
+# than accepting anything: a subdomain says which site a payload is for, it
+# does not prove who sent it.
+HOSTING_WEBHOOK_SECRET = os.getenv("HOSTING_WEBHOOK_SECRET", "")

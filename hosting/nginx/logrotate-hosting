@@ -1,0 +1,26 @@
+# The access log holds a raw address for every request to every hosted site.
+#
+# It is the only place on the platform that does: the aggregator hashes them on
+# the way into the database, so this file is where the retention limit has to
+# be applied. Seven days is well past what `aggregate_access_logs` needs to
+# catch up after an outage, and short enough that a copy of the platform's
+# visitors is not sitting on the disk for ever.
+#
+# It also stops the file growing without bound, which nothing else here does:
+# nginx:alpine ships neither logrotate nor cron.
+/var/log/hosting/access.log {
+    daily
+    rotate 7
+    compress
+    delaycompress
+    missingok
+    notifempty
+    su root root
+    sharedscripts
+    postrotate
+        # nginx keeps writing to the old inode until it is told to reopen.
+        # Without this the rotation happens and every later request still goes
+        # into the rotated file, which then never gets cleaned up either.
+        [ -f /var/run/nginx.pid ] && kill -USR1 "$(cat /var/run/nginx.pid)"
+    endscript
+}

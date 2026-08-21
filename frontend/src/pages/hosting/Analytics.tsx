@@ -4,6 +4,7 @@ import { errorMessage } from "../../lib/api/errors"
 
 /** What /hosting/analytics/ returns for one website. */
 interface AnalyticsDay {
+  date: string
   page_views?: number
   unique_visitors?: number
   bounce_rate?: number
@@ -11,13 +12,22 @@ interface AnalyticsDay {
   bandwidth_used?: number
 }
 
+/**
+ * What `/websites/<id>/analytics/` returns.
+ *
+ * The day-by-day figures come back as `daily_data`, a list in date order. This
+ * used to declare an `analytics` map keyed by date, which the endpoint has
+ * never sent — so the traffic chart read `undefined` and drew nothing however
+ * much traffic a site had.
+ */
 interface WebsiteAnalytics {
-  analytics?: Record<string, AnalyticsDay>
+  daily_data?: AnalyticsDay[]
   summary?: {
     total_page_views?: number
     total_unique_visitors?: number
     avg_bounce_rate?: number
     avg_session_duration?: number
+    total_bandwidth?: number
   }
 }
 import { useNavigate } from "react-router-dom"
@@ -149,17 +159,30 @@ export default function Analytics() {
    */
   const summary = analyticsData?.summary
   const trafficData = useMemo(() => {
-    const byDate = analyticsData?.analytics ?? {}
-    return Object.entries(byDate)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([date, day]) => ({
-        date: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        fullDate: date,
-        visitors: day.unique_visitors ?? 0,
-        pageViews: day.page_views ?? 0,
-        bounceRate: day.bounce_rate ?? 0,
-        bandwidth: Math.round((day.bandwidth_used ?? 0) / (1024 * 1024)),
-      }))
+    // `daily_data`, which is what the endpoint actually returns — a list, one
+    // entry per day, already in order. This read `analytics` and treated it as
+    // an object keyed by date; there is no such key, so the chart stayed empty
+    // whatever the traffic was. The summary cards above it worked, which is
+    // what made it look like a chart with nothing to show rather than a chart
+    // reading the wrong field.
+    const days = analyticsData?.daily_data ?? []
+    return days.map((day) => ({
+      // `YYYY-MM-DD` on its own parses as midnight UTC, which renders as the
+      // day before anywhere west of it — every point on the chart labelled
+      // with the wrong date for half the world. The time makes it local.
+      date: new Date(`${day.date}T00:00:00`).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+      }),
+      fullDate: day.date,
+      visitors: day.unique_visitors ?? 0,
+      pageViews: day.page_views ?? 0,
+      bounceRate: day.bounce_rate ?? 0,
+      // Stored in bytes, charted in MB — to two decimals, because a small site
+      // serves well under a megabyte a day and rounding to whole ones flattened
+      // the line to zero. Which is the empty chart this page already had.
+      bandwidth: Number(((day.bandwidth_used ?? 0) / (1024 * 1024)).toFixed(2)),
+    }))
   }, [analyticsData])
 
   // Memoize bandwidth usage to prevent multiple function calls

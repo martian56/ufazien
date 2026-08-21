@@ -15,8 +15,14 @@ from rest_framework.views import APIView
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.pagination import PageNumberPagination
 from datetime import datetime, timedelta
+import hashlib
+import hmac
 import json
 import uuid
+
+from django.conf import settings
+
+from . import access_logs
 
 from .models import (
     SubscriptionPlan, UserSubscription, Website, Database, Domain,
@@ -435,20 +441,21 @@ class WebsiteViewSet(viewsets.ModelViewSet):
             date__range=[start_date, end_date]
         ).order_by('date')
         
-        # Generate sample data if no analytics exist
-        if not analytics_queryset.exists():
-            analytics_data = self._generate_sample_analytics(website, start_date, end_date)
-        else:
-            analytics_data = []
-            for analytics in analytics_queryset:
-                analytics_data.append({
-                    'date': analytics.date.strftime('%Y-%m-%d'),
-                    'page_views': analytics.page_views,
-                    'unique_visitors': analytics.unique_visitors,
-                    'bounce_rate': analytics.bounce_rate,
-                    'avg_session_duration': analytics.avg_session_duration,
-                    'bandwidth_used': analytics.bandwidth_used
-                })
+        # A site with no traffic yet has no traffic yet. This used to invent a
+        # week of it with `random.randint` whenever the table was empty — which
+        # it always was, because nothing wrote to it — so nobody has ever seen
+        # their own numbers on this page.
+        analytics_data = [
+            {
+                'date': analytics.date.strftime('%Y-%m-%d'),
+                'page_views': analytics.page_views,
+                'unique_visitors': analytics.unique_visitors,
+                'bounce_rate': analytics.bounce_rate,
+                'avg_session_duration': analytics.avg_session_duration,
+                'bandwidth_used': analytics.bandwidth_used,
+            }
+            for analytics in analytics_queryset
+        ]
         
         # Calculate totals
         total_page_views = sum(item['page_views'] for item in analytics_data)
@@ -473,27 +480,6 @@ class WebsiteViewSet(viewsets.ModelViewSet):
             'daily_data': analytics_data
         })
     
-    def _generate_sample_analytics(self, website, start_date, end_date):
-        """Generate sample analytics data for demonstration"""
-        import random
-        analytics_data = []
-        current_date = start_date
-        
-        while current_date <= end_date:
-            # Generate realistic sample data
-            base_views = random.randint(50, 500)
-            analytics_data.append({
-                'date': current_date.strftime('%Y-%m-%d'),
-                'page_views': base_views,
-                'unique_visitors': random.randint(int(base_views * 0.6), int(base_views * 0.9)),
-                'bounce_rate': round(random.uniform(30, 70), 2),
-                'avg_session_duration': round(random.uniform(120, 600), 2),
-                'bandwidth_used': random.randint(100, 1000)  # MB
-            })
-            current_date += timedelta(days=1)
-        
-        return analytics_data
-
     def perform_destroy(self, instance):
         """Custom destroy method - domains are kept available for reuse"""
         import os
@@ -1660,39 +1646,93 @@ def webhook_deployment_status(request):
         return JsonResponse({'error': str(e)}, status=400)
 
 
-@csrf_exempt  
+@csrf_exempt
 @require_http_methods(["POST"])
 def webhook_analytics(request):
     """
-    Webhook endpoint for analytics data
+    Analytics posted from outside, for a site named by its subdomain.
+
+    Signed, because a subdomain identifies a site but does not authenticate
+    anybody: it is public and guessable, so without a signature anyone could
+    post whatever traffic they liked for anybody's website. The body is HMAC'd
+    with `HOSTING_WEBHOOK_SECRET` and sent as `X-Ufazien-Signature`.
+
+    Fails closed. With no secret configured this refuses everything rather than
+    waving it through, which is the state the endpoint was in until now: no
+    authentication at all, `website_id` taken straight from the body.
+
+    The figures replace the day rather than adding to it. It used to do
+    `analytics.page_views += ...`, so a retried delivery counted twice and
+    `unique_visitors` — which cannot be added up at all, since the same person
+    on two posts is one visitor — drifted further every time.
+
+    Note that `aggregate_access_logs` is the normal source now. This is kept for
+    anything that can measure what a log cannot, such as a page script
+    reporting real sessions.
     """
+    secret = getattr(settings, 'HOSTING_WEBHOOK_SECRET', '') or ''
+    if not secret:
+        return JsonResponse(
+            {'error': 'Analytics webhook is not configured.'}, status=503
+        )
+
+    # Compared as bytes. `compare_digest` raises TypeError on a str holding
+    # anything outside ASCII, so a header with one character of nonsense in it
+    # crashed the endpoint with a 500 rather than being refused with a 401 —
+    # which is a way of telling an attacker their guess was interesting.
+    signature = request.headers.get('X-Ufazien-Signature', '').encode('utf-8', 'ignore')
+    expected = hmac.new(secret.encode(), request.body, hashlib.sha256).hexdigest().encode()
+    if not hmac.compare_digest(signature, expected):
+        return JsonResponse({'error': 'Bad signature.'}, status=401)
+
     try:
         data = json.loads(request.body)
-        website_id = data.get('website_id')
-        date = datetime.strptime(data.get('date'), '%Y-%m-%d').date()
-        
-        analytics, created = WebsiteAnalytics.objects.get_or_create(
-            website_id=website_id,
-            date=date,
-            defaults={
-                'page_views': data.get('page_views', 0),
-                'unique_visitors': data.get('unique_visitors', 0),
-                'bounce_rate': data.get('bounce_rate', 0.0),
-                'avg_session_duration': data.get('avg_session_duration', 0),
-                'top_pages': data.get('top_pages', []),
-                'referrers': data.get('referrers', []),
-            }
-        )
-        
-        if not created:
-            analytics.page_views += data.get('page_views', 0)
-            analytics.unique_visitors += data.get('unique_visitors', 0)
-            analytics.save()
-        
-        return JsonResponse({'status': 'ok'})
-    
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=400)
+    except (ValueError, TypeError):
+        return JsonResponse({'error': 'Invalid JSON.'}, status=400)
+
+    # By host, through the domain — `Website.name` is the label the user typed
+    # on the create form, and the subdomain is the separate field beside it,
+    # saved as a `Domain`. Looking a site up by its label found none of the
+    # ones made through the UI. `subdomain` is still accepted as the name of
+    # the field, and a full host may be sent instead for a custom domain.
+    base = getattr(settings, 'HOSTING_BASE_DOMAIN', 'ufazien.com')
+    given = str(data.get('host') or data.get('subdomain') or '').strip().lower()
+    host = given if '.' in given else f'{given}.{base}'
+    website = access_logs.sites_by_host({host}, base).get(access_logs.clean_host(host)) if given else None
+    if website is None:
+        return JsonResponse({'error': 'Unknown website.'}, status=404)
+
+    try:
+        day = datetime.strptime(str(data.get('date')), '%Y-%m-%d').date()
+    except (ValueError, TypeError):
+        return JsonResponse({'error': 'A date of the form YYYY-MM-DD is required.'}, status=400)
+
+    fields = {}
+    for name in (
+        'page_views', 'unique_visitors', 'avg_session_duration', 'bandwidth_used',
+    ):
+        if name in data:
+            try:
+                fields[name] = max(0, int(data[name]))
+            except (TypeError, ValueError):
+                return JsonResponse({'error': f'{name} must be a whole number.'}, status=400)
+    if 'bounce_rate' in data:
+        try:
+            fields['bounce_rate'] = min(100.0, max(0.0, float(data['bounce_rate'])))
+        except (TypeError, ValueError):
+            return JsonResponse({'error': 'bounce_rate must be a number.'}, status=400)
+    for name in ('top_pages', 'referrers'):
+        if isinstance(data.get(name), list):
+            fields[name] = data[name][:20]
+
+    if not fields:
+        return JsonResponse({'error': 'Nothing to record.'}, status=400)
+
+    WebsiteAnalytics.objects.update_or_create(
+        website=website, date=day, defaults=fields
+    )
+
+    return JsonResponse({'status': 'ok', 'website': host, 'date': day.isoformat()})
 
 
 @api_view(['POST'])
