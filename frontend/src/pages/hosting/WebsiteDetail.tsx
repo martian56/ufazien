@@ -3,7 +3,7 @@ import type { Deployment, Website } from "../../utils/hostingApi"
 
 /** A folder upload attaches this; File has no writable name. */
 type PickedFile = File & { relativePath?: string }
-import WebsiteAnalyticsTab from "../../features/hosting/WebsiteAnalyticsTab"
+import WebsiteAnalyticsTab, { formatBytes } from "../../features/hosting/WebsiteAnalyticsTab"
 import WebsiteDeploymentsTab from "../../features/hosting/WebsiteDeploymentsTab"
 import WebsiteFilesTab from "../../features/hosting/WebsiteFilesTab"
 import WebsiteOverviewTab from "../../features/hosting/WebsiteOverviewTab"
@@ -48,6 +48,7 @@ export default function WebsiteDetail() {
   const [website, setWebsite] = useState<Website | null>(null)
   const [deployments, setDeployments] = useState<Deployment[]>([])
   const [analytics, setAnalytics] = useState<Record<string, unknown> | null>(null)
+  const [analyticsFailed, setAnalyticsFailed] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [editingSettings, setEditingSettings] = useState(false)
   const [settingsForm, setSettingsForm] = useState({
@@ -100,12 +101,12 @@ export default function WebsiteDetail() {
           setAnalytics(analyticsData)
         } catch (analyticsError) {
           console.warn('Analytics not available:', analyticsError)
-          // Set default analytics data
-          setAnalytics({
-            dailyVisits: [0, 0, 0, 0, 0, 0, 0],
-            topPages: [],
-            referrers: []
-          })
+          // Left unknown rather than substituted. This used to stand in an
+          // empty week of `dailyVisits`, in key names the tab does not read,
+          // so a request that failed looked exactly like a site nobody has
+          // visited — which is a different thing and a worse thing to be told.
+          setAnalytics(null)
+          setAnalyticsFailed(true)
         }
 
       } catch (err) {
@@ -467,12 +468,21 @@ export default function WebsiteDetail() {
                   </div>
                 </div>
 
+                {/* There was an "Uptime 99.9%" card here. Nothing measures
+                    uptime — the figure was typed into the markup, and would
+                    have read 99.9% through an outage. Bandwidth is a number we
+                    actually have. */}
                 <div className="bg-white rounded-lg border border-gray-200 p-4">
                   <div className="flex items-center">
                     <Zap className="w-6 h-6 text-yellow-600 mr-3" />
                     <div>
-                      <p className="text-sm text-gray-600">Uptime</p>
-                      <p className="text-lg font-semibold text-gray-900">99.9%</p>
+                      <p className="text-sm text-gray-600">Bandwidth</p>
+                      <p className="text-lg font-semibold text-gray-900">
+                        {formatBytes(
+                          (analytics as { summary?: { total_bandwidth?: number } } | null)
+                            ?.summary?.total_bandwidth,
+                        )}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -540,7 +550,7 @@ export default function WebsiteDetail() {
             )}
 
             {activeTab === 'analytics' && (
-              <WebsiteAnalyticsTab website={website} analytics={analytics} />
+              <WebsiteAnalyticsTab website={website} analytics={analytics} failed={analyticsFailed} />
             )}
 
             {activeTab === 'settings' && (

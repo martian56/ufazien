@@ -1,4 +1,4 @@
-import { Clock, Eye, TrendingUp, Users } from "lucide-react"
+import { Clock, Eye, Gauge, Info, Laptop, TrendingUp, Users } from "lucide-react"
 // These are chart primitives, not icons. lucide-react exports similarly named
 // icons, so importing them from there would have rendered a picture of a chart
 // instead of a chart.
@@ -13,279 +13,365 @@ import {
 } from "recharts"
 import type { Website } from "../../utils/hostingApi"
 
-interface WebsiteAnalyticsTabProps {
-  website: Website
-  analytics: Record<string, unknown> | null
-}
-
 /**
  * Traffic and bandwidth for one website.
  *
- * Carved out of WebsiteDetail, which held all five tabs inline in one
- * 1,300-line function.
+ * Every figure on this tab used to be `Math.random()` — visitors, page views,
+ * bounce rate, the chart, top pages, traffic sources, device split and a
+ * "real-time activity" panel that counted users who did not exist. The real
+ * analytics were fetched by `WebsiteDetail`, passed in as a prop, and never
+ * read.
+ *
+ * They are read now. What cannot be measured is said rather than invented:
+ * bounce rate and session length need a script running on the visitor's page,
+ * and nothing serves one, so they show as not measured instead of as a
+ * plausible number nobody can act on.
  */
-export default function WebsiteAnalyticsTab({ website, analytics }: WebsiteAnalyticsTabProps) {
+
+export interface AnalyticsDay {
+  date: string
+  page_views?: number
+  unique_visitors?: number
+  bandwidth_used?: number
+}
+
+export interface WebsiteAnalyticsPayload {
+  summary?: {
+    total_page_views?: number
+    total_unique_visitors?: number
+    total_bandwidth?: number
+    avg_bounce_rate?: number
+    avg_session_duration?: number
+  }
+  daily_data?: AnalyticsDay[]
+  top_pages?: { path: string; views: number }[]
+  referrers?: { referrer: string; visits: number }[]
+  devices?: Record<string, number>
+}
+
+interface WebsiteAnalyticsTabProps {
+  website: Website
+  analytics: WebsiteAnalyticsPayload | Record<string, unknown> | null
+  /** Whether the request for these figures failed, as opposed to finding none. */
+  failed?: boolean
+}
+
+export function formatBytes(bytes?: number | null): string {
+  if (!bytes || bytes < 0) return "0 B"
+  const units = ["B", "KB", "MB", "GB", "TB"]
+  const i = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)))
+  return `${(bytes / 1024 ** i).toFixed(i === 0 ? 0 : 1)} ${units[i]}`
+}
+
+/** A `YYYY-MM-DD` day, labelled in the reader's own timezone. */
+export function dayLabel(date: string): string {
+  // The date alone parses as midnight UTC, which renders as the day before
+  // anywhere west of it. The time component makes it local.
+  return new Date(`${date}T00:00:00`).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  })
+}
+
+/**
+ * The share each device took, as whole percentages that add to 100.
+ *
+ * Rounding each one on its own does not: three equal counts round to 33 apiece
+ * and the panel shows 99%. The whole part is taken first and what is left over
+ * is handed out to the largest remainders, which is the ordinary way of making
+ * a set of rounded shares total what they started as.
+ */
+export function deviceShare(devices: Record<string, number> | undefined) {
+  const entries = Object.entries(devices ?? {}).filter(([, count]) => count > 0)
+  const total = entries.reduce((sum, [, count]) => sum + count, 0)
+  if (total === 0) return []
+
+  const shares = entries
+    .sort((a, b) => b[1] - a[1])
+    .map(([device, count]) => {
+      const exact = (count / total) * 100
+      const whole = Math.floor(exact)
+      return { device, count, percentage: whole, remainder: exact - whole }
+    })
+
+  // Biggest remainders first, so the leftover points go where they are most
+  // nearly owed. Ties keep the order above, which is by count.
+  let leftover = 100 - shares.reduce((sum, share) => sum + share.percentage, 0)
+  for (const share of [...shares].sort((a, b) => b.remainder - a.remainder)) {
+    if (leftover <= 0) break
+    share.percentage += 1
+    leftover -= 1
+  }
+
+  return shares.map(({ device, count, percentage }) => ({ device, count, percentage }))
+}
+
+function Stat({
+  icon,
+  tint,
+  label,
+  value,
+  note,
+}: {
+  icon: React.ReactNode
+  tint: string
+  label: string
+  value: string
+  note?: string
+}) {
   return (
-        <div className="space-y-6">
-          {/* Analytics Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <div className="flex items-center">
-                <div className="p-2 bg-blue-100 rounded-lg">
-                  <Users className="h-6 w-6 text-blue-600" />
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Unique Visitors</p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {Math.floor(Math.random() * 2000) + 500}
-                  </p>
-                  <p className="text-xs text-green-600">+12% this week</p>
-                </div>
-              </div>
-            </div>
+    <div className="bg-white rounded-lg border border-gray-200 p-6">
+      <div className="flex items-center">
+        <div className={`p-2 rounded-lg ${tint}`}>{icon}</div>
+        <div className="ml-4 min-w-0">
+          <p className="text-sm font-medium text-gray-600">{label}</p>
+          <p className="text-2xl font-bold text-gray-900">{value}</p>
+          {note && <p className="text-xs text-gray-400">{note}</p>}
+        </div>
+      </div>
+    </div>
+  )
+}
 
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <div className="flex items-center">
-                <div className="p-2 bg-green-100 rounded-lg">
-                  <Eye className="h-6 w-6 text-green-600" />
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Page Views</p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {Math.floor(Math.random() * 8000) + 2000}
-                  </p>
-                  <p className="text-xs text-green-600">+8% this week</p>
-                </div>
-              </div>
-            </div>
+/** Said once, where a panel has nothing in it yet. */
+function Empty({ children }: { children: React.ReactNode }) {
+  return <p className="py-6 text-center text-sm text-gray-400">{children}</p>
+}
 
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <div className="flex items-center">
-                <div className="p-2 bg-yellow-100 rounded-lg">
-                  <TrendingUp className="h-6 w-6 text-yellow-600" />
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Bounce Rate</p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {(Math.random() * 30 + 25).toFixed(1)}%
-                  </p>
-                  <p className="text-xs text-red-600">+2% this week</p>
-                </div>
-              </div>
-            </div>
+const DEVICE_COLOURS: Record<string, string> = {
+  desktop: "bg-blue-500",
+  mobile: "bg-green-500",
+  tablet: "bg-purple-500",
+}
 
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
+export default function WebsiteAnalyticsTab({
+  website,
+  analytics,
+  failed = false,
+}: WebsiteAnalyticsTabProps) {
+  const data = (analytics ?? {}) as WebsiteAnalyticsPayload
+  const summary = data.summary ?? {}
+  const days = data.daily_data ?? []
+  const topPages = data.top_pages ?? []
+  const referrers = data.referrers ?? []
+  const devices = deviceShare(data.devices)
+
+  const chart = days.map((day) => ({
+    date: dayLabel(day.date),
+    visitors: day.unique_visitors ?? 0,
+    pageViews: day.page_views ?? 0,
+  }))
+
+  const hasTraffic = (summary.total_page_views ?? 0) > 0
+
+  if (failed) {
+    return (
+      <div className="rounded-lg border border-amber-200 bg-amber-50 p-6 text-sm text-amber-800">
+        These figures could not be loaded just now. That is not the same as there being no
+        traffic — try again in a moment.
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <Stat
+          icon={<Users className="h-6 w-6 text-blue-600" />}
+          tint="bg-blue-100"
+          label="Unique Visitors"
+          value={(summary.total_unique_visitors ?? 0).toLocaleString()}
+        />
+        <Stat
+          icon={<Eye className="h-6 w-6 text-green-600" />}
+          tint="bg-green-100"
+          label="Page Views"
+          value={(summary.total_page_views ?? 0).toLocaleString()}
+        />
+        <Stat
+          icon={<Gauge className="h-6 w-6 text-yellow-600" />}
+          tint="bg-yellow-100"
+          label="Bandwidth"
+          value={formatBytes(summary.total_bandwidth)}
+        />
+        {/* Bounce rate and session length cannot be worked out from a server
+            log: a log line is a request, not a session. Saying so beats a
+            number that looks measured and is not. */}
+        <Stat
+          icon={<Clock className="h-6 w-6 text-gray-400" />}
+          tint="bg-gray-100"
+          label="Bounce Rate · Session"
+          value="Not measured"
+          note="Needs a script on your pages"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">Traffic</h3>
+            <div className="flex items-center space-x-4 text-sm">
               <div className="flex items-center">
-                <div className="p-2 bg-purple-100 rounded-lg">
-                  <Clock className="h-6 w-6 text-purple-600" />
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Avg. Session</p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {Math.floor(Math.random() * 3 + 2)}m {Math.floor(Math.random() * 60)}s
-                  </p>
-                  <p className="text-xs text-green-600">+15% this week</p>
-                </div>
+                <div className="w-3 h-3 bg-blue-500 rounded-full mr-2" />
+                <span className="text-gray-600">Visitors</span>
+              </div>
+              <div className="flex items-center">
+                <div className="w-3 h-3 bg-green-500 rounded-full mr-2" />
+                <span className="text-gray-600">Page Views</span>
               </div>
             </div>
           </div>
-
-          {/* Charts Row */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Traffic Trend Chart */}
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">Traffic Trend (Last 7 Days)</h3>
-                <div className="flex items-center space-x-4 text-sm">
-                  <div className="flex items-center">
-                    <div className="w-3 h-3 bg-blue-500 rounded-full mr-2"></div>
-                    <span className="text-gray-600">Visitors</span>
-                  </div>
-                  <div className="flex items-center">
-                    <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
-                    <span className="text-gray-600">Page Views</span>
-                  </div>
-                </div>
-              </div>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={(() => {
-                    const data = []
-                    const today = new Date()
-                    
-                    for (let i = 6; i >= 0; i--) {
-                      const date = new Date(today)
-                      date.setDate(date.getDate() - i)
-                      
-                      const visitors = Math.floor(Math.random() * 300) + 100
-                      const pageViews = visitors + Math.floor(Math.random() * 500) + 200
-                      
-                      data.push({
-                        date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-                        visitors,
-                        pageViews
-                      })
-                    }
-                    return data
-                  })()}>
-                    <defs>
-                      <linearGradient id="colorVisitors" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
-                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
-                      </linearGradient>
-                      <linearGradient id="colorPageViews" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
-                        <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
-                    <XAxis 
-                      dataKey="date" 
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fontSize: 12, fill: '#6b7280' }}
-                    />
-                    <YAxis 
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fontSize: 12, fill: '#6b7280' }}
-                    />
-                    <Tooltip 
-                      contentStyle={{
-                        backgroundColor: 'white',
-                        border: '1px solid #e5e7eb',
-                        borderRadius: '8px',
-                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-                      }}
-                      labelStyle={{ color: '#374151', fontWeight: 'medium' }}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="visitors"
-                      stroke="#3b82f6"
-                      strokeWidth={2}
-                      fillOpacity={1}
-                      fill="url(#colorVisitors)"
-                      name="Visitors"
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="pageViews"
-                      stroke="#10b981"
-                      strokeWidth={2}
-                      fillOpacity={1}
-                      fill="url(#colorPageViews)"
-                      name="Page Views"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            {/* Top Pages */}
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Pages</h3>
-              <div className="space-y-4">
-                {[
-                  { page: '/', views: Math.floor(Math.random() * 1000) + 500, change: '+12%' },
-                  { page: '/about', views: Math.floor(Math.random() * 500) + 200, change: '+8%' },
-                  { page: '/contact', views: Math.floor(Math.random() * 300) + 100, change: '+5%' },
-                  { page: '/services', views: Math.floor(Math.random() * 400) + 150, change: '+15%' },
-                  { page: '/blog', views: Math.floor(Math.random() * 600) + 300, change: '+3%' }
-                ].map((page, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg">
-                    <div className="flex items-center">
-                      <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
-                        <span className="text-sm font-medium text-blue-600">{index + 1}</span>
-                      </div>
-                      <div>
-                        <span className="text-sm font-medium text-gray-900">{page.page}</span>
-                        <p className="text-xs text-gray-500">{page.views} views</p>
-                      </div>
-                    </div>
-                    <span className="text-xs text-green-600 font-medium">{page.change}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Bottom Row - Referrers and Device Types */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Traffic Sources */}
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Traffic Sources</h3>
-              <div className="space-y-3">
-                {[
-                  { source: 'Direct', visits: Math.floor(Math.random() * 500) + 200, percentage: '45%', color: 'bg-blue-500' },
-                  { source: 'Google', visits: Math.floor(Math.random() * 300) + 150, percentage: '30%', color: 'bg-green-500' },
-                  { source: 'Social Media', visits: Math.floor(Math.random() * 200) + 100, percentage: '15%', color: 'bg-purple-500' },
-                  { source: 'Referrals', visits: Math.floor(Math.random() * 150) + 50, percentage: '10%', color: 'bg-yellow-500' }
-                ].map((referrer, index) => (
-                  <div key={index} className="flex items-center justify-between">
-                    <div className="flex items-center">
-                      <div className={`w-3 h-3 ${referrer.color} rounded-full mr-3`}></div>
-                      <span className="text-sm font-medium text-gray-900">{referrer.source}</span>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-sm font-medium text-gray-900">{referrer.visits}</span>
-                      <span className="text-xs text-gray-500 ml-2">{referrer.percentage}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Device Breakdown */}
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Device Types</h3>
-              <div className="space-y-4">
-                {[
-                  { device: 'Desktop', percentage: 55, count: Math.floor(Math.random() * 800) + 400 },
-                  { device: 'Mobile', percentage: 35, count: Math.floor(Math.random() * 600) + 300 },
-                  { device: 'Tablet', percentage: 10, count: Math.floor(Math.random() * 200) + 100 }
-                ].map((device, index) => (
-                  <div key={index} className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-gray-900">{device.device}</span>
-                      <span className="text-sm text-gray-600">{device.count} ({device.percentage}%)</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div 
-                        className="bg-blue-600 h-2 rounded-full" 
-                        style={{ width: `${device.percentage}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Real-time Activity */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">Real-time Activity</h3>
-              <div className="flex items-center text-sm text-gray-600">
-                <div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></div>
-                <span>{Math.floor(Math.random() * 10) + 5} users online</span>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="text-center p-4 border border-gray-200 rounded-lg">
-                <p className="text-2xl font-bold text-gray-900">{Math.floor(Math.random() * 50) + 20}</p>
-                <p className="text-sm text-gray-600">Active Users</p>
-              </div>
-              <div className="text-center p-4 border border-gray-200 rounded-lg">
-                <p className="text-2xl font-bold text-gray-900">{Math.floor(Math.random() * 30) + 10}</p>
-                <p className="text-sm text-gray-600">Pages/Session</p>
-              </div>
-              <div className="text-center p-4 border border-gray-200 rounded-lg">
-                <p className="text-2xl font-bold text-gray-900">{Math.floor(Math.random() * 5) + 2}m</p>
-                <p className="text-sm text-gray-600">Avg. Duration</p>
-              </div>
-            </div>
+          <div className="h-64">
+            {chart.length === 0 ? (
+              <Empty>No traffic recorded yet.</Empty>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chart}>
+                  <defs>
+                    <linearGradient id="colorVisitors" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="colorPageViews" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                  <XAxis
+                    dataKey="date"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 12, fill: "#6b7280" }}
+                  />
+                  <YAxis
+                    axisLine={false}
+                    tickLine={false}
+                    allowDecimals={false}
+                    tick={{ fontSize: 12, fill: "#6b7280" }}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "white",
+                      border: "1px solid #e5e7eb",
+                      borderRadius: "8px",
+                      boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
+                    }}
+                    labelStyle={{ color: "#374151", fontWeight: "medium" }}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="visitors"
+                    stroke="#3b82f6"
+                    strokeWidth={2}
+                    fillOpacity={1}
+                    fill="url(#colorVisitors)"
+                    name="Visitors"
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="pageViews"
+                    stroke="#10b981"
+                    strokeWidth={2}
+                    fillOpacity={1}
+                    fill="url(#colorPageViews)"
+                    name="Page Views"
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </div>
+
+        <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Pages</h3>
+          {topPages.length === 0 ? (
+            <Empty>Nothing has been read yet.</Empty>
+          ) : (
+            <div className="space-y-3">
+              {topPages.map((page) => (
+                <div key={page.path} className="flex items-center justify-between gap-3">
+                  <span className="truncate text-sm text-gray-700">{page.path}</span>
+                  <span className="shrink-0 text-sm font-medium text-gray-900 tabular-nums">
+                    {page.views.toLocaleString()}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-white rounded-lg border border-gray-200 p-6">
+          {/* Referrers, which is what a log can tell you — not the invented
+              Direct / Google / Social split that was here, whose percentages
+              were fixed constants beside random counts. */}
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Where readers came from</h3>
+          {referrers.length === 0 ? (
+            <Empty>
+              {hasTraffic
+                ? "Everyone arrived directly, with no referring page."
+                : "No traffic recorded yet."}
+            </Empty>
+          ) : (
+            <div className="space-y-3">
+              {referrers.map((source) => (
+                <div key={source.referrer} className="flex items-center justify-between gap-3">
+                  <span className="truncate text-sm text-gray-700">{source.referrer}</span>
+                  <span className="shrink-0 text-sm font-medium text-gray-900 tabular-nums">
+                    {source.visits.toLocaleString()}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <h3 className="mb-4 flex items-center gap-2 text-lg font-semibold text-gray-900">
+            <Laptop className="h-4 w-4 text-gray-400" />
+            Device Types
+          </h3>
+          {devices.length === 0 ? (
+            <Empty>No traffic recorded yet.</Empty>
+          ) : (
+            <div className="space-y-3">
+              {devices.map(({ device, count, percentage }) => (
+                <div key={device}>
+                  <div className="mb-1 flex items-center justify-between text-sm">
+                    <span className="capitalize text-gray-700">{device}</span>
+                    <span className="text-gray-500 tabular-nums">
+                      {percentage}% · {count.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="h-2 w-full rounded-full bg-gray-200">
+                    <div
+                      className={`h-2 rounded-full ${DEVICE_COLOURS[device] ?? "bg-gray-400"}`}
+                      style={{ width: `${percentage}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Where the numbers come from, and how fresh they are. The panel this
+          replaces claimed to show real-time activity, counting users who did
+          not exist: the figures are rolled up from the server's own logs on a
+          timer, so there is no live number to show. */}
+      <div className="flex items-start gap-2 rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">
+        <Info className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />
+        <p>
+          Counted from the server's own request logs for{" "}
+          <span className="font-medium text-gray-900">{website.name}</span>, so nothing has to be
+          added to your pages. A visit is a page that was successfully served: images,
+          stylesheets, redirects and errors are not counted as reading, and neither are crawlers
+          — all of them still count towards bandwidth. Updated periodically rather than live.
+        </p>
+      </div>
+    </div>
   )
 }

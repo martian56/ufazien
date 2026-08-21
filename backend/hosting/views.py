@@ -14,6 +14,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.pagination import PageNumberPagination
+from collections import Counter
 from datetime import datetime, timedelta
 import hashlib
 import hmac
@@ -463,7 +464,26 @@ class WebsiteViewSet(viewsets.ModelViewSet):
         avg_bounce_rate = sum(item['bounce_rate'] for item in analytics_data) / len(analytics_data) if analytics_data else 0
         avg_session_duration = sum(item['avg_session_duration'] for item in analytics_data) / len(analytics_data) if analytics_data else 0
         total_bandwidth = sum(item['bandwidth_used'] for item in analytics_data)
-        
+
+        # Merged across the window, because a chart of the period wants the
+        # period's totals rather than one day's. The tab that shows these was
+        # inventing all three, with the real figures fetched and unread.
+        pages = Counter()
+        referrers = Counter()
+        devices = Counter()
+        for row in analytics_queryset:
+            for entry in row.top_pages or []:
+                pages[entry.get('path', '')] += entry.get('views', 0)
+            for entry in row.referrers or []:
+                # Reduced again on the way out, so a row written before this
+                # rule existed cannot hand somebody's reset token to the owner
+                # of the site it linked to.
+                origin = access_logs.referrer_origin(entry.get('referrer', ''))
+                if origin:
+                    referrers[origin] += entry.get('visits', 0)
+            for name, count in (row.devices or {}).items():
+                devices[name] += count
+
         return Response({
             'website_id': str(website.id),
             'website_name': website.name,
@@ -477,7 +497,16 @@ class WebsiteViewSet(viewsets.ModelViewSet):
                 'avg_session_duration': round(avg_session_duration, 2),
                 'total_bandwidth': total_bandwidth,
             },
-            'daily_data': analytics_data
+            'daily_data': analytics_data,
+            'top_pages': [
+                {'path': path, 'views': views}
+                for path, views in pages.most_common(10) if path
+            ],
+            'referrers': [
+                {'referrer': referrer, 'visits': visits}
+                for referrer, visits in referrers.most_common(10) if referrer
+            ],
+            'devices': dict(devices),
         })
     
     def perform_destroy(self, instance):
@@ -1573,8 +1602,11 @@ class BandwidthAnalyticsAPIView(APIView):
         if website_id:
             queryset = queryset.filter(website_id=website_id)
         
-        # Aggregate data
-        total_bandwidth = sum(usage.bandwidth_mb for usage in queryset)
+        # From the exact bytes. Summing the megabyte column loses every day a
+        # site served less than half of one, which on this platform is most of
+        # them — a month of real traffic added up to zero.
+        total_bytes = sum(usage.bandwidth_bytes for usage in queryset)
+        total_bandwidth = round(total_bytes / (1024 * 1024), 2)
         
         # Get user's subscription for limits
         try:
@@ -1587,14 +1619,13 @@ class BandwidthAnalyticsAPIView(APIView):
         daily_usage = {}
         for usage in queryset:
             date_str = usage.date.strftime('%Y-%m-%d')
-            if date_str not in daily_usage:
-                daily_usage[date_str] = 0
-            daily_usage[date_str] += usage.bandwidth_mb
-        
-        # Convert to list format for frontend
+            daily_usage[date_str] = daily_usage.get(date_str, 0) + usage.bandwidth_bytes
+
+        # Two decimals, for the same reason: a day of a few hundred kilobytes
+        # is not nothing, and a chart of whole megabytes drew it as nothing.
         chart_data = [
-            {'date': date, 'bandwidth_mb': mb}
-            for date, mb in sorted(daily_usage.items())
+            {'date': date, 'bandwidth_mb': round(byte_count / (1024 * 1024), 2), 'bandwidth_bytes': byte_count}
+            for date, byte_count in sorted(daily_usage.items())
         ]
         
         return Response({

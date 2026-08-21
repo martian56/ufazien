@@ -81,12 +81,16 @@ class UserSubscription(models.Model):
         from django.utils import timezone
         from datetime import datetime
         current_month = timezone.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        bandwidth_used = sum(
-            usage.bandwidth_mb for usage in BandwidthUsage.objects.filter(
+        # From the exact bytes. Summing the megabyte column loses every day a
+        # site served less than half of one, which on this platform is most of
+        # them — a month of real traffic added up to nothing.
+        bandwidth_bytes = sum(
+            usage.bandwidth_bytes for usage in BandwidthUsage.objects.filter(
                 website__user=self.user,
                 date__gte=current_month
             )
         )
+        bandwidth_used = round(bandwidth_bytes / (1024 * 1024), 2)
         
         return {
             'websites': websites_count,
@@ -275,9 +279,23 @@ class SSLCertificate(models.Model):
 
 
 class BandwidthUsage(models.Model):
-    """Daily bandwidth usage tracking"""
+    """
+    Daily bandwidth usage tracking.
+
+    Filled in by `manage.py aggregate_access_logs` from the same bytes the
+    analytics are counted from. Nothing wrote to it before, so the dashboard,
+    the bandwidth panel and `usage_stats` all reported zero however much
+    anybody served.
+    """
     website = models.ForeignKey(Website, on_delete=models.CASCADE, related_name='bandwidth_usage')
     date = models.DateField()
+    #: Exact, and the one to read. `bandwidth_mb` is a whole number of
+    #: megabytes, and the sites here serve kilobytes a day: rounding down
+    #: records a real day as nothing, and rounding up records 14 KB as a
+    #: megabyte — seventy times what it was, against a quota.
+    bandwidth_bytes = models.BigIntegerField(default=0)
+    #: Kept because several places read it. Derived from the bytes, rounded to
+    #: nearest, and only meaningful once a site serves megabytes a day.
     bandwidth_mb = models.IntegerField(default=0)
     requests_count = models.IntegerField(default=0)
     
@@ -313,6 +331,10 @@ class WebsiteAnalytics(models.Model):
     #: [{path, views}] and [{referrer, visits}], most first.
     top_pages = models.JSONField(default=list)
     referrers = models.JSONField(default=list)
+    #: {desktop, mobile, tablet} -> page views, from the user agent. Rough on
+    #: purpose — user agents lie — and a great deal closer than the invented
+    #: percentages the page used to show.
+    devices = models.JSONField(default=dict, blank=True)
     
     class Meta:
         unique_together = ['website', 'date']

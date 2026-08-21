@@ -39,9 +39,18 @@ ASSET_SUFFIXES = (
     '.pdf', '.zip', '.gz', '.json', '.xml', '.txt',
 )
 
-#: How many of each to keep. The page shows a handful; storing hundreds makes
-#: the row big and tells nobody anything.
-TOP_N = 10
+#: How many of each to keep per day.
+#:
+#: More than the ten a page shows, because the period's ranking is worked out
+#: by merging the days: a page eleventh every day for a week can beat one that
+#: was first on a single day, and if only ten are kept it can never be seen.
+#: Fifty covers any site this platform hosts; a site with a longer tail than
+#: that needs per-day counters in a table of their own, which is a bigger
+#: change than the ranking is worth.
+TOP_N = 50
+
+#: How many of them the page shows.
+SHOW_N = 10
 
 #: Anything that says it is a bot. Crawlers are most of the traffic to a small
 #: site and counting them as visitors makes the whole page a lie.
@@ -54,6 +63,29 @@ _BOT = re.compile(
 
 def is_bot(user_agent: str) -> bool:
     return bool(user_agent and _BOT.search(user_agent))
+
+
+#: Tablets first: an iPad says "Macintosh" and most Android tablets say
+#: "Android", so asking the mobile question first calls every one of them a
+#: phone.
+_TABLET = re.compile(r'ipad|tablet|kindle|silk|playbook|nexus (?:7|9|10)', re.IGNORECASE)
+_MOBILE = re.compile(r'mobi|iphone|ipod|android|windows phone|blackberry|opera mini', re.IGNORECASE)
+
+
+def device_of(user_agent: str) -> str:
+    """
+    Roughly what somebody was reading on.
+
+    Rough on purpose: user agents lie, and the panel this feeds shows three
+    bars. It is a great deal closer than the invented percentages it replaces.
+    """
+    if not user_agent:
+        return 'desktop'
+    if _TABLET.search(user_agent):
+        return 'tablet'
+    if _MOBILE.search(user_agent):
+        return 'mobile'
+    return 'desktop'
 
 
 def is_page(path: str) -> bool:
@@ -100,6 +132,43 @@ def subdomain_of(host: str, base: str = 'ufazien.com') -> str | None:
     return name or None
 
 
+def referrer_origin(referrer: str) -> str | None:
+    """
+    Where a reader came from, and nothing more.
+
+    Scheme and host only. A `Referer` carries the full URL of the page somebody
+    was on when they clicked, and that URL belongs to a *different* site than
+    the one being reported to — its path and query can hold a password-reset
+    token, an unsubscribe link, a session id, or somebody's email address.
+    Handing all of that to whoever owns the site that was linked to is exactly
+    what `CLAUDE.md` forbids: a user's email must never reach another user.
+
+    The panel only ever showed the source, so nothing is lost by never keeping
+    the rest.
+    """
+    referrer = (referrer or '').strip()
+    if not referrer or referrer == '-':
+        return None
+
+    try:
+        from urllib.parse import urlsplit
+
+        parts = urlsplit(referrer)
+    except ValueError:
+        return None
+
+    if not parts.scheme or not parts.netloc:
+        return None
+    if parts.scheme.lower() not in ('http', 'https'):
+        return None
+
+    # Credentials appear in netloc as user:pass@host, and are not ours to keep.
+    host = parts.netloc.rsplit('@', 1)[-1].lower()
+    if not host:
+        return None
+    return f'{parts.scheme.lower()}://{host}'[:200]
+
+
 def visitor_key(ip: str, day: date, salt: str) -> str:
     """
     One visitor, without keeping their address.
@@ -116,10 +185,14 @@ class DayTraffic:
     """One site, one day, accumulated."""
 
     page_views: int = 0
+    #: Every request, assets and errors and crawlers included. What the
+    #: bandwidth quota is actually spent on, and not the same as page views.
+    requests: int = 0
     bandwidth_used: int = 0
     visitors: set[str] = field(default_factory=set)
     pages: Counter = field(default_factory=Counter)
     referrers: Counter = field(default_factory=Counter)
+    devices: Counter = field(default_factory=Counter)
 
     def as_row(self) -> dict:
         return {
@@ -134,6 +207,7 @@ class DayTraffic:
                 {'referrer': referrer, 'visits': visits}
                 for referrer, visits in self.referrers.most_common(TOP_N)
             ],
+            'devices': dict(self.devices),
         }
 
 
@@ -206,6 +280,7 @@ def aggregate(
         # quota, and the quota is what this figure is checked against. Counted
         # before the crawler filter for exactly that reason — a site that only
         # ever gets crawled has bandwidth and no readers, and both are true.
+        into.requests += 1
         try:
             into.bandwidth_used += max(0, int(entry.get('bytes', 0) or 0))
         except (TypeError, ValueError):
@@ -231,11 +306,14 @@ def aggregate(
             if ip:
                 into.visitors.add(visitor_key(ip, day, salt))
 
-            referrer = str(entry.get('ref', '') or '').strip()
-            # `-` is nginx for "there wasn't one", and a site's own pages are
-            # not referrers to itself.
-            if referrer and referrer != '-' and f'//{host}' not in referrer:
-                into.referrers[referrer[:200]] += 1
+            into.devices[device_of(str(entry.get('ua', '')))] += 1
+
+            # Reduced to its origin before it is counted, so the rest is never
+            # stored at all — see `referrer_origin`. A site's own pages are not
+            # referrers to itself.
+            origin = referrer_origin(str(entry.get('ref', '') or ''))
+            if origin and not origin.endswith(f'//{host}'):
+                into.referrers[origin] += 1
 
     return dict(traffic)
 

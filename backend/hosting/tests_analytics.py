@@ -17,8 +17,11 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from .access_logs import (
+    SHOW_N,
+    TOP_N,
     aggregate,
     clean_host,
+    referrer_origin,
     is_bot,
     is_page,
     parse_line,
@@ -26,7 +29,7 @@ from .access_logs import (
     subdomain_of,
     visitor_key,
 )
-from .models import Domain, Website, WebsiteAnalytics
+from .models import BandwidthUsage, Domain, Website, WebsiteAnalytics
 
 User = get_user_model()
 
@@ -185,8 +188,9 @@ class AggregationTests(TestCase):
             line(ref='https://alice.ufazien.com/index.html'),
             line(ref='https://news.example.com/story'),
         ])
+        # The origin, not the page: see ReferrerPrivacyTests.
         self.assertEqual([r['referrer'] for r in got.as_row()['referrers']],
-                         ['https://news.example.com/story'])
+                         ['https://news.example.com'])
 
     def test_top_pages_are_ordered_by_how_often_they_were_read(self):
         got = self.totals([line(uri='/about'), line(uri='/about'), line(uri='/')])
@@ -501,6 +505,246 @@ class FindingTheSiteTests(TestCase):
         self.assertEqual(
             sites_by_host({'Portfolio.Ufazien.com:80'}), {'portfolio.ufazien.com': site}
         )
+
+
+class TotalVisitsTests(TestCase):
+    """
+    `Website.total_visits` is read by the site's own page, by the dashboard's
+    total, and by the public listing — which is *ordered* by it. Nothing has
+    ever written it, so it sat at zero everywhere and that ordering was
+    meaningless.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='counter', email='counter@example.com', password='pw'
+        )
+        self.site = make_site(self.user, 'Counted', subdomain='counted')
+
+    def run_over(self, lines):
+        from io import StringIO
+        import os
+        import tempfile
+
+        from django.core.management import call_command
+
+        directory = tempfile.mkdtemp()
+        path = os.path.join(directory, 'access.log')
+        with open(path, 'w') as handle:
+            handle.write('\n'.join(lines) + '\n')
+        call_command('aggregate_access_logs', logs=path, stdout=StringIO())
+
+    def views(self, count, day='2026-08-20', uri='/'):
+        return [
+            json.dumps({
+                't': f'{day}T10:00:00+04:00', 'host': 'counted.ufazien.com',
+                'method': 'GET', 'uri': uri, 'status': 200, 'bytes': 100,
+                'ip': f'203.0.113.{i}', 'ref': '-', 'ua': 'Mozilla/5.0',
+            })
+            for i in range(count)
+        ]
+
+    def test_it_is_filled_in_from_the_traffic(self):
+        self.run_over(self.views(4))
+
+        self.site.refresh_from_db()
+        self.assertEqual(self.site.total_visits, 4)
+
+    def test_running_it_twice_does_not_double_it(self):
+        lines = self.views(4)
+        self.run_over(lines)
+        self.run_over(lines)
+
+        self.site.refresh_from_db()
+        self.assertEqual(self.site.total_visits, 4, 'a second run counted the same visits again')
+
+    def test_it_adds_up_across_days(self):
+        self.run_over(self.views(4) + self.views(3, day='2026-08-21', uri='/about'))
+
+        self.site.refresh_from_db()
+        self.assertEqual(self.site.total_visits, 7)
+
+
+class ReferrerPrivacyTests(TestCase):
+    """
+    A referrer says which site somebody came from, and nothing else.
+
+    The `Referer` header carries the full URL of the page they were on, and
+    that page belongs to a *different* site than the one being reported to. Its
+    path and query can hold a password-reset token, an unsubscribe link, a
+    session id, or somebody's email address — and handing that to whoever owns
+    the site that was linked to is exactly what `CLAUDE.md` forbids: a user's
+    email must never reach another user.
+    """
+
+    def test_keeps_the_site_and_drops_the_rest(self):
+        self.assertEqual(
+            referrer_origin('https://mail.example.com/inbox?token=abc123'),
+            'https://mail.example.com',
+        )
+
+    def test_an_address_in_the_path_does_not_survive(self):
+        origin = referrer_origin('https://forum.example.com/u/someone@example.com/posts')
+
+        self.assertEqual(origin, 'https://forum.example.com')
+        self.assertNotIn('@example.com', origin)
+
+    def test_a_reset_link_does_not_survive(self):
+        origin = referrer_origin('https://bank.example.com/reset?token=9f3a&user=carol@x.com')
+
+        self.assertNotIn('token', origin)
+        self.assertNotIn('carol', origin)
+
+    def test_credentials_in_the_host_are_dropped(self):
+        self.assertEqual(
+            referrer_origin('https://user:hunter2@example.com/page'),
+            'https://example.com',
+        )
+
+    def test_nothing_useless_is_kept(self):
+        for value in ('', '-', 'not a url', 'javascript:alert(1)', 'about:blank'):
+            self.assertIsNone(referrer_origin(value), value)
+
+    def test_aggregation_never_stores_more_than_the_origin(self):
+        line = json.dumps({
+            't': '2026-08-20T10:00:00+04:00', 'host': 'alice.ufazien.com',
+            'method': 'GET', 'uri': '/', 'status': 200, 'bytes': 10,
+            'ip': '203.0.113.1', 'ua': 'Mozilla/5.0',
+            'ref': 'https://mail.example.com/message?to=nigar@example.com&token=s3cr3t',
+        })
+
+        row = aggregate([line], salt=SALT)[('alice.ufazien.com', date(2026, 8, 20))].as_row()
+
+        self.assertEqual(row['referrers'], [{'referrer': 'https://mail.example.com', 'visits': 1}])
+        self.assertNotIn('nigar', json.dumps(row))
+        self.assertNotIn('s3cr3t', json.dumps(row))
+
+    def test_two_pages_of_one_site_are_one_referrer(self):
+        """Which follows from keeping only the origin, and is what a reader wants."""
+        def line(path):
+            return json.dumps({
+                't': '2026-08-20T10:00:00+04:00', 'host': 'alice.ufazien.com',
+                'method': 'GET', 'uri': '/', 'status': 200, 'bytes': 10,
+                'ip': '203.0.113.1', 'ua': 'Mozilla/5.0',
+                'ref': f'https://news.example.com{path}',
+            })
+
+        row = aggregate([line('/one'), line('/two')], salt=SALT)[
+            ('alice.ufazien.com', date(2026, 8, 20))
+        ].as_row()
+
+        self.assertEqual(row['referrers'], [{'referrer': 'https://news.example.com', 'visits': 2}])
+
+
+class TruncationTests(TestCase):
+    """
+    A period's ranking is worked out by merging the days, so a page kept out of
+    every day's list can never appear in the period's — however often it was
+    read across the week.
+    """
+
+    def test_more_is_kept_per_day_than_is_ever_shown(self):
+        self.assertGreater(
+            TOP_N, SHOW_N,
+            'keeping only what is shown means the weekly ranking is built from truncated days',
+        )
+
+
+class BandwidthQuotaTests(TestCase):
+    """
+    `BandwidthUsage` is read by the dashboard, by the bandwidth panel and by
+    `get_usage_stats` — and was written by nothing at all, so all three
+    reported zero however much anybody served.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='served', email='served@example.com', password='pw'
+        )
+        self.site = make_site(self.user, 'Served', subdomain='served')
+
+    def run_over(self, lines):
+        from io import StringIO
+        import os
+        import tempfile
+
+        from django.core.management import call_command
+
+        directory = tempfile.mkdtemp()
+        path = os.path.join(directory, 'access.log')
+        with open(path, 'w') as handle:
+            handle.write('\n'.join(lines) + '\n')
+        call_command('aggregate_access_logs', logs=path, stdout=StringIO())
+
+    def request(self, byte_count, uri='/', ua='Mozilla/5.0'):
+        return json.dumps({
+            't': '2026-08-20T10:00:00+04:00', 'host': 'served.ufazien.com',
+            'method': 'GET', 'uri': uri, 'status': 200, 'bytes': byte_count,
+            'ip': '203.0.113.1', 'ref': '-', 'ua': ua,
+        })
+
+    def test_the_run_records_what_was_served(self):
+        self.run_over([self.request(4000), self.request(6000, uri='/a.css')])
+
+        usage = BandwidthUsage.objects.get(website=self.site, date=date(2026, 8, 20))
+        self.assertEqual(usage.bandwidth_bytes, 10_000)
+        self.assertEqual(usage.requests_count, 2)
+
+    def test_it_counts_requests_not_page_views(self):
+        """
+        Assets and crawlers spend the quota. Counting page views here would
+        report a fraction of what the server actually sent.
+        """
+        self.run_over([
+            self.request(1000),
+            self.request(1000, uri='/style.css'),
+            self.request(1000, ua='Googlebot/2.1'),
+        ])
+
+        usage = BandwidthUsage.objects.get(website=self.site, date=date(2026, 8, 20))
+        self.assertEqual(usage.requests_count, 3)
+        self.assertEqual(usage.bandwidth_bytes, 3000)
+
+    def test_a_small_day_is_not_rounded_up_to_a_megabyte(self):
+        """
+        Ceilinged, 14 KB became 1 MB — seventy times what it was, against a
+        quota. The exact bytes are what the readers use.
+        """
+        self.run_over([self.request(14_000)])
+
+        usage = BandwidthUsage.objects.get(website=self.site, date=date(2026, 8, 20))
+        self.assertEqual(usage.bandwidth_bytes, 14_000)
+        self.assertEqual(usage.bandwidth_mb, 0)
+
+    def test_running_it_twice_does_not_double_the_quota(self):
+        lines = [self.request(5000), self.request(5000)]
+        self.run_over(lines)
+        self.run_over(lines)
+
+        usage = BandwidthUsage.objects.get(website=self.site, date=date(2026, 8, 20))
+        self.assertEqual(usage.bandwidth_bytes, 10_000)
+        self.assertEqual(BandwidthUsage.objects.count(), 1)
+
+    def test_the_subscription_reports_it(self):
+        """
+        `get_usage_stats` summed the megabyte column, so a month of real
+        traffic on a small site added up to nothing.
+        """
+        from hosting.models import SubscriptionPlan, UserSubscription
+
+        plan = SubscriptionPlan.objects.create(
+            name='free', display_name='Free', price=0, max_websites=3,
+            max_databases=1, storage_limit_mb=1024, bandwidth_limit_mb=10240,
+        )
+        subscription = UserSubscription.objects.create(
+            user=self.user, plan=plan, status='active'
+        )
+        today = timezone.now().date()
+        BandwidthUsage.objects.create(
+            website=self.site, date=today, bandwidth_bytes=3_500_000, bandwidth_mb=3
+        )
+
+        self.assertAlmostEqual(subscription.get_usage_stats()['bandwidth_mb'], 3.34, places=1)
 
 
 class RealisticSiteTests(TestCase):
