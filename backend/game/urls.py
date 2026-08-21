@@ -27,4 +27,6 @@ urlpatterns = [
     path('lobbies/<str:lobby_id>/permissions/', views.lobby_permissions, name='lobby_permissions'),
     path('lobbies/<str:lobby_id>/members/<int:user_id>/mute/', views.set_member_muted, name='set_member_muted'),
     path('lobbies/<str:lobby_id>/members/<int:user_id>/screen-share/', views.set_member_screen_share, name='set_member_screen_share'),
+    path('lobbies/<str:lobby_id>/members/<int:user_id>/privileges/', views.set_member_privileges, name='set_member_privileges'),
+    path('lobbies/<str:lobby_id>/members/<int:user_id>/kick/', views.kick_member, name='kick_member'),
 ]

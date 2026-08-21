@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet';
-import { Search, Plus, Lock, Unlock, Users, Star, StarOff, Settings, RefreshCw, Filter, Eye, EyeOff, Zap, ArrowLeft, Building2, Play, Trophy, Users2, Loader2, User, X } from 'lucide-react';
+import { Search, Plus, Lock, Unlock, Users, Star, StarOff, Settings, RefreshCw, Filter, Eye, EyeOff, Zap, ArrowLeft, Building2, Play, Trophy, Users2, Loader2, User, X, Crown, Pencil, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import campusApi from '../../services/campusApi';
 import { campusUserName, type Lobby, type LobbyListParams, type SavedLobby } from '../../services/campusTypes';
 import { errorMessage } from '../../lib/api/errors';
 import Select from "../../components/ui/Select"
 import CharacterPicker from './CharacterPicker'
+import EditLobbyDialog from './EditLobbyDialog'
 import { api } from '../../lib/api/client'
 import Range from "../../components/ui/Range"
 import { Checkbox } from "../../components/ui/checkbox"
@@ -78,6 +79,12 @@ const CampusSimulatorMenu = () => {
   // API state
   const [lobbies, setLobbies] = useState<Lobby[]>([]);
   const [savedLobbies, setSavedLobbies] = useState<SavedLobby[]>([]);
+  // Lobbies this player is in, which is where the ones they host are reachable
+  // from. Hosting one and then having no way back to it — to rename it, or to
+  // close it — was the gap: `my-lobbies/` has always existed and nothing asked.
+  const [myLobbies, setMyLobbies] = useState<Lobby[]>([]);
+  const [editing, setEditing] = useState<Lobby | null>(null);
+  const [closing, setClosing] = useState<Lobby | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   /** How many filters are narrowing the list, shown on the collapsed header. */
   const activeFilterCount = [
@@ -109,6 +116,12 @@ const CampusSimulatorMenu = () => {
   useEffect(() => {
     loadLobbies();
   }, [searchTerm, passwordFilter, playerCountFilter, sortBy, pagination.page]);
+
+  useEffect(() => {
+    if (activeTab === 'mine') {
+      loadMyLobbies();
+    }
+  }, [activeTab]);
 
   // Load saved lobbies if on saved tab
   useEffect(() => {
@@ -179,6 +192,73 @@ const CampusSimulatorMenu = () => {
       setSavedLobbies(Array.isArray(response) ? response : (response?.results ?? []));
     } catch (err) {
       console.error('Failed to load saved lobbies:', err);
+    }
+  };
+
+  const loadMyLobbies = async () => {
+    if (!campusApi.isAuthenticated()) return;
+
+    try {
+      const response = await campusApi.getMyLobbies();
+      // The endpoint paginates on some deployments and not others.
+      setMyLobbies(Array.isArray(response) ? response : (response?.results ?? []));
+    } catch (err) {
+      console.error('Failed to load your lobbies:', err);
+    }
+  };
+
+  /**
+   * Whether this is a lobby the signed-in player owns.
+   *
+   * The server says so. It used to be worked out by comparing the host against
+   * the profile fetched for the character picker — and that request is
+   * deliberately quiet about failing, so one failed call took Edit and Close
+   * off the only page a host can reach their own lobby from, with nothing on
+   * screen to explain it. The comparison stays as a fallback for a backend that
+   * does not send the field yet.
+   */
+  const iHost = (lobby: Lobby) =>
+    lobby.is_host ?? Boolean(me && String(lobby.host?.id) === String(me.id));
+
+  /**
+   * Save the changes made in the edit dialog.
+   *
+   * The host keeps their lobby when they walk out of it now, so this is how
+   * they change it afterwards — there was no way to rename or close one at all
+   * from here, even though the endpoints have always been there.
+   */
+  const handleSaveLobby = async (changes: Partial<Lobby>) => {
+    if (!editing) return;
+    setIsLoading(true);
+    setError(null);
+    try {
+      const updated = await campusApi.updateLobby(editing.id, changes);
+      setMyLobbies((current) =>
+        current.map((lobby) => (lobby.id === updated.id ? { ...lobby, ...updated } : lobby)),
+      );
+      setEditing(null);
+      loadLobbies();
+    } catch (err) {
+      setError(errorMessage(err, 'Could not save those changes.'));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  /** Close a lobby for good. It stops being listed and nobody else can join. */
+  const handleCloseLobby = async () => {
+    if (!closing) return;
+    setIsLoading(true);
+    setError(null);
+    try {
+      await campusApi.deleteLobby(closing.id);
+      setMyLobbies((current) => current.filter((lobby) => lobby.id !== closing.id));
+      setClosing(null);
+      loadLobbies();
+    } catch (err) {
+      setError(errorMessage(err, 'Could not close that lobby.'));
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -335,7 +415,19 @@ const CampusSimulatorMenu = () => {
     return matchesSearch && matchesPassword && matchesPlayerCount;
   });
 
-  const LobbyCard = ({ lobby, isSaved = false }: { lobby: Lobby; isSaved?: boolean }) => {
+  /** How many rows the tab in front of you has. */
+  const shownCount =
+    activeTab === 'saved'
+      ? savedLobbies.length
+      : activeTab === 'mine'
+        ? myLobbies.length
+        : filteredLobbies.length;
+
+  const LobbyCard = ({
+    lobby,
+    isSaved = false,
+    mine = false,
+  }: { lobby: Lobby; isSaved?: boolean; mine?: boolean }) => {
     const playerPercentage = (lobby.current_players_count / lobby.max_players) * 100;
     const isNearFull = playerPercentage >= 80;
     const isFull = lobby.current_players_count >= lobby.max_players;
@@ -416,6 +508,32 @@ const CampusSimulatorMenu = () => {
         >
           {isFull ? 'Lobby Full' : lobby.is_private ? 'Join (Password Required)' : 'Join Lobby'}
         </button>
+
+        {/* The host's own controls. Offered on the lobbies you are in rather
+            than everywhere, because that is the tab you go to looking for
+            them — and only on the ones you actually own. */}
+        {mine && iHost(lobby) && (
+          <div className="mt-3 flex items-center gap-2 border-t border-gray-100 pt-3">
+            <span className="mr-auto inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
+              <Crown className="h-3 w-3" />
+              You host this
+            </span>
+            <button
+              onClick={() => setEditing(lobby)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              Edit
+            </button>
+            <button
+              onClick={() => setClosing(lobby)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 transition-colors hover:bg-red-50"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Close
+            </button>
+          </div>
+        )}
       </div>
     );
   };
@@ -667,6 +785,7 @@ const CampusSimulatorMenu = () => {
             <div className="flex space-x-1 mb-6 bg-gray-100 p-1 rounded-lg">
               {[
                 { key: 'browse', label: 'Browse Lobbies', icon: Search },
+                { key: 'mine', label: 'My Lobbies', icon: Building2 },
                 { key: 'saved', label: 'Saved Lobbies', icon: Star },
               ].map(({ key, label, icon: Icon }) => (
                 <button
@@ -694,7 +813,9 @@ const CampusSimulatorMenu = () => {
                     Loading lobbies...
                   </div>
                 ) : (
-                  `Showing ${filteredLobbies.length} of ${pagination.totalCount} lobbies`
+                  activeTab === 'browse'
+                    ? `Showing ${filteredLobbies.length} of ${pagination.totalCount} lobbies`
+                    : `${shownCount} ${shownCount === 1 ? 'lobby' : 'lobbies'}`
                 )}
               </div>
               
@@ -714,6 +835,11 @@ const CampusSimulatorMenu = () => {
                   <LobbyCard key={lobby.id} lobby={lobby} />
                 ))}
               
+              {activeTab === 'mine' &&
+                myLobbies.map((lobby) => (
+                  <LobbyCard key={lobby.id} lobby={lobby} mine />
+                ))}
+
               {activeTab === 'saved' &&
                 savedLobbies.map((savedLobby) => (
                   <LobbyCard key={savedLobby.lobby.id} lobby={savedLobby.lobby} isSaved={true} />
@@ -745,25 +871,33 @@ const CampusSimulatorMenu = () => {
               </div>
             )}
 
-            {/* Empty State */}
-            {!isLoading && filteredLobbies.length === 0 && (
+            {/* Empty State. Counted for the tab you are actually looking at —
+                it read the browse list whichever tab was open, so a full Saved
+                tab still said there was nothing in it. */}
+            {!isLoading && shownCount === 0 && (
               <div className="text-center py-12">
                 <Building2 className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                  {activeTab === 'saved' ? 'No saved lobbies' : 'No lobbies found'}
+                  {activeTab === 'saved'
+                    ? 'No saved lobbies'
+                    : activeTab === 'mine'
+                      ? 'You are not in any lobbies'
+                      : 'No lobbies found'}
                 </h3>
                 <p className="text-gray-500 mb-6">
-                  {activeTab === 'saved' 
+                  {activeTab === 'saved'
                     ? 'Save lobbies you enjoy to quickly access them later.'
-                    : 'Try adjusting your filters or create a new lobby to get started.'
+                    : activeTab === 'mine'
+                      ? 'Lobbies you join or host appear here. The ones you host stay yours, so you can come back and change or close them.'
+                      : 'Try adjusting your filters or create a new lobby to get started.'
                   }
                 </p>
-                {activeTab === 'browse' && (
+                {activeTab !== 'saved' && (
                   <button
                     onClick={() => setShowCreateLobby(true)}
                     className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
                   >
-                    Create First Lobby
+                    {activeTab === 'mine' ? 'Create a lobby' : 'Create First Lobby'}
                   </button>
                 )}
               </div>
@@ -865,6 +999,49 @@ const CampusSimulatorMenu = () => {
                   className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isLoading ? 'Creating...' : 'Create Lobby'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Editing a lobby you host. The same fields as creating one, minus
+            the id, so nothing has to be learned twice. */}
+        {editing && (
+          <EditLobbyDialog
+            lobby={editing}
+            busy={isLoading}
+            onCancel={() => setEditing(null)}
+            onSave={handleSaveLobby}
+          />
+        )}
+
+        {/* Closing one. Asked first, because it cannot be undone and everybody
+            still inside is turned out. */}
+        {closing && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 p-4">
+            <div className="w-full max-w-md rounded-lg border border-gray-200 bg-white p-6">
+              <h2 className="mb-2 text-xl font-bold text-gray-900">Close “{closing.name}”?</h2>
+              <p className="mb-6 text-sm text-gray-600">
+                It stops being listed and nobody can join it again.{' '}
+                {closing.current_players_count > 0
+                  ? `${closing.current_players_count} ${closing.current_players_count === 1 ? 'person is' : 'people are'} in it right now.`
+                  : 'Nobody is in it.'}{' '}
+                This cannot be undone.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setClosing(null)}
+                  className="flex-1 rounded-lg border border-gray-300 px-4 py-2 font-medium text-gray-700 transition-colors hover:bg-gray-50"
+                >
+                  Keep it
+                </button>
+                <button
+                  onClick={handleCloseLobby}
+                  disabled={isLoading}
+                  className="flex-1 rounded-lg bg-red-600 px-4 py-2 font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+                >
+                  {isLoading ? 'Closing…' : 'Close the lobby'}
                 </button>
               </div>
             </div>

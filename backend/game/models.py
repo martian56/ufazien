@@ -127,10 +127,18 @@ class LobbyMember(models.Model):
     connections = models.PositiveIntegerField(default=0)
     last_seen = models.DateTimeField(null=True, blank=True, default=None)
 
-    # Realtime A/V permissions. These live here, not on the client, because the
-    # LiveKit token is minted from them: a participant cannot grant itself the
-    # right to publish.
+    # What the host has handed out. All of it lives here, not on the client:
+    # the LiveKit token is minted from `can_share_screen`, so a participant
+    # cannot grant itself the right to publish, and the same reasoning covers
+    # the rest — see `game/privileges.py`.
+    #
+    # The host holds every one of these implicitly and none of them is written
+    # down for them, because a stored copy is a thing that can disagree with
+    # who the host actually is.
     can_share_screen = models.BooleanField(default=False)
+    can_manage = models.BooleanField(default=False)
+    can_kick = models.BooleanField(default=False)
+    can_mute_others = models.BooleanField(default=False)
     is_muted = models.BooleanField(default=False)
 
     objects = LobbyMemberQuerySet.as_manager()

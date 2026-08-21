@@ -28,6 +28,8 @@ export interface LobbyMember {
  * that drift.
  */
 export interface Lobby {
+  /** Whether the signed-in player hosts this one. Absent on older backends. */
+  is_host?: boolean
   id: string
   name: string
   description: string | null

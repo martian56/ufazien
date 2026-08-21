@@ -148,6 +148,17 @@ export function useCampusVoice({ lobbyId, userPosition, playerPositions, enabled
     return data
   }, [lobbyId])
 
+  // Asked for as soon as there is a lobby, not once voice connects. Who is in
+  // the lobby and what they are allowed to do is a fact about the lobby; tying
+  // it to LiveKit meant the People panel was empty on every deployment without
+  // voice configured — including every developer's machine — and the host
+  // could not hand anything out from there at all.
+  useEffect(() => {
+    if (lobbyId) loadPermissions().catch(() => {})
+  }, [lobbyId, loadPermissions])
+
+  // And again when voice arrives, because connecting can change what the
+  // server says about publishing rights.
   useEffect(() => {
     if (connected) loadPermissions().catch(() => {})
   }, [connected, loadPermissions])
@@ -187,6 +198,27 @@ export function useCampusVoice({ lobbyId, userPosition, playerPositions, enabled
     [lobbyId, loadPermissions],
   )
 
+  const setMemberPrivileges = useCallback(
+    async (
+      userId: string | number,
+      granted: Partial<Record<'manage' | 'kick' | 'mute' | 'present', boolean>>,
+    ) => {
+      if (!lobbyId) return
+      await campusHostApi.setPrivileges(lobbyId, userId, granted)
+      await loadPermissions()
+    },
+    [lobbyId, loadPermissions],
+  )
+
+  const removeMember = useCallback(
+    async (userId: string | number) => {
+      if (!lobbyId) return
+      await campusHostApi.kick(lobbyId, userId)
+      await loadPermissions()
+    },
+    [lobbyId, loadPermissions],
+  )
+
   // Our own rights can change while connected; re-mint to pick that up.
   const refreshMyPermissions = useCallback(async () => {
     const voice = voiceRef.current
@@ -202,6 +234,9 @@ export function useCampusVoice({ lobbyId, userPosition, playerPositions, enabled
     micEnabled,
     screenShare,
     permissions,
+    setMemberPrivileges,
+    removeMember,
+    reloadPermissions: loadPermissions,
     isHost: Boolean(voiceRef.current?.isHost),
     mayScreenShare: Boolean(voiceRef.current?.mayScreenShare),
     toggleMic,

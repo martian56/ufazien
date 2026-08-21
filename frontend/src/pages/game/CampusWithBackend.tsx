@@ -48,6 +48,8 @@ import { errorMessage } from '../../lib/api/errors'
 import gpaApi from '../../lib/api/endpoints/gpa'
 import TouchControls, { createTouchState, useIsTouchDevice } from '../../components/campus/TouchControls'
 import type { TouchState } from '../../components/campus/TouchControls'
+import LobbyPeople from '../../components/campus/LobbyPeople'
+import { mergeTouch } from '../../components/campus/touchActions'
 import {
   CampusEnvironment,
   CampusGround,
@@ -271,11 +273,14 @@ function ChatSystem({
   onToggle,
   campusHook,
   focusToken = 0,
+  besideControls = false,
 }: {
   isOpen: boolean
   onToggle: () => void
   campusHook: CampusHook
   focusToken?: number
+  /** Whether the on-screen controls own the bottom right corner. */
+  besideControls?: boolean
 }) {
   const [newMessage, setNewMessage] = useState("")
   const [activeTab, setActiveTab] = useState("global")
@@ -338,7 +343,19 @@ function ChatSystem({
 
   if (!isOpen) {
     return (
-      <div className="pointer-events-auto absolute bottom-0 right-0 z-30 p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pr-[max(0.5rem,env(safe-area-inset-right))] sm:p-4 short:left-0 short:right-auto short:pl-[max(0.5rem,env(safe-area-inset-left))]">
+      /* On a phone the bottom right corner is the thumb controls, and this sat
+         on top of the Jump button — a slice of each was unreachable. There it
+         takes the gap between the stick and the buttons instead: the middle is
+         the one part of the bottom edge nothing else wants, and it stays clear
+         however many of the contextual buttons are showing, because those
+         stack upwards rather than sideways. */
+      <div
+        className={
+          besideControls
+            ? 'pointer-events-auto absolute bottom-5 left-1/2 z-30 -translate-x-1/2 pb-[env(safe-area-inset-bottom)]'
+            : 'pointer-events-auto absolute bottom-0 right-0 z-30 p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pr-[max(0.5rem,env(safe-area-inset-right))] sm:p-4 short:left-0 short:right-auto short:pl-[max(0.5rem,env(safe-area-inset-left))]'
+        }
+      >
         <button
           onClick={onToggle}
           aria-label="Open the chat"
@@ -676,12 +693,14 @@ function PropController({
   myRoom,
   onCandidate,
   onCharge,
+  touch,
 }: {
   campusHook: CampusHook
   insideBuilding: CampusBuilding | null
   myRoom: string | null
   onCandidate: (prop: PropSpec | null) => void
   onCharge: (power: number) => void
+  touch?: React.RefObject<TouchState>
 }) {
   const { camera } = useThree()
   const [, get] = useKeyboardControls()
@@ -716,7 +735,9 @@ function PropController({
 
   useFrame((state) => {
     const typing = isTypingInField()
-    const controls = get()
+    // Picking things up and the light switch were on a keyboard and nowhere
+    // else; the thumb buttons write the same controls.
+    const controls = mergeTouch(get(), touch?.current)
 
     // What is within reach, so the prompt can name it.
     const near = ownProp
@@ -865,6 +886,7 @@ function SeatController({
   onEmote,
   leaning,
   onLean,
+  touch,
 }: {
   campusHook: CampusHook
   insideBuilding: CampusBuilding | null
@@ -873,6 +895,7 @@ function SeatController({
   onEmote: (activity: Activity | null) => void
   leaning: boolean
   onLean: (leaning: boolean) => void
+  touch?: React.RefObject<TouchState>
 }) {
   const { camera } = useThree()
   const [, get] = useKeyboardControls()
@@ -914,7 +937,10 @@ function SeatController({
 
   useFrame((state) => {
     const typing = isTypingInField()
-    const controls = get()
+    // Whichever hand is on the controls: sitting, leaning and every emote
+    // were keyboard-only, so on a phone the campus was somewhere you could
+    // walk around and nothing more.
+    const controls = mergeTouch(get(), touch?.current)
 
     // What is within reach, so the prompt can name it.
     const seats = insideBuilding ? interiorSeats(insideBuilding.interior) : []
@@ -1145,7 +1171,10 @@ function Player({
     // side of the campus.
     const delta = Math.min(rawDelta, 0.1)
     const typing = isTypingInField()
-    const raw = get()
+    // The thumb stick has no shift key, so it says running itself — see
+    // `isRunning`. Merged here rather than read separately so the two surfaces
+    // stay one set of controls.
+    const raw = mergeTouch(get(), touch?.current)
     const { forward, backward, leftward, rightward, jump, run } = typing
       ? { forward: false, backward: false, leftward: false, rightward: false, jump: false, run: false }
       : raw
@@ -1287,7 +1316,7 @@ function Player({
     // and only from arm's reach: the key that used to teleport you inside
     // worked from anywhere along a fifty metre facade, which is what made it
     // feel like a menu rather than a door.
-    const wantsDoor = Boolean(raw.interact) || Boolean(touch?.current?.interact)
+    const wantsDoor = Boolean(raw.interact)
     if (wantsDoor && !doorHeld.current && !typing) {
       const now = performance.now()
       // Which floor the player is standing on, for the lift's call button.
@@ -2187,15 +2216,25 @@ const CampusWithBackend = () => {
       {!games.active && (insideBuilding || leaning) && (seatCandidate || campusHook.ownSeat || leaning) && (
         <div className="absolute left-1/2 -translate-x-1/2 bottom-32 sm:bottom-16 z-30 pointer-events-none max-w-[92vw]">
           <div className="bg-black/80 backdrop-blur-sm border border-emerald-500/30 rounded-xl px-4 py-2.5 text-white text-center">
+            {/* Named for the surface they are on. A phone was being told to
+                press keys it does not have. */}
             <div className="text-xs text-emerald-300">
               {leaning
-                ? 'Press V to stand up straight'
+                ? isTouchDevice
+                  ? 'Lean again to stand up straight'
+                  : 'Press V to stand up straight'
                 : campusHook.ownSeat
-                  ? 'Press C to stand up'
-                  : 'Press C to sit down'}
+                  ? isTouchDevice
+                    ? 'Tap Stand to get up'
+                    : 'Press C to stand up'
+                  : isTouchDevice
+                    ? 'Tap Sit to sit down'
+                    : 'Press C to sit down'}
             </div>
             <div className="text-[11px] text-gray-400 mt-1">
-              V lean · 1 wave · 2 clap · 3 raise hand · 4 point
+              {isTouchDevice
+                ? 'More · leaning and emotes'
+                : 'V lean · 1 wave · 2 clap · 3 raise hand · 4 point'}
             </div>
           </div>
         </div>
@@ -2210,7 +2249,7 @@ const CampusWithBackend = () => {
             {campusHook.ownProp ? (
               <>
                 <div className="text-xs text-amber-300">
-                  Hold G to throw · tap to drop
+                  {isTouchDevice ? 'Hold Throw to send it further · tap to drop' : 'Hold G to throw · tap to drop'}
                 </div>
                 {/* The wind-up, so a throw is aimed rather than guessed. */}
                 <div className="mt-1.5 h-1.5 w-full bg-white/15 rounded-full overflow-hidden">
@@ -2221,11 +2260,15 @@ const CampusWithBackend = () => {
                 </div>
               </>
             ) : propCandidate ? (
-              <div className="text-xs text-amber-300">Press G to pick up the {propCandidate.label}</div>
+              <div className="text-xs text-amber-300">
+                {isTouchDevice ? 'Tap Pick up for the ' : 'Press G to pick up the '}
+                {propCandidate.label}
+              </div>
             ) : null}
             {insideBuilding && (
               <div className="text-[11px] text-gray-400 mt-1">
-                L · turn the lights {roomLit ? 'off' : 'on'}
+                {isTouchDevice ? 'More · turn the lights ' : 'L · turn the lights '}
+                {roomLit ? 'off' : 'on'}
               </div>
             )}
           </div>
@@ -2237,8 +2280,18 @@ const CampusWithBackend = () => {
       {isTouchDevice && !isChatOpen && (
         <TouchControls
           stateRef={touchState}
-          insideBuilding={insideBuilding}
-          canInteract={Boolean(nearBuilding)}
+          context={{
+            insideBuilding,
+            canInteract: Boolean(nearBuilding),
+            // The same conditions the on-screen prompts use, so the button and
+            // the sentence telling a keyboard player which key to press appear
+            // together or not at all.
+            canSit: Boolean(seatCandidate || campusHook.ownSeat),
+            seated: Boolean(campusHook.ownSeat),
+            canGrab: Boolean(propCandidate || campusHook.ownProp),
+            holding: Boolean(campusHook.ownProp),
+            leaning,
+          }}
         />
       )}
 
@@ -2246,10 +2299,17 @@ const CampusWithBackend = () => {
           over the player's view. Out on the campus there is no screen to put it
           on, so all they get is a nudge to go and watch it. */}
       {voice.screenShare && (
-        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20 pointer-events-auto">
+        /* Pinned to the top edge, above the rest of the HUD. It used to float
+           64px down and horizontally centred, which on a wide screen reads as
+           the middle of the picture rather than a banner, and on a phone
+           landed straight on top of the list of who is here.
+           Its own row below the status chip on a phone, because the top of a
+           390px screen is already the chip on one side and the dock on the
+           other, with nothing like enough between them for a sentence. */
+        <div className="absolute top-14 left-2 right-[8.5rem] z-40 pointer-events-auto sm:top-3 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 sm:max-w-[min(28rem,calc(100vw-24rem))]">
           <div className="bg-black/75 backdrop-blur-sm border border-blue-500/30 text-white rounded-full pl-3 pr-1.5 py-1 flex items-center gap-2 text-xs">
             <MonitorUp className="w-3.5 h-3.5 text-blue-300 shrink-0" />
-            <span className="truncate max-w-[38vw]">
+            <span className="truncate">
               {voice.screenShare.isLocal
                 ? 'You are sharing your screen'
                 : shareIsInThisRoom
@@ -2302,7 +2362,13 @@ const CampusWithBackend = () => {
           as the doors: a click in the world never lands while the pointer is
           locked, which is the normal way to play. */}
       {visibleAvatars.length > 0 && !games.active && (
-        <div className="pointer-events-auto absolute left-2 top-14 z-10 w-[min(15rem,52vw)] sm:left-3 sm:top-16 short:hidden">
+        <div
+          className={`pointer-events-auto absolute left-2 z-10 w-[min(15rem,52vw)] sm:left-3 sm:top-16 short:hidden ${
+            // A share takes the row under the status chip on a phone, so the
+            // list of who is here moves down instead of being covered by it.
+            voice.screenShare ? 'top-[6.25rem]' : 'top-14'
+          }`}
+        >
           <div className="bg-black/75 backdrop-blur-sm border border-blue-500/25 rounded-xl px-3 py-2 text-white">
             <div className="text-[11px] uppercase tracking-wide text-blue-300/80 mb-1">
               {myRoom ? 'In this room' : 'On the campus'}
@@ -2411,6 +2477,18 @@ const CampusWithBackend = () => {
             onSetMemberMuted={voice.setMemberMuted}
             onSetMemberScreenShare={voice.setMemberScreenShare}
             embedded
+          />
+        }
+        people={
+          <LobbyPeople
+            members={voice.permissions?.members ?? []}
+            meId={currentUser?.id ?? null}
+            hostId={voice.permissions?.host_id ?? null}
+            onSetMuted={voice.setMemberMuted}
+            onSetPrivilege={(userId, privilege, granted) =>
+              voice.setMemberPrivileges(userId, { [privilege]: granted })
+            }
+            onRemove={voice.removeMember}
           />
         }
       />
@@ -2606,6 +2684,7 @@ const CampusWithBackend = () => {
               onEmote={setEmote}
               leaning={leaning}
               onLean={setLeaning}
+              touch={touchState}
             />
             <PropController
               campusHook={campusHook}
@@ -2613,6 +2692,7 @@ const CampusWithBackend = () => {
               myRoom={myRoom}
               onCandidate={setPropCandidate}
               onCharge={setThrowCharge}
+              touch={touchState}
             />
 
             {/* Without a selector drei binds the lock handler to document, so every
@@ -2644,6 +2724,7 @@ const CampusWithBackend = () => {
         onToggle={() => setIsChatOpen(!isChatOpen)}
         campusHook={campusHook}
         focusToken={chatFocus}
+        besideControls={isTouchDevice}
       />
 
     </div>

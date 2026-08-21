@@ -1,11 +1,11 @@
 import { useState, type ReactNode } from 'react'
-import { Keyboard, LogOut, Maximize, Minimize, Monitor, Moon, Sun, Sunset, Volume2, X } from 'lucide-react'
+import { Keyboard, LogOut, Maximize, Minimize, Monitor, Moon, Sun, Sunset, Users, Volume2, X } from 'lucide-react'
 import { KEY_GROUPS, bindingsIn } from './keyBindings'
 import { DISTRICT_ATTRIBUTION } from './districtSurvey'
 
 export type TimeOfDay = 'day' | 'dusk' | 'night'
 
-type Tab = 'display' | 'voice' | 'controls'
+type Tab = 'display' | 'voice' | 'people' | 'controls'
 
 interface Props {
   open: boolean
@@ -17,11 +17,14 @@ interface Props {
   onToggleFullscreen: () => void
   onLeave: () => void
   voice: ReactNode
+  /** Who is here and what they may do. Absent while the lobby is unknown. */
+  people?: ReactNode
 }
 
 const TABS: { id: Tab; label: string; icon: typeof Monitor }[] = [
   { id: 'display', label: 'Display', icon: Monitor },
   { id: 'voice', label: 'Voice', icon: Volume2 },
+  { id: 'people', label: 'People', icon: Users },
   { id: 'controls', label: 'Controls', icon: Keyboard },
 ]
 
@@ -49,6 +52,7 @@ export default function CampusSettings({
   onToggleFullscreen,
   onLeave,
   voice,
+  people,
 }: Props) {
   const [tab, setTab] = useState<Tab>('display')
 
@@ -144,6 +148,12 @@ export default function CampusSettings({
           )}
 
           {tab === 'voice' && <div className="text-sm text-slate-300">{voice}</div>}
+
+          {tab === 'people' && (
+            <div className="text-sm text-slate-300">
+              {people ?? <p className="text-slate-400">Who is here is not available yet.</p>}
+            </div>
+          )}
 
           {tab === 'controls' && (
             <div className="space-y-4">

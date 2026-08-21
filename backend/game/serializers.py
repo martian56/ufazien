@@ -56,6 +56,40 @@ class LobbyCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Lobby
         fields = ['name', 'description', 'is_private', 'password', 'max_players']
+
+    def validate(self, attrs):
+        """
+        A private lobby has to have a password.
+
+        `join_lobby` reads `if lobby.is_private and lobby.password and ...`, so a
+        private lobby with a blank password skips the check altogether and lets
+        anybody in — while the listing shows it locked and offers "Join
+        (Password Required)". The host believes the room is shut and it is open.
+
+        Both halves are enforced here rather than in the browser, because the
+        browser is not what decides this: the create form has always allowed
+        ticking Private and leaving the box empty.
+        """
+        private = attrs.get('is_private', getattr(self.instance, 'is_private', False))
+        if not private:
+            # Going public drops the password rather than keeping it in the row.
+            # Kept, it silently comes back the next time privacy is switched on,
+            # and the host has no idea which password the lobby now has.
+            attrs['password'] = None
+            return attrs
+
+        password = attrs.get('password', None)
+        if password is None and self.instance is not None:
+            # Editing, and the field was left blank: keep whatever is stored.
+            password = self.instance.password
+
+        if not (password or '').strip():
+            raise serializers.ValidationError(
+                {'password': 'A private lobby needs a password, or nobody is kept out by it.'}
+            )
+
+        attrs['password'] = password
+        return attrs
     
     def create(self, validated_data):
         validated_data['host'] = self.context['request'].user
@@ -67,13 +101,31 @@ class LobbyListSerializer(serializers.ModelSerializer):
     host = UserSerializer(read_only=True)
     current_players_count = serializers.ReadOnlyField()
     is_full = serializers.ReadOnlyField()
+    is_host = serializers.SerializerMethodField()
     
     class Meta:
         model = Lobby
         fields = [
             'id', 'name', 'description', 'host', 'is_private',
-            'max_players', 'current_players_count', 'is_full', 'created_at'
+            'max_players', 'current_players_count', 'is_full', 'is_host', 'created_at'
         ]
+
+    def get_is_host(self, obj):
+        """
+        Whether the person asking hosts this lobby.
+
+        Said here so the client does not have to work it out by comparing the
+        host against a profile it fetched separately. It did, and that request
+        is deliberately quiet about failing — so one failed profile call took
+        the Edit and Close buttons off the only page a host can reach their own
+        lobby from, with nothing on screen to say why.
+
+        `False` with no request in context, which is the same shape the email
+        rule in `CLAUDE.md` uses: absent context must never read as permission.
+        """
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        return bool(user and user.is_authenticated and obj.host_id == user.id)
 
 
 class PlayerPositionSerializer(serializers.ModelSerializer):

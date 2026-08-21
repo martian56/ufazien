@@ -383,6 +383,20 @@ export const campusHostApi = {
     apiClient
       .post(`/game/lobbies/${lobbyId}/members/${userId}/screen-share/`, { allowed })
       ,
+  /**
+   * Hand a member one of the host's powers, or take it back.
+   *
+   * Only the host may call this. The lobby stays with whoever made it now, so
+   * this is how a room the host is not in still has somebody who can moderate
+   * it — the powers move instead of the role. See `backend/game/privileges.py`.
+   */
+  setPrivileges: (
+    lobbyId: string,
+    userId: string | number,
+    granted: Partial<Record<'manage' | 'kick' | 'mute' | 'present', boolean>>,
+  ) => apiClient.post(`/game/lobbies/${lobbyId}/members/${userId}/privileges/`, granted),
+  kick: (lobbyId: string, userId: string | number) =>
+    apiClient.post(`/game/lobbies/${lobbyId}/members/${userId}/kick/`, {}),
 }
 
 export default CampusVoice
