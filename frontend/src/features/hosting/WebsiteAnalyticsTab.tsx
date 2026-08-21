@@ -1,4 +1,4 @@
-import { Clock, Eye, Gauge, Info, Laptop, TrendingUp, Users } from "lucide-react"
+import { Clock, Eye, Gauge, Laptop, Users } from "lucide-react"
 // These are chart primitives, not icons. lucide-react exports similarly named
 // icons, so importing them from there would have rendered a picture of a chart
 // instead of a chart.
@@ -50,6 +50,7 @@ export interface WebsiteAnalyticsPayload {
 }
 
 interface WebsiteAnalyticsTabProps {
+  /** Kept for the call site; the tab shows figures rather than the site. */
   website: Website
   analytics: WebsiteAnalyticsPayload | Record<string, unknown> | null
   /** Whether the request for these figures failed, as opposed to finding none. */
@@ -145,7 +146,6 @@ const DEVICE_COLOURS: Record<string, string> = {
 }
 
 export default function WebsiteAnalyticsTab({
-  website,
   analytics,
   failed = false,
 }: WebsiteAnalyticsTabProps) {
@@ -356,21 +356,6 @@ export default function WebsiteAnalyticsTab({
             </div>
           )}
         </div>
-      </div>
-
-      {/* Where the numbers come from, and how fresh they are. The panel this
-          replaces claimed to show real-time activity, counting users who did
-          not exist: the figures are rolled up from the server's own logs on a
-          timer, so there is no live number to show. */}
-      <div className="flex items-start gap-2 rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">
-        <Info className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />
-        <p>
-          Counted from the server's own request logs for{" "}
-          <span className="font-medium text-gray-900">{website.name}</span>, so nothing has to be
-          added to your pages. A visit is a page that was successfully served: images,
-          stylesheets, redirects and errors are not counted as reading, and neither are crawlers
-          — all of them still count towards bandwidth. Updated periodically rather than live.
-        </p>
       </div>
     </div>
   )
