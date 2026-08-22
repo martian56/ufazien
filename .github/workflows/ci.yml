@@ -15,6 +15,23 @@ permissions:
   contents: read
 
 jobs:
+  # The release notes are built by a script, and a release happens once — so
+  # the script is tested here, on the pull request, rather than discovered to
+  # be broken at the moment somebody pushes a tag.
+  release-notes:
+    name: Release notes generator
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run its tests
+        working-directory: .github/scripts
+        run: python -m unittest discover -p 'test_*.py' -v
+
   backend:
     name: Backend (Django)
     runs-on: ubuntu-latest

@@ -1,0 +1,87 @@
+name: Release
+
+# Tag pushes only. Nothing here builds or deploys — Coolify does that from the
+# server, and `CLAUDE.md` asks that CI is not given a deploy step. This job
+# writes down what went into a version and publishes it.
+on:
+  push:
+    tags:
+      - 'v*'
+
+# One release per tag, and never two runs racing to create the same one.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Publish the release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The whole history and every tag. The notes are the difference
+          # between this tag and the one before it, and a shallow clone has
+          # neither the commits nor the tag to compare against.
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Test the notes generator
+        # Before it writes anything. A release happens once and whatever it
+        # produces is what people read; finding out here that the generator is
+        # broken is much better than finding out from the published page.
+        working-directory: .github/scripts
+        run: python -m unittest discover -p 'test_*.py' -v
+
+      - name: Work out what this release is
+        id: about
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+
+          # A tag with a hyphen in its version is a pre-release by the
+          # semver convention: v1.2.0-rc.1, v2.0.0-beta. Marked as one so it
+          # does not become the "latest" release people are shown.
+          if [[ "${tag}" == *-* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Write the notes
+        run: |
+          python3 .github/scripts/release_notes.py \
+            "${{ steps.about.outputs.tag }}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            > "${RUNNER_TEMP}/notes.md"
+
+          # Worth seeing in the log even when the release publishes fine.
+          echo "## ${{ steps.about.outputs.tag }}" >> "$GITHUB_STEP_SUMMARY"
+          cat "${RUNNER_TEMP}/notes.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish it
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.about.outputs.tag }}
+          PRERELEASE: ${{ steps.about.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+          flags=(--title "${TAG}" --notes-file "${RUNNER_TEMP}/notes.md")
+          if [[ "${PRERELEASE}" == "true" ]]; then
+            flags+=(--prerelease)
+          fi
+
+          # Re-runnable. A workflow re-run on a tag that already has a release
+          # should bring the notes up to date rather than fail the job.
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            echo "Release ${TAG} exists; updating its notes."
+            gh release edit "${TAG}" "${flags[@]}"
+          else
+            gh release create "${TAG}" "${flags[@]}"
+          fi

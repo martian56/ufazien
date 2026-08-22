@@ -155,6 +155,22 @@ Coolify on a Hetzner VPS, not from CI. `ci.yml` runs tests and a frontend build 
 
 Config lives in Coolify environment variables, not in the repo. `settings.py` reads `DB_HOST`, `DB_PORT`, `ALLOWED_HOSTS`, `DJANGO_CORS_ALLOWED_ORIGINS`, `DJANGO_CSRF_TRUSTED_ORIGINS` and the `LIVEKIT_*` values from the environment.
 
+## Releases
+
+Push a tag beginning with `v` and `release.yml` publishes a GitHub release for
+it. It deploys nothing — Coolify still does that from the server.
+
+The notes are built by `.github/scripts/release_notes.py` from the commits
+between this tag and the one before it: what changed, grouped by area, with the
+pull request beside each line, then the numbers and who wrote it. It welcomes
+anybody whose first commit is in that range, matched on email address rather
+than name — the same person appears here as both `Martian` and `martian56`.
+
+Its tests run in CI, on every pull request, because a release happens once and
+whatever it produces is what people read. A tag with a hyphen in the version
+(`v1.2.0-rc.1`) publishes as a pre-release. Re-running the workflow on a tag
+updates the notes rather than failing.
+
 ## Working style
 
 - Branch off `main`; the repository has branch protection and expects pull requests.
