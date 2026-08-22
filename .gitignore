@@ -27,3 +27,8 @@ id_ed25519*
 
 # Installed dependencies and tooling caches, which are not source
 node_modules/
+
+# Python bytecode. `backend/.gitignore` covers the Django app; this catches the
+# rest, such as the release-notes script under `.github/scripts`.
+__pycache__/
+*.py[cod]
