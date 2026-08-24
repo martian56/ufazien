@@ -212,6 +212,24 @@ locks out everybody. Negative is worse than either — DRF indexes past the end
 of the header and every throttled request raises `IndexError`, so `settings.py`
 refuses to start rather than turning sign-in into a 500.
 
+**The real client address reaches the logs through `FORWARDED_ALLOW_IPS`.**
+uvicorn runs with `--proxy-headers`, so it takes the client from
+`X-Forwarded-For` rather than the TCP peer, which behind Traefik is always the
+proxy: every access log line used to read `172.18.0.x`. Which addresses may be
+trusted to send that header is uvicorn's own environment variable, set per
+deployment, so the range is not baked into the image. Unset it defaults to
+`127.0.0.1`, trusts nothing and logs the proxy, which is the behaviour this
+replaced.
+
+Never set it to `*`. With a trusted list uvicorn walks the header in reverse
+and takes the first host it does not trust, which is the one Traefik appended.
+With `*` it takes the leftmost entry instead, which the caller writes, so
+anybody could put whatever they liked in your logs.
+
+This does not touch rate limiting. DRF reads `HTTP_X_FORWARDED_FOR` itself and
+counts back `NUM_PROXIES` hops from the end; `--proxy-headers` only rewrites
+the ASGI client, which becomes `REMOTE_ADDR`, and leaves the header alone.
+
 ## Releases
 
 Push a tag beginning with `v` and `release.yml` publishes a GitHub release for

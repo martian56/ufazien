@@ -57,5 +57,12 @@ HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
 # Run the application
 # Note: Using single worker for WebSocket support (multiple workers don't work with WebSockets)
 ENTRYPOINT ["/app/entrypoint.sh"]
-CMD ["uvicorn", "ufazien.asgi:application", "--host", "0.0.0.0", "--port", "8000", "--timeout-keep-alive", "120"]
+# --proxy-headers makes uvicorn take the client address from X-Forwarded-For
+# instead of the TCP peer, which behind Traefik is always the proxy: every
+# access log line read 172.18.0.x. Which addresses may be trusted to send
+# that header comes from FORWARDED_ALLOW_IPS, uvicorn's own environment
+# variable, so the range is set per deployment rather than baked in here.
+# Unset it defaults to 127.0.0.1, which trusts nothing and logs the proxy,
+# so this fails closed to the behaviour it replaces.
+CMD ["uvicorn", "ufazien.asgi:application", "--host", "0.0.0.0", "--port", "8000", "--timeout-keep-alive", "120", "--proxy-headers"]
 
