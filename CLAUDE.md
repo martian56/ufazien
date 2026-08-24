@@ -61,6 +61,45 @@ starts at the API client, so a browser check still matters for anything visual. 
 
 **Never commit secrets.** `.env`, keys and certificates are gitignored. A private key was committed here once and is still in history.
 
+**`SECRET_KEY` is read from the environment and has no fallback.** There used
+to be a literal default, which made the published contents of this repository
+the signing key for anybody who had not set the variable — and everything
+Django signs comes from it, including the JWTs the API authenticates with.
+Guarding it behind `DEBUG` was not enough, because a box brought up with
+`DJANGO_DEBUG=true` still ran on the published key, so the default is gone and
+Django refuses to start without one in any mode. `SECRET_KEY=dev` locally, as
+the commands above already show. Setting it in production for the first time
+signs everybody out once; that is the rotation working.
+
+**Credentials are minted server-side, and a password is rotated on the server
+that holds it.** A hosting database's `username` and `password` are read-only
+on the serializer: the browser used to generate both with `Math.random()` and
+post them, and what it sent became the real credential. `change_password` runs
+`ALTER ROLE`/`ALTER USER` through `set_database_password` and writes the row
+only once the server has accepted it — it used to assign the field and save, so
+the dashboard showed a new password while the real user kept the old one.
+
+**A site's files are reached through `path_within`, never `startswith`.**
+`/srv/hosting/alice` starts with `/srv/hosting/a`, and people choose their own
+subdomains, so the prefix check that used to guard `delete_file` and
+`download_file` let a site called `a` read and delete files in every site whose
+name began with an `a`. It resolves with `realpath` and compares with
+`commonpath`, which also closes a symlink planted inside the site.
+
+**Subdomains go through `hosting/domains.py`.** The name becomes a directory on
+disk and the root nginx serves, so it is not free text: `check()` lower-cases
+it, rejects anything that is not a hostname, and refuses the reserved list —
+`admin`, `login`, `api` and the rest. A site on `login.ufazien.com`, served
+under the platform's own wildcard certificate, is a convincing place to ask
+somebody for a password.
+
+**Every site shares one php-fpm pool, so `open_basedir` is what separates
+them.** `hosting/nginx/hosting.conf` sets it per request from the subdomain
+`server_name` already captured; the pool is shared, so it cannot go in the pool
+config. `/tmp` has to stay in the list — sessions and uploads live there, and a
+basedir without it breaks any site that accepts a form. Verified by serving two
+sites and reading one from the other.
+
 ## Traps this codebase has
 
 **`requirements.txt` is UTF-16 with CRLF** (a PowerShell `pip freeze` artefact). pip copes; other tools may not. Preserve the encoding when editing it.
@@ -153,7 +192,25 @@ hall's benches, three metres apart for months.
 
 Coolify on a Hetzner VPS, not from CI. `ci.yml` runs tests and a frontend build only. Do not add a deploy step to it.
 
-Config lives in Coolify environment variables, not in the repo. `settings.py` reads `DB_HOST`, `DB_PORT`, `ALLOWED_HOSTS`, `DJANGO_CORS_ALLOWED_ORIGINS`, `DJANGO_CSRF_TRUSTED_ORIGINS` and the `LIVEKIT_*` values from the environment.
+Config lives in Coolify environment variables, not in the repo. `settings.py` reads `SECRET_KEY`, `DB_HOST`, `DB_PORT`, `ALLOWED_HOSTS`, `DJANGO_CORS_ALLOWED_ORIGINS`, `DJANGO_CSRF_TRUSTED_ORIGINS`, `NUM_PROXIES` and the `LIVEKIT_*` values from the environment.
+
+**Rate limiting counts hops, so `NUM_PROXIES` has to match the deployment.**
+DRF identifies a caller by address, and unset it uses the whole
+`X-Forwarded-For` header — which the caller writes and Traefik appends to
+rather than replaces, so anybody could rotate a made-up value and get a fresh
+budget for every attempt. Coolify puts one Traefik in front of the container,
+so it is 1. Putting another proxy in front — Cloudflare in proxy mode — makes
+it 2.
+
+Both ways of getting it wrong bite, and not symmetrically. DRF counts back from
+the *end* of the header, so **too high** reads too far left, into the part the
+caller wrote: at `2` against one real proxy, `X-Forwarded-For: FAKE, <client>`
+resolves to `FAKE` and identities rotate freely. **Too low** reads too far
+right, into the proxies: at `1` behind Cloudflare, every caller resolves to
+Cloudflare's address and shares one bucket, so one person guessing passwords
+locks out everybody. Negative is worse than either — DRF indexes past the end
+of the header and every throttled request raises `IndexError`, so `settings.py`
+refuses to start rather than turning sign-in into a 500.
 
 ## Releases
 

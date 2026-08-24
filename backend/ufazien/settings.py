@@ -25,12 +25,34 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv("SECRET_KEY", "django-insecure-default-key-for-development")
+#: Read from the environment, with no fallback, in every mode.
+#:
+#: There used to be a literal default here, which meant the published contents
+#: of this repository were the signing key for anybody who had not set the
+#: variable. Everything Django signs comes from this value — session cookies,
+#: password-reset links, and the JWTs the API authenticates with — so that let
+#: anybody who could read the source mint a token for any account.
+#:
+#: Guarding it behind `DEBUG` was not enough: a box brought up with
+#: `DJANGO_DEBUG=true` still ran on the published key. Removing the default is
+#: what actually settles it, and costs nothing — the README, CLAUDE.md and CI
+#: all set `SECRET_KEY` already.
+#:
+#: Setting it for the first time invalidates existing sessions and tokens:
+#: everybody is signed out once, which is the rotation working.
+SECRET_KEY = os.getenv("SECRET_KEY", "").strip()
+if not SECRET_KEY:
+    raise ImproperlyConfigured(
+        "SECRET_KEY is not set. Everything Django signs comes from it, "
+        "including the JWTs the API authenticates with, so there is no safe "
+        "default to fall back to. Set the SECRET_KEY environment variable "
+        "(SECRET_KEY=dev is fine for local development)."
+    )
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DJANGO_DEBUG", "False").strip().lower() in ("true", "1", "yes", "on")
 # Fix ALLOWED_HOSTS with fallback
+
 ALLOWED_HOSTS_ENV = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1,testserver,api.ufazien.com")
 ALLOWED_HOSTS = [host.strip() for host in ALLOWED_HOSTS_ENV.split(",") if host.strip()]
 
@@ -104,14 +126,77 @@ CORS_ALLOW_CREDENTIALS = True
 # Allow all headers for multipart/form-data uploads
 CORS_ALLOW_ALL_HEADERS = True
 
+#: Validated here rather than inline, because a bad value does not fail where
+#: it is set: a negative number makes DRF index past the end of the header, so
+#: every throttled request raises `IndexError` — a 500 on sign-in — and it does
+#: it at request time, not at boot.
+#:
+#: The default is 1 rather than nothing, because that is this deployment: one
+#: Traefik, in front of one container, and Coolify puts it there. A missing
+#: value is therefore right rather than merely tolerated, which is not true of
+#: `SECRET_KEY` above — there, any default at all is forgeable, so there is
+#: none.
+#: An empty value is treated as unset, not as a malformed one — Coolify hands
+#: over a variable that has been cleared as `''`, and refusing to boot over
+#: that would be a worse failure than the one being prevented.
+try:
+    NUM_PROXIES = int(os.getenv('NUM_PROXIES', '').strip() or '1')
+except ValueError:
+    raise ImproperlyConfigured(
+        f"NUM_PROXIES must be a whole number, not {os.getenv('NUM_PROXIES')!r}. "
+        "It is how many proxies sit in front of this application: 1 for the "
+        "Coolify deployment, which is one Traefik."
+    )
+
+if NUM_PROXIES < 0:
+    raise ImproperlyConfigured(
+        f"NUM_PROXIES cannot be negative (got {NUM_PROXIES}). It is a count of "
+        "proxies in front of this application: 0 when nothing is, 1 for the "
+        "Coolify deployment, which is one Traefik."
+    )
+
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.ScopedRateThrottle',
+    ],
     'DEFAULT_THROTTLE_RATES': {
         'feedback': '12/hour',  # 12 per hour = 1 per 5 minutes
+        # Signing in had no limit at all, so a password could be guessed as
+        # fast as the network allowed. Generous enough that somebody mistyping
+        # theirs a few times is unaffected.
+        'login': os.getenv('LOGIN_RATE_LIMIT', '10/min'),
+        'signup': os.getenv('SIGNUP_RATE_LIMIT', '20/hour'),
+        'password_reset': os.getenv('PASSWORD_RESET_RATE_LIMIT', '5/hour'),
     },
+    #: How many proxies sit in front of this application.
+    #:
+    #: Rate limiting identifies a caller by address, and unset, DRF uses the
+    #: whole `X-Forwarded-For` header as that identity. The header is written
+    #: by the caller and Traefik *appends* to it rather than replacing it, so
+    #: anybody could rotate a made-up value and get a fresh bucket for every
+    #: attempt — which is the rate limit not existing. Verified: with the
+    #: header rotated, thirteen wrong passwords in a row all returned 401.
+    #:
+    #: Set to the number of hops, so DRF counts back from the end of the header
+    #: and reads the address a proxy recorded rather than one the caller wrote.
+    #: Deployment is Coolify, which puts one Traefik in front of the container.
+    #:
+    #: Both directions of getting it wrong are worth knowing, and they are not
+    #: symmetric:
+    #:
+    #: - **Too high** reads too far left, into the part the caller wrote. With
+    #:   `2` against one real proxy, `X-Forwarded-For: FAKE, <client>` resolves
+    #:   to `FAKE`, and identities rotate freely. This is the insecure one.
+    #: - **Too low** reads too far right, into the proxies. With `1` against
+    #:   Cloudflare in front of Traefik, it resolves to Cloudflare's address,
+    #:   and everybody behind that edge shares one bucket — so one person
+    #:   guessing passwords locks out everybody else.
+    'NUM_PROXIES': NUM_PROXIES,
     'PAGE_SIZE': 10,  # Default page size for pagination
 }
 

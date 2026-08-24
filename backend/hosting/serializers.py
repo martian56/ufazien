@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from . import domains
 from .models import (
     SubscriptionPlan, UserSubscription, Website, Database, Domain,
     Deployment, SSLCertificate, BandwidthUsage, WebsiteAnalytics,
@@ -62,6 +63,22 @@ class DomainSerializer(serializers.ModelSerializer):
 
 
 class DatabaseSerializer(serializers.ModelSerializer):
+    """
+    A user's database, credentials included.
+
+    `password` is readable — the owner needs it to connect, and the queryset is
+    scoped to them — but no longer writable. The browser used to generate it
+    with `Math.random()` and post it, and whatever it sent became the real
+    password on the real database. `Math.random()` is not a cryptographic
+    generator: its state is recoverable from a handful of outputs, and the
+    shape was fixed besides. The server mints it now, from `uuid4()`, which is
+    `os.urandom` underneath.
+
+    `username` goes the same way and for the same reason: it was derived from
+    the site's name in the browser, which made it guessable, and it is not the
+    client's to choose.
+    """
+
     class Meta:
         model = Database
         fields = [
@@ -69,12 +86,9 @@ class DatabaseSerializer(serializers.ModelSerializer):
             'size_mb', 'created_at', 'updated_at', 'error_message', 'connection_info'
         ]
         read_only_fields = [
-            'id', 'status', 'host', 'port', 
+            'id', 'status', 'host', 'port', 'username', 'password',
             'size_mb', 'created_at', 'updated_at', 'error_message', 'connection_info'
         ]
-        extra_kwargs = {
-            'password': {'required': False}
-        }
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -115,15 +129,25 @@ class WebsiteSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Provide either domain_id or new_domain_name, not both")
         
         if new_domain_name:
-            # Validate domain name format
-            if not new_domain_name.strip():
-                raise serializers.ValidationError("new_domain_name cannot be empty")
-            
-            # Check if domain already exists
-            request = self.context.get('request')
-            if request and Domain.objects.filter(name=new_domain_name, user=request.user).exists():
-                raise serializers.ValidationError(f"Domain '{new_domain_name}' already exists")
-        
+            # Normalised and checked in one place — see `hosting/domains.py`.
+            # The name reaches the filesystem as the site's directory and nginx
+            # as the root it serves, so it is not free text.
+            try:
+                new_domain_name = domains.check(new_domain_name)
+            except ValueError as problem:
+                raise serializers.ValidationError({'new_domain_name': str(problem)})
+            data['new_domain_name'] = new_domain_name
+
+            # Taken by anybody, not just by the person asking. This was scoped
+            # to `user=request.user`, so claiming a name somebody else held
+            # passed validation and then hit the unique constraint as an
+            # IntegrityError — a 500 where 400 was meant, and a way to tell
+            # which subdomains exist by the shape of the failure.
+            if Domain.objects.filter(name=new_domain_name).exists():
+                raise serializers.ValidationError(
+                    {'new_domain_name': f"“{new_domain_name}” is already taken."}
+                )
+
         return data
 
 

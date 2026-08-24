@@ -140,10 +140,14 @@ export default function Databases() {
     }
 
     try {
+      // Through the hook, which routes a password-only update to the endpoint
+      // that changes it on the database server and then refetches the row.
+      // Calling that endpoint directly skips the refetch, and the Password
+      // field goes on showing the old value until the page is reloaded.
       await updateDatabase(databaseId, { password: newPassword })
       setChangingPassword(prev => ({ ...prev, [databaseId]: false }))
       setNewPasswords(prev => ({ ...prev, [databaseId]: '' }))
-      toast.success('Password updated.')
+      toast.success('Password changed. It may take a moment to take effect.')
     } catch (error) {
       toast.error('Could not update the password. ' + errorMessage(error))
     }

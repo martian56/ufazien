@@ -271,11 +271,22 @@ def quick_join(request):
     user_lobbies = LobbyMember.objects.filter(user=request.user).values_list('lobby_id', flat=True)
     queryset = queryset.exclude(id__in=user_lobbies)
     
-    # Apply preferences
-    if lobby_type == 'public':
-        queryset = queryset.filter(is_private=False)
-    elif lobby_type == 'private':
-        queryset = queryset.filter(is_private=True)
+    # Never a private lobby, whatever was asked for.
+    #
+    # `join_lobby` checks `lobby.password` before adding anybody. This path
+    # called `LobbyMember.objects.create()` directly, so asking for
+    # `preferred_lobby_type: 'private'` put the caller straight into somebody's
+    # password-protected lobby — voice and chat included — without the password
+    # being sent, known, or looked at. Quick join has nowhere to ask for one:
+    # it picks the lobby itself, so the caller could not supply the password
+    # even in principle. A private lobby is joined by id, through `join_lobby`.
+    if lobby_type == 'private':
+        return Response(
+            {'error': 'A private lobby has to be joined with its password. '
+                      'Open it from the lobby list instead.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    queryset = queryset.filter(is_private=False)
     
     if max_players:
         queryset = queryset.filter(max_players__lte=max_players)

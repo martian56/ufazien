@@ -1,3 +1,5 @@
+import logging
+
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from rest_framework.views import APIView
@@ -22,12 +24,16 @@ import os
 
 load_dotenv()
 
+logger = logging.getLogger(__name__)
+
 
 User = get_user_model()
 
 
 class SignupView(APIView):
     permission_classes = []
+    # Rate limited by IP. Creating accounts had no ceiling either.
+    throttle_scope = 'signup'
 
     def post(self, request):
         print(f"[SIGNUP] Request received - data keys: {list(request.data.keys())}")
@@ -35,7 +41,7 @@ class SignupView(APIView):
         if serializer.is_valid():
             print("[SIGNUP] Serializer valid, creating user")
             user = serializer.save()
-            print(f"[SIGNUP] User created - id={user.id}, email={user.email}, username={user.username}")
+            logger.info("Signup: created user id=%s", user.id)
             
             # Send welcome email
             try:
@@ -56,42 +62,47 @@ class SignupView(APIView):
 
 class LoginView(APIView):
     permission_classes = []
+    # Signing in had no limit at all, so a password could be guessed as fast as
+    # the network allowed. See `DEFAULT_THROTTLE_RATES` for the rate; it is
+    # generous enough that mistyping yours a few times is unaffected.
+    throttle_scope = 'login'
 
     def post(self, request):
-        print(f"[LOGIN] Request received - data keys: {list(request.data.keys())}")
+        # No email in the log line. Every attempt used to print the address
+        # somebody typed, which put user emails in the application logs — and
+        # a failed sign-in is exactly where somebody else's address might be.
+        logger.info("Login attempt received")
         serializer = LoginSerializer(data=request.data)
         if not serializer.is_valid():
-            print(f"[LOGIN] Validation failed: {serializer.errors}")
+            logger.info("Login rejected: the request was not valid")
             serializer.is_valid(raise_exception=True)
         
         email = serializer.validated_data["email"]
         password = serializer.validated_data["password"]
-        print(f"[LOGIN] Login attempt for email: {email}")
-        
+
         # Try authenticating with email as username first (for regular signup users)
         user = authenticate(request, username=email, password=password)
-        print(f"[LOGIN] First auth attempt result: {'SUCCESS' if user else 'FAILED'}")
         
         # If that fails, try to find user by email and authenticate with their actual username
         # This handles OAuth users who have username = email.split("@")[0]
         if user is None:
             try:
                 user_obj = User.objects.get(email=email)
-                print(f"[LOGIN] User found by email, attempting auth with username: {user_obj.username}")
                 # Try authenticating with the user's actual username
                 user = authenticate(request, username=user_obj.username, password=password)
-                print(f"[LOGIN] Second auth attempt result: {'SUCCESS' if user else 'FAILED'}")
+                logger.info("Login retry for user id=%s %s", user_obj.id,
+                            "succeeded" if user else "failed")
             except User.DoesNotExist:
-                print(f"[LOGIN] No user found with email: {email}")
+                logger.info("Login attempted for an address with no account")
                 user = None
         
         if user is not None:
-            print(f"[LOGIN] Login successful for user id={user.id}, email={user.email}")
+            logger.info("Login successful for user id=%s", user.id)
             # Send login alert email
             try:
                 NotificationService.send_login_alert_email(user, request)
             except Exception as e:
-                print(f"[LOGIN] WARNING: Failed to send login alert email to user id={user.id}: {str(e)}")
+                logger.warning("Login alert email failed for user id=%s: %s", user.id, e)
             
             refresh = RefreshToken.for_user(user)
             return Response({
@@ -99,55 +110,41 @@ class LoginView(APIView):
                 "refresh": str(refresh),
                 "user": UserSerializer(user, context={'request': request}).data
             })
-        print(f"[LOGIN] Login failed: Invalid credentials for email {email}")
+        logger.info("Login failed: invalid credentials")
         return Response({"detail": "Invalid credentials."}, status=status.HTTP_401_UNAUTHORIZED)
 
 class GoogleAuthCodeExchangeView(APIView):
     permission_classes = []
+    throttle_scope = 'login'
 
     def post(self, request):
-        print("=" * 80)
-        print("[GOOGLE OAUTH] Request received")
-        print(f"[GOOGLE OAUTH] Request method: {request.method}")
-        print(f"[GOOGLE OAUTH] Request path: {request.path}")
-        print(f"[GOOGLE OAUTH] Request data keys: {list(request.data.keys())}")
-        print(f"[GOOGLE OAUTH] Request META (relevant): {[(k, request.META.get(k)) for k in request.META.keys() if 'HTTP_' in k or 'CONTENT_TYPE' in k]}")
-        
+        # Shapes, not contents.
+        #
+        # This block used to print every `HTTP_*` header — `Authorization` and
+        # `Cookie` among them — forty characters of the authorization code
+        # across two lines, and the whole request body whenever the code was
+        # missing. An authorization code is a live credential: it is short and
+        # single-use, but until it is redeemed it exchanges for somebody's
+        # tokens, and logs outlive the exchange.
+        logger.info("Google OAuth: request carried %s", ", ".join(sorted(request.data.keys())))
+
         code = request.data.get("code")
         code_verifier = request.data.get("code_verifier")  # Optional PKCE parameter
-        print(f"[GOOGLE OAUTH] Code extracted: {code is not None}")
-        print(f"[GOOGLE OAUTH] Code verifier present: {code_verifier is not None}")
-        if code:
-            print(f"[GOOGLE OAUTH] Code length: {len(code)}")
-            print(f"[GOOGLE OAUTH] Code first 30 chars: {code[:30]}...")
-            print(f"[GOOGLE OAUTH] Code last 10 chars: ...{code[-10:]}")
-            if code_verifier:
-                print(f"[GOOGLE OAUTH] Code verifier length: {len(code_verifier)}")
-                print(f"[GOOGLE OAUTH] Using PKCE flow (mobile app)")
-            else:
-                print(f"[GOOGLE OAUTH] Using standard flow (web app)")
-        else:
-            print("[GOOGLE OAUTH] ERROR: Code is None or missing")
-            print(f"[GOOGLE OAUTH] Full request.data: {request.data}")
+        if not code:
+            logger.info("Google OAuth: rejected, no authorization code in the request")
             return Response({"error": "Missing code"}, status=status.HTTP_400_BAD_REQUEST)
+
+        logger.info("Google OAuth: %s flow", "PKCE" if code_verifier else "standard")
 
         CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
         CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
         REDIRECT_URI = "postmessage"
         
-        print(f"[GOOGLE OAUTH] Environment check:")
-        print(f"[GOOGLE OAUTH]   CLIENT_ID present: {bool(CLIENT_ID)}")
-        print(f"[GOOGLE OAUTH]   CLIENT_SECRET present: {bool(CLIENT_SECRET)}")
-        print(f"[GOOGLE OAUTH]   CLIENT_ID length: {len(CLIENT_ID) if CLIENT_ID else 0}")
-        print(f"[GOOGLE OAUTH]   CLIENT_SECRET length: {len(CLIENT_SECRET) if CLIENT_SECRET else 0}")
-        print(f"[GOOGLE OAUTH]   REDIRECT_URI: {REDIRECT_URI}")
-        
         if not CLIENT_ID or not CLIENT_SECRET:
-            print("[GOOGLE OAUTH] ERROR: Missing Google OAuth credentials in environment")
+            logger.error("Google OAuth: CLIENT_ID or CLIENT_SECRET is not set")
             return Response({"error": "Server configuration error: Missing Google OAuth credentials"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         try:
-            print("[GOOGLE OAUTH] Initializing Flow...")
             flow = Flow.from_client_config(
                 {
                     "web": {
@@ -165,43 +162,35 @@ class GoogleAuthCodeExchangeView(APIView):
                 ],
                 redirect_uri=REDIRECT_URI,
             )
-            print("[GOOGLE OAUTH] Flow initialized successfully")
-            
             # Token exchange with optional PKCE support
             if code_verifier:
-                print(f"[GOOGLE OAUTH] Attempting PKCE token exchange with code (length={len(code)}) and code_verifier (length={len(code_verifier)})...")
                 flow.fetch_token(code=code, code_verifier=code_verifier)
             else:
-                print(f"[GOOGLE OAUTH] Attempting standard token exchange with code (length={len(code)})...")
                 flow.fetch_token(code=code)
             credentials = flow.credentials
-            print("[GOOGLE OAUTH] Token exchange successful!")
-            print(f"[GOOGLE OAUTH] Token type: {type(credentials)}")
-            print(f"[GOOGLE OAUTH] Has access token: {hasattr(credentials, 'token')}")
+            logger.info("Google OAuth: token exchange succeeded")
 
-            # Get user info from Google
-            print("[GOOGLE OAUTH] Fetching user info from Google API...")
             oauth2 = build("oauth2", "v2", credentials=credentials)
             user_info = oauth2.userinfo().get().execute()
-            print(f"[GOOGLE OAUTH] User info retrieved. Keys: {list(user_info.keys())}")
             
             email = user_info.get("email")
             username = user_info.get("email").split("@")[0] if user_info.get("email") else None
             first_name = user_info.get("given_name", "")
             last_name = user_info.get("family_name", "")
             
-            print(f"[GOOGLE OAUTH] Extracted user data:")
-            print(f"[GOOGLE OAUTH]   Email: {email}")
-            print(f"[GOOGLE OAUTH]   Username: {username}")
-            print(f"[GOOGLE OAUTH]   First name: {first_name}")
-            print(f"[GOOGLE OAUTH]   Last name: {last_name}")
+            # Names, not values. `username` here is the address's local part,
+            # so printing it published most of the address; `user_info` is the
+            # whole Google profile, address and picture included.
+            logger.info("Google OAuth: profile carried %s", ", ".join(sorted(user_info.keys())))
 
             if not email:
-                print("[GOOGLE OAUTH] ERROR: No email returned from Google")
-                print(f"[GOOGLE OAUTH] Full user_info response: {user_info}")
+                logger.warning(
+                    "Google OAuth: no email in the profile; it carried %s",
+                    ", ".join(sorted(user_info.keys())),
+                )
                 return Response({"error": "No email returned from Google"}, status=status.HTTP_400_BAD_REQUEST)
 
-            print(f"[GOOGLE OAUTH] Creating/retrieving user with email: {email}")
+            logger.info("Google OAuth: resolving an account for the token address")
             user, created = User.objects.get_or_create(
                 email=email,
                 defaults={
@@ -212,49 +201,43 @@ class GoogleAuthCodeExchangeView(APIView):
             )
             
             if created:
-                print(f"[GOOGLE OAUTH] New user created - id={user.id}, email={user.email}, username={user.username}")
+                logger.info("Google OAuth: created user id=%s", user.id)
             else:
-                print(f"[GOOGLE OAUTH] Existing user found - id={user.id}, email={user.email}, username={user.username}")
+                logger.info("Google OAuth: matched existing user id=%s", user.id)
             
             # For OAuth users, explicitly set unusable password if newly created
             if created:
                 user.set_unusable_password()
                 user.save()
-                print(f"[GOOGLE OAUTH] Set unusable password for new user id={user.id}")
 
             # Send welcome email for new Google OAuth users
             if created:
                 try:
                     NotificationService.send_welcome_email(user)
-                    print(f"[GOOGLE OAUTH] Welcome email sent to new user id={user.id}")
                 except Exception as e:
-                    print(f"[GOOGLE OAUTH] WARNING: Failed to send welcome email to user id={user.id}: {str(e)}")
+                    logger.warning("Google OAuth: welcome email failed for user id=%s: %s", user.id, type(e).__name__)
             else:
                 # Send login alert for existing users
                 try:
                     NotificationService.send_login_alert_email(user, request)
-                    print(f"[GOOGLE OAUTH] Login alert email sent to existing user id={user.id}")
                 except Exception as e:
-                    print(f"[GOOGLE OAUTH] WARNING: Failed to send login alert email to user id={user.id}: {str(e)}")
+                    logger.warning("Google OAuth: login alert failed for user id=%s: %s", user.id, type(e).__name__)
 
             # Optionally update names if user exists and info has changed
             updated = False
             if not created:
                 if user.first_name != first_name:
-                    print(f"[GOOGLE OAUTH] Updating first_name for user id={user.id} from '{user.first_name}' to '{first_name}'")
                     user.first_name = first_name
                     updated = True
                 if user.last_name != last_name:
-                    print(f"[GOOGLE OAUTH] Updating last_name for user id={user.id} from '{user.last_name}' to '{last_name}'")
                     user.last_name = last_name
                     updated = True
                 if updated:
                     user.save()
-                    print(f"[GOOGLE OAUTH] Updated user profile for id={user.id}")
+                    logger.info("Google OAuth: refreshed the name on user id=%s", user.id)
 
             refresh = RefreshToken.for_user(user)
-            print(f"[GOOGLE OAUTH] Login successful for user id={user.id}, email={user.email}")
-            print("=" * 80)
+            logger.info("Google OAuth: login successful for user id=%s", user.id)
             return Response({
                 "access": str(refresh.access_token),
                 "refresh": str(refresh),
@@ -267,29 +250,27 @@ class GoogleAuthCodeExchangeView(APIView):
                 }
             })
         except Exception as e:
-            import traceback
-            error_type = type(e).__name__
             error_message = str(e)
-            error_traceback = traceback.format_exc()
-            
-            print("=" * 80)
-            print("[GOOGLE OAUTH] ERROR: Exception occurred")
-            print(f"[GOOGLE OAUTH] Error type: {error_type}")
-            print(f"[GOOGLE OAUTH] Error message: {error_message}")
-            print(f"[GOOGLE OAUTH] Full traceback:")
-            print(error_traceback)
-            print("=" * 80)
-            
-            # Log specific error types for better debugging
+
+            # The traceback goes to the log, where the operator can read it.
+            # It used to go to stdout *and* the message went back to the
+            # browser, and a failure from Google quotes what was sent — which
+            # on an `invalid_client` is the client secret.
+            logger.exception("Google OAuth: exchange failed")
+
             if "invalid_grant" in error_message.lower():
-                print("[GOOGLE OAUTH] DIAGNOSIS: Invalid grant error - Code may be expired, already used, or redirect_uri mismatch")
+                logger.info("Google OAuth: the code was expired, already used, "
+                            "or the redirect_uri did not match")
             elif "invalid_client" in error_message.lower():
-                print("[GOOGLE OAUTH] DIAGNOSIS: Invalid client error - CLIENT_ID or CLIENT_SECRET may be incorrect")
-            elif "redirect_uri_mismatch" in error_message.lower() or "redirect" in error_message.lower():
-                print("[GOOGLE OAUTH] DIAGNOSIS: Redirect URI mismatch - The redirect_uri used in OAuth flow doesn't match backend expectation")
-                print(f"[GOOGLE OAUTH] DIAGNOSIS: Backend expects redirect_uri: '{REDIRECT_URI}'")
-            
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+                logger.info("Google OAuth: CLIENT_ID or CLIENT_SECRET is wrong")
+            elif "redirect" in error_message.lower():
+                logger.info("Google OAuth: redirect_uri mismatch; this end expects %r",
+                            REDIRECT_URI)
+
+            return Response(
+                {"error": "Could not complete the Google sign-in. Please try again."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         
 def can_view_profile(viewer, target):
     """Whether `viewer` may see `target`'s full profile.

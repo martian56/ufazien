@@ -1,3 +1,5 @@
+import logging
+
 from django.shortcuts import render
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -17,6 +19,7 @@ from rest_framework.pagination import PageNumberPagination
 from collections import Counter
 from datetime import datetime, timedelta
 import hashlib
+import os
 import hmac
 import json
 import uuid
@@ -36,7 +39,13 @@ from .serializers import (
     SSLCertificateSerializer, WebsiteAnalyticsSerializer, BackupJobSerializer,
     InvoiceSerializer, ActivityLogSerializer
 )
-from .tasks import provision_database, compute_storage_for_user
+from .tasks import (
+    compute_storage_for_user,
+    generate_password,
+    provision_database,
+    sanitize_identifier,
+    set_database_password,
+)
 
 
 # Standard pagination for hosting endpoints
@@ -44,6 +53,34 @@ class StandardResultsSetPagination(PageNumberPagination):
     page_size = 20
     page_size_query_param = 'page_size'
     max_page_size = 100
+
+
+logger = logging.getLogger(__name__)
+
+
+def path_within(root: str, relative: str) -> str | None:
+    """
+    Resolve `relative` inside `root`, or None if it points anywhere else.
+
+    The two callers used to compare strings — `file_path.startswith(website_dir)`
+    — which is a prefix test, not a containment test. `/srv/hosting/alice`
+    starts with `/srv/hosting/a`, and subdomains are chosen by the person
+    registering them, so a site called `a` could read and delete files in every
+    site whose name began with an `a`. `commonpath` compares path components,
+    where `a` and `alice` are different names rather than a shared prefix.
+
+    `realpath` rather than `normpath`, so a symlink planted inside the site
+    cannot point out of it either.
+    """
+    root = os.path.realpath(root)
+    target = os.path.realpath(os.path.join(root, relative))
+    try:
+        if os.path.commonpath([root, target]) != root:
+            return None
+    except ValueError:
+        # Different drives, or a path that cannot be compared at all.
+        return None
+    return target
 
 
 class SubscriptionPlanViewSet(viewsets.ReadOnlyModelViewSet):
@@ -583,28 +620,28 @@ class WebsiteViewSet(viewsets.ModelViewSet):
         uploaded_files = request.FILES.getlist('files')
         saved_files = []
         
+        rejected = []
         for file in uploaded_files:
-            print(f"Upload debug: Processing file '{file.name}' (size: {file.size} bytes)")
-            
-            # Handle folder uploads - file.name includes relative path
-            if '/' in file.name:
-                # This is a file from a folder upload
-                file_path = os.path.join(website_dir, file.name)
-                # Create directory structure if it doesn't exist
-                file_dir = os.path.dirname(file_path)
-                os.makedirs(file_dir, exist_ok=True)
-                print(f"Upload debug: Created directory structure for '{file.name}' -> '{file_path}'")
-            else:
-                # Regular file upload
-                file_path = os.path.join(website_dir, file.name)
-                print(f"Upload debug: Regular file upload '{file.name}' -> '{file_path}'")
-            
+            # Checked here rather than trusted to arrive safe. Django reduces an
+            # uploaded name to its basename, which is what stops `../` from
+            # meaning anything — but that is Django's guarantee, not this
+            # function's, and the branch that used to be here tested for `/` in
+            # a name that can no longer contain one. Resolve it against the
+            # site's own directory and refuse anything that lands outside.
+            file_path = path_within(website_dir, file.name)
+            if file_path is None:
+                rejected.append(file.name)
+                continue
+
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+
             # Save file to disk
             with open(file_path, 'wb+') as destination:
                 for chunk in file.chunks():
                     destination.write(chunk)
             
             saved_files.append(file.name)
+
         self.write_env_file_from_dict(website.environment_variables or {}, website_dir)
 
         website.status = 'active'
@@ -615,6 +652,7 @@ class WebsiteViewSet(viewsets.ModelViewSet):
         return Response({
             'message': f'Uploaded {len(saved_files)} files',
             'files': saved_files,
+            'rejected': rejected,
             'website_url': f'http://{website.domain.name}'
         })
 
@@ -800,10 +838,8 @@ class WebsiteViewSet(viewsets.ModelViewSet):
 
         subdomain = website.domain.name.split('.')[0]
         website_dir = f"/srv/hosting/{subdomain}"
-        file_path = os.path.normpath(os.path.join(website_dir, filename))
-
-        # Prevent path traversal
-        if not file_path.startswith(os.path.abspath(website_dir)):
+        file_path = path_within(website_dir, filename)
+        if file_path is None:
             return Response({'error': 'invalid filename'}, status=400)
 
         if os.path.exists(file_path):
@@ -838,10 +874,8 @@ class WebsiteViewSet(viewsets.ModelViewSet):
 
         subdomain = website.domain.name.split('.')[0]
         website_dir = f"/srv/hosting/{subdomain}"
-        file_path = os.path.normpath(os.path.join(website_dir, filename))
-
-        # Prevent path traversal
-        if not file_path.startswith(os.path.abspath(website_dir)):
+        file_path = path_within(website_dir, filename)
+        if file_path is None:
             return Response({'error': 'invalid filename'}, status=400)
 
         if os.path.exists(file_path):
@@ -910,9 +944,13 @@ class DatabaseViewSet(viewsets.ModelViewSet):
                 f'Database limit exceeded. Upgrade your plan to create more databases.'
             )
         
-        # Use provided credentials from frontend, or leave blank to generate in task
-        username = serializer.validated_data.get('username', '')
-        password = serializer.validated_data.get('password', '')
+        # Minted here, never accepted from the client. The browser used to
+        # generate both with `Math.random()` and post them, and what it sent
+        # became the real credential on the real database. Generated up front
+        # rather than in the provisioning task so the create response can show
+        # the owner their password straight away.
+        username = sanitize_identifier(f'user_{uuid.uuid4().hex[:10]}')
+        password = generate_password()
 
         # Set port based on database type (postgres uses 5433 per request)
         db_type = serializer.validated_data.get('db_type', 'mysql')
@@ -980,9 +1018,26 @@ class DatabaseViewSet(viewsets.ModelViewSet):
                 {'error': 'Password must be at least 8 characters long'}, 
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
-        database.password = new_password
-        database.save()
+
+        # On the database server, not just on our row. This used to assign the
+        # field and save, so the dashboard showed a new password while the real
+        # role kept the old one — and somebody rotating a credential they
+        # believed had leaked ended up with neither working as they thought.
+        # The row is written by the task, once the server has accepted it.
+        #
+        # `CELERY_TASK_ALWAYS_EAGER` runs this inline and re-raises, so a
+        # database server that cannot be reached would otherwise surface as a
+        # 500 — and the caller would have no idea whether the old password
+        # still works. Say so instead, and leave the stored one alone.
+        try:
+            set_database_password.delay(str(database.id), new_password)
+        except Exception:
+            logger.exception('Password rotation failed for database %s', database.id)
+            return Response(
+                {'error': 'The database server could not be reached, so the password '
+                          'was not changed. Your existing password still works.'},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
         
         # Log activity
         ActivityLog.objects.create(

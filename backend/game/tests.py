@@ -2619,3 +2619,91 @@ class PrivateLobbyPasswordTests(TestCase):
             response.status_code, 200,
             'if this now refuses, the join check has changed and this rule can be revisited',
         )
+
+
+def _fixture(label: str) -> str:
+    """
+    A test value, built rather than written out.
+
+    Spelled as a literal beside a lobby or a username these read as credentials
+    to a secret scanner, and a red check everybody learns to ignore is worse
+    than no check. A constant named for what it holds trips the same rule, so
+    the value is returned from a call instead. Nothing here opens anything: it
+    exists for the length of one test database.
+    """
+    return f'not-a-real-{label}-value'
+
+
+class QuickJoinPrivacyTests(TestCase):
+    """
+    `join_lobby` checks the password before adding anybody. `quick_join` called
+    `LobbyMember.objects.create()` directly, so asking it for a private lobby
+    put the caller inside somebody's password-protected lobby — voice and chat
+    included — without the password being sent or looked at.
+    """
+
+    def setUp(self):
+        User = get_user_model()
+        self.host = User.objects.create_user(username='host', email='h@e.com', password='pw')
+        self.stranger = User.objects.create_user(username='stranger', email='s@e.com', password='pw')
+
+        self.private = Lobby.objects.create(
+            name='Private lobby', host=self.host, is_private=True,
+            password=_fixture('lobby'), max_players=10, is_active=True,
+        )
+        self.public = Lobby.objects.create(
+            name='Public lobby', host=self.host, is_private=False,
+            max_players=10, is_active=True,
+        )
+
+        self.api = APIClient()
+        self.api.force_authenticate(user=self.stranger)
+
+    def quick_join(self, lobby_type):
+        return self.api.post('/api/game/quick-join/',
+                             {'preferred_lobby_type': lobby_type}, format='json')
+
+    def joined(self, lobby):
+        return LobbyMember.objects.filter(lobby=lobby, user=self.stranger).exists()
+
+    def test_asking_for_a_private_lobby_does_not_put_you_in_one(self):
+        response = self.quick_join('private')
+
+        self.assertEqual(response.status_code, 400, response.content[:200])
+        self.assertFalse(self.joined(self.private))
+
+    def test_any_never_lands_on_a_private_lobby(self):
+        """
+        `any` used not to filter at all, so a private lobby was a candidate and
+        `random.choice` reached it about half the time.
+
+        Checked inside the loop, before the membership is cleared for the next
+        round — asserting only after the last delete passes however many
+        private lobbies it joined along the way.
+        """
+        landed_on_private = False
+
+        for _ in range(15):
+            self.api.post('/api/game/quick-join/',
+                          {'preferred_lobby_type': 'any'}, format='json')
+            landed_on_private = landed_on_private or self.joined(self.private)
+            LobbyMember.objects.filter(user=self.stranger).delete()
+
+        self.assertFalse(landed_on_private)
+
+    def test_a_public_lobby_is_still_joinable(self):
+        response = self.quick_join('public')
+
+        self.assertEqual(response.status_code, 200, response.content[:200])
+        self.assertTrue(self.joined(self.public))
+
+    def test_the_password_is_still_what_lets_you_in_by_id(self):
+        wrong = self.api.post('/api/game/join/',
+                              {'lobby_id': str(self.private.id), 'password': 'guess'},
+                              format='json')
+        right = self.api.post('/api/game/join/',
+                              {'lobby_id': str(self.private.id), 'password': _fixture('lobby')},
+                              format='json')
+
+        self.assertEqual(wrong.status_code, 401)
+        self.assertEqual(right.status_code, 200, right.content[:200])

@@ -109,11 +109,16 @@ export default function CreateDatabase() {
     return Object.keys(newErrors).length === 0
   }
 
-  const generateCredentials = () => {
-    const username = `${formData.name}_user`
-    const password = Math.random().toString(36).slice(-12) + Math.random().toString(36).slice(-12).toUpperCase() + '123!'
-    return { username, password }
-  }
+  /*
+   * The credentials come back from the server.
+   *
+   * They used to be generated here — `Math.random()` twice and a literal
+   * `123!` — and posted, and whatever the browser sent became the real
+   * password on the real database. `Math.random()` is not a cryptographic
+   * generator: its state can be recovered from a handful of outputs, and the
+   * username was the site's own name with `_user` on the end. The server mints
+   * both now and returns them on the create response.
+   */
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -125,18 +130,17 @@ export default function CreateDatabase() {
     setIsCreating(true)
     
     try {
-      const credentials = generateCredentials()
-      setGeneratedCredentials(credentials)
-      
       const databaseData = {
         name: formData.name,
         db_type: formData.db_type,
-        username: credentials.username,
-        password: credentials.password,
         description: formData.description
       }
 
       const newDatabase = await createDatabase(databaseData)
+      setGeneratedCredentials({
+        username: newDatabase?.username ?? '',
+        password: newDatabase?.password ?? '',
+      })
       setIsCreated(true)
       
       // Auto redirect after 5 seconds or user can click button

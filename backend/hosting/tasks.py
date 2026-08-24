@@ -1,12 +1,17 @@
+import logging
 import os
 import uuid
 import json
+from contextlib import closing
+
 from celery import shared_task
 from django.conf import settings
 from django.utils import timezone
 
 from .models import Database, ActivityLog
 from .models import Website
+
+logger = logging.getLogger(__name__)
 
 # Lazy imports for DB drivers
 def _import_psycopg2():
@@ -205,6 +210,86 @@ def provision_database(self, database_id: str):
         except Exception:
             # final failure
             return
+
+
+@shared_task(bind=True, default_retry_delay=10, max_retries=3)
+def set_database_password(self, database_id: str, new_password: str):
+    """
+    Change the password on the database itself, not just in our row.
+
+    `change_password` used to assign `database.password` and save, which
+    changed what the dashboard displays and nothing else: the real Postgres
+    role or MySQL user kept the password it had. Somebody rotating a
+    credential they thought had leaked was left with the old one still live and
+    a new one that does not connect — the worst of both.
+
+    Identifiers go through `sql.Identifier` on Postgres, and the MySQL user is
+    parameterised. Neither takes the password as anything but a bound value.
+    """
+    try:
+        db = Database.objects.get(id=database_id)
+    except Database.DoesNotExist:
+        return
+
+    username = db.username
+    if not username:
+        return
+
+    try:
+        if db.db_type == 'postgresql':
+            psycopg2, sql = _import_psycopg2()
+            if not psycopg2:
+                raise RuntimeError('psycopg2 not installed')
+
+            admin_conf = getattr(settings, 'DB_ADMIN', {}).get('postgresql', {})
+            # `closing`, because the task retries three times and this runs for
+            # every rotation: closing only on the success path leaks a socket
+            # on the admin server each time an `ALTER` fails.
+            with closing(psycopg2.connect(
+                host=admin_conf.get('host', 'postgres.ufazien.com'),
+                port=int(admin_conf.get('port', 5433)),
+                user=admin_conf.get('user'),
+                password=admin_conf.get('password'),
+            )) as conn:
+                conn.autocommit = True
+                with conn.cursor() as cur:
+                    cur.execute(
+                        sql.SQL("ALTER ROLE {} WITH PASSWORD %s;").format(sql.Identifier(username)),
+                        [new_password],
+                    )
+        else:
+            pymysql = _import_pymysql()
+            if not pymysql:
+                raise RuntimeError('pymysql not installed')
+
+            admin_conf = getattr(settings, 'DB_ADMIN', {}).get('mysql', {})
+            with closing(pymysql.connect(
+                host=admin_conf.get('host', 'mysql.ufazien.com'),
+                port=int(admin_conf.get('port', 3306)),
+                user=admin_conf.get('user'),
+                password=admin_conf.get('password'),
+                autocommit=True,
+            )) as conn:
+                with closing(conn.cursor()) as cur:
+                    cur.execute("ALTER USER %s@'%%' IDENTIFIED BY %s;", (username, new_password))
+                    cur.execute("FLUSH PRIVILEGES;")
+
+        # Only once the server has taken it. Storing it first would leave the
+        # dashboard showing a password that does not work.
+        db.password = new_password
+        db.error_message = ''
+        db.save(update_fields=['password', 'error_message'])
+        return {'status': 'ok', 'database_id': str(db.id)}
+
+    except Exception as exc:
+        # The detail goes to the log, not to the row. `error_message` is
+        # serialised to the owner, and a driver's connection error names the
+        # admin host, port and user it tried — which is the platform's
+        # infrastructure, not theirs.
+        logger.exception('Could not change the password for database %s', db.id)
+        db.error_message = 'Could not change the password. Please try again.'
+        db.save(update_fields=['error_message'])
+        raise self.retry(exc=exc) from exc
 
 
 @shared_task(bind=True, default_retry_delay=10, max_retries=3)
