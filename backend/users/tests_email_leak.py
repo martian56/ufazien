@@ -331,3 +331,34 @@ class ReviewFixTests(APITestCase):
                 User.objects.create_user(
                     username="unique.name", email="two@example.com", password="pw"
                 )
+
+
+class SomebodyElsesAddressTests(APITestCase):
+    """Eight production accounts carried an address that was not their own."""
+
+    def test_a_username_holding_another_persons_address_is_replaced(self):
+        user = User.objects.create_user(
+            username="someone.else@gmail.com", email="mine@example.com", password="pw",
+            first_name="Safiya", last_name="Mirzayeva",
+        )
+        call_command("backfill_usernames", "--apply", stdout=StringIO())
+        user.refresh_from_db()
+        self.assertEqual(user.username, "safiya.mirzayeva")
+        self.assertNotIn("@", user.username)
+
+    def test_a_reserved_username_is_replaced_too(self):
+        user = User.objects.create_user(
+            username="admin", email="admin.person@example.com", password="pw",
+            first_name="Ad", last_name="Min",
+        )
+        call_command("backfill_usernames", "--apply", stdout=StringIO())
+        user.refresh_from_db()
+        self.assertNotEqual(user.username, "admin")
+
+    def test_a_clean_username_is_still_left_alone(self):
+        user = User.objects.create_user(
+            username="perfectly.fine", email="other@example.com", password="pw"
+        )
+        call_command("backfill_usernames", "--apply", stdout=StringIO())
+        user.refresh_from_db()
+        self.assertEqual(user.username, "perfectly.fine")
