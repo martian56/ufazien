@@ -1,6 +1,8 @@
 from rest_framework import serializers
 from .models import AcademicYear, Semester, Course, UserGPA, CourseGrade, GPATarget, UserInputState
 
+from api.sanitize import PlainTextFieldsMixin
+
 class AcademicYearSerializer(serializers.ModelSerializer):
     class Meta:
         model = AcademicYear
@@ -30,10 +32,12 @@ class CourseGradeSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ('gpa_points', 'letter_grade')
 
-class UserGPASerializer(serializers.ModelSerializer):
+class UserGPASerializer(PlainTextFieldsMixin, serializers.ModelSerializer):
     course_grades = CourseGradeSerializer(many=True, read_only=True)
     course_count = serializers.SerializerMethodField()
-    
+
+    plain_text_fields = {"name": dict(max_length=100)}
+
     class Meta:
         model = UserGPA
         fields = '__all__'
@@ -42,7 +46,7 @@ class UserGPASerializer(serializers.ModelSerializer):
     def get_course_count(self, obj):
         return obj.course_grades.count()
 
-class NestedCourseGradeSerializer(serializers.ModelSerializer):
+class NestedCourseGradeSerializer(PlainTextFieldsMixin, serializers.ModelSerializer):
     """A grade being created as part of its parent calculation.
 
     CourseGradeSerializer uses fields = '__all__', which makes user_gpa a
@@ -52,15 +56,19 @@ class NestedCourseGradeSerializer(serializers.ModelSerializer):
     create() below has always set the parent itself.
     """
 
+    plain_text_fields = {"course_name": dict(max_length=100)}
+
     class Meta:
         model = CourseGrade
         exclude = ['user_gpa']
         read_only_fields = ('gpa_points', 'letter_grade')
 
 
-class CreateUserGPASerializer(serializers.ModelSerializer):
+class CreateUserGPASerializer(PlainTextFieldsMixin, serializers.ModelSerializer):
     course_grades = NestedCourseGradeSerializer(many=True, write_only=True)
-    
+
+    plain_text_fields = {"name": dict(max_length=100)}
+
     class Meta:
         model = UserGPA
         fields = ['name', 'calculation_type', 'course_grades']
@@ -79,10 +87,12 @@ class CreateUserGPASerializer(serializers.ModelSerializer):
         user_gpa.calculate_overall_gpa()
         return user_gpa
 
-class GPATargetSerializer(serializers.ModelSerializer):
+class GPATargetSerializer(PlainTextFieldsMixin, serializers.ModelSerializer):
     target_semester_name = serializers.CharField(source='target_semester.name', read_only=True)
     target_year_name = serializers.CharField(source='target_year.name', read_only=True)
-    
+
+    plain_text_fields = {"description": dict(max_length=200)}
+
     class Meta:
         model = GPATarget
         fields = '__all__'

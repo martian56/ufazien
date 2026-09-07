@@ -1,9 +1,11 @@
 from rest_framework import serializers
 
+from api.sanitize import PlainTextFieldsMixin
+
 from .models import CalendarEvent
 
 
-class CalendarEventSerializer(serializers.ModelSerializer):
+class CalendarEventSerializer(PlainTextFieldsMixin, serializers.ModelSerializer):
     """The UI uses camelCase for these three; keep both spellings available."""
 
     startTime = serializers.TimeField(source='start_time', required=False)
@@ -11,6 +13,14 @@ class CalendarEventSerializer(serializers.ModelSerializer):
     courseCode = serializers.CharField(
         source='course_code', required=False, allow_blank=True
     )
+
+    plain_text_fields = {
+        "title": dict(max_length=200),
+        "description": dict(max_length=1000, keep_newlines=True),
+        "location": dict(max_length=200),
+        "professor": dict(max_length=100),
+        "course_code": dict(max_length=20),
+    }
 
     class Meta:
         model = CalendarEvent

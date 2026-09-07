@@ -2,12 +2,20 @@ from rest_framework import serializers
 from .models import AverageSchema, SchemaField, UserSchemaGrades, FieldGrade, SavedSchema
 from django.contrib.auth.models import User
 
-class SchemaFieldSerializer(serializers.ModelSerializer):
+from api.sanitize import PlainTextFieldsMixin, plain_text
+
+class SchemaFieldSerializer(PlainTextFieldsMixin, serializers.ModelSerializer):
+    plain_text_fields = {"name": dict(max_length=100)}
+
     class Meta:
         model = SchemaField
         fields = ['id', 'name', 'weight', 'order']
 
-class AverageSchemaSerializer(serializers.ModelSerializer):
+class AverageSchemaSerializer(PlainTextFieldsMixin, serializers.ModelSerializer):
+    plain_text_fields = {
+        "name": dict(max_length=100),
+        "description": dict(max_length=2000, keep_newlines=True),
+    }
     fields = SchemaFieldSerializer(many=True, read_only=True)
     creator_full_name = serializers.CharField(source='creator.get_full_name', read_only=True)
     creator_username = serializers.CharField(source='creator.username', read_only=True)
@@ -46,7 +54,7 @@ class UserSchemaGradesSerializer(serializers.ModelSerializer):
     def get_weighted_average(self, obj):
         return obj.calculate_weighted_average()
 
-class CreateSchemaSerializer(serializers.Serializer):
+class CreateSchemaSerializer(PlainTextFieldsMixin, serializers.Serializer):
     name = serializers.CharField(max_length=100)
     description = serializers.CharField(allow_blank=True, required=False)
     fields = serializers.ListField(
@@ -54,22 +62,29 @@ class CreateSchemaSerializer(serializers.Serializer):
             child=serializers.CharField()
         )
     )
-    
+
+    plain_text_fields = {
+        "name": dict(max_length=100),
+        "description": dict(max_length=2000, keep_newlines=True),
+    }
+
     def validate_fields(self, value):
         if not value:
             raise serializers.ValidationError("At least one field is required")
-        
+
         for field in value:
             if 'name' not in field or 'weight' not in field:
                 raise serializers.ValidationError("Each field must have 'name' and 'weight'")
-            
+
             try:
                 weight = float(field['weight'])
                 if weight <= 0:
                     raise serializers.ValidationError("Weight must be positive")
             except (ValueError, TypeError):
                 raise serializers.ValidationError("Weight must be a valid number")
-        
+
+            field['name'] = plain_text(field['name'], max_length=100)
+
         return value
 
 class SavedSchemaSerializer(serializers.ModelSerializer):
