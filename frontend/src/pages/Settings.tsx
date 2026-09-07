@@ -199,6 +199,7 @@ const Settings = () => {
       const updateData = {
         first_name: profileData.firstName,
         last_name: profileData.lastName,
+        username: profileData.username.trim(),
         email: profileData.email,
         major: profileData.major, // Send the code directly (CS, CH, CE, OGE, GE, UD)
         year: profileData.year,
@@ -458,9 +459,13 @@ const Settings = () => {
                       <Input
                         id="username"
                         value={profileData.username}
-                        disabled
-                        className="bg-gray-50 border-gray-200 rounded-xl"
+                        onChange={(e) => handleProfileChange("username", e.target.value)}
+                        aria-describedby="username-hint"
+                        className="border-gray-300 focus:border-blue-500 focus:ring-blue-500 rounded-xl"
                       />
+                      <p id="username-hint" className="text-xs text-gray-500">
+                        Shown on your posts and profile. It cannot be your email address.
+                      </p>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="major" className="text-sm font-semibold text-gray-700">

@@ -17,7 +17,8 @@ from .serializers import (
     UserSerializer,
     UserSettingsSerializer,
 )
-from .models import UserSettings
+from .models import User, UserSettings
+from . import usernames
 from api.services.notification_service import NotificationService
 import os
 
@@ -86,15 +87,15 @@ class LoginView(APIView):
         # If that fails, try to find user by email and authenticate with their actual username
         # This handles OAuth users who have username = email.split("@")[0]
         if user is None:
-            try:
-                user_obj = User.objects.get(email=email)
-                # Try authenticating with the user's actual username
-                user = authenticate(request, username=user_obj.username, password=password)
-                logger.info("Login retry for user id=%s %s", user_obj.id,
-                            "succeeded" if user else "failed")
-            except User.DoesNotExist:
+            candidates = list(User.objects.filter(email__iexact=email).order_by("id"))
+            if not candidates:
                 logger.info("Login attempted for an address with no account")
-                user = None
+            for candidate in candidates:
+                user = authenticate(request, username=candidate.username, password=password)
+                logger.info("Login retry for user id=%s %s", candidate.id,
+                            "succeeded" if user else "failed")
+                if user is not None:
+                    break
         
         if user is not None:
             logger.info("Login successful for user id=%s", user.id)
@@ -174,7 +175,6 @@ class GoogleAuthCodeExchangeView(APIView):
             user_info = oauth2.userinfo().get().execute()
             
             email = user_info.get("email")
-            username = user_info.get("email").split("@")[0] if user_info.get("email") else None
             first_name = user_info.get("given_name", "")
             last_name = user_info.get("family_name", "")
             
@@ -191,14 +191,22 @@ class GoogleAuthCodeExchangeView(APIView):
                 return Response({"error": "No email returned from Google"}, status=status.HTTP_400_BAD_REQUEST)
 
             logger.info("Google OAuth: resolving an account for the token address")
-            user, created = User.objects.get_or_create(
-                email=email,
-                defaults={
-                    "username": username,
-                    "first_name": first_name,
-                    "last_name": last_name,
-                }
-            )
+            existing = User.objects.filter(email__iexact=email).first()
+            if existing is not None:
+                user, created = existing, False
+            else:
+                user = User.objects.create(
+                    email=email,
+                    username=usernames.for_person(
+                        first_name,
+                        last_name,
+                        lambda candidate: User.objects.filter(username__iexact=candidate).exists(),
+                        email=email,
+                    ),
+                    first_name=first_name,
+                    last_name=last_name,
+                )
+                created = True
             
             if created:
                 logger.info("Google OAuth: created user id=%s", user.id)

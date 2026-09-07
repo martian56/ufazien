@@ -84,6 +84,7 @@ class AuthTests(TestCase):
     def setUp(self):
         # Set up any necessary data for the tests
         self.user_data = {
+            'username': 'test.user',
             'first_name': 'testuser',
             'last_name': 'testuser',
             'email': 'testuser@example.com',
