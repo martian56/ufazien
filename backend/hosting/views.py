@@ -83,6 +83,32 @@ def path_within(root: str, relative: str) -> str | None:
     return target
 
 
+HOSTING_ROOT = "/srv/hosting"
+
+
+def site_directory(label: str) -> str | None:
+    """The directory a site's files live in, or None if `label` is not a name.
+
+    `path_within` guards the file endpoints, where the site root is derived
+    from a domain and `domains.check()` has already refused anything that is
+    not a hostname. Deletion had no such guarantee: a website with no domain
+    fell back to `Website.name`, which is a plain `CharField` nobody validates,
+    and the result went straight to `shutil.rmtree`. A site called `../../etc`
+    deleted `/etc`.
+
+    A site directory is always an immediate child of the hosting root, so that
+    is the property checked here rather than mere containment: `a/b` resolves
+    inside the tree and would still be wrong.
+    """
+    if not label or label in (".", ".."):
+        return None
+    root = os.path.realpath(HOSTING_ROOT)
+    target = os.path.realpath(os.path.join(root, label))
+    if os.path.dirname(target) != root or target == root:
+        return None
+    return target
+
+
 class SubscriptionPlanViewSet(viewsets.ReadOnlyModelViewSet):
     """
     ViewSet for subscription plans - read only for users to see available plans
@@ -560,10 +586,10 @@ class WebsiteViewSet(viewsets.ModelViewSet):
             subdomain = instance.domain.name.split('.')[0]
         else:
             subdomain = instance.name
-        
+
         # Delete the website folder if it exists
-        website_dir = f"/srv/hosting/{subdomain}"
-        if os.path.exists(website_dir):
+        website_dir = site_directory(subdomain)
+        if website_dir and os.path.exists(website_dir):
             try:
                 shutil.rmtree(website_dir)
             except Exception as e:
@@ -1195,7 +1221,25 @@ class DomainViewSet(viewsets.ModelViewSet):
         # Check if domain is being used by any websites
         websites_using_domain = Website.objects.filter(domain=instance)
         website_names = [website.name for website in websites_using_domain]
-        
+
+        # A domain nobody builds on still has files, and nginx keeps serving
+        # them: it maps a request to a directory by `server_name`, and knows
+        # nothing about these rows. Deleting the row alone left the site up.
+        # `testphp.ufazien.com` outlived its owner's intent that way for a
+        # year, and a later assessment reported it as a live web shell.
+        #
+        # Only when no website references the domain. A website that does is
+        # set to NULL rather than deleted, and its files are still its own.
+        if not website_names:
+            site_dir = site_directory(instance.name.split('.')[0])
+            if site_dir and os.path.exists(site_dir):
+                import shutil
+
+                try:
+                    shutil.rmtree(site_dir)
+                except OSError as error:
+                    logger.warning("could not remove %s: %s", site_dir, error)
+
         # Delete the domain (this will cascade delete the SSL certificate due to OneToOne relationship)
         instance.delete()
         

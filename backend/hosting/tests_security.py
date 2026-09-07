@@ -7,6 +7,7 @@ regression in any of them is a way back in rather than a style problem.
 
 import os
 import tempfile
+from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
@@ -805,3 +806,106 @@ class ProxyHopStartupTests(TestCase):
 
         self.assertTrue(started, stderr[-400:])
         self.assertEqual(value, '2')
+
+
+class SiteDirectoryTests(TestCase):
+    """Deletion had no equivalent of `path_within`, and needed one.
+
+    The file endpoints derive the site root from a domain, and `domains.check()`
+    has already refused anything that is not a hostname. `perform_destroy` fell
+    back to `Website.name` when a site had no domain, which is a plain
+    CharField nobody validates, and handed the result to `shutil.rmtree`.
+
+    `Domain.on_delete` is SET_NULL, so a site loses its domain whenever the
+    domain is deleted. Reaching the fallback is a normal thing to do.
+    """
+
+    def test_an_ordinary_name_resolves_inside_the_tree(self):
+        import os
+
+        from hosting.views import HOSTING_ROOT, site_directory
+
+        resolved = site_directory('alice')
+        self.assertEqual(resolved, os.path.join(os.path.realpath(HOSTING_ROOT), 'alice'))
+
+    def test_climbing_out_of_the_tree_is_refused(self):
+        from hosting.views import site_directory
+
+        for label in ('../etc', '../../etc', '..', '../../../', 'a/../../etc'):
+            self.assertIsNone(site_directory(label), label)
+
+    def test_a_nested_path_is_refused(self):
+        """A site directory is an immediate child, so `a/b` is wrong even inside."""
+        from hosting.views import site_directory
+
+        self.assertIsNone(site_directory('alice/public'))
+
+    def test_the_root_itself_is_refused(self):
+        from hosting.views import site_directory
+
+        for label in ('', '.', '/'):
+            self.assertIsNone(site_directory(label), repr(label))
+
+    def test_an_absolute_path_cannot_escape(self):
+        from hosting.views import site_directory
+
+        self.assertIsNone(site_directory('/etc'))
+
+    def test_a_prefix_neighbour_is_still_its_own_directory(self):
+        from hosting.views import site_directory
+
+        self.assertNotEqual(site_directory('a'), site_directory('alice'))
+
+
+class DomainDeletionFileTests(TestCase):
+    """A domain row is not the only thing that keeps a site up.
+
+    nginx maps a request to a directory by `server_name` and knows nothing
+    about these rows, so deleting the row left the files served. That is how
+    `testphp.ufazien.com` stayed reachable long after its owner was done with
+    it, and how a later assessment came to report it as a live web shell.
+    """
+
+    def setUp(self):
+        from rest_framework.test import APIClient
+
+        from hosting.models import Domain
+
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username='owner.one', email='owner@example.com', password='pw'
+        )
+        self.api = APIClient()
+        self.api.force_authenticate(user=self.user)
+        self.domain = Domain.objects.create(
+            name='oldsite.ufazien.com', domain_type='subdomain', user=self.user
+        )
+
+    def delete_domain(self):
+        with mock.patch('hosting.views.os.path.exists', return_value=True), \
+                mock.patch('shutil.rmtree') as rmtree:
+            response = self.api.delete(f'/api/hosting/domains/{self.domain.id}/')
+        return response, rmtree
+
+    def test_an_orphaned_domain_takes_its_directory_with_it(self):
+        response, rmtree = self.delete_domain()
+        self.assertIn(response.status_code, (200, 204), response.status_code)
+        rmtree.assert_called_once()
+        self.assertTrue(rmtree.call_args[0][0].endswith('oldsite'))
+
+    def test_a_domain_a_website_still_uses_keeps_its_files(self):
+        """The website survives with domain set to NULL; its files are its own."""
+        from hosting.models import Website
+
+        Website.objects.create(name='Live', user=self.user, domain=self.domain)
+        _, rmtree = self.delete_domain()
+        rmtree.assert_not_called()
+
+    def test_a_domain_whose_label_would_escape_deletes_nothing(self):
+        from hosting.models import Domain
+
+        self.domain = Domain.objects.create(
+            name='../etc', domain_type='custom', user=self.user
+        )
+        _, rmtree = self.delete_domain()
+        rmtree.assert_not_called()
