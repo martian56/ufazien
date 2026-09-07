@@ -35,6 +35,19 @@ class Command(BaseCommand):
             raise CommandError("--limit cannot be negative.")
         return limit
 
+    @staticmethod
+    def needs_replacing(user):
+        """Any username that should not exist, not only one matching its owner.
+
+        `reveals_email` compares a handle against its own address, so it never
+        saw the accounts that carry somebody else's: eight people here had an
+        address in the username field that was not theirs, which publishes a
+        third party's rather than their own.
+        """
+        if usernames.reveals_email(user.username, user.email):
+            return True
+        return usernames.check(user.username, user.email) is not None
+
     def handle(self, *args, **options):
         keep = {name.strip().lower() for name in options["keep"] if name.strip()}
 
@@ -49,7 +62,7 @@ class Command(BaseCommand):
         for user in User.objects.order_by("id").iterator(chunk_size=500):
             if user.username.lower() in keep:
                 continue
-            if not usernames.reveals_email(user.username, user.email):
+            if not self.needs_replacing(user):
                 continue
             affected.append(user)
             if limit and len(affected) >= limit:
@@ -89,9 +102,8 @@ class Command(BaseCommand):
 
         remaining = sum(
             1
-            for user in User.objects.only("username", "email").iterator(chunk_size=500)
-            if user.username.lower() not in keep
-            and usernames.reveals_email(user.username, user.email)
+            for user in User.objects.only("username", "email", "first_name", "last_name").iterator(chunk_size=500)
+            if user.username.lower() not in keep and self.needs_replacing(user)
         )
         self.stdout.write(self.style.SUCCESS(f"Renamed {changed}."))
         if skipped:
