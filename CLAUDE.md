@@ -100,6 +100,45 @@ config. `/tmp` has to stay in the list — sessions and uploads live there, and 
 basedir without it breaks any site that accepts a form. Verified by serving two
 sites and reading one from the other.
 
+**A username must never be an email address, or the local part of one.** Both
+signup paths used to derive it from the address: `SignupSerializer` used the
+whole thing and the Google exchange used `email.split("@")[0]`. Usernames are
+public, so 337 of 539 accounts published their owner's address on every post
+and nameplate, and 188 more published its local part. The serializer never
+leaked `email` at all; `UserSerializer.to_representation` has always stripped
+it. It was the username the whole time.
+
+`users/usernames.py` owns this. `check()` refuses an address, your own local
+part, a reserved name and anything that is not a handle. `for_person()` derives
+`first.last` and falls back to a generated handle, and counts a name that lands
+on the address by coincidence as taken. Azerbaijani names need the
+transliteration table there: NFKD decomposes `ö` and `ş`, but `ə` and `ı` are
+letters rather than accented Latin, so it deleted them and `Əliyev Rəşad` came
+out as `liyev.r.sad`.
+
+`manage.py backfill_usernames` replaces any username `check()` refuses. Its
+first version only compared a handle against its owner's address, which missed
+eight accounts carrying somebody else's.
+
+**Plain-text fields are cleaned where they are stored.** `api/sanitize.py`
+holds `plain_text` and `PlainTextFieldsMixin`. It is a mixin rather than
+`validate_<field>` methods because the write path is usually a different
+serializer from the read path: guarding `GroupSerializer` looks complete and
+leaves `GroupCreateSerializer`, the one that actually stores a group,
+untouched.
+
+Escaping alone is wrong for these. `a < b` stored as `a &lt; b` renders as the
+entity once React escapes it again, so entities are resolved afterwards and
+anything tag-shaped is dropped. That pattern needs a letter straight after the
+bracket, so `a < b` and `I <3 this` survive as themselves.
+
+**Blog HTML goes through `bleach`, on an allowlist.** `blog/security.py` used
+to escape everything and then restore the allowed tags by regex with their
+attributes intact, so it removed the four event handlers it named and nothing
+else: `onerror` was refused while `onfocus` with `autofocus` was stored live.
+It also refused any post that merely mentioned `document.cookie`, so nobody
+could write about the thing it defends against.
+
 ## Traps this codebase has
 
 **`requirements.txt` is UTF-16 with CRLF** (a PowerShell `pip freeze` artefact). pip copes; other tools may not. Preserve the encoding when editing it.
