@@ -106,9 +106,11 @@ class BehaviourTests(TestCase):
         serializer = WebsiteSerializer(data={
             "name": PAYLOAD, "description": PAYLOAD, "website_type": "static",
         })
-        serializer.is_valid()
-        self.assertTrue(inert(serializer.validated_data.get("name", "")))
-        self.assertTrue(inert(serializer.validated_data.get("description", "")))
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertIn("name", serializer.validated_data)
+        self.assertTrue(inert(serializer.validated_data["name"]))
+        self.assertTrue(inert(serializer.validated_data["description"]))
+        self.assertIn("Study Group", serializer.validated_data["name"])
 
     def test_the_color_field_is_left_alone(self):
         """A CSS token is not display text; sanitising it would be wrong."""
