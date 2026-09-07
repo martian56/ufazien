@@ -1,6 +1,6 @@
 """Rewrite usernames that hand out the address they belong to."""
 
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from users import usernames
@@ -29,6 +29,12 @@ class Command(BaseCommand):
             help="Only process this many, for a cautious first run.",
         )
 
+    def limit_from(self, options):
+        limit = options["limit"]
+        if limit < 0:
+            raise CommandError("--limit cannot be negative.")
+        return limit
+
     def handle(self, *args, **options):
         keep = {name.strip().lower() for name in options["keep"] if name.strip()}
 
@@ -37,15 +43,17 @@ class Command(BaseCommand):
         def taken(candidate):
             return candidate.lower() in held
 
-        affected = [
-            user
-            for user in User.objects.order_by("id")
-            if user.username.lower() not in keep
-            and usernames.reveals_email(user.username, user.email)
-        ]
+        limit = self.limit_from(options)
 
-        if options["limit"]:
-            affected = affected[: options["limit"]]
+        affected = []
+        for user in User.objects.order_by("id").iterator(chunk_size=500):
+            if user.username.lower() in keep:
+                continue
+            if not usernames.reveals_email(user.username, user.email):
+                continue
+            affected.append(user)
+            if limit and len(affected) >= limit:
+                break
 
         if not affected:
             self.stdout.write("Nothing to do: no username reveals its address.")
@@ -71,16 +79,24 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING("Dry run. Re-run with --apply to write."))
             return
 
+        changed = 0
         with transaction.atomic():
             for user, handle in renames:
-                User.objects.filter(pk=user.pk).update(username=handle)
+                changed += User.objects.filter(
+                    pk=user.pk, username=user.username, email=user.email
+                ).update(username=handle)
+        skipped = len(renames) - changed
 
-        remaining = [
-            user
-            for user in User.objects.only("username", "email")
+        remaining = sum(
+            1
+            for user in User.objects.only("username", "email").iterator(chunk_size=500)
             if user.username.lower() not in keep
             and usernames.reveals_email(user.username, user.email)
-        ]
-        self.stdout.write(self.style.SUCCESS(f"Renamed {len(renames)}."))
+        )
+        self.stdout.write(self.style.SUCCESS(f"Renamed {changed}."))
+        if skipped:
+            self.stdout.write(
+                self.style.WARNING(f"{skipped} changed underneath us and were left alone.")
+            )
         if remaining:
-            self.stdout.write(self.style.ERROR(f"{len(remaining)} still reveal an address."))
+            self.stdout.write(self.style.ERROR(f"{remaining} still reveal an address."))

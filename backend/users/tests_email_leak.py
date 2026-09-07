@@ -274,3 +274,60 @@ class GoogleDerivationTests(APITestCase):
 
     def test_an_azerbaijani_name_is_not_emptied(self):
         self.assertEqual(usernames.for_person("Əlvin", "Məmmədov", self.taken), "elvin.memmedov")
+
+
+class ReviewFixTests(APITestCase):
+    """The five things review found, each with the failure it prevents."""
+
+    def test_signup_without_an_email_is_refused_not_crashed(self):
+        response = self.client.post(
+            "/api/auth/signup/",
+            {"username": "no.email", "first_name": "A", "last_name": "B", "password": "pw12345678"},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("email", response.data)
+
+    def test_signup_with_a_blank_email_is_refused(self):
+        response = self.client.post(
+            "/api/auth/signup/",
+            {"username": "blank.email", "email": "", "first_name": "A", "last_name": "B",
+             "password": "pw12345678"},
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_a_negative_limit_is_refused(self):
+        from django.core.management.base import CommandError
+
+        User.objects.create_user(username="x@example.com", email="x@example.com", password="pw")
+        with self.assertRaises(CommandError):
+            call_command("backfill_usernames", "--apply", "--limit", "-1", stdout=StringIO())
+
+    def test_a_limit_stops_after_that_many(self):
+        for n in range(4):
+            User.objects.create_user(
+                username=f"u{n}@example.com", email=f"u{n}@example.com", password="pw"
+            )
+        call_command("backfill_usernames", "--apply", "--limit", "2", stdout=StringIO())
+        renamed = sum(1 for u in User.objects.all() if "@" not in u.username)
+        self.assertEqual(renamed, 2)
+
+    def test_a_row_that_changed_underneath_is_left_alone(self):
+        """The rename is keyed on the username it read, not on the id alone."""
+        user = User.objects.create_user(
+            username="race@example.com", email="race@example.com", password="pw",
+            first_name="Race", last_name="Case",
+        )
+        User.objects.filter(pk=user.pk).update(username="chosen.by.them")
+        call_command("backfill_usernames", "--apply", stdout=StringIO())
+        user.refresh_from_db()
+        self.assertEqual(user.username, "chosen.by.them")
+
+    def test_the_database_refuses_a_case_insensitive_duplicate(self):
+        from django.db import IntegrityError, transaction
+
+        User.objects.create_user(username="Unique.Name", email="one@example.com", password="pw")
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                User.objects.create_user(
+                    username="unique.name", email="two@example.com", password="pw"
+                )

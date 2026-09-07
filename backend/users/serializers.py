@@ -12,6 +12,7 @@ User = get_user_model()
 class SignupSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
     username = serializers.CharField()
+    email = serializers.EmailField(required=True, allow_blank=False)
 
     class Meta:
         model = User

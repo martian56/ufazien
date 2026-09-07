@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
+from django.db.models.functions import Lower
 
 """
 # UFAZ Offers Bachelor's Degree Programs in 
@@ -40,6 +41,14 @@ class User(AbstractUser):
     )
     gpa = models.DecimalField(max_digits=3, decimal_places=2, default=0.00)
     completed_credits = models.PositiveIntegerField(default=0)
+
+    class Meta(AbstractUser.Meta):
+        constraints = [
+            models.UniqueConstraint(
+                Lower("username"),
+                name="users_user_username_ci_unique",
+            ),
+        ]
 
     def __str__(self):
         return self.get_full_name()
