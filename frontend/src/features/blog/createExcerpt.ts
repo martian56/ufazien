@@ -8,14 +8,16 @@
 /**
  * Strip markup by letting the browser parse it, rather than by regex.
  *
- * The element is never attached to the document, so scripts and inline
- * handlers in the HTML do not run: only its text is read back out.
+ * Parsed into an inert document rather than assigned to an element's
+ * innerHTML. A detached element still belongs to the live document, and a
+ * browser may begin loading an `<img>` placed in one, which is enough to fire
+ * an `onerror` handler. A document from `DOMParser` fetches nothing and runs
+ * nothing, so only its text ever comes back out.
  */
 export function stripHtmlTags(html: string | null | undefined): string {
   if (!html) return ''
-  const holder = document.createElement('div')
-  holder.innerHTML = html
-  return holder.textContent || ''
+  const parsed = new DOMParser().parseFromString(html, 'text/html')
+  return parsed.body.textContent || ''
 }
 
 export function createExcerpt(content: string | null | undefined, maxLength = 150): string {

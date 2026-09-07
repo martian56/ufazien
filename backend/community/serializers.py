@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from api.sanitize import PlainTextFieldsMixin, plain_text
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from .models import (
@@ -76,6 +77,18 @@ class GroupSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'owner']
     
+    def validate_name(self, value):
+        return plain_text(value, max_length=100)
+
+    def validate_description(self, value):
+        return plain_text(value, max_length=500, keep_newlines=True)
+
+    def validate_course_code(self, value):
+        return plain_text(value, max_length=20)
+
+    def validate_professor(self, value):
+        return plain_text(value, max_length=100)
+
     def get_is_joined(self, obj):
         request = self.context.get('request')
         if request and request.user.is_authenticated:
@@ -114,8 +127,15 @@ class GroupSerializer(serializers.ModelSerializer):
         return [tag.strip().lower() for tag in value if tag.strip()]
 
 
-class GroupCreateSerializer(serializers.ModelSerializer):
+class GroupCreateSerializer(PlainTextFieldsMixin, serializers.ModelSerializer):
     """Serializer for creating groups"""
+
+    plain_text_fields = {
+        "name": dict(max_length=100),
+        "description": dict(max_length=500, keep_newlines=True),
+        "course_code": dict(max_length=20),
+        "professor": dict(max_length=100),
+    }
     class Meta:
         model = Group
         fields = [
@@ -138,8 +158,12 @@ class GroupCreateSerializer(serializers.ModelSerializer):
         return group
 
 
-class GroupMessageSerializer(serializers.ModelSerializer):
+class GroupMessageSerializer(PlainTextFieldsMixin, serializers.ModelSerializer):
     """Serializer for group messages"""
+
+    plain_text_fields = {
+        "content": dict(max_length=2000, keep_newlines=True),
+    }
     sender = UserBasicSerializer(read_only=True)
     
     class Meta:
@@ -156,8 +180,13 @@ class GroupMessageSerializer(serializers.ModelSerializer):
         return super().create(validated_data)
 
 
-class ForumSerializer(serializers.ModelSerializer):
+class ForumSerializer(PlainTextFieldsMixin, serializers.ModelSerializer):
     """Serializer for forum model"""
+
+    plain_text_fields = {
+        "title": dict(max_length=200),
+        "description": dict(max_length=1000, keep_newlines=True),
+    }
     moderators = UserBasicSerializer(many=True, read_only=True)
     post_count = serializers.ReadOnlyField()
     member_count = serializers.ReadOnlyField()
@@ -275,8 +304,13 @@ class ForumPostSerializer(serializers.ModelSerializer):
         return super().create(validated_data)
 
 
-class ForumPostCreateSerializer(serializers.ModelSerializer):
+class ForumPostCreateSerializer(PlainTextFieldsMixin, serializers.ModelSerializer):
     """Serializer for creating forum posts"""
+
+    plain_text_fields = {
+        "title": dict(max_length=200),
+        "content": dict(max_length=10000, keep_newlines=True),
+    }
     forum_id = serializers.UUIDField(write_only=True)
     
     class Meta:
@@ -297,8 +331,12 @@ class ForumPostCreateSerializer(serializers.ModelSerializer):
         return super().create(validated_data)
 
 
-class PrivateMessageSerializer(serializers.ModelSerializer):
+class PrivateMessageSerializer(PlainTextFieldsMixin, serializers.ModelSerializer):
     """Serializer for private messages"""
+
+    plain_text_fields = {
+        "content": dict(max_length=2000, keep_newlines=True),
+    }
     sender = UserBasicSerializer(read_only=True)
     
     class Meta:

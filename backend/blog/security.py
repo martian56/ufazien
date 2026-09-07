@@ -2,7 +2,9 @@
 Security utilities for the blog application
 """
 import re
-import html
+
+import bleach
+from bleach.css_sanitizer import CSSSanitizer
 from urllib.parse import urlparse
 from django.utils.html import strip_tags
 from django.core.exceptions import ValidationError
@@ -43,46 +45,54 @@ class SecurityUtils:
         r'<form',
     ]
     
+    ALLOWED_ATTRIBUTES = {
+        "*": ["class", "style"],
+        "a": ["href", "title", "target", "rel"],
+        "img": ["src", "alt", "title", "width", "height"],
+        "ol": ["start"],
+    }
+
+    ALLOWED_PROTOCOLS = ["http", "https", "mailto"]
+
+    ALLOWED_CSS_PROPERTIES = [
+        "color", "background-color", "text-align", "text-decoration",
+        "font-style", "font-weight",
+    ]
+
     @classmethod
     def sanitize_html_content(cls, content):
-        """
-        Sanitize HTML content for blog posts
-        """
+        """Reduce blog HTML to the tags and attributes a post may carry."""
         if not content:
             return ''
-        
-        # Convert to string if not already
-        content = str(content)
-        
-        # Check for suspicious patterns
-        for pattern in cls.SUSPICIOUS_PATTERNS:
-            if re.search(pattern, content, re.IGNORECASE):
-                raise ValidationError(f"Suspicious content detected: {pattern}")
-        
-        # Basic HTML escaping for security
-        # Note: In production, use a proper HTML sanitizer like bleach
-        content = html.escape(content, quote=False)
-        
-        # Allow specific safe HTML tags back using regex to handle attributes
-        for tag in cls.ALLOWED_TAGS:
-            # Handle opening tags with attributes (e.g., <img src="...">)
-            pattern = rf'&lt;{tag}(\s[^&]*?)?&gt;'
-            replacement = rf'<{tag}\1>'
-            content = re.sub(pattern, replacement, content)
-            
-            # Handle self-closing tags with attributes (e.g., <img src="..." />)
-            pattern = rf'&lt;{tag}(\s[^&]*?)?/&gt;'
-            replacement = rf'<{tag}\1/>'
-            content = re.sub(pattern, replacement, content)
-            
-            # Handle closing tags (e.g., </p>)
-            if tag not in ['br', 'hr', 'img']:  # Skip self-closing tags
-                pattern = rf'&lt;/{tag}&gt;'
-                replacement = rf'</{tag}>'
-                content = re.sub(pattern, replacement, content)
-        
-        return content
-    
+
+        css_sanitizer = CSSSanitizer(allowed_css_properties=cls.ALLOWED_CSS_PROPERTIES)
+        cleaned = bleach.clean(
+            str(content),
+            tags=set(cls.ALLOWED_TAGS),
+            attributes=cls.ALLOWED_ATTRIBUTES,
+            protocols=cls.ALLOWED_PROTOCOLS,
+            css_sanitizer=css_sanitizer,
+            strip=True,
+            strip_comments=True,
+        )
+        return cls._force_safe_link_rel(cleaned)
+
+    @classmethod
+    def _force_safe_link_rel(cls, html_text):
+        """`target="_blank"` without `noopener` hands the opener to the page."""
+
+        def fix(match):
+            tag = match.group(0)
+            if 'target=' not in tag:
+                return tag
+            if re.search(r'rel\s*=\s*"[^"]*noopener', tag):
+                return tag
+            if re.search(r'rel\s*=\s*"', tag):
+                return re.sub(r'rel\s*=\s*"', 'rel="noopener noreferrer ', tag, count=1)
+            return tag[:-1] + ' rel="noopener noreferrer">'
+
+        return re.sub("<a[^>]*>", fix, html_text)
+
     @classmethod
     def validate_image_url(cls, url):
         """
