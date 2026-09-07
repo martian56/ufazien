@@ -1025,3 +1025,55 @@ class SiteLabelCollisionTests(TestCase):
         self.assertEqual(response.status_code, 400, response.data)
         self.assertIn('new_domain_name', response.data)
         self.assertIn('alice', str(response.data['new_domain_name']))
+
+
+class PhpHardeningConfigTests(TestCase):
+    """The php-fpm pool is shared, so `disable_functions` is a tenant boundary.
+
+    `open_basedir` stops a PHP script reading another site's files, but only
+    inside PHP. A function that forks a helper process escapes it, and the
+    helper is not bound by `disable_functions` either. The classic route is
+    `putenv('LD_PRELOAD=...')` followed by `mail()`, which forks
+    `/usr/sbin/sendmail` (a real busybox applet in this image) with the
+    attacker's shared object preloaded. Disabling `putenv` removes the only way
+    PHP userland can set `LD_PRELOAD`, and disabling the mail functions removes
+    the fork.
+    """
+
+    def hardening(self):
+        import os
+
+        from django.conf import settings
+
+        path = os.path.join(
+            os.path.dirname(settings.BASE_DIR),
+            'hosting', 'php', 'conf.d', 'zz-hardening.ini',
+        )
+        values = {}
+        with open(path, encoding='utf-8') as handle:
+            for line in handle:
+                line = line.strip()
+                if not line or line.startswith(('#', ';')) or '=' not in line:
+                    continue
+                key, _, value = line.partition('=')
+                values[key.strip()] = value.strip()
+        return values
+
+    def test_the_ld_preload_bypass_functions_are_disabled(self):
+        disabled = set(self.hardening().get('disable_functions', '').split(','))
+        for name in ('putenv', 'mail', 'mb_send_mail', 'dl'):
+            self.assertIn(name, disabled, name)
+
+    def test_the_exec_family_stays_disabled(self):
+        disabled = set(self.hardening().get('disable_functions', '').split(','))
+        for name in ('exec', 'passthru', 'shell_exec', 'system', 'popen',
+                     'proc_open', 'pcntl_exec', 'pcntl_fork'):
+            self.assertIn(name, disabled, name)
+
+    def test_remote_includes_are_off(self):
+        values = self.hardening()
+        self.assertEqual(values.get('allow_url_fopen'), '0')
+        self.assertEqual(values.get('allow_url_include'), '0')
+
+    def test_runtime_extension_loading_is_off(self):
+        self.assertEqual(self.hardening().get('enable_dl'), '0')
