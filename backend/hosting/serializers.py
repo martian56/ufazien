@@ -1,4 +1,7 @@
 from rest_framework import serializers
+
+from api.sanitize import PlainTextFieldsMixin
+
 from . import domains
 from .models import (
     SubscriptionPlan, UserSubscription, Website, Database, Domain,
@@ -146,14 +149,19 @@ class DatabaseSerializer(serializers.ModelSerializer):
         return data
 
 
-class WebsiteSerializer(serializers.ModelSerializer):
+class WebsiteSerializer(PlainTextFieldsMixin, serializers.ModelSerializer):
     domain = DomainSerializer(read_only=True)
     domain_id = serializers.IntegerField(write_only=True, required=False, allow_null=True, help_text="ID of existing domain to use")
     new_domain_name = serializers.CharField(write_only=True, required=False, allow_blank=True, help_text="Name of new domain to create")
     database = DatabaseSerializer(read_only=True)
     database_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
     url = serializers.ReadOnlyField()
-    
+
+    plain_text_fields = {
+        "name": dict(max_length=100),
+        "description": dict(max_length=2000, keep_newlines=True),
+    }
+
     class Meta:
         model = Website
         fields = [
