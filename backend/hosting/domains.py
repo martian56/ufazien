@@ -72,6 +72,18 @@ def subdomain_of(name: str) -> str | None:
     return label or None
 
 
+def site_label(name: str) -> str:
+    """The directory a domain resolves to, which is not always its own.
+
+    Every file endpoint derives the site root as `name.split('.')[0]`, so this
+    is the part of a domain that decides whose files are reached. Under the
+    base domain it is the subdomain and `check()` guarantees it is a single
+    label. A custom domain is not constrained that way: `alice.attacker.com`
+    is a perfectly good hostname whose first label is somebody else's site.
+    """
+    return normalise(name).split('.')[0]
+
+
 def check(name: str) -> str:
     """
     The name to store, or raise `ValueError` saying why not.
