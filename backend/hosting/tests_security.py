@@ -909,3 +909,119 @@ class DomainDeletionFileTests(TestCase):
         )
         _, rmtree = self.delete_domain()
         rmtree.assert_not_called()
+
+
+class DomainEndpointValidationTests(TestCase):
+    """`domains.check()` guarded website creation but not the domain endpoint.
+
+    `POST /api/hosting/domains/` went through `DomainSerializer`, which named
+    `name` as a writable field and validated nothing, straight to
+    `serializer.save()`. Every file endpoint then derives the site root from
+    that name, so a name nobody checked chose the directory.
+    """
+
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username='tenant.one', email='one@example.com', password='pw'
+        )
+        self.api = APIClient()
+        self.api.force_authenticate(user=self.user)
+
+    def claim(self, name, domain_type='custom'):
+        return self.api.post(
+            '/api/hosting/domains/', {'name': name, 'domain_type': domain_type}, format='json'
+        )
+
+    def test_a_traversing_name_is_refused(self):
+        """`'../etc'.split('.')[0]` is empty, which roots the site at /srv/hosting."""
+        for name in ('../etc', '../../srv', 'a/../../etc', '.ufazien.com', 'not a domain'):
+            response = self.claim(name)
+            self.assertEqual(response.status_code, 400, f'{name} -> {response.status_code}')
+            self.assertFalse(Domain.objects.filter(name=name).exists(), name)
+
+    def test_a_reserved_subdomain_is_still_refused_here(self):
+        response = self.claim('admin.ufazien.com', domain_type='subdomain')
+        self.assertEqual(response.status_code, 400)
+
+    def test_a_dotted_subdomain_is_refused(self):
+        response = self.claim('a.b.ufazien.com', domain_type='subdomain')
+        self.assertEqual(response.status_code, 400)
+
+    def test_an_ordinary_subdomain_is_accepted(self):
+        response = self.claim('mysite.ufazien.com', domain_type='subdomain')
+        self.assertIn(response.status_code, (200, 201), response.data)
+
+    def test_a_custom_domain_of_your_own_is_accepted(self):
+        response = self.claim('luxmart.example')
+        self.assertIn(response.status_code, (200, 201), response.data)
+
+    def test_the_name_is_stored_normalised(self):
+        self.claim('MySite.UFAZIEN.com', domain_type='subdomain')
+        self.assertTrue(Domain.objects.filter(name='mysite.ufazien.com').exists())
+
+
+class SiteLabelCollisionTests(TestCase):
+    """A valid hostname can still name somebody else's directory.
+
+    The site root is the domain's first label. Under the base domain that is
+    the subdomain, and it is unique because the whole name is. A custom domain
+    is only checked for syntax, so `alice.attacker.com` passes every check and
+    resolves to `/srv/hosting/alice`. `path_within` cannot help: it measures
+    containment against that root, and the root is the victim's.
+    """
+
+    def setUp(self):
+        User = get_user_model()
+        self.victim = User.objects.create_user(
+            username='alice.one', email='alice@example.com', password='pw'
+        )
+        self.attacker = User.objects.create_user(
+            username='mallory.one', email='mallory@example.com', password='pw'
+        )
+        Domain.objects.create(
+            name='alice.ufazien.com', domain_type='subdomain', user=self.victim
+        )
+        self.api = APIClient()
+        self.api.force_authenticate(user=self.attacker)
+
+    def claim(self, name, domain_type='custom'):
+        return self.api.post(
+            '/api/hosting/domains/', {'name': name, 'domain_type': domain_type}, format='json'
+        )
+
+    def test_a_custom_domain_cannot_borrow_another_tenants_label(self):
+        response = self.claim('alice.attacker-owned.com')
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertFalse(Domain.objects.filter(name='alice.attacker-owned.com').exists())
+
+    def test_the_subdomain_itself_is_still_refused(self):
+        response = self.claim('alice.ufazien.com', domain_type='subdomain')
+        self.assertEqual(response.status_code, 400)
+
+    def test_a_label_nobody_holds_is_allowed(self):
+        response = self.claim('mallory.attacker-owned.com')
+        self.assertIn(response.status_code, (200, 201), response.data)
+
+    def test_your_own_label_is_not_held_against_you(self):
+        """One person may point two names at their own site."""
+        Domain.objects.create(
+            name='mallory.ufazien.com', domain_type='subdomain', user=self.attacker
+        )
+        response = self.claim('mallory.example.org')
+        self.assertIn(response.status_code, (200, 201), response.data)
+
+    def test_a_website_cannot_claim_the_label_either(self):
+        """The website path creates a domain too, and needs the same check.
+
+        Asserted on the field and not merely on the status: website creation
+        has other reasons to answer 400, and this passed against the unfixed
+        code by hitting one of them.
+        """
+        response = self.api.post('/api/hosting/websites/', {
+            'name': 'Mine', 'website_type': 'static',
+            'new_domain_name': 'alice.attacker-owned.com',
+        }, format='json')
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertIn('new_domain_name', response.data)
+        self.assertIn('alice', str(response.data['new_domain_name']))

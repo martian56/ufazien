@@ -53,13 +53,61 @@ class UserSubscriptionSerializer(serializers.ModelSerializer):
 
 
 class DomainSerializer(serializers.ModelSerializer):
+    """
+    A domain, whose name is a filesystem path before it is an address.
+
+    `domains.check()` was wired into the website creation path and not into
+    this one, so `POST /api/hosting/domains/` took the name exactly as typed.
+    `../etc` split to an empty first label and rooted the site at
+    `/srv/hosting` itself, which `path_within` then measured containment
+    against — every tenant's files, through the call meant to separate them.
+
+    Syntax is not enough on its own. A custom domain is not hosted on anybody's
+    behalf and so is not checked against the reserved list or the base domain,
+    but its first label still names the directory: `alice.attacker.com` is a
+    valid hostname pointing at Alice's site. The label has to be free, not just
+    well formed.
+    """
+
     class Meta:
         model = Domain
         fields = [
-            'id', 'name', 'domain_type', 'status', 'ssl_enabled', 
+            'id', 'name', 'domain_type', 'status', 'ssl_enabled',
             'ssl_expires_at', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'status', 'ssl_enabled', 'ssl_expires_at', 'created_at', 'updated_at']
+
+    def validate_name(self, value):
+        try:
+            return domains.check(value)
+        except ValueError as problem:
+            raise serializers.ValidationError(str(problem))
+
+    def validate(self, data):
+        name = data.get('name') or getattr(self.instance, 'name', None)
+        if not name:
+            return data
+
+        taken = Domain.objects.filter(name=name)
+        if self.instance is not None:
+            taken = taken.exclude(pk=self.instance.pk)
+        if taken.exists():
+            raise serializers.ValidationError({'name': f"“{name}” is already taken."})
+
+        request = self.context.get('request')
+        owner = getattr(request, 'user', None)
+        label = domains.site_label(name)
+
+        held = Domain.objects.exclude(user=owner) if owner is not None else Domain.objects.all()
+        if self.instance is not None:
+            held = held.exclude(pk=self.instance.pk)
+        for other in held.values_list('name', flat=True).iterator(chunk_size=500):
+            if domains.site_label(other) == label:
+                raise serializers.ValidationError(
+                    {'name': f"“{label}” is already in use. Please choose another."}
+                )
+
+        return data
 
 
 class DatabaseSerializer(serializers.ModelSerializer):
@@ -147,6 +195,18 @@ class WebsiteSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {'new_domain_name': f"“{new_domain_name}” is already taken."}
                 )
+
+            # A free name is not yet a free directory. The site root is the
+            # first label, and a custom domain may carry somebody else's.
+            request = self.context.get('request')
+            owner = getattr(request, 'user', None)
+            label = domains.site_label(new_domain_name)
+            held = Domain.objects.exclude(user=owner) if owner is not None else Domain.objects.all()
+            for other in held.values_list('name', flat=True).iterator(chunk_size=500):
+                if domains.site_label(other) == label:
+                    raise serializers.ValidationError(
+                        {'new_domain_name': f"“{label}” is already in use. Please choose another."}
+                    )
 
         return data
 
