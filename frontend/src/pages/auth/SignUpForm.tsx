@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import type React from "react"
-import { Eye, EyeOff, User, Mail, Lock } from "lucide-react"
+import { AtSign, Eye, EyeOff, User, Mail, Lock } from "lucide-react"
 import { Button } from "../../components/ui/button"
 import { Input } from "../../components/ui/input"
 import { Label } from "../../components/ui/label"
@@ -21,13 +21,14 @@ interface SignUpResponse {
   user?: { id: number; username: string }
 }
 
-type SignUpField = "firstName" | "lastName" | "email" | "password" | "confirmPassword"
+type SignUpField = "firstName" | "lastName" | "username" | "email" | "password" | "confirmPassword"
 type SignUpErrors = Partial<Record<SignUpField, string>>
 
 export default function SignUpForm() {
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
+    username: "",
     email: "",
     password: "",
     confirmPassword: "",
@@ -45,6 +46,16 @@ export default function SignUpForm() {
 
     if (!formData.firstName.trim()) {
       newErrors.firstName = "First name is required"
+    }
+    const handle = formData.username.trim()
+    if (!handle) {
+      newErrors.username = "Username is required"
+    } else if (handle.includes("@")) {
+      newErrors.username = "A username cannot be an email address"
+    } else if (handle.length < 3 || handle.length > 30) {
+      newErrors.username = "Username must be between 3 and 30 characters"
+    } else if (!/^[a-zA-Z0-9](?:[a-zA-Z0-9._-]*[a-zA-Z0-9])?$/.test(handle)) {
+      newErrors.username = "Use letters, numbers, dots, hyphens and underscores"
     }
     if (!formData.lastName.trim()) {
       newErrors.lastName = "Last name is required"
@@ -84,6 +95,7 @@ export default function SignUpForm() {
         "/auth/signup/",
         {
           email: formData.email,
+          username: formData.username.trim(),
           first_name: formData.firstName,
           last_name: formData.lastName,
           password: formData.password,
@@ -104,6 +116,7 @@ export default function SignUpForm() {
       setFormData({
         firstName: "",
         lastName: "",
+        username: "",
         email: "",
         password: "",
         confirmPassword: "",
@@ -171,6 +184,34 @@ export default function SignUpForm() {
             </p>
           )}
         </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="signup-username" className="text-sm font-medium text-gray-700">
+          Username
+        </Label>
+        <div className="relative">
+          <AtSign className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+          <Input
+            id="signup-username"
+            type="text"
+            autoComplete="username"
+            placeholder="How others will see you"
+            value={formData.username}
+            onChange={(e) => handleInputChange("username", e.target.value)}
+            className={`pl-10 ${errors.username ? "border-red-500 focus:border-red-500" : ""}`}
+            aria-describedby={errors.username ? "username-error" : "username-hint"}
+          />
+        </div>
+        {errors.username ? (
+          <p id="username-error" className="text-xs text-red-600" role="alert">
+            {errors.username}
+          </p>
+        ) : (
+          <p id="username-hint" className="text-xs text-gray-500">
+            Shown on your posts and profile. Letters, numbers, dots, hyphens and underscores.
+          </p>
+        )}
       </div>
 
       <div className="space-y-2">

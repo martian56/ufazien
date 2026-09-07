@@ -1,4 +1,6 @@
 from rest_framework import serializers
+
+from . import usernames
 from django.contrib.auth import get_user_model
 
 from .models import UserSettings
@@ -9,17 +11,42 @@ User = get_user_model()
 
 class SignupSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
+    username = serializers.CharField()
+    email = serializers.EmailField(required=True, allow_blank=False)
 
     class Meta:
         model = User
-        fields = ("first_name", "last_name", "email", "password")
+        fields = ("username", "first_name", "last_name", "email", "password")
+
+    def validate_email(self, value):
+        address = (value or "").strip().lower()
+        if not address:
+            raise serializers.ValidationError("An email address is required.")
+        if User.objects.filter(email__iexact=address).exists():
+            raise serializers.ValidationError("An account with this email already exists.")
+        return address
+
+    def validate_username(self, value):
+        handle = (value or "").strip()
+        problem = usernames.check(handle)
+        if problem:
+            raise serializers.ValidationError(problem)
+        if User.objects.filter(username__iexact=handle).exists():
+            raise serializers.ValidationError("That username is taken.")
+        return handle
+
+    def validate(self, attrs):
+        problem = usernames.check(attrs.get("username"), attrs.get("email"))
+        if problem:
+            raise serializers.ValidationError({"username": problem})
+        return attrs
 
     def create(self, validated_data):
         user = User.objects.create_user(
-            username=validated_data["email"],
+            username=validated_data["username"],
             email=validated_data["email"],
-            first_name=validated_data["first_name"],
-            last_name=validated_data["last_name"],
+            first_name=validated_data.get("first_name", ""),
+            last_name=validated_data.get("last_name", ""),
             password=validated_data["password"],
         )
         return user
@@ -111,6 +138,29 @@ class UserSerializer(serializers.ModelSerializer):
             'password': {'write_only': True}
         }
     
+    def validate_username(self, value):
+        handle = (value or "").strip()
+        problem = usernames.check(handle, getattr(self.instance, "email", None))
+        if problem:
+            raise serializers.ValidationError(problem)
+        taken = User.objects.filter(username__iexact=handle)
+        if self.instance is not None:
+            taken = taken.exclude(pk=self.instance.pk)
+        if taken.exists():
+            raise serializers.ValidationError("That username is taken.")
+        return handle
+
+    def validate_email(self, value):
+        address = (value or "").strip().lower()
+        if not address:
+            raise serializers.ValidationError("An email address is required.")
+        clash = User.objects.filter(email__iexact=address)
+        if self.instance is not None:
+            clash = clash.exclude(pk=self.instance.pk)
+        if clash.exists():
+            raise serializers.ValidationError("An account with this email already exists.")
+        return address
+
     def validate_campus_character(self, value):
         """
         Only bodies the campus actually has.
