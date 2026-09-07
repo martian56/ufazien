@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from api.sanitize import plain_text
 from django.contrib.auth import get_user_model
 from .models import Lobby, LobbyMember, PlayerPosition, ChatMessage, SavedLobby
 
@@ -56,6 +57,12 @@ class LobbyCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Lobby
         fields = ['name', 'description', 'is_private', 'password', 'max_players']
+
+    def validate_name(self, value):
+        return plain_text(value, max_length=100)
+
+    def validate_description(self, value):
+        return plain_text(value, max_length=500, keep_newlines=True)
 
     def validate(self, attrs):
         """

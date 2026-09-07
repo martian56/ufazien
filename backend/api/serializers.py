@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from api.sanitize import plain_text
 from .models import Notification, NotificationPreference, PushSubscription, Feedback
 
 class NotificationPreferenceSerializer(serializers.ModelSerializer):
@@ -42,6 +43,12 @@ class NotificationSerializer(serializers.ModelSerializer):
             return obj.sender.get_full_name() or obj.sender.username
         return None
     
+    def validate_subject(self, value):
+        return plain_text(value, max_length=200)
+
+    def validate_message(self, value):
+        return plain_text(value, max_length=5000, keep_newlines=True)
+
     def get_time_since(self, obj):
         from django.utils.timesince import timesince
         return timesince(obj.created_at)

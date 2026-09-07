@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from . import usernames
+from api.sanitize import plain_text
 from django.contrib.auth import get_user_model
 
 from .models import UserSettings
@@ -160,6 +161,15 @@ class UserSerializer(serializers.ModelSerializer):
         if clash.exists():
             raise serializers.ValidationError("An account with this email already exists.")
         return address
+
+    def validate_bio(self, value):
+        return plain_text(value, max_length=500, keep_newlines=True)
+
+    def validate_first_name(self, value):
+        return plain_text(value, max_length=150)
+
+    def validate_last_name(self, value):
+        return plain_text(value, max_length=150)
 
     def validate_campus_character(self, value):
         """
