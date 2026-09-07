@@ -46,6 +46,7 @@ class RelationScanTests(TestCase):
             model._meta.db_table: k for model, _, k in scoped_models()
             if model._meta.db_table in {"api_notificationpreference", "gpa_userinputstate"}
         }
+        self.assertEqual(len(keys), 2, keys)
         for table, k in keys.items():
             self.assertTrue(k, table)
 

@@ -1,5 +1,7 @@
 """Fold each pair of accounts sharing an address into one."""
 
+from functools import lru_cache
+
 from django.apps import apps
 from django.contrib.auth.hashers import is_password_usable
 from django.core.exceptions import ObjectDoesNotExist
@@ -18,6 +20,7 @@ def is_google_only(user):
     return not user.password or not is_password_usable(user.password)
 
 
+@lru_cache(maxsize=1)
 def scoped_models():
     """Every concrete column pointing at User, with the keys a merge can break.
 
